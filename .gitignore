@@ -18,3 +18,4 @@ apps/web/.env.local
 apps/mobile/.env.production
 *firebase-adminsdk*.json
 apps/web/.next_*
+supabase/.temp/
