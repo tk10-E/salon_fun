@@ -1,5 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
+import Link from "next/link";
+
 import {
   approveInstagramMentionAction,
   disconnectInstagramConnectionAction,
@@ -100,6 +102,10 @@ function getConnectionStatusLabel(status: InstagramConnectionRecord["connection_
 export default async function InstagramPage({ searchParams }: InstagramPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient() as any;
+  const canUseAutomaticMetaConnect = Boolean(
+    process.env.INSTAGRAM_META_APP_ID?.trim() &&
+      process.env.INSTAGRAM_META_APP_SECRET?.trim(),
+  );
 
   const [{ data: connection }, { data: mentions }, { data: webhookEvents }] = await Promise.all([
     supabase
@@ -173,12 +179,40 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
         </div>
 
         <div className="feed-composer-tip-card" style={{ marginTop: 18 }}>
+          <strong>Conexao automatica com a Meta</strong>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Para novos saloes, prefira o fluxo de login da Meta. Ele ja traz pagina, Instagram profissional e token para o painel sem copiar IDs na mao.
+          </p>
+          <div className="row-actions" style={{ marginTop: 14 }}>
+            {canUseAutomaticMetaConnect ? (
+              <Link href="/dashboard/instagram/connect" className="primary-button">
+                {safeConnection ? "Reconectar com Meta" : "Conectar Instagram com Meta"}
+              </Link>
+            ) : (
+              <p className="muted">
+                Configure <code>INSTAGRAM_META_APP_ID</code> e{" "}
+                <code>INSTAGRAM_META_APP_SECRET</code> para liberar a conexao automatica.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="feed-composer-tip-card" style={{ marginTop: 18 }}>
           <strong>Fluxo recomendado</strong>
           <ul className="feed-composer-tip-list">
             <li>Use conta profissional do Instagram conectada a uma página no ecossistema da Meta.</li>
             <li>Deixe aprovação manual ligada para conteúdo de cliente.</li>
             <li>Publique no app só o que reforça prova social real do salão.</li>
           </ul>
+        </div>
+
+        <div className="section-heading" style={{ marginTop: 18 }}>
+          <div>
+            <h3 style={{ marginBottom: 4 }}>Fallback avancado</h3>
+            <p className="muted">
+              Se precisar conectar um salao manualmente, ainda dá para preencher os IDs e o token da Meta neste formulario.
+            </p>
+          </div>
         </div>
 
         <form action={saveInstagramConnectionAction} className="form-grid" style={{ marginTop: 18 }}>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createClientMock,
@@ -54,11 +54,21 @@ function createQuery(data: unknown) {
 }
 
 describe("instagram page UI", () => {
+  const originalMetaAppId = process.env.INSTAGRAM_META_APP_ID;
+  const originalMetaAppSecret = process.env.INSTAGRAM_META_APP_SECRET;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.INSTAGRAM_META_APP_ID = "1490951809405535";
+    process.env.INSTAGRAM_META_APP_SECRET = "meta-secret";
     requireOwnerSalonMock.mockResolvedValue({
       salon: { id: "salon-1" },
     });
+  });
+
+  afterEach(() => {
+    process.env.INSTAGRAM_META_APP_ID = originalMetaAppId;
+    process.env.INSTAGRAM_META_APP_SECRET = originalMetaAppSecret;
   });
 
   it("renders connection health and the moderation queue", async () => {
@@ -137,6 +147,9 @@ describe("instagram page UI", () => {
 
     expect(screen.getByRole("heading", { name: "Instagram do salão" })).toBeInTheDocument();
     expect(screen.getByText("Conexão do Instagram atualizada com sucesso.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Reconectar com Meta" }),
+    ).toHaveAttribute("href", "/dashboard/instagram/connect");
     expect(screen.getByText("Pendentes")).toBeInTheDocument();
     expect(screen.getByText("Aprovadas")).toBeInTheDocument();
     expect(screen.getByText("Publicadas")).toBeInTheDocument();
