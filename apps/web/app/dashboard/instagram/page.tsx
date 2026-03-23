@@ -206,70 +206,74 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           </ul>
         </div>
 
-        <div className="section-heading" style={{ marginTop: 18 }}>
-          <div>
-            <h3 style={{ marginBottom: 4 }}>Fallback avancado</h3>
-            <p className="muted">
-              Se precisar conectar um salao manualmente, ainda dá para preencher os IDs e o token da Meta neste formulario.
-            </p>
-          </div>
-        </div>
+        <details
+          className="feed-composer-tip-card"
+          style={{ marginTop: 18 }}
+          open={!canUseAutomaticMetaConnect}
+        >
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>
+            Configuracao avancada e fallback manual
+          </summary>
+          <p className="muted" style={{ marginTop: 12 }}>
+            Essa area fica como plano B para suporte tecnico. No fluxo normal do salao, prefira o botao da Meta acima e deixe token e IDs fora da etapa principal.
+          </p>
 
-        <form action={saveInstagramConnectionAction} className="form-grid" style={{ marginTop: 18 }}>
-          <div className="field">
-            <label htmlFor="instagram-user-id">Instagram Business/Creator ID</label>
-            <input id="instagram-user-id" name="instagramUserId" defaultValue={safeConnection?.instagram_user_id ?? ""} placeholder="17841400000000000" />
-          </div>
-          <div className="field">
-            <label htmlFor="instagram-username">Usuário do Instagram</label>
-            <input id="instagram-username" name="instagramUsername" defaultValue={safeConnection?.instagram_username ?? ""} placeholder="docebeleza" />
-          </div>
-          <div className="field">
-            <label htmlFor="facebook-page-id">Facebook Page ID</label>
-            <input id="facebook-page-id" name="facebookPageId" defaultValue={safeConnection?.facebook_page_id ?? ""} placeholder="123456789012345" />
-          </div>
-          <div className="field">
-            <label htmlFor="instagram-access-token">Access token da Meta</label>
-            <input
-              id="instagram-access-token"
-              name="accessToken"
-              type="password"
-              autoComplete="off"
-              placeholder={safeConnection ? "Deixe em branco para manter o token salvo" : "Cole o token da conta profissional"}
-            />
-          </div>
+          <form action={saveInstagramConnectionAction} className="form-grid" style={{ marginTop: 18 }}>
+            <div className="field">
+              <label htmlFor="instagram-user-id">Instagram Business/Creator ID</label>
+              <input id="instagram-user-id" name="instagramUserId" defaultValue={safeConnection?.instagram_user_id ?? ""} placeholder="17841400000000000" />
+            </div>
+            <div className="field">
+              <label htmlFor="instagram-username">Usuário do Instagram</label>
+              <input id="instagram-username" name="instagramUsername" defaultValue={safeConnection?.instagram_username ?? ""} placeholder="docebeleza" />
+            </div>
+            <div className="field">
+              <label htmlFor="facebook-page-id">Facebook Page ID</label>
+              <input id="facebook-page-id" name="facebookPageId" defaultValue={safeConnection?.facebook_page_id ?? ""} placeholder="123456789012345" />
+            </div>
+            <div className="field">
+              <label htmlFor="instagram-access-token">Access token da Meta</label>
+              <input
+                id="instagram-access-token"
+                name="accessToken"
+                type="password"
+                autoComplete="off"
+                placeholder={safeConnection ? "Deixe em branco para manter o token salvo" : "Cole o token da conta profissional"}
+              />
+            </div>
 
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              name="requireMentionApproval"
-              defaultChecked={safeConnection?.require_mention_approval ?? true}
-            />
-            <span>Exigir aprovação antes de publicar menções de clientes</span>
-          </label>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              name="importStoryMentions"
-              defaultChecked={safeConnection?.import_story_mentions ?? true}
-            />
-            <span>Importar story mentions para a fila do painel</span>
-          </label>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              name="autoPublishOwnedPosts"
-              defaultChecked={safeConnection?.auto_publish_owned_posts ?? false}
-            />
-            <span>Marcar posts do próprio salão como aprovados automaticamente</span>
-          </label>
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                name="requireMentionApproval"
+                defaultChecked={safeConnection?.require_mention_approval ?? true}
+              />
+              <span>Exigir aprovação antes de publicar menções de clientes</span>
+            </label>
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                name="importStoryMentions"
+                defaultChecked={safeConnection?.import_story_mentions ?? true}
+              />
+              <span>Importar story mentions para a fila do painel</span>
+            </label>
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                name="autoPublishOwnedPosts"
+                defaultChecked={safeConnection?.auto_publish_owned_posts ?? false}
+              />
+              <span>Marcar posts do próprio salão como aprovados automaticamente</span>
+            </label>
 
-          <div className="row-actions">
-            <button type="submit" className="primary-button">
-              Salvar conexão
-            </button>
-          </div>
-        </form>
+            <div className="row-actions">
+              <button type="submit" className="primary-button">
+                Salvar conexão
+              </button>
+            </div>
+          </form>
+        </details>
 
         {safeConnection ? (
           <div className="row-actions" style={{ marginTop: 12 }}>
