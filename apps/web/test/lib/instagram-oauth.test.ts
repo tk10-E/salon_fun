@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildInstagramMetaAuthorizeUrl,
   createInstagramOAuthState,
+  resolveInstagramOAuthState,
   pickInstagramPageAccount,
   verifyInstagramOAuthState,
 } from "@/lib/instagram-oauth";
@@ -46,6 +47,22 @@ describe("instagram oauth helpers", () => {
     expect(url.searchParams.get("state")).toBe("signed-state");
     expect(url.searchParams.get("scope")).toContain("instagram_manage_comments");
     expect(url.searchParams.get("scope")).toContain("pages_show_list");
+  });
+
+  it("falls back to the cookie state when Meta does not echo the query state", () => {
+    const state = createInstagramOAuthState("salon-cookie");
+    const payload = resolveInstagramOAuthState(null, state);
+
+    expect(payload.salonId).toBe("salon-cookie");
+  });
+
+  it("rejects the callback when query state and cookie state disagree", () => {
+    const state = createInstagramOAuthState("salon-1");
+    const otherState = createInstagramOAuthState("salon-2");
+
+    expect(() => resolveInstagramOAuthState(state, otherState)).toThrowError(
+      "mismatched_instagram_oauth_state",
+    );
   });
 
   it("prefers the saved page when multiple Meta pages are available", () => {

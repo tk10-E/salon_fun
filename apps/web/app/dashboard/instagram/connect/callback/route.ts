@@ -7,10 +7,11 @@ import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
 import {
   getInstagramMetaAppId,
   getInstagramMetaAppSecret,
+  INSTAGRAM_OAUTH_STATE_COOKIE,
   INSTAGRAM_META_GRAPH_VERSION,
   pickInstagramPageAccount,
+  resolveInstagramOAuthState,
   type InstagramMetaPageAccount,
-  verifyInstagramOAuthState,
 } from "@/lib/instagram-oauth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -29,9 +30,18 @@ function redirectToInstagramDashboard(
   message: string,
   tone: "success" | "error" | "info" = "info",
 ) {
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     new URL(buildRedirectNotice(INSTAGRAM_PATH, message, tone), request.url),
   );
+  response.cookies.set(INSTAGRAM_OAUTH_STATE_COOKIE, "", {
+    httpOnly: true,
+    maxAge: 0,
+    path: "/",
+    sameSite: "lax",
+    secure: request.nextUrl.protocol === "https:",
+  });
+
+  return response;
 }
 
 async function exchangeMetaCodeForToken(code: string, redirectUri: string) {
@@ -108,6 +118,7 @@ export async function GET(request: NextRequest) {
   const errorReason = request.nextUrl.searchParams.get("error_reason");
   const errorDescription = request.nextUrl.searchParams.get("error_description");
   const state = request.nextUrl.searchParams.get("state");
+  const cookieState = request.cookies.get(INSTAGRAM_OAUTH_STATE_COOKIE)?.value;
   const code = request.nextUrl.searchParams.get("code");
 
   if (errorReason || errorDescription) {
@@ -118,16 +129,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!state) {
-    return redirectToInstagramDashboard(
-      request,
-      "A conexao com a Meta voltou sem o estado de seguranca esperado.",
-      "error",
-    );
-  }
-
   try {
-    const verifiedState = verifyInstagramOAuthState(state);
+    const verifiedState = resolveInstagramOAuthState(state, cookieState);
 
     if (verifiedState.salonId !== salon.id) {
       return redirectToInstagramDashboard(
@@ -203,11 +206,22 @@ export async function GET(request: NextRequest) {
       "success",
     );
   } catch (error) {
+    const message =
+      error instanceof Error && error.message === "missing_instagram_oauth_state"
+        ? "A conexao com a Meta voltou sem o estado de seguranca esperado."
+        : error instanceof Error && error.message === "mismatched_instagram_oauth_state"
+          ? "A conexao com a Meta voltou com um estado diferente do esperado. Tente iniciar novamente pelo painel."
+          : error instanceof Error && error.message === "expired_instagram_oauth_state"
+            ? "A tentativa de conexao com a Meta expirou. Inicie novamente pelo painel."
+            : error instanceof Error && error.message === "invalid_instagram_oauth_state"
+              ? "A Meta devolveu um estado invalido para a conexao automatica."
+              : error instanceof Error
+                ? error.message
+                : "Nao foi possivel concluir a conexao automatica com a Meta.";
+
     return redirectToInstagramDashboard(
       request,
-      error instanceof Error
-        ? error.message
-        : "Nao foi possivel concluir a conexao automatica com a Meta.",
+      message,
       "error",
     );
   }

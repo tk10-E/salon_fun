@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const INSTAGRAM_META_GRAPH_VERSION = "v23.0";
+export const INSTAGRAM_OAUTH_STATE_COOKIE = "instagram_meta_oauth_state";
 export const INSTAGRAM_META_OAUTH_SCOPES = [
   "instagram_basic",
   "instagram_manage_comments",
@@ -109,6 +110,25 @@ export function verifyInstagramOAuthState(rawState: string, maxAgeMs = 10 * 60 *
   }
 
   return payload;
+}
+
+export function resolveInstagramOAuthState(
+  rawState: string | null | undefined,
+  cookieState: string | null | undefined,
+  maxAgeMs = 10 * 60 * 1000,
+) {
+  const queryState = rawState?.trim() ?? "";
+  const storedState = cookieState?.trim() ?? "";
+
+  if (!queryState && !storedState) {
+    throw new Error("missing_instagram_oauth_state");
+  }
+
+  if (queryState && storedState && queryState !== storedState) {
+    throw new Error("mismatched_instagram_oauth_state");
+  }
+
+  return verifyInstagramOAuthState(queryState || storedState, maxAgeMs);
 }
 
 export function buildInstagramMetaAuthorizeUrl(args: {

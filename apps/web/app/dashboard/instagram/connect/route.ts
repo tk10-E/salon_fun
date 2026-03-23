@@ -5,6 +5,7 @@ import { getOwnerSalon } from "@/lib/auth";
 import {
   buildInstagramMetaAuthorizeUrl,
   createInstagramOAuthState,
+  INSTAGRAM_OAUTH_STATE_COOKIE,
 } from "@/lib/instagram-oauth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -43,8 +44,16 @@ export async function GET(request: NextRequest) {
       redirectUri,
       state,
     });
+    const response = NextResponse.redirect(authorizationUrl);
+    response.cookies.set(INSTAGRAM_OAUTH_STATE_COOKIE, state, {
+      httpOnly: true,
+      maxAge: 10 * 60,
+      path: "/",
+      sameSite: "lax",
+      secure: request.nextUrl.protocol === "https:",
+    });
 
-    return NextResponse.redirect(authorizationUrl);
+    return response;
   } catch (error) {
     return redirectToInstagramDashboard(
       request,
