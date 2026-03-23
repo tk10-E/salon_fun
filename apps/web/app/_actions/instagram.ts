@@ -350,7 +350,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
         })
         .eq("id", connection.id);
 
-      redirect(buildRedirectNotice(INSTAGRAM_PATH, "O token não pôde ser validado na API da Meta.", "error"));
+      return redirect(buildRedirectNotice(INSTAGRAM_PATH, "O token não pôde ser validado na API da Meta.", "error"));
     }
 
     const payload = await response.json();
@@ -367,7 +367,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
           })
           .eq("id", connection.id);
 
-        redirect(
+        return redirect(
           buildRedirectNotice(
             INSTAGRAM_PATH,
             "A página conectada não retornou uma conta profissional do Instagram válida.",
@@ -388,7 +388,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
           })
           .eq("id", connection.id);
 
-        redirect(
+        return redirect(
           buildRedirectNotice(
             INSTAGRAM_PATH,
             "A página conectada retornou um Instagram diferente do configurado no painel.",
@@ -410,7 +410,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
           })
           .eq("id", connection.id);
 
-        redirect(
+        return redirect(
           buildRedirectNotice(
             INSTAGRAM_PATH,
             "O usuário retornado pela Meta não corresponde ao configurado no painel.",
@@ -430,7 +430,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
           })
           .eq("id", connection.id);
 
-        redirect(
+        return redirect(
           buildRedirectNotice(
             INSTAGRAM_PATH,
             "O token foi aceito, mas nenhuma página foi encontrada para essa conta.",
@@ -449,7 +449,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
       })
       .eq("id", connection.id);
   } catch (error) {
-    redirect(
+    return redirect(
       buildRedirectNotice(
         INSTAGRAM_PATH,
         error instanceof Error ? error.message : "Não foi possível validar o token do Instagram.",
