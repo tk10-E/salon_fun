@@ -44,6 +44,7 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
     _branding = SalonBranding.fromName(
       widget.profile.salonName,
       overrideHexColor: widget.profile.salonBrandColor,
+      businessSegment: widget.profile.salonBusinessSegment,
     );
     _loyaltySummary = widget.initialLoyaltySummary;
     _referralSummary = widget.initialReferralSummary;
@@ -264,7 +265,8 @@ class _WalletHero extends StatelessWidget {
         ? 'Sem ranking'
         : '${loyaltySummary!.rankPosition}º lugar';
     final referralCode = referralSummary?.referralCode.trim();
-    final focusTitle = referralSummary?.availableRewardsCount != null &&
+    final focusTitle =
+        referralSummary?.availableRewardsCount != null &&
             referralSummary!.availableRewardsCount > 0
         ? 'Você já tem recompensa pronta para usar'
         : loyaltySummary?.visitsToNextTier == 1
@@ -272,7 +274,8 @@ class _WalletHero extends StatelessWidget {
         : (loyaltySummary?.cashbackBalance ?? 0) > 0
         ? 'Seu cashback já pode ajudar no próximo retorno'
         : 'Sua carteira já trabalha retenção a seu favor';
-    final focusMessage = referralSummary?.availableRewardsCount != null &&
+    final focusMessage =
+        referralSummary?.availableRewardsCount != null &&
             referralSummary!.availableRewardsCount > 0
         ? 'Abra a carteira sempre que for marcar a próxima visita e alinhe com o salão a melhor forma de usar esse benefício.'
         : loyaltySummary?.visitsToNextTier == 1
@@ -405,7 +408,9 @@ class _WalletHero extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.82),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
+              border: Border.all(
+                color: branding.outline.withValues(alpha: 0.62),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

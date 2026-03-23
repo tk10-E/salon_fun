@@ -46,6 +46,7 @@ describe("settings page UI", () => {
         name: "Studio Centro",
         tagline: "Beleza com agenda inteligente.",
         brand_color: "#C56B43",
+        business_segment: "beauty_salon",
         whatsapp_phone: "5511999999999",
         timezone: "America/Sao_Paulo",
         slot_step_minutes: 30,
@@ -98,6 +99,7 @@ describe("settings page UI", () => {
     expect(screen.getByRole("heading", { name: "Identidade do salão" })).toBeInTheDocument();
     expect(screen.getByText("Preview do app")).toBeInTheDocument();
     expect(screen.getByLabelText("Nome do salão")).toBeInTheDocument();
+    expect(screen.getByLabelText("Segmento do salão")).toBeInTheDocument();
     expect(screen.getByLabelText("Cor principal")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Salvar identidade" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Agenda online" })).toBeInTheDocument();

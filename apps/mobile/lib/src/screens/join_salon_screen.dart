@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/app_models.dart';
 import '../repositories/salon_repository.dart';
 import '../theme/salon_branding.dart';
+import '../theme/salon_experience_preset.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/salon_brand_mark.dart';
 import '../widgets/soft_card.dart';
@@ -57,12 +58,23 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
   SalonBranding get _branding {
     final preview = _joinPreview;
     if (preview == null) {
-      return SalonBranding.fromName('Salon Fun', overrideHexColor: '#C56B43');
+      return SalonBranding.fromName(
+        'Salon Fun',
+        overrideHexColor: '#C56B43',
+        businessSegment: 'beauty_salon',
+      );
     }
 
     return SalonBranding.fromName(
       preview.name,
       overrideHexColor: preview.brandColor,
+      businessSegment: preview.businessSegment,
+    );
+  }
+
+  SalonExperiencePreset get _preset {
+    return SalonExperiencePreset.fromBusinessSegment(
+      _joinPreview?.businessSegment,
     );
   }
 
@@ -72,16 +84,13 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
   }
 
   List<String> get _valueHighlights {
+    final preset = _preset;
     final salonName = _joinPreview?.name;
     final salonLabel = salonName == null || salonName.trim().isEmpty
         ? 'o salão'
         : salonName;
 
-    return [
-      'Agenda, serviços e identidade de $salonLabel no app.',
-      'Carteira com fidelidade, cashback, descontos e indicações quando esse salão ativar.',
-      'Contato rápido e avisos que ajudam você a decidir, reservar e voltar.',
-    ];
+    return preset.joinValueHighlights(salonLabel);
   }
 
   Future<void> _openPreviewWhatsApp() async {
@@ -181,12 +190,16 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
         return;
       }
 
+      final preset = _preset;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             _joinPreview == null
                 ? 'Salão vinculado com sucesso. Agenda, benefícios e avisos já ficam organizados no app.'
-                : 'Agora seu app está conectado a ${_joinPreview!.name}. Agenda, benefícios e contato já aparecem daqui para frente.',
+                : preset.joinSuccessMessage.replaceAll(
+                    '{salon}',
+                    _joinPreview!.name,
+                  ),
           ),
         ),
       );
@@ -239,6 +252,7 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final branding = _branding;
+    final preset = _preset;
     final preview = _joinPreview;
     final previewTagline = preview?.tagline?.trim();
 
@@ -314,8 +328,8 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                                       previewTagline?.isNotEmpty == true
                                           ? previewTagline!
                                           : preview == null
-                                          ? 'Ative a experiência do seu salão com logo, agenda e benefícios personalizados.'
-                                          : 'Tudo o que o cliente vê aqui passa a refletir a marca deste salão.',
+                                          ? preset.joinUnknownTagline
+                                          : preset.joinKnownTagline,
                                       style: theme.textTheme.bodyMedium
                                           ?.copyWith(
                                             color: branding.mutedText,
@@ -330,7 +344,7 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                           const SizedBox(height: 20),
                           Text(
                             preview == null
-                                ? 'Conecte sua conta ao salão certo.'
+                                ? preset.joinPendingTitle
                                 : 'Você está prestes a entrar em ${preview.name}.',
                             style: theme.textTheme.headlineSmall?.copyWith(
                               color: branding.deep,
@@ -339,8 +353,8 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                           const SizedBox(height: 12),
                           Text(
                             preview == null
-                                ? 'Digite o código que você recebeu para liberar horários, serviços, benefícios, comunicação e a identidade do seu salão.'
-                                : 'Assim que confirmar, o app passa a mostrar a cor, os serviços, a agenda, os benefícios e os avisos da marca certa.',
+                                ? preset.joinPendingDescription
+                                : preset.joinConnectedDescription,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               color: branding.mutedText,
                             ),
@@ -516,7 +530,10 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      'O cliente vai entrar em ${preview.name} com a identidade correta, agenda liberada e benefícios prontos para aparecer já nesta etapa.',
+                                      preset.joinVerificationMessage.replaceAll(
+                                        '{salon}',
+                                        preview.name,
+                                      ),
                                       style: theme.textTheme.bodyMedium
                                           ?.copyWith(
                                             color: branding.deep,

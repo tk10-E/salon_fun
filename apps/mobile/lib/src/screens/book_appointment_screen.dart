@@ -515,6 +515,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     final branding = SalonBranding.fromName(
       widget.profile.salonName,
       overrideHexColor: widget.profile.salonBrandColor,
+      businessSegment: widget.profile.salonBusinessSegment,
     );
     final serviceVisual = resolveServiceCategoryVisual(
       category: widget.service.category,
@@ -676,7 +677,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         spacing: 10,
                         runSpacing: 10,
                         children: [
-                          if (widget.service.category?.trim().isNotEmpty == true)
+                          if (widget.service.category?.trim().isNotEmpty ==
+                              true)
                             _HeroInfoChip(
                               icon: serviceVisual.icon,
                               label: widget.service.category!,

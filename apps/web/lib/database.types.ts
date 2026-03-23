@@ -319,6 +319,7 @@ export type Database = {
       salons: {
         Row: {
           brand_color: string;
+          business_segment: string;
           created_at: string;
           id: string;
           join_code: string;
@@ -333,6 +334,7 @@ export type Database = {
         };
         Insert: {
           brand_color?: string;
+          business_segment?: string;
           created_at?: string;
           id?: string;
           join_code?: string;
@@ -347,6 +349,7 @@ export type Database = {
         };
         Update: {
           brand_color?: string;
+          business_segment?: string;
           created_at?: string;
           id?: string;
           join_code?: string;

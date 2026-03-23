@@ -62,6 +62,8 @@ describe("onboarding actions", () => {
 
     expect(insert).toHaveBeenCalledWith({
       name: "Studio Centro",
+      business_segment: "beauty_salon",
+      brand_color: "#C56B43",
       owner_user_id: "owner-1",
     });
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard");

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { SALON_TIMEZONE_OPTIONS, SLOT_STEP_OPTIONS, WEEKDAY_OPTIONS } from "@/lib/schedule";
+import { normalizeSalonBusinessSegment } from "@/lib/salonSegments";
 import { createClient } from "@/lib/supabase/server";
 
 import { buildRedirectNotice } from "./shared";
@@ -57,6 +58,7 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   const rawTagline = String(formData.get("tagline") ?? "").trim();
   const rawBrandColor = String(formData.get("brandColor") ?? "").trim().toUpperCase();
   const rawWhatsapp = String(formData.get("whatsappPhone") ?? "").trim();
+  const businessSegment = normalizeSalonBusinessSegment(String(formData.get("businessSegment") ?? ""));
   const shouldRemoveLogo = formData.get("removeLogo") === "on";
   const logoInput = formData.get("logo");
   const logoFile = logoInput instanceof File && logoInput.size > 0 ? logoInput : null;
@@ -118,6 +120,7 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       name: rawName,
       tagline: rawTagline || null,
       brand_color: brandColor,
+      business_segment: businessSegment,
       whatsapp_phone: whatsappDigits || null,
       logo_path: logoPath,
     })

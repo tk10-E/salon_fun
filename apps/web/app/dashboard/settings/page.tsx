@@ -4,6 +4,7 @@ import { regenerateSalonCodeAction, updateSalonBrandingAction, updateSalonSchedu
 import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
 import { SALON_TIMEZONE_OPTIONS, SLOT_STEP_OPTIONS, WEEKDAY_OPTIONS, formatBusinessTime } from "@/lib/schedule";
+import { getSalonSegmentPreset, SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatters";
 
@@ -23,6 +24,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     .eq("salon_id", salon.id)
     .order("weekday");
   const brandColor = salon.brand_color ?? "#C56B43";
+  const segmentPreset = getSalonSegmentPreset(salon.business_segment);
   const timezone = salon.timezone ?? "America/Sao_Paulo";
   const slotStepMinutes = salon.slot_step_minutes ?? 30;
   const logoUrl = salon.logo_path
@@ -79,11 +81,15 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <div className="brand-preview-copy">
                 <span className="eyebrow">Preview do app</span>
                 <h3>{salonName}</h3>
-                <p>{salon.tagline || "Seu salão com uma presença mais elegante e fácil de reconhecer no app."}</p>
+                <p>{salon.tagline || segmentPreset.description}</p>
               </div>
             </div>
 
             <div className="brand-preview-meta">
+              <div>
+                <span className="eyebrow">Segmento</span>
+                <p>{segmentPreset.label}</p>
+              </div>
               <div>
                 <span className="eyebrow">WhatsApp</span>
                 <p>{salon.whatsapp_phone || "Ainda não configurado"}</p>
@@ -115,26 +121,21 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     </div>
                     <div>
                       <strong>{salonName}</strong>
-                      <span>{salon.tagline || "Seu salão dentro de um app único, com identidade própria."}</span>
+                      <span>{salon.tagline || segmentPreset.mobileSupport}</span>
                     </div>
                   </div>
 
-                  <div className="brand-preview-mobile__headline">
-                    O cliente entra e já reconhece que está no app do seu salão.
-                  </div>
+                  <div className="brand-preview-mobile__headline">{segmentPreset.mobileHeadline}</div>
                 </div>
 
                 <div className="brand-preview-mobile__cards">
-                  <div className="brand-preview-mobile__card">
-                    <span className="eyebrow">Agenda</span>
-                    <strong>Horários alinhados com sua operação</strong>
-                    <p>Agendamento, confirmação e encaixes com a cor e a assinatura da sua marca.</p>
-                  </div>
-                  <div className="brand-preview-mobile__card">
-                    <span className="eyebrow">Relacionamento</span>
-                    <strong>Comunicação com cara de atendimento próprio</strong>
-                    <p>Notificações, fidelidade, indicação e carteira aparecem com a identidade do salão.</p>
-                  </div>
+                  {segmentPreset.previewCards.map((card) => (
+                    <div key={card.title} className="brand-preview-mobile__card">
+                      <span className="eyebrow">{card.eyebrow}</span>
+                      <strong>{card.title}</strong>
+                      <p>{card.description}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -155,6 +156,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 rows={3}
                 placeholder="Ex.: Escova, corte e manicure em um ambiente leve e acolhedor."
               />
+            </div>
+
+            <div className="field">
+              <label htmlFor="businessSegment">Segmento do salão</label>
+              <select id="businessSegment" name="businessSegment" defaultValue={segmentPreset.value}>
+                {SALON_SEGMENT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <small className="muted">
+                Esse preset muda a linguagem, os destaques e a sensação do app do cliente sem trocar a estrutura do produto.
+              </small>
             </div>
 
             <div className="split-grid">
@@ -240,6 +255,40 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 A logo fica no destaque principal do app do cliente, junto do nome do salão, da cor da marca e do botão de
                 contato.
               </p>
+            </div>
+
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 18,
+                background: "#FBF7F2",
+                border: "1px solid #E3D5C7",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <strong style={{ display: "block", color: "#2F231C" }}>Preset ativo: {segmentPreset.label}</strong>
+              <p className="muted" style={{ margin: 0 }}>
+                {segmentPreset.shortDescription}
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {segmentPreset.focusAreas.map((focus) => (
+                  <span
+                    key={focus}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 999,
+                      border: "1px solid #E3D5C7",
+                      background: "rgba(255,255,255,0.92)",
+                      color: "#2F231C",
+                      fontWeight: 700,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    {focus}
+                  </span>
+                ))}
+              </div>
             </div>
 
             <div className="inline-actions">

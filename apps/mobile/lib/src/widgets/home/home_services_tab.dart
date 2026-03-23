@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../features/home/home_data.dart';
 import '../../models/app_models.dart';
 import '../../theme/salon_branding.dart';
+import '../../theme/salon_experience_preset.dart';
 import '../customer_growth_suggestion_card.dart';
 import '../empty_state.dart';
 import '../featured_smart_schedule_card.dart';
@@ -70,6 +71,9 @@ class HomeServicesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final preset = SalonExperiencePreset.fromBusinessSegment(
+      profile.salonBusinessSegment,
+    );
     final sortedServices = [...data.services]
       ..sort((left, right) {
         final leftFavorite = favoriteServiceIds.contains(left.id);
@@ -98,12 +102,12 @@ class HomeServicesTab extends StatelessWidget {
             logoUrl: profile.salonLogoUrl,
             metrics: [
               SalonHeroMetric(
-                label: 'Próximo horário',
+                label: preset.agendaMetricLabel,
                 value: nextAvailableLabel,
                 icon: Icons.schedule_rounded,
               ),
               SalonHeroMetric(
-                label: 'Benefícios',
+                label: preset.benefitsMetricLabel,
                 value: data.offers.isNotEmpty
                     ? '${data.offers.length} ativos'
                     : data.loyaltySummary?.hasVisibleContent == true
@@ -112,7 +116,7 @@ class HomeServicesTab extends StatelessWidget {
                 icon: Icons.card_giftcard_rounded,
               ),
               SalonHeroMetric(
-                label: 'Vitrine',
+                label: preset.portfolioMetricLabel,
                 value: data.posts.isEmpty
                     ? 'Em atualização'
                     : data.posts.length == 1
@@ -132,6 +136,7 @@ class HomeServicesTab extends StatelessWidget {
             hasBenefits:
                 data.loyaltySummary?.hasVisibleContent == true ||
                 data.referralSummary?.hasVisibleContent == true,
+            preset: preset,
           ),
           const SizedBox(height: 22),
           if (data.growthSuggestions?.hasVisibleContent == true) ...[
@@ -270,6 +275,7 @@ class HomeServicesTab extends StatelessWidget {
             hasBenefits:
                 data.loyaltySummary?.hasVisibleContent == true ||
                 data.referralSummary?.hasVisibleContent == true,
+            businessSegment: profile.salonBusinessSegment,
           ),
           if ((data.smartSchedule?.suggestions.length ?? 0) > 1) ...[
             const SizedBox(height: 28),
@@ -427,6 +433,7 @@ class _HomeMomentumCard extends StatelessWidget {
     required this.hasFeed,
     required this.hasOffers,
     required this.hasBenefits,
+    required this.preset,
   });
 
   final SalonBranding branding;
@@ -434,15 +441,16 @@ class _HomeMomentumCard extends StatelessWidget {
   final bool hasFeed;
   final bool hasOffers;
   final bool hasBenefits;
+  final SalonExperiencePreset preset;
 
   @override
   Widget build(BuildContext context) {
     final title = hasFeed
-        ? 'Seu próximo visual pode começar agora'
-        : 'Sua próxima reserva pode sair mais rápido daqui';
+        ? preset.momentumTitleWithFeed
+        : preset.momentumTitleWithoutFeed;
     final description = hasFeed
-        ? 'Horários, inspirações e benefícios estão no mesmo lugar para transformar vontade em agendamento sem atrito.'
-        : 'A agenda real do salão já está aqui com tudo que ajuda você a decidir melhor e voltar com mais frequência.';
+        ? preset.momentumDescriptionWithFeed
+        : preset.momentumDescriptionWithoutFeed;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -462,7 +470,7 @@ class _HomeMomentumCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Momento do salão',
+            preset.momentumLabel,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: branding.deep,
               fontWeight: FontWeight.w800,
@@ -494,14 +502,16 @@ class _HomeMomentumCard extends StatelessWidget {
                 branding: branding,
               ),
               _MomentumPill(
-                label: hasBenefits ? 'Benefícios acompanhados no app' : 'Contato direto com o salão',
+                label: hasBenefits
+                    ? preset.benefitsPillLabel
+                    : 'Contato direto com o salão',
                 branding: branding,
               ),
               _MomentumPill(
                 label: hasOffers
-                    ? 'Planos e ofertas ativos'
+                    ? preset.offersPillLabel
                     : hasFeed
-                    ? 'Vitrine com resultados reais'
+                    ? preset.feedPillLabel
                     : 'Escolha com mais clareza',
                 branding: branding,
               ),

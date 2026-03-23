@@ -172,7 +172,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Vitrine do salão'), findsOneWidget);
+      expect(find.text('Feed do salão'), findsNWidgets(2));
       expect(
         find.text('Seu próximo visual favorito vai aparecer aqui'),
         findsOneWidget,
@@ -183,6 +183,35 @@ void main() {
       await tester.pump();
 
       expect(whatsappTapCount, 1);
+    });
+
+    testWidgets('adapts the feed copy for the barbershop preset', (
+      tester,
+    ) async {
+      await _pumpHomeTestApp(
+        tester,
+        HomeFeedTab(
+          profile: _profile(salonBusinessSegment: 'barbershop'),
+          branding: _branding(businessSegment: 'barbershop'),
+          posts: const [],
+          onRefresh: () async {},
+          onWhatsApp: () {},
+          onToggleLike: (_) async {},
+          onOpenComments: (_) async {},
+          onBookService: (_) async {},
+          busyPostIds: const {},
+        ),
+      );
+
+      expect(find.text('Portfólio da barbearia'), findsNWidgets(2));
+      expect(
+        find.text('Cortes, acabamentos e assinatura dos profissionais'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Seu próximo corte favorito vai aparecer aqui'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('opens like, comment and booking actions from a feed card', (
@@ -357,20 +386,25 @@ Future<void> _pumpHomeTestApp(WidgetTester tester, Widget child) async {
   await tester.pump();
 }
 
-CustomerProfile _profile() {
-  return const CustomerProfile(
+CustomerProfile _profile({String? salonBusinessSegment = 'beauty_salon'}) {
+  return CustomerProfile(
     id: 'customer-1',
     name: 'Talita',
     salonId: 'salon-1',
     salonName: 'Salon Fun',
     salonTagline: 'Beleza com cuidado',
     salonBrandColor: '#C56B43',
+    salonBusinessSegment: salonBusinessSegment,
     salonWhatsappPhone: '5511999999999',
   );
 }
 
-SalonBranding _branding() {
-  return SalonBranding.fromName('Salon Fun', overrideHexColor: '#C56B43');
+SalonBranding _branding({String? businessSegment = 'beauty_salon'}) {
+  return SalonBranding.fromName(
+    'Salon Fun',
+    overrideHexColor: '#C56B43',
+    businessSegment: businessSegment,
+  );
 }
 
 ServiceItem _service() {

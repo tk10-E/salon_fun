@@ -10,6 +10,7 @@ class CustomerProfile {
     this.beautyProducts,
     this.salonTagline,
     this.salonBrandColor,
+    this.salonBusinessSegment,
     this.salonWhatsappPhone,
     this.salonLogoUrl,
   });
@@ -24,6 +25,7 @@ class CustomerProfile {
   final String? beautyProducts;
   final String? salonTagline;
   final String? salonBrandColor;
+  final String? salonBusinessSegment;
   final String? salonWhatsappPhone;
   final String? salonLogoUrl;
 
@@ -42,6 +44,7 @@ class CustomerProfile {
     bool clearBeautyProducts = false,
     String? salonTagline,
     String? salonBrandColor,
+    String? salonBusinessSegment,
     String? salonWhatsappPhone,
     String? salonLogoUrl,
   }) {
@@ -58,6 +61,7 @@ class CustomerProfile {
           : beautyProducts ?? this.beautyProducts,
       salonTagline: salonTagline ?? this.salonTagline,
       salonBrandColor: salonBrandColor ?? this.salonBrandColor,
+      salonBusinessSegment: salonBusinessSegment ?? this.salonBusinessSegment,
       salonWhatsappPhone: salonWhatsappPhone ?? this.salonWhatsappPhone,
       salonLogoUrl: salonLogoUrl ?? this.salonLogoUrl,
     );
@@ -85,6 +89,7 @@ class CustomerProfile {
       beautyProducts: _readNullableString(map['beauty_products']),
       salonTagline: _readNullableString(salonMap['tagline']),
       salonBrandColor: _readNullableString(salonMap['brand_color']),
+      salonBusinessSegment: _readNullableString(salonMap['business_segment']),
       salonWhatsappPhone: _readNullableString(salonMap['whatsapp_phone']),
       salonLogoUrl: salonLogoUrl,
     );
@@ -97,6 +102,7 @@ class SalonJoinPreview {
     required this.name,
     this.tagline,
     this.brandColor,
+    this.businessSegment,
     this.whatsappPhone,
     this.logoUrl,
   });
@@ -105,6 +111,7 @@ class SalonJoinPreview {
   final String name;
   final String? tagline;
   final String? brandColor;
+  final String? businessSegment;
   final String? whatsappPhone;
   final String? logoUrl;
 
@@ -117,6 +124,7 @@ class SalonJoinPreview {
       name: (map['name'] ?? 'Salão') as String,
       tagline: _readNullableString(map['tagline']),
       brandColor: _readNullableString(map['brand_color']),
+      businessSegment: _readNullableString(map['business_segment']),
       whatsappPhone: _readNullableString(map['whatsapp_phone']),
       logoUrl: salonLogoUrl,
     );

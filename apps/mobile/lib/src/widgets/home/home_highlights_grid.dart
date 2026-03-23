@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/salon_branding.dart';
+import '../../theme/salon_experience_preset.dart';
 import '../salon_highlight_card.dart';
 
 class HomeHighlightsGrid extends StatelessWidget {
@@ -13,6 +14,7 @@ class HomeHighlightsGrid extends StatelessWidget {
     required this.offerCount,
     required this.feedCount,
     required this.hasBenefits,
+    required this.businessSegment,
   });
 
   final SalonBranding branding;
@@ -22,9 +24,11 @@ class HomeHighlightsGrid extends StatelessWidget {
   final int offerCount;
   final int feedCount;
   final bool hasBenefits;
+  final String? businessSegment;
 
   @override
   Widget build(BuildContext context) {
+    final preset = SalonExperiencePreset.fromBusinessSegment(businessSegment);
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 860
@@ -46,7 +50,8 @@ class HomeHighlightsGrid extends StatelessWidget {
                 icon: Icons.schedule_rounded,
                 label: 'Próximo horário disponível',
                 value: nextAvailableLabel,
-                note: 'Se fizer sentido para você, já dá para reservar pelo app',
+                note:
+                    'Se fizer sentido para você, já dá para reservar pelo app',
                 branding: branding,
               ),
             ),
@@ -54,11 +59,11 @@ class HomeHighlightsGrid extends StatelessWidget {
               width: width,
               child: SalonHighlightCard(
                 icon: Icons.auto_awesome_rounded,
-                label: 'Serviços do salão',
+                label: preset.highlightCollectionLabel,
                 value: serviceCount == 1
                     ? '1 serviço'
                     : '$serviceCount serviços',
-                note: 'Preço visível e escolha sem atrito',
+                note: preset.highlightCollectionNote,
                 branding: branding,
               ),
             ),
@@ -68,13 +73,11 @@ class HomeHighlightsGrid extends StatelessWidget {
                 icon: hasBenefits
                     ? Icons.card_giftcard_rounded
                     : Icons.today_rounded,
-                label: hasBenefits
-                    ? 'Benefícios no app'
-                    : 'Atendimento hoje',
+                label: hasBenefits ? 'Benefícios no app' : 'Atendimento hoje',
                 value: hasBenefits
                     ? offerCount > 0
-                        ? '$offerCount ativos'
-                        : 'Carteira ativa'
+                          ? '$offerCount ativos'
+                          : 'Carteira ativa'
                     : todayAttendanceLabel,
                 note: hasBenefits
                     ? 'Cashback, fidelidade e vantagens acompanhadas no seu ritmo'
@@ -86,15 +89,15 @@ class HomeHighlightsGrid extends StatelessWidget {
               width: width,
               child: SalonHighlightCard(
                 icon: Icons.photo_library_outlined,
-                label: 'Vitrine do salão',
+                label: preset.highlightPortfolioLabel,
                 value: feedCount == 0
                     ? 'Em atualização'
                     : feedCount == 1
                     ? '1 inspiração'
                     : '$feedCount inspirações',
                 note: feedCount == 0
-                    ? 'Quando o salão publicar, a vitrine aparece aqui para inspirar sua próxima visita'
-                    : 'Resultados reais para escolher com mais desejo e confiança',
+                    ? preset.highlightPortfolioEmptyNote
+                    : preset.highlightPortfolioFilledNote,
                 branding: branding,
               ),
             ),

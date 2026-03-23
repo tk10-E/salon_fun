@@ -107,6 +107,24 @@ void main() {
       },
     );
 
+    testWidgets('adapts the app bar label for the barbershop preset', (
+      tester,
+    ) async {
+      final loader = _FakeHomeDataLoader(onLoad: (_) async => _homeData());
+
+      await _pumpHomeScreen(
+        tester,
+        repository: _FakeSalonRepository(),
+        loader: loader,
+        profile: _profile(salonBusinessSegment: 'barbershop'),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Sua barbearia no app'), findsOneWidget);
+    });
+
     testWidgets('shows an error state and retries the load successfully', (
       tester,
     ) async {
@@ -676,7 +694,10 @@ Future<void> _pumpHomeScreen(
   await tester.pump();
 }
 
-CustomerProfile _profile({String? salonTagline = 'Beleza com cuidado'}) {
+CustomerProfile _profile({
+  String? salonTagline = 'Beleza com cuidado',
+  String? salonBusinessSegment = 'beauty_salon',
+}) {
   return CustomerProfile(
     id: 'customer-1',
     name: 'Talita',
@@ -684,6 +705,7 @@ CustomerProfile _profile({String? salonTagline = 'Beleza com cuidado'}) {
     salonName: 'Salon Fun',
     salonTagline: salonTagline,
     salonBrandColor: '#C56B43',
+    salonBusinessSegment: salonBusinessSegment,
   );
 }
 

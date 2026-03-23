@@ -420,6 +420,7 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
     final branding = SalonBranding.fromName(
       _profile.salonName,
       overrideHexColor: _profile.salonBrandColor,
+      businessSegment: _profile.salonBusinessSegment,
     );
 
     await showModalBottomSheet<void>(

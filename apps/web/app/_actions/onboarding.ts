@@ -2,11 +2,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { getSalonSegmentPreset, normalizeSalonBusinessSegment } from "@/lib/salonSegments";
 
 import { buildRedirectNotice } from "./shared";
 
 export async function createSalonActionImpl(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
+  const businessSegment = normalizeSalonBusinessSegment(String(formData.get("businessSegment") ?? ""));
+  const preset = getSalonSegmentPreset(businessSegment);
   const { supabase, user } = await requireUser();
 
   if (!name) {
@@ -26,6 +29,8 @@ export async function createSalonActionImpl(formData: FormData) {
 
   const { error } = await supabase.from("salons").insert({
     name,
+    business_segment: businessSegment,
+    brand_color: preset.suggestedBrandColor,
     owner_user_id: user.id,
   });
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/app_models.dart';
 import '../../theme/salon_branding.dart';
+import '../../theme/salon_experience_preset.dart';
 import '../empty_state.dart';
 import '../salon_feed_post_card.dart';
 import '../soft_card.dart';
@@ -36,6 +37,9 @@ class HomeFeedTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final preset = SalonExperiencePreset.fromBusinessSegment(
+      profile.salonBusinessSegment,
+    );
     final linkedPostsCount = posts
         .where((post) => post.linkedService != null)
         .length;
@@ -64,21 +68,19 @@ class HomeFeedTab extends StatelessWidget {
                 'Resultados, novidades e inspirações com a identidade do seu salão.',
           ),
           const SizedBox(height: 20),
-          const HomeSectionIntro(
-            eyebrow: 'Feed do salão',
-            title: 'Resultados, novidades e inspirações',
-            description:
-                'Veja transformações reais, vídeos curtos e resultados assinados pelo salão para escolher seu próximo atendimento com mais desejo e confiança.',
+          HomeSectionIntro(
+            eyebrow: preset.feedEyebrow,
+            title: preset.feedTitle,
+            description: preset.feedDescription,
           ),
           const SizedBox(height: 16),
           if (posts.isEmpty)
             EmptyState(
               centered: true,
               icon: Icons.photo_library_outlined,
-              eyebrow: 'Vitrine do salão',
-              title: 'Seu próximo visual favorito vai aparecer aqui',
-              message:
-                  'Quando o salão publicar transformações, vídeos e resultados reais, você vai poder salvar a referência, conversar e decidir com muito mais confiança.',
+              eyebrow: preset.feedEyebrow,
+              title: preset.feedEmptyTitle,
+              message: preset.feedEmptyMessage,
               actionLabel: 'Falar com o salão',
               onAction: onWhatsApp,
               accentColor: branding.primary,
@@ -88,6 +90,7 @@ class HomeFeedTab extends StatelessWidget {
               children: [
                 _FeedConversionCard(
                   branding: branding,
+                  preset: preset,
                   postCount: posts.length,
                   linkedPostsCount: linkedPostsCount,
                   beforeAfterCount: beforeAfterCount,
@@ -126,6 +129,7 @@ class HomeFeedTab extends StatelessWidget {
 class _FeedConversionCard extends StatelessWidget {
   const _FeedConversionCard({
     required this.branding,
+    required this.preset,
     required this.postCount,
     required this.linkedPostsCount,
     required this.beforeAfterCount,
@@ -135,6 +139,7 @@ class _FeedConversionCard extends StatelessWidget {
   });
 
   final SalonBranding branding;
+  final SalonExperiencePreset preset;
   final int postCount;
   final int linkedPostsCount;
   final int beforeAfterCount;
@@ -145,11 +150,11 @@ class _FeedConversionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = linkedPostsCount > 0
-        ? 'Seu próximo visual pode sair do feed de hoje'
-        : 'Use o feed para descobrir o atendimento que mais combina com você';
+        ? preset.feedConversionTitleWithLinked
+        : preset.feedConversionTitleWithoutLinked;
     final description = linkedPostsCount > 0
-        ? 'Há resultados com reserva direta, transformações reais e referências que ajudam você a imaginar como vai sair do salão antes mesmo de marcar.'
-        : 'Mesmo quando a publicação ainda não estiver ligada a um serviço, ela já funciona como referência para você conversar com o salão e montar o visual ideal.';
+        ? preset.feedConversionDescriptionWithLinked
+        : preset.feedConversionDescriptionWithoutLinked;
 
     return SoftCard(
       gradient: LinearGradient(
@@ -166,7 +171,13 @@ class _FeedConversionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Portfólio vivo do salão',
+            preset.value == 'barbershop'
+                ? 'Portfólio vivo da barbearia'
+                : preset.value == 'nail_studio'
+                ? 'Vitrine viva do studio'
+                : preset.value == 'aesthetics_clinic'
+                ? 'Vitrine viva da clínica'
+                : 'Portfólio vivo do salão',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: Colors.white.withValues(alpha: 0.82),
               fontWeight: FontWeight.w800,
@@ -191,7 +202,7 @@ class _FeedConversionCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Peça a referência, marque o serviço ou converse com o salão sem sair do app.',
+            preset.feedSupportLine,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Colors.white.withValues(alpha: 0.76),
               fontWeight: FontWeight.w700,

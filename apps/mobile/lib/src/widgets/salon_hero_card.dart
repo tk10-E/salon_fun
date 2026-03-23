@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../models/app_models.dart';
 import '../theme/salon_branding.dart';
+import '../theme/salon_experience_preset.dart';
 
 class SalonHeroCard extends StatelessWidget {
   const SalonHeroCard({
@@ -26,6 +27,9 @@ class SalonHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final initials = _initials(profile.salonName);
+    final preset = SalonExperiencePreset.fromBusinessSegment(
+      profile.salonBusinessSegment,
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -71,24 +75,60 @@ class SalonHeroCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.22),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: Text(
+                        'Olá, ${profile.name}',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: branding.onPrimary,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    'Olá, ${profile.name}',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: branding.onPrimary,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            preset.segmentIcon,
+                            size: 16,
+                            color: branding.onPrimary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            preset.label,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: branding.onPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
                 const SizedBox(height: 18),
                 Row(
@@ -121,7 +161,7 @@ class SalonHeroCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'Escolha, converse e reserve no mesmo lugar.',
+                            preset.heroSupportLine,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: Colors.white.withValues(alpha: 0.76),
                               fontWeight: FontWeight.w700,
@@ -130,8 +170,8 @@ class SalonHeroCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                ],
-              ),
+                  ],
+                ),
                 if (metrics.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   Wrap(
@@ -174,11 +214,7 @@ class SalonHeroCard extends StatelessWidget {
 }
 
 class SalonHeroMetric {
-  const SalonHeroMetric({
-    required this.label,
-    required this.value,
-    this.icon,
-  });
+  const SalonHeroMetric({required this.label, required this.value, this.icon});
 
   final String label;
   final String value;
@@ -273,10 +309,7 @@ class _AvatarFallback extends StatelessWidget {
 }
 
 class _HeroMetricChip extends StatelessWidget {
-  const _HeroMetricChip({
-    required this.metric,
-    required this.branding,
-  });
+  const _HeroMetricChip({required this.metric, required this.branding});
 
   final SalonHeroMetric metric;
   final SalonBranding branding;

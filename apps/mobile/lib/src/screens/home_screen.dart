@@ -14,6 +14,7 @@ import '../repositories/salon_repository.dart';
 import '../services/push_notification_service.dart';
 import '../services/push_token_sync_service.dart';
 import '../theme/salon_branding.dart';
+import '../theme/salon_experience_preset.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cancel_appointment_sheet.dart';
 import '../widgets/home/home_feed_tab.dart';
@@ -183,6 +184,8 @@ class _HomeScreenState extends _HomeScreenStateBase
         oldWidget.profile.name != widget.profile.name ||
         oldWidget.profile.salonName != widget.profile.salonName ||
         oldWidget.profile.salonBrandColor != widget.profile.salonBrandColor ||
+        oldWidget.profile.salonBusinessSegment !=
+            widget.profile.salonBusinessSegment ||
         oldWidget.profile.salonLogoUrl != widget.profile.salonLogoUrl) {
       _profile = widget.profile;
       widget.onActiveProfileChanged?.call(_profile);
@@ -211,6 +214,9 @@ class _HomeScreenState extends _HomeScreenStateBase
   }
 
   String _buildHeroSubtitle(HomeData data) {
+    final preset = SalonExperiencePreset.fromBusinessSegment(
+      _profile.salonBusinessSegment,
+    );
     final services = data.services;
     final profileTagline = _profile.salonTagline?.trim();
     if (profileTagline != null && profileTagline.isNotEmpty) {
@@ -218,27 +224,29 @@ class _HomeScreenState extends _HomeScreenStateBase
     }
 
     if (data.nextAvailableAt != null && services.isNotEmpty) {
-      return 'Seu próximo horário pode sair em ${_formatNextAvailable(data.nextAvailableAt)} com reserva direto pelo app.';
+      return preset.nextAvailableSubtitle(
+        _formatNextAvailable(data.nextAvailableAt),
+      );
     }
 
     if (data.offers.any((offer) => offer.isMembership)) {
-      return 'Planos, pacotes e horários do salão organizados para você decidir e reservar mais rápido.';
+      return preset.membershipSubtitle;
     }
 
     if (data.offers.isNotEmpty) {
-      return 'Promoções, benefícios e horários do salão organizados para você decidir e reservar mais rápido.';
+      return preset.offerSubtitle;
     }
 
     if (data.posts.isNotEmpty) {
-      return 'Veja resultados reais do salão e agende seu próximo cuidado sem sair do app.';
+      return preset.postsSubtitle;
     }
 
     if (data.loyaltySummary?.hasVisibleContent == true) {
-      return 'Agende, acumule cashback e acompanhe suas vantagens direto pelo app.';
+      return preset.benefitsSubtitle;
     }
 
     if (services.isEmpty) {
-      return 'Agenda, contato e cuidados do salão organizados para você resolver tudo no app.';
+      return preset.noServicesSubtitle;
     }
 
     final highlights = services
@@ -247,7 +255,7 @@ class _HomeScreenState extends _HomeScreenStateBase
         .where((name) => name.isNotEmpty)
         .toList();
 
-    return '${highlights.join(' • ')} disponíveis para agendamento no app.';
+    return preset.servicesAvailableSubtitle(highlights);
   }
 
   String _formatNextAvailable(DateTime? slot) {
@@ -290,9 +298,13 @@ class _HomeScreenState extends _HomeScreenStateBase
 
   @override
   Widget build(BuildContext context) {
+    final preset = SalonExperiencePreset.fromBusinessSegment(
+      _profile.salonBusinessSegment,
+    );
     final branding = SalonBranding.fromName(
       _profile.salonName,
       overrideHexColor: _profile.salonBrandColor,
+      businessSegment: _profile.salonBusinessSegment,
     );
 
     return FutureBuilder<HomeData>(
@@ -333,7 +345,7 @@ class _HomeScreenState extends _HomeScreenStateBase
                         ),
                       ),
                       Text(
-                        'Seu app do salão',
+                        preset.appBarLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(

@@ -109,6 +109,53 @@ describe("settings actions", () => {
     expect(location).toContain("WhatsApp+v%C3%A1lido");
   });
 
+  it("updates branding, business segment and contact details", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const updateSalon = vi.fn(() => ({ eq }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table !== "salons") {
+          throw new Error(`Unexpected table ${table}`);
+        }
+
+        return {
+          update: updateSalon,
+        };
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(),
+          upload: vi.fn(),
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      updateSalonBrandingActionImpl(
+        makeFormData({
+          name: "Studio Centro",
+          tagline: "Atendimento elegante e direto no app.",
+          brandColor: "#B35D77",
+          businessSegment: "nail_studio",
+          whatsappPhone: "55 11 99999-9999",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).toHaveBeenCalledWith({
+      name: "Studio Centro",
+      tagline: "Atendimento elegante e direto no app.",
+      brand_color: "#B35D77",
+      business_segment: "nail_studio",
+      whatsapp_phone: "5511999999999",
+      logo_path: "logos/current.png",
+    });
+    expect(eq).toHaveBeenCalledWith("id", "salon-1");
+    expect(location).toBe("/dashboard/settings?message=Identidade+do+sal%C3%A3o+atualizada+com+sucesso.&tone=success");
+  });
+
   it("updates the online schedule and business hours", async () => {
     const updateSalon = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),

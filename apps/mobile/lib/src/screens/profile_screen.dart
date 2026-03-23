@@ -71,6 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _branding = SalonBranding.fromName(
       widget.profile.salonName,
       overrideHexColor: widget.profile.salonBrandColor,
+      businessSegment: widget.profile.salonBusinessSegment,
     );
     _loyaltySummary = widget.initialLoyaltySummary;
     _referralSummary = widget.initialReferralSummary;
@@ -223,17 +224,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   List<AppointmentItem> get _beautyHistoryAppointments {
-    final completedAppointments = _appointments
-        .where(
-          (appointment) =>
-              appointment.status == 'completed' || appointment.completedAt != null,
-        )
-        .toList()
-      ..sort((left, right) {
-        final leftDate = left.completedAt ?? left.date;
-        final rightDate = right.completedAt ?? right.date;
-        return rightDate.compareTo(leftDate);
-      });
+    final completedAppointments =
+        _appointments
+            .where(
+              (appointment) =>
+                  appointment.status == 'completed' ||
+                  appointment.completedAt != null,
+            )
+            .toList()
+          ..sort((left, right) {
+            final leftDate = left.completedAt ?? left.date;
+            final rightDate = right.completedAt ?? right.date;
+            return rightDate.compareTo(leftDate);
+          });
 
     return completedAppointments.take(3).toList();
   }

@@ -11,6 +11,7 @@ import 'screens/join_salon_screen.dart';
 import 'screens/notification_alert_screen.dart';
 import 'services/push_notification_service.dart';
 import 'theme/salon_branding.dart';
+import 'theme/salon_experience_preset.dart';
 import 'widgets/branded_loading_view.dart';
 
 class SalonClientApp extends StatefulWidget {
@@ -234,6 +235,7 @@ class _SalonClientAppState extends State<SalonClientApp> {
         : SalonBranding.fromName(
             _activeProfile!.salonName,
             overrideHexColor: _activeProfile!.salonBrandColor,
+            businessSegment: _activeProfile!.salonBusinessSegment,
           );
 
     return MaterialApp(
@@ -258,6 +260,8 @@ bool _sameBrandingProfile(CustomerProfile? left, CustomerProfile? right) {
   return left.salonId == right.salonId &&
       left.salonName == right.salonName &&
       left.salonBrandColor == right.salonBrandColor &&
+      normalizeSalonBusinessSegment(left.salonBusinessSegment) ==
+          normalizeSalonBusinessSegment(right.salonBusinessSegment) &&
       left.salonLogoUrl == right.salonLogoUrl &&
       left.salonTagline == right.salonTagline;
 }

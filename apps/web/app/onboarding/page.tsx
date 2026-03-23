@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { createSalonAction } from "@/app/actions";
 import { FlashMessage } from "@/components/FlashMessage";
+import { SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -39,16 +40,27 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       <section className="setup-card card">
         <span className="eyebrow">Primeiros passos</span>
         <h1>Falta pouco para o seu salão ficar pronto.</h1>
-        <p>Informe o nome do salão. O código para seus clientes será criado automaticamente.</p>
+        <p>Informe o nome do salão e escolha o segmento. O app já nasce com um preset visual e comercial mais próximo do seu negócio.</p>
 
         <div className="setup-highlight">
-          <strong>Em instantes você já pode cadastrar serviços e compartilhar o acesso com seus clientes.</strong>
+          <strong>Em instantes você já pode cadastrar serviços, entrar com um visual-base do seu segmento e compartilhar o acesso com seus clientes.</strong>
         </div>
 
         <form action={createSalonAction} className="form-grid">
           <div className="field">
             <label htmlFor="salon-name">Nome do salão</label>
             <input id="salon-name" name="name" placeholder="Studio Beleza Centro" required />
+          </div>
+
+          <div className="field">
+            <label htmlFor="business-segment">Segmento do salão</label>
+            <select id="business-segment" name="businessSegment" defaultValue="beauty_salon">
+              {SALON_SEGMENT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <button type="submit" className="primary-button">
