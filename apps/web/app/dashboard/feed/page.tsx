@@ -87,6 +87,25 @@ function getFeedPostTypeLabel(postType: FeedPostRecord["post_type"]) {
   }
 }
 
+function getFeedPostEditorialNote(post: {
+  postType: "standard" | "before_after" | "reel";
+  service?: { name: string } | null;
+}) {
+  if (post.postType === "before_after") {
+    return "Transformação que ajuda a cliente a imaginar o próprio resultado com mais confiança.";
+  }
+
+  if (post.postType === "reel") {
+    return "Vídeo curto para vender brilho, movimento e acabamento em poucos segundos.";
+  }
+
+  if (post.service?.name) {
+    return `Resultado que pode puxar reserva direta para ${post.service.name}.`;
+  }
+
+  return "Publicação de inspiração para gerar conversa, desejo e descoberta do salão.";
+}
+
 export default async function FeedPage({ searchParams }: FeedPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
@@ -136,8 +155,8 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
           <div>
             <h2>Feed do salão</h2>
             <p className="muted">
-              Publique fotos, antes e depois e vídeos curtos, destaque o profissional responsável e acompanhe curtidas e
-              comentários dos clientes no app.
+              Publique fotos, antes e depois e vídeos curtos com cara de vitrine premium, destaque o profissional
+              responsável e acompanhe curtidas e comentários dos clientes no app.
             </p>
           </div>
         </div>
@@ -202,8 +221,17 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                 <div className="feed-post-body">
                   <div className="feed-post-header">
                     <div>
+                      <div className="feed-post-kicker">
+                        <span className="feed-format-badge">{getFeedPostTypeLabel(post.postType)}</span>
+                        <span className="feed-post-date">{formatDateTime(post.created_at)}</span>
+                      </div>
                       <h3>{post.title}</h3>
-                      <p className="muted">{formatDateTime(post.created_at)}</p>
+                      {post.staffMember ? (
+                        <p className="feed-post-signature">
+                          Assinado por <strong>{post.staffMember.name}</strong>
+                          {post.staffMember.role ? ` • ${post.staffMember.role}` : ""}
+                        </p>
+                      ) : null}
                     </div>
 
                     <form action={deleteSalonPostAction}>
@@ -214,19 +242,27 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                     </form>
                   </div>
 
-                  <div className="feed-post-stats">
-                    <span className="feed-stat-pill">Formato: {getFeedPostTypeLabel(post.postType)}</span>
-                    {post.service ? <span className="feed-stat-pill">Serviço vinculado: {post.service.name}</span> : null}
+                  <div className="feed-post-meta-strip">
+                    {post.service ? (
+                      <div className="feed-post-meta-card">
+                        <span className="feed-post-meta-card__eyebrow">Serviço ligado ao post</span>
+                        <strong>{post.service.name}</strong>
+                      </div>
+                    ) : null}
                     {post.staffMember ? (
-                      <span className="feed-stat-pill">
-                        Profissional: {post.staffMember.name}
-                        {post.staffMember.role ? ` • ${post.staffMember.role}` : ""}
-                      </span>
+                      <div className="feed-post-meta-card">
+                        <span className="feed-post-meta-card__eyebrow">Profissional em destaque</span>
+                        <strong>
+                          {post.staffMember.name}
+                          {post.staffMember.role ? ` • ${post.staffMember.role}` : ""}
+                        </strong>
+                      </div>
                     ) : null}
                   </div>
+                  <p className="feed-post-note">{getFeedPostEditorialNote(post)}</p>
                   {post.caption ? <p className="feed-post-caption">{post.caption}</p> : null}
 
-                  <div className="feed-post-stats">
+                  <div className="feed-post-engagement">
                     <span className="feed-stat-pill">{post.likesCount} curtidas</span>
                     <span className="feed-stat-pill">{post.commentsCount} comentários</span>
                   </div>
@@ -267,6 +303,15 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               um ponto de descoberta e agendamento.
             </p>
           </div>
+        </div>
+
+        <div className="feed-composer-tip-card" style={{ marginTop: 18 }}>
+          <strong>O que mais faz a cliente salvar e agendar</strong>
+          <ul className="feed-composer-tip-list">
+            <li>Antes e depois vende transformação real.</li>
+            <li>Vídeo curto mostra brilho, movimento e acabamento.</li>
+            <li>Profissional destacado aumenta confiança e descoberta.</li>
+          </ul>
         </div>
 
         <form action={createSalonPostAction} className="form-grid" encType="multipart/form-data" style={{ marginTop: 18 }}>

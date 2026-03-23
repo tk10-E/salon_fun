@@ -172,8 +172,11 @@ void main() {
         ),
       );
 
-      expect(find.text('Feed em preparacao'), findsOneWidget);
-      expect(find.text('As fotos do salão vão aparecer aqui'), findsOneWidget);
+      expect(find.text('Vitrine do salão'), findsOneWidget);
+      expect(
+        find.text('Seu próximo visual favorito vai aparecer aqui'),
+        findsOneWidget,
+      );
 
       await tester.scrollUntilVisible(find.text('Falar com o salão'), 200);
       await tester.tap(find.text('Falar com o salão'));
@@ -217,7 +220,10 @@ void main() {
       expect(find.text('Resultado glossy'), findsOneWidget);
       expect(find.text('1 comentário'), findsOneWidget);
       expect(find.text('Talita'), findsOneWidget);
-      expect(find.text('1 resultado já pode virar reserva'), findsOneWidget);
+      expect(
+        find.text('Seu próximo visual pode sair do feed de hoje'),
+        findsOneWidget,
+      );
 
       await tester.ensureVisible(find.text('0 curtidas'));
       await tester.tap(find.text('0 curtidas'));
@@ -227,8 +233,8 @@ void main() {
       await tester.tap(find.text('1 comentário'));
       await tester.pump();
 
-      await tester.ensureVisible(find.text('Agendar este serviço'));
-      await tester.tap(find.text('Agendar este serviço'));
+      await tester.ensureVisible(find.text('Quero esse resultado'));
+      await tester.tap(find.text('Quero esse resultado'));
       await tester.pump();
 
       await tester.ensureVisible(find.text('Falar com o salão').first);

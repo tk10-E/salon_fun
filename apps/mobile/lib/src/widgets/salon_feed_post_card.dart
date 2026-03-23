@@ -62,10 +62,18 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
             name: post.linkedService!.name,
           );
     final hasVideoAction = post.videoUrl != null && widget.onOpenVideo != null;
+    final servicePriceLabel = post.linkedService == null
+        ? null
+        : NumberFormat.currency(
+            locale: 'pt_BR',
+            symbol: r'R$',
+            decimalDigits: post.linkedService!.price % 1 == 0 ? 0 : 2,
+          ).format(post.linkedService!.price);
 
     return SoftCard(
       padding: EdgeInsets.zero,
       borderColor: branding.outline.withValues(alpha: 0.72),
+      backgroundColor: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -74,101 +82,104 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
             child: _buildMedia(post, branding),
           ),
           Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Novo no salão • $postedAt',
+                  'Seleção do salão • $postedAt',
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: branding.deep,
+                    letterSpacing: 0.3,
                   ),
                 ),
-                const SizedBox(height: 10),
-                Text(post.title, style: theme.textTheme.titleLarge),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+                Text(
+                  post.title,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: const Color(0xFF2B2019),
+                    fontWeight: FontWeight.w900,
+                    height: 1.1,
+                  ),
+                ),
+                if (_buildSignatureLabel(post) case final signatureLabel?) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 18,
+                        color: branding.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          signatureLabel,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: branding.deep,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 14),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    _ActionChip(
+                    _MetaPill(
                       icon: post.isReel
                           ? Icons.play_circle_outline_rounded
                           : post.isBeforeAfter
                           ? Icons.compare_rounded
                           : Icons.photo_library_outlined,
                       label: post.postType.label,
-                      busy: false,
                       branding: branding,
-                      onTap: hasVideoAction ? widget.onOpenVideo : null,
                     ),
-                    if (post.staffMemberName != null)
-                      _ActionChip(
-                        icon: Icons.person_outline_rounded,
-                        label: post.staffMemberRole == null
-                            ? post.staffMemberName!
-                            : '${post.staffMemberName!} • ${post.staffMemberRole!}',
-                        busy: false,
-                        branding: branding,
-                        onTap: null,
-                      ),
                     if (post.linkedService != null)
-                      _ActionChip(
+                      _MetaPill(
                         icon:
                             linkedServiceVisual?.icon ??
                             Icons.auto_awesome_rounded,
                         label: post.linkedService!.name,
-                        busy: false,
                         branding: branding,
-                        onTap: null,
                       ),
                     if (post.linkedService != null)
-                      _ActionChip(
+                      _MetaPill(
                         icon: Icons.schedule_rounded,
                         label: '${post.linkedService!.duration} min',
-                        busy: false,
                         branding: branding,
-                        onTap: null,
+                      ),
+                    if (servicePriceLabel != null)
+                      _MetaPill(
+                        icon: Icons.sell_outlined,
+                        label: servicePriceLabel,
+                        branding: branding,
                       ),
                   ],
                 ),
-                if (post.linkedService != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    post.isReel
-                        ? widget.onContactSalon != null
-                              ? 'Gostou desse video? Reserve ${post.linkedService!.name} no app ou fale com o salão para adaptar esse resultado ao seu estilo.'
-                              : 'Gostou desse video? Reserve ${post.linkedService!.name} direto pelo app.'
-                        : widget.onContactSalon != null
-                        ? 'Gostou desse resultado? Reserve ${post.linkedService!.name} no app ou fale com o salão para alinhar detalhes.'
-                        : 'Gostou desse resultado? Reserve ${post.linkedService!.name} direto pelo app.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF6D5647),
-                    ),
-                  ),
-                ] else if (post.isBeforeAfter) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Use esse antes e depois para entender o resultado final e conversar com o salão sobre a melhor versao para voce.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF6D5647),
-                    ),
-                  ),
-                ] else if (post.isReel) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Esse video curto ajuda a ver movimento, acabamento e estilo final antes de decidir seu proximo agendamento.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF6D5647),
-                    ),
+                if (_buildEditorialCopy(post) case final editorialCopy?) ...[
+                  const SizedBox(height: 14),
+                  _EditorialNote(
+                    branding: branding,
+                    icon: post.isReel
+                        ? Icons.play_circle_outline_rounded
+                        : post.isBeforeAfter
+                        ? Icons.compare_rounded
+                        : Icons.auto_awesome_rounded,
+                    text: editorialCopy,
                   ),
                 ],
                 if (post.caption != null && post.caption!.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Text(
                     post.caption!,
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: const Color(0xFF6D5647),
+                      height: 1.55,
                     ),
                   ),
                 ],
@@ -209,7 +220,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                           ? null
                           : widget.onOpenVideo,
                       icon: const Icon(Icons.play_circle_outline_rounded),
-                      label: const Text('Assistir video curto'),
+                      label: const Text('Ver em movimento'),
                     ),
                   ),
                 ],
@@ -228,9 +239,11 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                       },
                       style: FilledButton.styleFrom(
                         backgroundColor: branding.primary,
+                        foregroundColor: branding.onPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       icon: const Icon(Icons.calendar_month_rounded, size: 18),
-                      label: const Text('Agendar este serviço'),
+                      label: const Text('Quero esse resultado'),
                     ),
                   ),
                   if (widget.onContactSalon != null) ...[
@@ -244,7 +257,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                         icon: const Icon(Icons.chat_bubble_outline_rounded),
                         label: Text(
                           post.isReel
-                              ? 'Falar sobre esse video'
+                              ? 'Falar sobre esse vídeo'
                               : 'Falar com o salão',
                         ),
                       ),
@@ -254,8 +267,8 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                   const SizedBox(height: 16),
                   Text(
                     post.isReel
-                        ? 'Se esse video combinou com voce, fale com o salão para descobrir o melhor serviço e o melhor encaixe.'
-                        : 'Se esse visual combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.',
+                        ? 'Se esse vídeo combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.'
+                        : 'Se esse visual te ganhou, fale com o salão para descobrir o melhor caminho até esse resultado.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF6D5647),
                     ),
@@ -270,14 +283,22 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                       icon: const Icon(Icons.chat_bubble_outline_rounded),
                       label: Text(
                         post.isReel
-                            ? 'Falar sobre esse video'
-                            : 'Falar sobre esse resultado',
+                            ? 'Falar sobre esse vídeo'
+                            : 'Quero entender esse resultado',
                       ),
                     ),
                   ),
                 ],
                 if (previewComments.isNotEmpty) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
+                  Text(
+                    'O que já estão comentando',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: const Color(0xFF2F231C),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Column(
                     children: previewComments
                         .map(
@@ -288,6 +309,9 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                             decoration: BoxDecoration(
                               color: branding.highlightBackground,
                               borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: branding.outline.withValues(alpha: 0.55),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,6 +320,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                                   comment.customerName,
                                   style: theme.textTheme.labelLarge?.copyWith(
                                     color: branding.deep,
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
                                 const SizedBox(height: 6),
@@ -320,30 +345,104 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
     );
   }
 
+  String? _buildSignatureLabel(SalonPost post) {
+    if (post.staffMemberName == null) {
+      return null;
+    }
+
+    return post.staffMemberRole == null
+        ? 'Assinado por ${post.staffMemberName}'
+        : 'Assinado por ${post.staffMemberName} • ${post.staffMemberRole}';
+  }
+
+  String? _buildEditorialCopy(SalonPost post) {
+    final serviceName = post.linkedService?.name;
+
+    if (serviceName != null && post.isReel) {
+      return 'Veja brilho, movimento e acabamento antes de reservar. Se esse estilo combina com você, $serviceName já pode entrar no seu próximo horário.';
+    }
+
+    if (serviceName != null && post.isBeforeAfter) {
+      return 'Uma transformação pensada para valorizar caimento, forma e acabamento. Se esse resultado conversa com o que você busca, $serviceName já pode ser seu próximo horário.';
+    }
+
+    if (serviceName != null) {
+      return 'Esse resultado mostra a assinatura do salão em $serviceName. Se você quer sair assim, dá para reservar agora mesmo pelo app.';
+    }
+
+    if (post.isBeforeAfter) {
+      return 'Esse antes e depois ajuda a enxergar o potencial do resultado final. Vale falar com o salão para adaptar a referência ao seu estilo.';
+    }
+
+    if (post.isReel) {
+      return 'Use esse vídeo como referência de brilho, movimento e acabamento e descubra com o salão qual é o serviço ideal para chegar lá.';
+    }
+
+    return 'Se esse visual te ganhou, vale falar com o salão para descobrir o melhor caminho até esse resultado.';
+  }
+
+  String? _buildMediaFooterLabel(SalonPost post) {
+    if (post.linkedService != null && post.staffMemberName != null) {
+      return '${post.linkedService!.name} • ${post.staffMemberName!}';
+    }
+
+    if (post.linkedService != null) {
+      return post.linkedService!.name;
+    }
+
+    if (post.staffMemberName != null) {
+      return 'Assinado por ${post.staffMemberName!}';
+    }
+
+    return null;
+  }
+
   Widget _buildMedia(SalonPost post, SalonBranding branding) {
     if (post.isBeforeAfter && post.imageUrls.length >= 2) {
       return AspectRatio(
         aspectRatio: 4 / 5,
-        child: Row(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: _BeforeAfterPanel(
-                label: 'Antes',
-                imageUrl: post.imageUrls[0],
-                branding: branding,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: _BeforeAfterPanel(
+                    label: 'Antes',
+                    imageUrl: post.imageUrls[0],
+                    branding: branding,
+                  ),
+                ),
+                Container(
+                  width: 2,
+                  color: Colors.white.withValues(alpha: 0.88),
+                ),
+                Expanded(
+                  child: _BeforeAfterPanel(
+                    label: 'Depois',
+                    imageUrl: post.imageUrls[1],
+                    branding: branding,
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: _BeforeAfterPanel(
-                label: 'Depois',
-                imageUrl: post.imageUrls[1],
-                branding: branding,
+            Center(
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.compare_arrows_rounded, color: branding.deep),
               ),
             ),
           ],
         ),
       );
     }
+
+    final mediaFooterLabel = _buildMediaFooterLabel(post);
 
     if (post.isReel) {
       return AspectRatio(
@@ -357,28 +456,38 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
               DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [const Color(0x08160E08), const Color(0x99160E08)],
+                    colors: [const Color(0x08160E08), const Color(0xCC160E08)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   ),
                 ),
               ),
-              Positioned(
+              const Positioned(
                 top: 14,
-                right: 14,
-                child: _MediaBadge(label: post.postType.label),
+                left: 14,
+                child: _MediaBadge(
+                  label: 'Vídeo curto',
+                  icon: Icons.play_circle_outline_rounded,
+                ),
               ),
               Center(
                 child: Container(
-                  width: 74,
-                  height: 74,
+                  width: 82,
+                  height: 82,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: Colors.white.withValues(alpha: 0.92),
                     shape: BoxShape.circle,
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x3327170F),
+                        blurRadius: 28,
+                        offset: Offset(0, 10),
+                      ),
+                    ],
                   ),
                   child: Icon(
                     Icons.play_arrow_rounded,
-                    size: 40,
+                    size: 46,
                     color: branding.deep,
                   ),
                 ),
@@ -387,13 +496,9 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                 left: 18,
                 right: 18,
                 bottom: 18,
-                child: Text(
-                  'Toque para assistir o video curto',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.96),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
+                child: _MediaFooter(
+                  eyebrow: 'Veja brilho, movimento e acabamento',
+                  label: mediaFooterLabel ?? 'Toque para ver em movimento',
                 ),
               ),
             ],
@@ -405,6 +510,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
     return AspectRatio(
       aspectRatio: 4 / 5,
       child: Stack(
+        fit: StackFit.expand,
         children: [
           PageView.builder(
             controller: _pageController,
@@ -419,6 +525,14 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
               );
             },
           ),
+          const Positioned(
+            top: 14,
+            left: 14,
+            child: _MediaBadge(
+              label: 'Resultado real',
+              icon: Icons.auto_awesome_rounded,
+            ),
+          ),
           if (post.imageUrls.length > 1)
             Positioned(
               top: 14,
@@ -431,7 +545,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 14,
+              bottom: mediaFooterLabel == null ? 14 : 70,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
@@ -449,6 +563,18 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                     ),
                   ),
                 ),
+              ),
+            ),
+          if (mediaFooterLabel != null)
+            Positioned(
+              left: 18,
+              right: 18,
+              bottom: 18,
+              child: _MediaFooter(
+                eyebrow: post.isBeforeAfter
+                    ? 'Transformação real'
+                    : 'Referência do salão',
+                label: mediaFooterLabel,
               ),
             ),
         ],
@@ -519,9 +645,10 @@ class _BeforeAfterPanel extends StatelessWidget {
 }
 
 class _MediaBadge extends StatelessWidget {
-  const _MediaBadge({required this.label});
+  const _MediaBadge({required this.label, this.icon});
 
   final String label;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -531,13 +658,159 @@ class _MediaBadge extends StatelessWidget {
         color: const Color(0xBF27170F),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: Colors.white),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MediaFooter extends StatelessWidget {
+  const _MediaFooter({required this.eyebrow, required this.label});
+
+  final String eyebrow;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xC926170F),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            eyebrow,
+            style: const TextStyle(
+              color: Color(0xFFF0D8CA),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditorialNote extends StatelessWidget {
+  const _EditorialNote({
+    required this.branding,
+    required this.icon,
+    required this.text,
+  });
+
+  final SalonBranding branding;
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            branding.highlightBackground,
+            Color.lerp(branding.highlightBackground, Colors.white, 0.3)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.52)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: branding.primary.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: branding.deep, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF5F483A),
+                height: 1.45,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({
+    required this.icon,
+    required this.label,
+    required this.branding,
+  });
+
+  final IconData icon;
+  final String label;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: branding.highlightBackground,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.58)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: branding.deep),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.deep,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

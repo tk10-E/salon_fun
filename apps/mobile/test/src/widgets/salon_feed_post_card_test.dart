@@ -84,11 +84,14 @@ void main() {
         },
       );
 
-      expect(find.text('Video curto'), findsWidgets);
-      expect(find.text('Talita • Colorista'), findsOneWidget);
-      expect(find.text('Assistir video curto'), findsOneWidget);
+      expect(find.text('Vídeo curto'), findsWidgets);
+      expect(
+        find.text('Assinado por Talita • Colorista'),
+        findsOneWidget,
+      );
+      expect(find.text('Ver em movimento'), findsOneWidget);
 
-      await tester.tap(find.text('Assistir video curto'));
+      await tester.tap(find.text('Ver em movimento'));
       await tester.pump();
 
       expect(openVideoCount, 1);
@@ -145,16 +148,16 @@ void main() {
         },
       );
 
-      expect(find.text('Agendar este serviço'), findsOneWidget);
+      expect(find.text('Quero esse resultado'), findsOneWidget);
       expect(
         find.text(
-          'Gostou desse resultado? Reserve Corte premium no app ou fale com o salão para alinhar detalhes.',
+          'Esse resultado mostra a assinatura do salão em Corte premium. Se você quer sair assim, dá para reservar agora mesmo pelo app.',
         ),
         findsOneWidget,
       );
       expect(find.text('Falar com o salão'), findsOneWidget);
 
-      await tester.tap(find.text('Agendar este serviço'));
+      await tester.tap(find.text('Quero esse resultado'));
       await tester.pump();
       await tester.tap(find.text('Falar com o salão'));
       await tester.pump();
@@ -179,18 +182,18 @@ void main() {
           },
         );
 
-        expect(find.text('Agendar este serviço'), findsNothing);
+        expect(find.text('Quero esse resultado'), findsNothing);
         expect(find.text('Corte premium'), findsNothing);
         expect(find.text('60 min'), findsNothing);
-        expect(find.text('Falar sobre esse resultado'), findsOneWidget);
+        expect(find.text('Quero entender esse resultado'), findsOneWidget);
         expect(
           find.text(
-            'Se esse visual combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.',
+            'Se esse visual te ganhou, fale com o salão para descobrir o melhor caminho até esse resultado.',
           ),
           findsOneWidget,
         );
 
-        await tester.tap(find.text('Falar sobre esse resultado'));
+        await tester.tap(find.text('Quero entender esse resultado'));
         await tester.pump();
 
         expect(contactTapCount, 1);
@@ -233,7 +236,7 @@ void main() {
         await tester.pump();
         await tester.tap(find.text('2 comentários'));
         await tester.pump();
-        await tester.tap(find.text('Agendar este serviço'));
+        await tester.tap(find.text('Quero esse resultado'));
         await tester.pump();
         await tester.tap(find.text('Falar com o salão'));
         await tester.pump();

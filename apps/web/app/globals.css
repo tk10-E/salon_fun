@@ -1911,6 +1911,33 @@ button {
   gap: 14px;
 }
 
+.feed-post-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.feed-format-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(39, 23, 15, 0.08);
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.feed-post-date {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .feed-post-header {
   display: flex;
   justify-content: space-between;
@@ -1918,12 +1945,60 @@ button {
   align-items: flex-start;
 }
 
+.feed-post-signature {
+  margin: 8px 0 0;
+  color: var(--accent-dark);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.feed-post-signature strong {
+  font-weight: 800;
+}
+
+.feed-post-meta-strip {
+  display: grid;
+  gap: 10px;
+}
+
+.feed-post-meta-card {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 248, 241, 0.9);
+  border: 1px solid rgba(220, 207, 190, 0.72);
+}
+
+.feed-post-meta-card strong {
+  color: var(--accent-dark);
+}
+
+.feed-post-meta-card__eyebrow {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.feed-post-note {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(248, 238, 227, 0.72);
+  color: var(--accent-dark);
+  font-weight: 700;
+  line-height: 1.55;
+}
+
 .feed-post-caption {
   color: var(--text);
   line-height: 1.68;
 }
 
-.feed-post-stats {
+.feed-post-stats,
+.feed-post-engagement {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -1939,6 +2014,27 @@ button {
   color: var(--accent-dark);
   font-size: 0.9rem;
   font-weight: 700;
+}
+
+.feed-composer-tip-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(248, 238, 227, 0.72);
+  border: 1px solid rgba(220, 207, 190, 0.72);
+}
+
+.feed-composer-tip-card strong {
+  color: var(--accent-dark);
+}
+
+.feed-composer-tip-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  display: grid;
+  gap: 6px;
 }
 
 .feed-comment-list {

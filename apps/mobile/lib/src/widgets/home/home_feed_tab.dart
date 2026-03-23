@@ -39,6 +39,13 @@ class HomeFeedTab extends StatelessWidget {
     final linkedPostsCount = posts
         .where((post) => post.linkedService != null)
         .length;
+    final beforeAfterCount = posts.where((post) => post.isBeforeAfter).length;
+    final reelCount = posts.where((post) => post.isReel).length;
+    final highlightedProfessionalsCount = posts
+        .map((post) => post.staffMemberName)
+        .whereType<String>()
+        .toSet()
+        .length;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -61,17 +68,17 @@ class HomeFeedTab extends StatelessWidget {
             eyebrow: 'Feed do salão',
             title: 'Resultados, novidades e inspirações',
             description:
-                'Veja cortes, unhas, sobrancelhas e outros resultados publicados pelo salão, incluindo antes e depois e videos curtos.',
+                'Veja transformações reais, vídeos curtos e resultados assinados pelo salão para escolher seu próximo atendimento com mais desejo e confiança.',
           ),
           const SizedBox(height: 16),
           if (posts.isEmpty)
             EmptyState(
               centered: true,
               icon: Icons.photo_library_outlined,
-              eyebrow: 'Feed em preparacao',
-              title: 'As fotos do salão vão aparecer aqui',
+              eyebrow: 'Vitrine do salão',
+              title: 'Seu próximo visual favorito vai aparecer aqui',
               message:
-                  'Quando o salão publicar seus resultados, você vai poder curtir e comentar sem sair do app.',
+                  'Quando o salão publicar transformações, vídeos e resultados reais, você vai poder salvar a referência, conversar e decidir com muito mais confiança.',
               actionLabel: 'Falar com o salão',
               onAction: onWhatsApp,
               accentColor: branding.primary,
@@ -80,7 +87,12 @@ class HomeFeedTab extends StatelessWidget {
             Column(
               children: [
                 _FeedConversionCard(
+                  branding: branding,
+                  postCount: posts.length,
                   linkedPostsCount: linkedPostsCount,
+                  beforeAfterCount: beforeAfterCount,
+                  reelCount: reelCount,
+                  highlightedProfessionalsCount: highlightedProfessionalsCount,
                   onWhatsApp: onWhatsApp,
                 ),
                 const SizedBox(height: 16),
@@ -113,47 +125,142 @@ class HomeFeedTab extends StatelessWidget {
 
 class _FeedConversionCard extends StatelessWidget {
   const _FeedConversionCard({
+    required this.branding,
+    required this.postCount,
     required this.linkedPostsCount,
+    required this.beforeAfterCount,
+    required this.reelCount,
+    required this.highlightedProfessionalsCount,
     required this.onWhatsApp,
   });
 
+  final SalonBranding branding;
+  final int postCount;
   final int linkedPostsCount;
+  final int beforeAfterCount;
+  final int reelCount;
+  final int highlightedProfessionalsCount;
   final VoidCallback onWhatsApp;
 
   @override
   Widget build(BuildContext context) {
     final title = linkedPostsCount > 0
-        ? '$linkedPostsCount ${linkedPostsCount == 1 ? 'resultado já pode virar reserva' : 'resultados já podem virar reserva'}'
-        : 'Use o feed para decidir com mais confiança';
+        ? 'Seu próximo visual pode sair do feed de hoje'
+        : 'Use o feed para descobrir o atendimento que mais combina com você';
     final description = linkedPostsCount > 0
-        ? 'Gostou de uma foto? Você pode reservar o serviço ligado ao resultado ou falar com o salão para adaptar o visual ao seu estilo.'
-        : 'Mesmo quando a foto não tiver serviço vinculado, vale falar com o salão para descobrir o melhor caminho antes de reservar.';
+        ? 'Há resultados com reserva direta, transformações reais e referências que ajudam você a imaginar como vai sair do salão antes mesmo de marcar.'
+        : 'Mesmo quando a publicação ainda não estiver ligada a um serviço, ela já funciona como referência para você conversar com o salão e montar o visual ideal.';
 
     return SoftCard(
+      gradient: LinearGradient(
+        colors: [
+          branding.deep,
+          branding.primary,
+          Color.lerp(branding.primary, Colors.white, 0.08)!,
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: branding.primary.withValues(alpha: 0.38),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
+            'Portfólio vivo do salão',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Colors.white.withValues(alpha: 0.82),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
             title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 10),
           Text(
             description,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF705A4B),
+              color: Colors.white.withValues(alpha: 0.88),
               height: 1.45,
             ),
           ),
           const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _FeedHighlightPill(
+                label: postCount == 1
+                    ? '1 inspiração no feed'
+                    : '$postCount inspirações no feed',
+              ),
+              if (beforeAfterCount > 0)
+                _FeedHighlightPill(
+                  label: beforeAfterCount == 1
+                      ? '1 antes e depois'
+                      : '$beforeAfterCount antes e depois',
+                ),
+              if (reelCount > 0)
+                _FeedHighlightPill(
+                  label: reelCount == 1
+                      ? '1 vídeo curto'
+                      : '$reelCount vídeos curtos',
+                ),
+              if (highlightedProfessionalsCount > 0)
+                _FeedHighlightPill(
+                  label: highlightedProfessionalsCount == 1
+                      ? '1 profissional em destaque'
+                      : '$highlightedProfessionalsCount profissionais em destaque',
+                ),
+              if (linkedPostsCount > 0)
+                _FeedHighlightPill(
+                  label: linkedPostsCount == 1
+                      ? '1 resultado com reserva direta'
+                      : '$linkedPostsCount resultados com reserva direta',
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
           OutlinedButton.icon(
             onPressed: onWhatsApp,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.7)),
+            ),
             icon: const Icon(Icons.chat_bubble_outline_rounded),
             label: const Text('Falar com o salão'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FeedHighlightPill extends StatelessWidget {
+  const _FeedHighlightPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }

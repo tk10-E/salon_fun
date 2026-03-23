@@ -65,7 +65,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('As fotos do salão vão aparecer aqui'), findsOneWidget);
+      expect(
+        find.text('Seu próximo visual favorito vai aparecer aqui'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Histórico'));
       await tester.pump();

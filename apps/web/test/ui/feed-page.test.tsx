@@ -141,13 +141,22 @@ describe("feed page UI", () => {
     expect(screen.getByRole("heading", { name: "Escova glow" })).toBeInTheDocument();
     expect(screen.getByText("Antes")).toBeInTheDocument();
     expect(screen.getByText("Depois")).toBeInTheDocument();
-    expect(screen.getByText("Formato: Antes e depois")).toBeInTheDocument();
-    expect(screen.getByText("Serviço vinculado: Escova modelada")).toBeInTheDocument();
-    expect(screen.getByText("Profissional: Talita • Colorista")).toBeInTheDocument();
+    expect(screen.getAllByText("Antes e depois").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Assinado por/i)).toBeInTheDocument();
+    expect(screen.getByText("Talita")).toBeInTheDocument();
+    expect(screen.getAllByText("Escova modelada").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "Transformação que ajuda a cliente a imaginar o próprio resultado com mais confiança.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("2 curtidas")).toBeInTheDocument();
     expect(screen.getByText("1 comentários")).toBeInTheDocument();
     expect(screen.getByText("Maria")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Nova publicação" })).toBeInTheDocument();
+    expect(
+      screen.getByText("O que mais faz a cliente salvar e agendar"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Formato do post")).toBeInTheDocument();
     expect(screen.getByLabelText("Título da publicação")).toBeInTheDocument();
     expect(screen.getByLabelText("Serviço vinculado")).toBeInTheDocument();
