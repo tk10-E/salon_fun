@@ -67,6 +67,42 @@ export function getInstagramMetaAppSecret() {
   return appSecret;
 }
 
+export function getInstagramMetaRedirectOrigin() {
+  const rawOrigin = process.env.INSTAGRAM_META_REDIRECT_ORIGIN?.trim();
+
+  if (!rawOrigin) {
+    return null;
+  }
+
+  const parsedOrigin = new URL(rawOrigin);
+
+  if (parsedOrigin.protocol !== "https:" && parsedOrigin.protocol !== "http:") {
+    throw new Error("INSTAGRAM_META_REDIRECT_ORIGIN must use http or https.");
+  }
+
+  parsedOrigin.pathname = "/";
+  parsedOrigin.search = "";
+  parsedOrigin.hash = "";
+
+  return parsedOrigin.origin;
+}
+
+export function buildInstagramMetaRedirectUri(pathname: string, fallbackBaseUrl?: string) {
+  const configuredOrigin = getInstagramMetaRedirectOrigin();
+
+  if (configuredOrigin) {
+    return new URL(pathname, configuredOrigin).toString();
+  }
+
+  if (!fallbackBaseUrl) {
+    throw new Error(
+      "INSTAGRAM_META_REDIRECT_ORIGIN is not configured and no fallback base URL was provided.",
+    );
+  }
+
+  return new URL(pathname, fallbackBaseUrl).toString();
+}
+
 export function createInstagramOAuthState(salonId: string) {
   const payload = Buffer.from(
     JSON.stringify({

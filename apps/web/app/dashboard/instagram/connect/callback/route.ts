@@ -5,6 +5,7 @@ import { buildRedirectNotice } from "@/app/_actions/shared";
 import { getOwnerSalon } from "@/lib/auth";
 import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
 import {
+  buildInstagramMetaRedirectUri,
   getInstagramMetaAppId,
   getInstagramMetaAppSecret,
   INSTAGRAM_OAUTH_STATE_COOKIE,
@@ -148,7 +149,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const redirectUri = new URL("/dashboard/instagram/connect/callback", request.url).toString();
+    const redirectUri = buildInstagramMetaRedirectUri(
+      "/dashboard/instagram/connect/callback",
+      request.url,
+    );
     const accessToken = await exchangeMetaCodeForToken(code, redirectUri);
     const metaAccounts = await loadMetaAccounts(accessToken);
     const { data: existingConnection } = await supabase

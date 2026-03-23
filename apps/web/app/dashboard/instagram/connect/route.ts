@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildRedirectNotice } from "@/app/_actions/shared";
 import { getOwnerSalon } from "@/lib/auth";
 import {
+  buildInstagramMetaRedirectUri,
   buildInstagramMetaAuthorizeUrl,
   createInstagramOAuthState,
   INSTAGRAM_OAUTH_STATE_COOKIE,
@@ -38,7 +39,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const redirectUri = new URL("/dashboard/instagram/connect/callback", request.url).toString();
+    const redirectUri = buildInstagramMetaRedirectUri(
+      "/dashboard/instagram/connect/callback",
+      request.url,
+    );
     const state = createInstagramOAuthState(salon.id);
     const authorizationUrl = buildInstagramMetaAuthorizeUrl({
       redirectUri,

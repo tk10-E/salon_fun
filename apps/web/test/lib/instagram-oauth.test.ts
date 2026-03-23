@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  buildInstagramMetaRedirectUri,
   buildInstagramMetaAuthorizeUrl,
   createInstagramOAuthState,
   resolveInstagramOAuthState,
@@ -11,15 +12,18 @@ import {
 describe("instagram oauth helpers", () => {
   const originalConnectionSecret = process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET;
   const originalMetaAppId = process.env.INSTAGRAM_META_APP_ID;
+  const originalMetaRedirectOrigin = process.env.INSTAGRAM_META_REDIRECT_ORIGIN;
 
   beforeEach(() => {
     process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET = "test-instagram-connection-secret";
     process.env.INSTAGRAM_META_APP_ID = "1490951809405535";
+    delete process.env.INSTAGRAM_META_REDIRECT_ORIGIN;
   });
 
   afterEach(() => {
     process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET = originalConnectionSecret;
     process.env.INSTAGRAM_META_APP_ID = originalMetaAppId;
+    process.env.INSTAGRAM_META_REDIRECT_ORIGIN = originalMetaRedirectOrigin;
   });
 
   it("round-trips the signed oauth state", () => {
@@ -54,6 +58,23 @@ describe("instagram oauth helpers", () => {
     const payload = resolveInstagramOAuthState(null, state);
 
     expect(payload.salonId).toBe("salon-cookie");
+  });
+
+  it("prefers the configured redirect origin for OAuth callbacks", () => {
+    process.env.INSTAGRAM_META_REDIRECT_ORIGIN = "https://painel.jc7desenvolvimento.online/";
+
+    expect(buildInstagramMetaRedirectUri("/dashboard/instagram/connect/callback")).toBe(
+      "https://painel.jc7desenvolvimento.online/dashboard/instagram/connect/callback",
+    );
+  });
+
+  it("falls back to the request URL base when no redirect origin is configured", () => {
+    expect(
+      buildInstagramMetaRedirectUri(
+        "/dashboard/instagram/connect/callback",
+        "https://preview.example.com/dashboard/instagram/connect",
+      ),
+    ).toBe("https://preview.example.com/dashboard/instagram/connect/callback");
   });
 
   it("rejects the callback when query state and cookie state disagree", () => {

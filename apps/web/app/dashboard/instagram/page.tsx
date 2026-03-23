@@ -135,6 +135,11 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
   const safeConnection = (connection ?? null) as InstagramConnectionRecord | null;
   const safeMentions = ((mentions ?? []) as InstagramMentionRecord[]);
   const safeEvents = ((webhookEvents ?? []) as InstagramWebhookEventRecord[]);
+  const metaRedirectOrigin = process.env.INSTAGRAM_META_REDIRECT_ORIGIN?.trim().replace(/\/+$/, "") ?? "";
+  const metaAppDomain = metaRedirectOrigin ? new URL(metaRedirectOrigin).hostname : null;
+  const metaCallbackUrl = metaRedirectOrigin
+    ? `${metaRedirectOrigin}/dashboard/instagram/connect/callback`
+    : null;
 
   const pendingCount = safeMentions.filter((item) => item.moderation_status === "pending").length;
   const approvedCount = safeMentions.filter((item) => item.moderation_status === "approved").length;
@@ -183,6 +188,19 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           <p className="muted" style={{ marginTop: 8 }}>
             Para novos saloes, prefira o fluxo de login da Meta. Ele ja traz pagina, Instagram profissional e token para o painel sem copiar IDs na mao.
           </p>
+          {metaAppDomain && metaCallbackUrl ? (
+            <div className="muted" style={{ marginTop: 12 }}>
+              <p style={{ margin: 0 }}>
+                Se a Meta bloquear a URL, cadastre estes valores no app:
+              </p>
+              <p style={{ margin: "8px 0 0" }}>
+                <strong>Dominios do aplicativo:</strong> <code>{metaAppDomain}</code>
+              </p>
+              <p style={{ margin: "8px 0 0" }}>
+                <strong>Redirect URI valido:</strong> <code>{metaCallbackUrl}</code>
+              </p>
+            </div>
+          ) : null}
           <div className="row-actions" style={{ marginTop: 14 }}>
             {canUseAutomaticMetaConnect ? (
               <Link href="/dashboard/instagram/connect" className="primary-button">
