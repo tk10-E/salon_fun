@@ -325,7 +325,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
   const supabase = createClient() as any;
   const { data: connection } = await supabase
     .from("instagram_connections")
-    .select("id, access_token_ciphertext")
+    .select("id, access_token_ciphertext, facebook_page_id, instagram_user_id, instagram_username")
     .eq("salon_id", salon.id)
     .maybeSingle();
 
@@ -335,9 +335,10 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
 
   try {
     const token = decryptInstagramAccessToken(connection.access_token_ciphertext);
-    const response = await fetch(
-      `https://graph.facebook.com/v23.0/me?fields=id,username&access_token=${encodeURIComponent(token)}`,
-    );
+    const validationUrl = connection.facebook_page_id
+      ? `https://graph.facebook.com/v23.0/${encodeURIComponent(connection.facebook_page_id)}?fields=instagram_business_account{id,username}&access_token=${encodeURIComponent(token)}`
+      : `https://graph.facebook.com/v23.0/me/accounts?fields=id&access_token=${encodeURIComponent(token)}`;
+    const response = await fetch(validationUrl);
 
     if (!response.ok) {
       const detail = await response.text();
@@ -350,6 +351,93 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
         .eq("id", connection.id);
 
       redirect(buildRedirectNotice(INSTAGRAM_PATH, "O token não pôde ser validado na API da Meta.", "error"));
+    }
+
+    const payload = await response.json();
+
+    if (connection.facebook_page_id) {
+      const connectedInstagramAccount = payload?.instagram_business_account;
+
+      if (!connectedInstagramAccount?.id) {
+        await supabase
+          .from("instagram_connections")
+          .update({
+            connection_status: "error",
+            last_error: "A página conectada não retornou uma conta profissional do Instagram.",
+          })
+          .eq("id", connection.id);
+
+        redirect(
+          buildRedirectNotice(
+            INSTAGRAM_PATH,
+            "A página conectada não retornou uma conta profissional do Instagram válida.",
+            "error",
+          ),
+        );
+      }
+
+      if (
+        connection.instagram_user_id &&
+        String(connectedInstagramAccount.id) !== String(connection.instagram_user_id)
+      ) {
+        await supabase
+          .from("instagram_connections")
+          .update({
+            connection_status: "error",
+            last_error: "O Instagram retornado pela página não corresponde ao ID salvo no painel.",
+          })
+          .eq("id", connection.id);
+
+        redirect(
+          buildRedirectNotice(
+            INSTAGRAM_PATH,
+            "A página conectada retornou um Instagram diferente do configurado no painel.",
+            "error",
+          ),
+        );
+      }
+
+      if (
+        connection.instagram_username &&
+        connectedInstagramAccount.username &&
+        connectedInstagramAccount.username.toLowerCase() !== connection.instagram_username.toLowerCase()
+      ) {
+        await supabase
+          .from("instagram_connections")
+          .update({
+            connection_status: "error",
+            last_error: "O nome de usuário retornado pela Meta não corresponde ao configurado no painel.",
+          })
+          .eq("id", connection.id);
+
+        redirect(
+          buildRedirectNotice(
+            INSTAGRAM_PATH,
+            "O usuário retornado pela Meta não corresponde ao configurado no painel.",
+            "error",
+          ),
+        );
+      }
+    } else {
+      const connectedPages = Array.isArray(payload?.data) ? payload.data : [];
+
+      if (connectedPages.length === 0) {
+        await supabase
+          .from("instagram_connections")
+          .update({
+            connection_status: "error",
+            last_error: "O token foi aceito, mas não encontrou páginas disponíveis para essa conta.",
+          })
+          .eq("id", connection.id);
+
+        redirect(
+          buildRedirectNotice(
+            INSTAGRAM_PATH,
+            "O token foi aceito, mas nenhuma página foi encontrada para essa conta.",
+            "error",
+          ),
+        );
+      }
     }
 
     await supabase

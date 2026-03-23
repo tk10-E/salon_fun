@@ -37,7 +37,9 @@ vi.mock("next/cache", () => ({
 import {
   publishInstagramMentionActionImpl,
   saveInstagramConnectionActionImpl,
+  validateInstagramConnectionTokenActionImpl,
 } from "@/app/_actions/instagram";
+import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
 
 describe("instagram actions", () => {
   const originalSecret = process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET;
@@ -214,5 +216,69 @@ describe("instagram actions", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
     expect(location).toBe("/dashboard/instagram?message=Men%C3%A7%C3%A3o+publicada+no+feed+do+app+com+sucesso.&tone=success");
+  });
+
+  it("validates a facebook-login instagram token through the connected page", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "connection-1",
+        access_token_ciphertext: encryptInstagramAccessToken("EAAB-test-token"),
+        facebook_page_id: "1120032767849275",
+        instagram_user_id: "17841442717327141",
+        instagram_username: "jctecnologi07",
+      },
+      error: null,
+    });
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "instagram_connections") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle,
+              })),
+            })),
+            update,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          instagram_business_account: {
+            id: "17841442717327141",
+            username: "jctecnologi07",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    ) as typeof fetch;
+
+    const location = await captureRedirect(
+      validateInstagramConnectionTokenActionImpl(new FormData()),
+      redirectMock,
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "https://graph.facebook.com/v23.0/1120032767849275?fields=instagram_business_account{id,username}",
+      ),
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connection_status: "active",
+        last_error: null,
+      }),
+    );
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
+    expect(location).toBe("/dashboard/instagram?message=Token+validado+com+sucesso+na+API+da+Meta.&tone=success");
   });
 });
