@@ -11,10 +11,12 @@ export function EmptyStateCard({
 }: EmptyStateCardProps) {
   return (
     <div className="empty-state">
-      <span className="eyebrow">{eyebrow}</span>
-      <h3>{title}</h3>
-      <p>{description}</p>
+      <div className="empty-state__mark" aria-hidden="true" />
+      <div className="empty-state__content">
+        <span className="eyebrow">{eyebrow}</span>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
     </div>
   );
 }
-

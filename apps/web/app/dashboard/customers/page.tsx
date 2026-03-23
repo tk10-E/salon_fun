@@ -159,6 +159,28 @@ function firstRelation<T extends { name?: string | null }>(
   return value ?? null;
 }
 
+function buildCustomerRelationshipSummary(customer: CustomerDirectoryItem) {
+  const isVip = customer.current_tier?.is_vip ?? false;
+
+  if (customer.upcoming_appointments > 0 && isVip) {
+    return "Cliente VIP com retorno já encaminhado e alto potencial de recompra.";
+  }
+
+  if (customer.upcoming_appointments > 0) {
+    return "Retorno já encaminhado, com agenda futura ajudando a proteger a recorrência.";
+  }
+
+  if (isVip) {
+    return "Cliente VIP sem próxima agenda; vale puxar um retorno antes de esfriar.";
+  }
+
+  if (customer.completed_visits >= 3) {
+    return "Cliente recorrente sem próxima agenda; boa candidata para rebook ou oferta inteligente.";
+  }
+
+  return "Cliente em construção de hábito com o salão; a próxima experiência ajuda a travar retenção.";
+}
+
 export default async function CustomersPage({ searchParams }: CustomersPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
@@ -392,21 +414,24 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               <article key={customer.id} className="list-row customer-card">
                 <div className="customer-card__content">
                   <div className="customer-card__header">
-                    <div className="list-row__content">
-                      <h3>{customer.name}</h3>
-                      <div className="customer-card__badges">
-                        {customer.current_tier ? (
-                          <span className={customer.current_tier.is_vip ? "badge badge--confirmed" : "badge badge--soft"}>
-                            {customer.current_tier.label}
-                          </span>
-                        ) : (
-                          <span className="badge badge--soft">Sem fidelidade ativa</span>
-                        )}
-                        {customer.current_tier?.is_vip ? <span className="badge badge--confirmed">VIP</span> : null}
-                        {customer.referral_code ? (
-                          <span className="badge badge--pending">Código {customer.referral_code}</span>
-                        ) : null}
+                    <div className="customer-card__identity">
+                      <div className="list-row__content">
+                        <h3>{customer.name}</h3>
+                        <div className="customer-card__badges">
+                          {customer.current_tier ? (
+                            <span className={customer.current_tier.is_vip ? "badge badge--confirmed" : "badge badge--soft"}>
+                              {customer.current_tier.label}
+                            </span>
+                          ) : (
+                            <span className="badge badge--soft">Sem fidelidade ativa</span>
+                          )}
+                          {customer.current_tier?.is_vip ? <span className="badge badge--confirmed">VIP</span> : null}
+                          {customer.referral_code ? (
+                            <span className="badge badge--pending">Código {customer.referral_code}</span>
+                          ) : null}
+                        </div>
                       </div>
+                      <p className="customer-card__summary">{buildCustomerRelationshipSummary(customer)}</p>
                     </div>
                   </div>
 
@@ -455,47 +480,58 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
                   customer.allergies ||
                   customer.beauty_products ||
                   customer.last_completed_service_name ? (
-                    <div className="customer-card__beauty">
-                      {customer.last_completed_service_name ? (
-                        <div className="customer-detail-item">
-                          <span className="customer-detail-item__label">Último resultado registrado</span>
-                          <strong>
-                            {customer.last_completed_service_name}
-                            {customer.last_completed_staff_member_name
-                              ? ` • com ${customer.last_completed_staff_member_name}`
-                              : ""}
-                            {customer.last_completed_at
-                              ? ` • ${formatDateTime(customer.last_completed_at)}`
-                              : ""}
-                          </strong>
-                        </div>
-                      ) : null}
-                      {customer.preferences ? (
-                        <div className="customer-detail-item">
-                          <span className="customer-detail-item__label">Preferências</span>
-                          <strong>{customer.preferences}</strong>
-                        </div>
-                      ) : null}
-                      {customer.beauty_products ? (
-                        <div className="customer-detail-item">
-                          <span className="customer-detail-item__label">Produtos usados ou preferidos</span>
-                          <strong>{customer.beauty_products}</strong>
-                        </div>
-                      ) : null}
-                      {customer.allergies ? (
-                        <div className="customer-detail-item">
-                          <span className="customer-detail-item__label">Alergias e cuidados</span>
-                          <strong>{customer.allergies}</strong>
-                        </div>
-                      ) : null}
+                    <div className="customer-card__section">
+                      <div className="customer-card__section-heading">
+                        <span className="eyebrow">Prontuário rápido</span>
+                        <small className="list-meta">
+                          Último resultado, preferências e cuidados que ajudam o salão a manter consistência no próximo atendimento.
+                        </small>
+                      </div>
+
+                      <div className="customer-card__beauty">
+                        {customer.last_completed_service_name ? (
+                          <div className="customer-detail-item">
+                            <span className="customer-detail-item__label">Último resultado registrado</span>
+                            <strong>
+                              {customer.last_completed_service_name}
+                              {customer.last_completed_staff_member_name
+                                ? ` • com ${customer.last_completed_staff_member_name}`
+                                : ""}
+                              {customer.last_completed_at
+                                ? ` • ${formatDateTime(customer.last_completed_at)}`
+                                : ""}
+                            </strong>
+                          </div>
+                        ) : null}
+                        {customer.preferences ? (
+                          <div className="customer-detail-item">
+                            <span className="customer-detail-item__label">Preferências</span>
+                            <strong>{customer.preferences}</strong>
+                          </div>
+                        ) : null}
+                        {customer.beauty_products ? (
+                          <div className="customer-detail-item">
+                            <span className="customer-detail-item__label">Produtos usados ou preferidos</span>
+                            <strong>{customer.beauty_products}</strong>
+                          </div>
+                        ) : null}
+                        {customer.allergies ? (
+                          <div className="customer-detail-item">
+                            <span className="customer-detail-item__label">Alergias e cuidados</span>
+                            <strong>{customer.allergies}</strong>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
 
                   {customer.current_tier ? (
-                    <small className="list-meta">
-                      Desconto atual de {formatTierDiscount(customer.current_tier.discount_percent)}% para esse cliente
-                      {customer.last_reward_at ? ` • última recompensa em ${formatDateTime(customer.last_reward_at)}` : ""}.
-                    </small>
+                    <div className="customer-card__footer">
+                      <small className="list-meta">
+                        Desconto atual de {formatTierDiscount(customer.current_tier.discount_percent)}% para esse cliente
+                        {customer.last_reward_at ? ` • última recompensa em ${formatDateTime(customer.last_reward_at)}` : ""}.
+                      </small>
+                    </div>
                   ) : null}
                 </div>
               </article>

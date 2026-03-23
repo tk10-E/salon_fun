@@ -890,12 +890,21 @@ button {
 }
 
 .command-card {
+  position: relative;
+  overflow: hidden;
   display: grid;
   gap: 12px;
   padding: 22px;
   border-radius: 22px;
   border: 1px solid rgba(220, 202, 182, 0.84);
   box-shadow: var(--shadow-soft);
+}
+
+.command-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
 }
 
 .command-card h3 {
@@ -910,16 +919,28 @@ button {
     rgba(255, 250, 244, 0.94);
 }
 
+.command-card--warm::before {
+  background: linear-gradient(90deg, rgba(168, 86, 45, 0.95), rgba(235, 174, 118, 0.9));
+}
+
 .command-card--soft {
   background:
     linear-gradient(145deg, rgba(255, 250, 244, 0.96), rgba(245, 236, 226, 0.94)),
     rgba(255, 250, 244, 0.94);
 }
 
+.command-card--soft::before {
+  background: linear-gradient(90deg, rgba(140, 108, 76, 0.9), rgba(208, 181, 151, 0.88));
+}
+
 .command-card--accent {
   background:
     linear-gradient(145deg, rgba(250, 239, 230, 0.98), rgba(239, 221, 203, 0.94)),
     rgba(255, 250, 244, 0.94);
+}
+
+.command-card--accent::before {
+  background: linear-gradient(90deg, rgba(136, 63, 29, 0.95), rgba(204, 143, 103, 0.9));
 }
 
 .command-card__highlight {
@@ -1201,11 +1222,24 @@ button {
   gap: 16px;
 }
 
+.customer-card__identity {
+  display: grid;
+  gap: 10px;
+  max-width: 48rem;
+}
+
 .customer-card__header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+}
+
+.customer-card__summary {
+  margin: 0;
+  color: rgba(39, 23, 15, 0.82);
+  font-size: 1rem;
+  line-height: 1.62;
 }
 
 .customer-card__badges {
@@ -1219,6 +1253,16 @@ button {
 .customer-card__beauty {
   display: grid;
   gap: 12px;
+}
+
+.customer-card__section {
+  display: grid;
+  gap: 12px;
+}
+
+.customer-card__section-heading {
+  display: grid;
+  gap: 6px;
 }
 
 .customer-card__details {
@@ -1255,6 +1299,13 @@ button {
 .customer-metric-tile strong {
   color: var(--text);
   line-height: 1.45;
+}
+
+.customer-card__footer {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(220, 202, 182, 0.88);
+  background: linear-gradient(135deg, rgba(255, 251, 247, 0.98), rgba(245, 235, 225, 0.92));
 }
 
 .notifications-pagination {
@@ -1447,11 +1498,44 @@ button {
 }
 
 .empty-state {
-  padding: 26px;
-  border: 1px dashed var(--border);
-  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+  padding: 30px;
+  border: 1px dashed rgba(168, 86, 45, 0.24);
+  border-radius: 22px;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.58);
+  background:
+    linear-gradient(135deg, rgba(255, 251, 247, 0.96), rgba(247, 238, 229, 0.9)),
+    rgba(255, 255, 255, 0.58);
+  display: grid;
+  gap: 14px;
+}
+
+.empty-state::before {
+  content: "";
+  position: absolute;
+  top: -36px;
+  right: -30px;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168, 86, 45, 0.14), rgba(168, 86, 45, 0.02) 70%);
+}
+
+.empty-state__mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  border: 1px solid rgba(168, 86, 45, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.18)),
+    rgba(255, 248, 241, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.empty-state__content {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 10px;
 }
