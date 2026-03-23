@@ -14,11 +14,36 @@ import {
 } from "./shared";
 
 const FEED_PATH = "/dashboard/feed";
+const FEED_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const FEED_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+
+type FeedPostType = "standard" | "before_after" | "reel";
 
 function readUploadedFiles(formData: FormData, field: string) {
   return formData
     .getAll(field)
     .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+}
+
+function readUploadedFile(formData: FormData, field: string) {
+  const entry = formData.get(field);
+  return entry instanceof File && entry.size > 0 ? entry : null;
+}
+
+function parseFeedPostType(value: string): FeedPostType | null {
+  if (value === "before_after" || value === "reel" || value === "standard") {
+    return value;
+  }
+
+  return null;
+}
+
+function buildFeedUploadPath(salonId: string, file: File, fallbackExtension: string) {
+  const extension = file.name.includes(".")
+    ? file.name.split(".").pop()?.toLowerCase() ?? fallbackExtension
+    : fallbackExtension;
+
+  return `${salonId}/${randomUUID()}.${extension}`;
 }
 
 export async function createSalonPostActionImpl(formData: FormData) {
@@ -27,23 +52,47 @@ export async function createSalonPostActionImpl(formData: FormData) {
 
   const rawTitle = String(formData.get("title") ?? "").trim();
   const rawCaption = String(formData.get("caption") ?? "").trim();
+  const rawPostType = String(formData.get("postType") ?? "standard").trim();
   const rawServiceId = String(formData.get("serviceId") ?? "").trim();
+  const rawStaffMemberId = String(formData.get("staffMemberId") ?? "").trim();
   const imageFiles = readUploadedFiles(formData, "images");
+  const videoFile = readUploadedFile(formData, "video");
+  const postType = parseFeedPostType(rawPostType);
 
   if (!rawTitle) {
-    redirect(buildRedirectNotice(FEED_PATH, "Informe um título para a foto.", "error"));
+    redirect(buildRedirectNotice(FEED_PATH, "Informe um título para a publicação.", "error"));
   }
 
   if (rawCaption.length > 500) {
     redirect(buildRedirectNotice(FEED_PATH, "A legenda pode ter no máximo 500 caracteres.", "error"));
   }
 
-  if (!imageFiles.length) {
+  if (!postType) {
+    redirect(buildRedirectNotice(FEED_PATH, "Selecione um formato válido para a publicação.", "error"));
+  }
+
+  if (postType === "standard" && !imageFiles.length) {
     redirect(buildRedirectNotice(FEED_PATH, "Selecione pelo menos uma imagem para publicar.", "error"));
   }
 
-  if (imageFiles.length > 5) {
+  if (postType === "standard" && imageFiles.length > 5) {
     redirect(buildRedirectNotice(FEED_PATH, "Envie no máximo 5 imagens por publicação.", "error"));
+  }
+
+  if (postType === "before_after" && imageFiles.length !== 2) {
+    redirect(buildRedirectNotice(FEED_PATH, "Posts de antes e depois precisam de exatamente 2 imagens.", "error"));
+  }
+
+  if (postType === "reel" && imageFiles.length !== 1) {
+    redirect(buildRedirectNotice(FEED_PATH, "Vídeos curtos precisam de 1 imagem de capa.", "error"));
+  }
+
+  if (postType !== "reel" && videoFile) {
+    redirect(buildRedirectNotice(FEED_PATH, "Vídeo só pode ser enviado no formato vídeo curto.", "error"));
+  }
+
+  if (postType === "reel" && !videoFile) {
+    redirect(buildRedirectNotice(FEED_PATH, "Envie um vídeo para publicar no formato vídeo curto.", "error"));
   }
 
   for (const imageFile of imageFiles) {
@@ -51,13 +100,25 @@ export async function createSalonPostActionImpl(formData: FormData) {
       redirect(buildRedirectNotice(FEED_PATH, "Envie apenas imagens válidas para o feed.", "error"));
     }
 
-    if (imageFile.size > 4 * 1024 * 1024) {
+    if (imageFile.size > FEED_IMAGE_MAX_BYTES) {
       redirect(buildRedirectNotice(FEED_PATH, "Cada imagem deve ter no máximo 4 MB.", "error"));
+    }
+  }
+
+  if (videoFile) {
+    if (!videoFile.type.startsWith("video/")) {
+      redirect(buildRedirectNotice(FEED_PATH, "Envie um vídeo válido para o feed.", "error"));
+    }
+
+    if (videoFile.size > FEED_VIDEO_MAX_BYTES) {
+      redirect(buildRedirectNotice(FEED_PATH, "O vídeo deve ter no máximo 25 MB.", "error"));
     }
   }
 
   let serviceId: string | null = null;
   let serviceName: string | null = null;
+  let staffMemberId: string | null = null;
+  let staffMemberName: string | null = null;
 
   if (rawServiceId) {
     const { data: service, error: serviceError } = await supabase
@@ -75,13 +136,27 @@ export async function createSalonPostActionImpl(formData: FormData) {
     serviceName = service.name;
   }
 
+  if (rawStaffMemberId) {
+    const { data: staffMember, error: staffMemberError } = await supabase
+      .from("staff_members")
+      .select("id,name")
+      .eq("id", rawStaffMemberId)
+      .eq("salon_id", salon.id)
+      .maybeSingle();
+
+    if (staffMemberError || !staffMember) {
+      redirect(buildRedirectNotice(FEED_PATH, "Selecione um profissional válido para destacar no post.", "error"));
+    }
+
+    staffMemberId = staffMember.id;
+    staffMemberName = staffMember.name;
+  }
+
   const uploadedPaths: string[] = [];
+  let videoPath: string | null = null;
 
   for (const imageFile of imageFiles) {
-    const extension = imageFile.name.includes(".")
-      ? imageFile.name.split(".").pop()?.toLowerCase() ?? "jpg"
-      : "jpg";
-    const uploadPath = `${salon.id}/${randomUUID()}.${extension}`;
+    const uploadPath = buildFeedUploadPath(salon.id, imageFile, "jpg");
     const bytes = Buffer.from(await imageFile.arrayBuffer());
 
     const { error: uploadError } = await supabase.storage.from("salon-posts").upload(uploadPath, bytes, {
@@ -99,6 +174,25 @@ export async function createSalonPostActionImpl(formData: FormData) {
     uploadedPaths.push(uploadPath);
   }
 
+  if (videoFile) {
+    const uploadPath = buildFeedUploadPath(salon.id, videoFile, "mp4");
+    const bytes = Buffer.from(await videoFile.arrayBuffer());
+    const { error: uploadError } = await supabase.storage.from("salon-posts").upload(uploadPath, bytes, {
+      contentType: videoFile.type,
+      upsert: false,
+    });
+
+    if (uploadError) {
+      if (uploadedPaths.length) {
+        await supabase.storage.from("salon-posts").remove(uploadedPaths);
+      }
+      redirect(buildRedirectNotice(FEED_PATH, "Não foi possível enviar o vídeo do post.", "error"));
+    }
+
+    videoPath = uploadPath;
+    uploadedPaths.push(uploadPath);
+  }
+
   const { data: createdPost, error } = await supabase
     .from("salon_posts")
     .insert({
@@ -106,7 +200,10 @@ export async function createSalonPostActionImpl(formData: FormData) {
       title: rawTitle,
       caption: rawCaption || null,
       image_path: uploadedPaths[0],
+      post_type: postType,
       service_id: serviceId,
+      staff_member_id: staffMemberId,
+      video_path: videoPath,
       created_by_user_id: user.id,
     })
     .select("id,created_at")
@@ -134,14 +231,20 @@ export async function createSalonPostActionImpl(formData: FormData) {
   const postImageUrl = supabase.storage
     .from("salon-posts")
     .getPublicUrl(uploadedPaths[0]).data.publicUrl;
+  const postVideoUrl = videoPath
+    ? supabase.storage.from("salon-posts").getPublicUrl(videoPath).data.publicUrl
+    : null;
   const feedNotification = buildFeedPostNotification({
     postId: createdPost.id,
     postTitle: rawTitle,
     postCaption: rawCaption,
     postImageUrl,
+    postType,
+    postVideoUrl,
     postPublishedAt: createdPost.created_at ?? new Date().toISOString(),
     serviceId,
     serviceName,
+    staffMemberName,
   });
 
   await queueCustomerNotification({
@@ -154,7 +257,17 @@ export async function createSalonPostActionImpl(formData: FormData) {
   });
 
   revalidatePath(FEED_PATH);
-  redirect(buildRedirectNotice(FEED_PATH, "Publicação criada com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      FEED_PATH,
+      postType === "reel"
+        ? "Vídeo curto publicado com sucesso."
+        : postType === "before_after"
+          ? "Antes e depois publicado com sucesso."
+          : "Publicação criada com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function deleteSalonPostActionImpl(formData: FormData) {
@@ -168,7 +281,7 @@ export async function deleteSalonPostActionImpl(formData: FormData) {
 
   const { data: post, error: loadError } = await supabase
     .from("salon_posts")
-    .select("id, image_path, salon_post_images(image_path)")
+    .select("id, image_path, video_path, salon_post_images(image_path)")
     .eq("id", postId)
     .eq("salon_id", salon.id)
     .maybeSingle();
@@ -190,6 +303,7 @@ export async function deleteSalonPostActionImpl(formData: FormData) {
   const imagePaths = Array.from(
     new Set([
       post.image_path,
+      post.video_path,
       ...((post.salon_post_images as { image_path: string }[] | null) ?? []).map((image) => image.image_path),
     ].filter(Boolean)),
   );

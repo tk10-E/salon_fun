@@ -77,7 +77,10 @@ abstract class _SalonRepositoryBase {
     final message = error.message.toLowerCase();
     return _isMissingFeedSchemaError(error) ||
         message.contains('salon_post_images') ||
-        message.contains('service_id');
+        message.contains('service_id') ||
+        message.contains('post_type') ||
+        message.contains('video_path') ||
+        message.contains('staff_member_id');
   }
 
   bool _isMissingFavoritesSchemaError(PostgrestException error) {

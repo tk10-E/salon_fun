@@ -43,3 +43,7 @@ export function makeFormData(entries: Record<string, FormValue>) {
 export function makeImageFile(name: string, contents = "image-bytes", type = "image/jpeg") {
   return new File([contents], name, { type });
 }
+
+export function makeVideoFile(name: string, contents = "video-bytes", type = "video/mp4") {
+  return new File([contents], name, { type });
+}

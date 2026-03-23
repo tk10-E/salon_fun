@@ -103,16 +103,27 @@ export function buildFeedPostNotification(args: {
   postTitle: string;
   postCaption: string;
   postImageUrl: string;
+  postType: "standard" | "before_after" | "reel";
+  postVideoUrl?: string | null;
   postPublishedAt: string;
   serviceId: string | null;
   serviceName: string | null;
+  staffMemberName?: string | null;
 }) {
-  const notificationTitle = args.serviceName
-    ? `Nova foto de ${args.serviceName} no feed`
-    : `Nova foto no feed: ${args.postTitle}`;
-  const fallbackBody = args.serviceName
-    ? `${args.postTitle} acabou de entrar no feed em ${args.serviceName}. Confira no app.`
-    : `${args.postTitle} acabou de entrar no feed do salão. Confira no app.`;
+  const formatLabel =
+    args.postType === "reel" ? "vídeo curto" : args.postType === "before_after" ? "antes e depois" : "foto";
+  const highlightSubject = args.serviceName ?? args.staffMemberName ?? args.postTitle;
+  const notificationTitle = args.postType === "reel"
+    ? `Novo vídeo de ${highlightSubject} no feed`
+    : args.postType === "before_after"
+      ? `Novo antes e depois de ${highlightSubject}`
+      : args.serviceName
+        ? `Nova foto de ${args.serviceName} no feed`
+        : `Nova foto no feed: ${args.postTitle}`;
+  const fallbackBody =
+    args.serviceName || args.staffMemberName
+      ? `${args.postTitle} acabou de entrar no feed como ${formatLabel} em ${highlightSubject}. Confira no app.`
+      : `${args.postTitle} acabou de entrar no feed do salão como ${formatLabel}. Confira no app.`;
 
   return {
     title: notificationTitle,
@@ -123,9 +134,12 @@ export function buildFeedPostNotification(args: {
       postTitle: args.postTitle,
       postCaption: args.postCaption || null,
       postImageUrl: args.postImageUrl,
+      postType: args.postType,
+      postVideoUrl: args.postVideoUrl ?? null,
       postPublishedAt: args.postPublishedAt,
       serviceId: args.serviceId,
       serviceName: args.serviceName,
+      staffMemberName: args.staffMemberName ?? null,
     },
   };
 }

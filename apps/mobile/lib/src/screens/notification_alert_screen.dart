@@ -59,8 +59,23 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
     return raw == null || raw.isEmpty ? null : raw;
   }
 
+  String? get _postVideoUrl {
+    final raw = notification.data['postVideoUrl']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
+  }
+
   String? get _postServiceName {
     final raw = notification.data['serviceName']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
+  }
+
+  String? get _postStaffMemberName {
+    final raw = notification.data['staffMemberName']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
+  }
+
+  String? get _postType {
+    final raw = notification.data['postType']?.toString().trim();
     return raw == null || raw.isEmpty ? null : raw;
   }
 
@@ -90,7 +105,8 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
   @override
   void initState() {
     super.initState();
-    _repository = widget.repository ?? SalonRepository(Supabase.instance.client);
+    _repository =
+        widget.repository ?? SalonRepository(Supabase.instance.client);
   }
 
   Future<void> _confirmPresence() async {
@@ -373,7 +389,10 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
                       title: _postTitle ?? notification.title,
                       caption: _postCaption ?? notification.body,
                       imageUrl: _postImageUrl,
+                      videoUrl: _postVideoUrl,
+                      postType: _postType,
                       serviceName: _postServiceName,
+                      staffMemberName: _postStaffMemberName,
                       publishedAt: postPublishedAt,
                     ),
                   ],
@@ -558,10 +577,7 @@ class _NextStepCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.bolt_rounded,
-            color: Color(0xFF8D5B28),
-          ),
+          const Icon(Icons.bolt_rounded, color: Color(0xFF8D5B28)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -713,8 +729,9 @@ String _descriptionFor(String type) {
 String? _nextStepFor(NotificationTapPayload notification) {
   final type = notification.type;
   final serviceName = notification.data['serviceName']?.toString().trim();
-  final staffMemberName =
-      notification.data['staffMemberName']?.toString().trim();
+  final staffMemberName = notification.data['staffMemberName']
+      ?.toString()
+      .trim();
 
   switch (type) {
     case 'feed_post_published':
@@ -774,14 +791,20 @@ class _FeedPostPreviewCard extends StatelessWidget {
     required this.title,
     required this.caption,
     this.imageUrl,
+    this.videoUrl,
+    this.postType,
     this.serviceName,
+    this.staffMemberName,
     this.publishedAt,
   });
 
   final String title;
   final String caption;
   final String? imageUrl;
+  final String? videoUrl;
+  final String? postType;
   final String? serviceName;
+  final String? staffMemberName;
   final DateTime? publishedAt;
 
   @override
@@ -791,6 +814,11 @@ class _FeedPostPreviewCard extends StatelessWidget {
       category: serviceName,
       name: title,
     );
+    final formatLabel = switch (postType) {
+      'before_after' => 'Antes e depois',
+      'reel' => 'Video curto',
+      _ => 'Foto',
+    };
 
     return Container(
       width: double.infinity,
@@ -831,8 +859,26 @@ class _FeedPostPreviewCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
+              _FeedMetaChip(
+                icon: postType == 'reel'
+                    ? Icons.play_circle_outline_rounded
+                    : postType == 'before_after'
+                    ? Icons.compare_rounded
+                    : Icons.photo_library_outlined,
+                label: formatLabel,
+              ),
               if (serviceName != null)
                 _FeedMetaChip(icon: serviceVisual.icon, label: serviceName!),
+              if (staffMemberName != null)
+                _FeedMetaChip(
+                  icon: Icons.person_outline_rounded,
+                  label: staffMemberName!,
+                ),
+              if (videoUrl != null)
+                const _FeedMetaChip(
+                  icon: Icons.ondemand_video_rounded,
+                  label: 'Com video',
+                ),
               if (publishedAt != null)
                 _FeedMetaChip(
                   icon: Icons.schedule_rounded,
@@ -840,7 +886,10 @@ class _FeedPostPreviewCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (serviceName != null || publishedAt != null)
+          if (serviceName != null ||
+              staffMemberName != null ||
+              publishedAt != null ||
+              postType != null)
             const SizedBox(height: 12),
           Text(
             title,

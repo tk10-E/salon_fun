@@ -4,6 +4,7 @@ import {
   captureRedirect,
   makeFormData,
   makeImageFile,
+  makeVideoFile,
   TEST_REDIRECT_PREFIX,
 } from "@/test/server-action-test-helpers";
 
@@ -165,5 +166,128 @@ describe("feed actions", () => {
     );
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
     expect(location).toBe("/dashboard/feed?message=Publica%C3%A7%C3%A3o+criada+com+sucesso.&tone=success");
+  });
+
+  it("creates a reel with highlighted professional and video payload", async () => {
+    const serviceLookup = vi.fn().mockResolvedValue({
+      data: {
+        id: "service-1",
+        name: "Escova modelada",
+      },
+      error: null,
+    });
+    const staffLookup = vi.fn().mockResolvedValue({
+      data: {
+        id: "staff-1",
+        name: "Talita",
+      },
+      error: null,
+    });
+    const selectService = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: serviceLookup,
+        })),
+      })),
+    }));
+    const selectStaff = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: staffLookup,
+        })),
+      })),
+    }));
+
+    const createdPost = {
+      id: "post-reel-1",
+      created_at: "2026-03-22T15:00:00.000Z",
+    };
+    const selectCreatedPost = vi.fn(() => ({
+      single: vi.fn().mockResolvedValue({
+        data: createdPost,
+        error: null,
+      }),
+    }));
+    const insertPost = vi.fn(() => ({
+      select: selectCreatedPost,
+    }));
+    const insertGallery = vi.fn().mockResolvedValue({ error: null });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+    const uploadAsset = vi.fn().mockResolvedValue({ error: null });
+    const removeAssets = vi.fn().mockResolvedValue(undefined);
+    const getPublicUrl = vi.fn((path: string) => ({
+      data: {
+        publicUrl: `https://cdn.example.com/${path}`,
+      },
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "services") {
+          return { select: selectService };
+        }
+
+        if (table === "staff_members") {
+          return { select: selectStaff };
+        }
+
+        if (table === "salon_posts") {
+          return {
+            insert: insertPost,
+          };
+        }
+
+        if (table === "salon_post_images") {
+          return { insert: insertGallery };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return { insert: insertNotification };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          upload: uploadAsset,
+          remove: removeAssets,
+          getPublicUrl,
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      createSalonPostActionImpl(
+        makeFormData({
+          postType: "reel",
+          title: "Finalização em movimento",
+          caption: "Video curto com escova glow.",
+          serviceId: "service-1",
+          staffMemberId: "staff-1",
+          images: [makeImageFile("cover.jpg")],
+          video: makeVideoFile("reel.mp4"),
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(uploadAsset).toHaveBeenCalledTimes(2);
+    expect(insertPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        post_type: "reel",
+        staff_member_id: "staff-1",
+        video_path: expect.stringMatching(/^salon-1\//),
+      }),
+    );
+    expect(insertNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          postType: "reel",
+          staffMemberName: "Talita",
+          postVideoUrl: expect.stringContaining("https://cdn.example.com/"),
+        }),
+      }),
+    );
+    expect(location).toBe("/dashboard/feed?message=V%C3%ADdeo+curto+publicado+com+sucesso.&tone=success");
   });
 });

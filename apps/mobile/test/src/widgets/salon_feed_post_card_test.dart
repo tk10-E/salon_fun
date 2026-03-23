@@ -45,6 +45,55 @@ void main() {
       expect(find.byType(PageView), findsOneWidget);
     });
 
+    testWidgets('renders before and after labels for transformation posts', (
+      tester,
+    ) async {
+      await _pumpFeedCard(
+        tester,
+        post: _feedPost(
+          imageUrls: const [
+            'https://example.com/post-before.jpg',
+            'https://example.com/post-after.jpg',
+          ],
+          postType: SalonPostType.beforeAfter,
+          linkedService: null,
+        ),
+      );
+
+      expect(find.text('Antes'), findsOneWidget);
+      expect(find.text('Depois'), findsOneWidget);
+      expect(find.byType(PageView), findsNothing);
+      expect(find.text('Antes e depois'), findsOneWidget);
+    });
+
+    testWidgets('shows reel CTA and opens the video action', (tester) async {
+      var openVideoCount = 0;
+
+      await _pumpFeedCard(
+        tester,
+        post: _feedPost(
+          imageUrls: const ['https://example.com/post-cover.jpg'],
+          postType: SalonPostType.reel,
+          videoUrl: 'https://example.com/post.mp4',
+          linkedService: null,
+          staffMemberName: 'Talita',
+          staffMemberRole: 'Colorista',
+        ),
+        onOpenVideo: () {
+          openVideoCount += 1;
+        },
+      );
+
+      expect(find.text('Video curto'), findsWidgets);
+      expect(find.text('Talita • Colorista'), findsOneWidget);
+      expect(find.text('Assistir video curto'), findsOneWidget);
+
+      await tester.tap(find.text('Assistir video curto'));
+      await tester.pump();
+
+      expect(openVideoCount, 1);
+    });
+
     testWidgets('shows only the first two preview comments', (tester) async {
       await _pumpFeedCard(
         tester,
@@ -119,33 +168,34 @@ void main() {
       (tester) async {
         var contactTapCount = 0;
 
-      await _pumpFeedCard(
-        tester,
-        post: _feedPost(
-          imageUrls: const ['https://example.com/post-1.jpg'],
-          linkedService: null,
-        ),
-        onContactSalon: () {
-          contactTapCount += 1;
-        },
-      );
+        await _pumpFeedCard(
+          tester,
+          post: _feedPost(
+            imageUrls: const ['https://example.com/post-1.jpg'],
+            linkedService: null,
+          ),
+          onContactSalon: () {
+            contactTapCount += 1;
+          },
+        );
 
-      expect(find.text('Agendar este serviço'), findsNothing);
-      expect(find.text('Corte premium'), findsNothing);
-      expect(find.text('60 min'), findsNothing);
-      expect(find.text('Falar sobre esse resultado'), findsOneWidget);
-      expect(
-        find.text(
-          'Se esse visual combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.',
-        ),
-        findsOneWidget,
-      );
+        expect(find.text('Agendar este serviço'), findsNothing);
+        expect(find.text('Corte premium'), findsNothing);
+        expect(find.text('60 min'), findsNothing);
+        expect(find.text('Falar sobre esse resultado'), findsOneWidget);
+        expect(
+          find.text(
+            'Se esse visual combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.',
+          ),
+          findsOneWidget,
+        );
 
-      await tester.tap(find.text('Falar sobre esse resultado'));
-      await tester.pump();
+        await tester.tap(find.text('Falar sobre esse resultado'));
+        await tester.pump();
 
-      expect(contactTapCount, 1);
-    });
+        expect(contactTapCount, 1);
+      },
+    );
 
     testWidgets(
       'shows busy indicators and blocks all feed card actions while busy',
@@ -205,6 +255,7 @@ Future<void> _pumpFeedCard(
   VoidCallback? onOpenComments,
   VoidCallback? onBookService,
   VoidCallback? onContactSalon,
+  VoidCallback? onOpenVideo,
 }) async {
   await tester.binding.setSurfaceSize(const Size(1200, 2200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -223,6 +274,7 @@ Future<void> _pumpFeedCard(
             onOpenComments: onOpenComments ?? () {},
             onBookService: onBookService,
             onContactSalon: onContactSalon,
+            onOpenVideo: onOpenVideo,
           ),
         ),
       ),
@@ -234,6 +286,10 @@ Future<void> _pumpFeedCard(
 SalonPost _feedPost({
   required List<String> imageUrls,
   List<SalonPostComment>? comments,
+  SalonPostType postType = SalonPostType.standard,
+  String? videoUrl,
+  String? staffMemberName,
+  String? staffMemberRole,
   ServiceItem? linkedService = const ServiceItem(
     id: 'service-1',
     name: 'Corte premium',
@@ -253,6 +309,10 @@ SalonPost _feedPost({
     likeCount: 1,
     commentCount: comments?.length ?? 2,
     likedByMe: false,
+    postType: postType,
+    videoUrl: videoUrl,
+    staffMemberName: staffMemberName,
+    staffMemberRole: staffMemberRole,
     comments:
         comments ??
         [

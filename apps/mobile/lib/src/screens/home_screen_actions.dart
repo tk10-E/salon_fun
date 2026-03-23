@@ -467,6 +467,24 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
     _showMessage('Código de indicação copiado.');
   }
 
+  Future<void> _openPostVideo(SalonPost post) async {
+    final videoUrl = post.videoUrl;
+    if (videoUrl == null || videoUrl.trim().isEmpty) {
+      return;
+    }
+
+    final launched = await launchUrl(
+      Uri.parse(videoUrl),
+      mode: LaunchMode.platformDefault,
+    );
+
+    if (!launched && mounted) {
+      _showMessage(
+        'Não foi possível abrir o video de ${post.title} agora. Tente novamente em instantes.',
+      );
+    }
+  }
+
   Future<void> _openWhatsApp() async {
     final whatsappDigits = _profile.salonWhatsappPhone?.replaceAll(
       RegExp(r'\D'),

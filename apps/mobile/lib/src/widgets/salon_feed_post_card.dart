@@ -16,6 +16,7 @@ class SalonFeedPostCard extends StatefulWidget {
     required this.onOpenComments,
     this.onBookService,
     this.onContactSalon,
+    this.onOpenVideo,
   });
 
   final SalonPost post;
@@ -25,6 +26,7 @@ class SalonFeedPostCard extends StatefulWidget {
   final VoidCallback onOpenComments;
   final VoidCallback? onBookService;
   final VoidCallback? onContactSalon;
+  final VoidCallback? onOpenVideo;
 
   @override
   State<SalonFeedPostCard> createState() => _SalonFeedPostCardState();
@@ -59,6 +61,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
             category: post.linkedService!.category,
             name: post.linkedService!.name,
           );
+    final hasVideoAction = post.videoUrl != null && widget.onOpenVideo != null;
 
     return SoftCard(
       padding: EdgeInsets.zero,
@@ -68,73 +71,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
         children: [
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            child: AspectRatio(
-              aspectRatio: 4 / 5,
-              child: Stack(
-                children: [
-                  PageView.builder(
-                    controller: _pageController,
-                    itemCount: post.imageUrls.length,
-                    onPageChanged: (index) {
-                      setState(() => _activePage = index);
-                    },
-                    itemBuilder: (context, index) {
-                      return _FeedImage(
-                        imageUrl: post.imageUrls[index],
-                        branding: branding,
-                      );
-                    },
-                  ),
-                  if (post.imageUrls.length > 1)
-                    Positioned(
-                      top: 14,
-                      right: 14,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xBF27170F),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          '${_activePage + 1}/${post.imageUrls.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (post.imageUrls.length > 1)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 14,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          post.imageUrls.length,
-                          (index) => AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            width: index == _activePage ? 18 : 8,
-                            height: 8,
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
-                            decoration: BoxDecoration(
-                              color: index == _activePage
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.48),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            child: _buildMedia(post, branding),
           ),
           Padding(
             padding: const EdgeInsets.all(18),
@@ -149,12 +86,33 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                 ),
                 const SizedBox(height: 10),
                 Text(post.title, style: theme.textTheme.titleLarge),
-                if (post.linkedService != null) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _ActionChip(
+                      icon: post.isReel
+                          ? Icons.play_circle_outline_rounded
+                          : post.isBeforeAfter
+                          ? Icons.compare_rounded
+                          : Icons.photo_library_outlined,
+                      label: post.postType.label,
+                      busy: false,
+                      branding: branding,
+                      onTap: hasVideoAction ? widget.onOpenVideo : null,
+                    ),
+                    if (post.staffMemberName != null)
+                      _ActionChip(
+                        icon: Icons.person_outline_rounded,
+                        label: post.staffMemberRole == null
+                            ? post.staffMemberName!
+                            : '${post.staffMemberName!} • ${post.staffMemberRole!}',
+                        busy: false,
+                        branding: branding,
+                        onTap: null,
+                      ),
+                    if (post.linkedService != null)
                       _ActionChip(
                         icon:
                             linkedServiceVisual?.icon ??
@@ -164,6 +122,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                         branding: branding,
                         onTap: null,
                       ),
+                    if (post.linkedService != null)
                       _ActionChip(
                         icon: Icons.schedule_rounded,
                         label: '${post.linkedService!.duration} min',
@@ -171,13 +130,34 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                         branding: branding,
                         onTap: null,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
+                  ],
+                ),
+                if (post.linkedService != null) ...[
+                  const SizedBox(height: 12),
                   Text(
-                    widget.onContactSalon != null
+                    post.isReel
+                        ? widget.onContactSalon != null
+                              ? 'Gostou desse video? Reserve ${post.linkedService!.name} no app ou fale com o salão para adaptar esse resultado ao seu estilo.'
+                              : 'Gostou desse video? Reserve ${post.linkedService!.name} direto pelo app.'
+                        : widget.onContactSalon != null
                         ? 'Gostou desse resultado? Reserve ${post.linkedService!.name} no app ou fale com o salão para alinhar detalhes.'
                         : 'Gostou desse resultado? Reserve ${post.linkedService!.name} direto pelo app.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF6D5647),
+                    ),
+                  ),
+                ] else if (post.isBeforeAfter) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Use esse antes e depois para entender o resultado final e conversar com o salão sobre a melhor versao para voce.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF6D5647),
+                    ),
+                  ),
+                ] else if (post.isReel) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Esse video curto ajuda a ver movimento, acabamento e estilo final antes de decidir seu proximo agendamento.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF6D5647),
                     ),
@@ -220,6 +200,19 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                     ),
                   ],
                 ),
+                if (hasVideoAction) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: widget.interactionBusy
+                          ? null
+                          : widget.onOpenVideo,
+                      icon: const Icon(Icons.play_circle_outline_rounded),
+                      label: const Text('Assistir video curto'),
+                    ),
+                  ),
+                ],
                 if (widget.onBookService != null &&
                     post.linkedService != null) ...[
                   const SizedBox(height: 16),
@@ -249,14 +242,20 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                             ? null
                             : widget.onContactSalon,
                         icon: const Icon(Icons.chat_bubble_outline_rounded),
-                        label: const Text('Falar com o salão'),
+                        label: Text(
+                          post.isReel
+                              ? 'Falar sobre esse video'
+                              : 'Falar com o salão',
+                        ),
                       ),
                     ),
                   ],
                 ] else if (widget.onContactSalon != null) ...[
                   const SizedBox(height: 16),
                   Text(
-                    'Se esse visual combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.',
+                    post.isReel
+                        ? 'Se esse video combinou com voce, fale com o salão para descobrir o melhor serviço e o melhor encaixe.'
+                        : 'Se esse visual combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF6D5647),
                     ),
@@ -269,7 +268,11 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                           ? null
                           : widget.onContactSalon,
                       icon: const Icon(Icons.chat_bubble_outline_rounded),
-                      label: const Text('Falar sobre esse resultado'),
+                      label: Text(
+                        post.isReel
+                            ? 'Falar sobre esse video'
+                            : 'Falar sobre esse resultado',
+                      ),
                     ),
                   ),
                 ],
@@ -316,6 +319,142 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
       ),
     );
   }
+
+  Widget _buildMedia(SalonPost post, SalonBranding branding) {
+    if (post.isBeforeAfter && post.imageUrls.length >= 2) {
+      return AspectRatio(
+        aspectRatio: 4 / 5,
+        child: Row(
+          children: [
+            Expanded(
+              child: _BeforeAfterPanel(
+                label: 'Antes',
+                imageUrl: post.imageUrls[0],
+                branding: branding,
+              ),
+            ),
+            Expanded(
+              child: _BeforeAfterPanel(
+                label: 'Depois',
+                imageUrl: post.imageUrls[1],
+                branding: branding,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (post.isReel) {
+      return AspectRatio(
+        aspectRatio: 4 / 5,
+        child: InkWell(
+          onTap: widget.interactionBusy ? null : widget.onOpenVideo,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _FeedImage(imageUrl: post.coverImageUrl, branding: branding),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [const Color(0x08160E08), const Color(0x99160E08)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 14,
+                right: 14,
+                child: _MediaBadge(label: post.postType.label),
+              ),
+              Center(
+                child: Container(
+                  width: 74,
+                  height: 74,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    size: 40,
+                    color: branding.deep,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 18,
+                right: 18,
+                bottom: 18,
+                child: Text(
+                  'Toque para assistir o video curto',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.96),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: post.imageUrls.length,
+            onPageChanged: (index) {
+              setState(() => _activePage = index);
+            },
+            itemBuilder: (context, index) {
+              return _FeedImage(
+                imageUrl: post.imageUrls[index],
+                branding: branding,
+              );
+            },
+          ),
+          if (post.imageUrls.length > 1)
+            Positioned(
+              top: 14,
+              right: 14,
+              child: _MediaBadge(
+                label: '${_activePage + 1}/${post.imageUrls.length}',
+              ),
+            ),
+          if (post.imageUrls.length > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 14,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  post.imageUrls.length,
+                  (index) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: index == _activePage ? 18 : 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: index == _activePage
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.48),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _FeedImage extends StatelessWidget {
@@ -350,6 +489,54 @@ class _FeedImage extends StatelessWidget {
           Icons.image_not_supported_rounded,
           size: 36,
           color: branding.deep,
+        ),
+      ),
+    );
+  }
+}
+
+class _BeforeAfterPanel extends StatelessWidget {
+  const _BeforeAfterPanel({
+    required this.label,
+    required this.imageUrl,
+    required this.branding,
+  });
+
+  final String label;
+  final String imageUrl;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _FeedImage(imageUrl: imageUrl, branding: branding),
+        Positioned(top: 14, left: 14, child: _MediaBadge(label: label)),
+      ],
+    );
+  }
+}
+
+class _MediaBadge extends StatelessWidget {
+  const _MediaBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xBF27170F),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

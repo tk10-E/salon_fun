@@ -19,6 +19,8 @@ type FeedPostRecord = {
   title: string;
   caption: string | null;
   image_path: string;
+  post_type: "standard" | "before_after" | "reel" | null;
+  video_path: string | null;
   created_at: string;
   services:
     | {
@@ -28,6 +30,18 @@ type FeedPostRecord = {
     | {
         id: string;
         name: string;
+      }[]
+    | null;
+  staff_members:
+    | {
+        id: string;
+        name: string;
+        role: string | null;
+      }
+    | {
+        id: string;
+        name: string;
+        role: string | null;
       }[]
     | null;
   salon_post_images:
@@ -48,23 +62,50 @@ type FeedPostRecord = {
     | null;
 };
 
+type FeedStaffMember = {
+  id: string;
+  name: string;
+  role: string | null;
+};
+
+function firstRelation<T>(value: T | T[] | null | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+function getFeedPostTypeLabel(postType: FeedPostRecord["post_type"]) {
+  switch (postType) {
+    case "before_after":
+      return "Antes e depois";
+    case "reel":
+      return "Vídeo curto";
+    default:
+      return "Foto";
+  }
+}
+
 export default async function FeedPage({ searchParams }: FeedPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
-  const [{ data, error }, { data: services }] = await Promise.all([
+  const [{ data, error }, { data: services }, { data: staffMembers }] = await Promise.all([
     supabase
       .from("salon_posts")
       .select(
-        "id,title,caption,image_path,created_at,services(id,name),salon_post_images(id,image_path,sort_order),salon_post_likes(customer_id),salon_post_comments(id,customer_name,body,created_at)",
+        "id,title,caption,image_path,post_type,video_path,created_at,services(id,name),staff_members(id,name,role),salon_post_images(id,image_path,sort_order),salon_post_likes(customer_id),salon_post_comments(id,customer_name,body,created_at)",
       )
       .eq("salon_id", salon.id)
       .order("created_at", { ascending: false }),
     supabase.from("services").select("id, name").eq("salon_id", salon.id).order("name"),
+    supabase.from("staff_members").select("id, name, role").eq("salon_id", salon.id).eq("is_active", true).order("name"),
   ]);
 
   const posts = ((data ?? []) as FeedPostRecord[]).map((post) => {
-    const service = Array.isArray(post.services) ? post.services[0] : post.services;
+    const service = firstRelation(post.services);
+    const staffMember = firstRelation(post.staff_members);
     const gallerySource = post.salon_post_images?.length
       ? [...(post.salon_post_images ?? [])].sort((left, right) => left.sort_order - right.sort_order)
       : [{ id: `${post.id}-cover`, image_path: post.image_path, sort_order: 0 }];
@@ -77,10 +118,16 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
         ...image,
         publicUrl: supabase.storage.from("salon-posts").getPublicUrl(image.image_path).data.publicUrl,
       })),
+      postType: post.post_type ?? "standard",
+      videoUrl: post.video_path
+        ? supabase.storage.from("salon-posts").getPublicUrl(post.video_path).data.publicUrl
+        : null,
+      staffMember,
       likesCount: post.salon_post_likes?.length ?? 0,
       commentsCount: post.salon_post_comments?.length ?? 0,
     };
   });
+  const safeStaffMembers = (staffMembers ?? []) as FeedStaffMember[];
 
   return (
     <div className="two-column-grid">
@@ -88,7 +135,10 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
         <div className="section-heading">
           <div>
             <h2>Feed do salão</h2>
-            <p className="muted">Publique resultados, vincule um serviço e acompanhe curtidas e comentários dos clientes no app.</p>
+            <p className="muted">
+              Publique fotos, antes e depois e vídeos curtos, destaque o profissional responsável e acompanhe curtidas e
+              comentários dos clientes no app.
+            </p>
           </div>
         </div>
 
@@ -109,18 +159,36 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
             <EmptyStateCard
               eyebrow="Seu feed começa aqui"
               title="Nenhuma foto publicada"
-              description="As publicações aparecem no app do cliente com curtidas, comentários e CTA de agendamento quando vinculadas a um serviço."
+              description="As publicações aparecem no app do cliente com curtidas, comentários, descoberta de profissional e CTA de agendamento quando vinculadas a um serviço."
             />
           ) : (
             posts.map((post) => (
               <article key={post.id} className="feed-post-card">
                 <div className="feed-post-visual">
-                  <div className="feed-post-media">
-                    <Image src={post.images[0].publicUrl} alt={post.title} fill sizes="(max-width: 960px) 100vw, 420px" />
-                    {post.images.length > 1 ? <span className="feed-gallery-count">{post.images.length} fotos</span> : null}
-                  </div>
+                  {post.postType === "before_after" && post.images.length >= 2 ? (
+                    <div className="feed-before-after-grid">
+                      {post.images.slice(0, 2).map((image, index) => (
+                        <div key={image.id} className="feed-before-after-frame">
+                          <span className="feed-before-after-label">{index === 0 ? "Antes" : "Depois"}</span>
+                          <Image src={image.publicUrl} alt={`${post.title} ${index === 0 ? "antes" : "depois"}`} fill sizes="(max-width: 960px) 50vw, 200px" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : post.postType === "reel" && post.videoUrl ? (
+                    <div className="feed-post-media">
+                      <video className="feed-post-video" controls preload="metadata" poster={post.images[0]?.publicUrl}>
+                        <source src={post.videoUrl} />
+                      </video>
+                      <span className="feed-gallery-count">Vídeo curto</span>
+                    </div>
+                  ) : (
+                    <div className="feed-post-media">
+                      <Image src={post.images[0].publicUrl} alt={post.title} fill sizes="(max-width: 960px) 100vw, 420px" />
+                      {post.images.length > 1 ? <span className="feed-gallery-count">{post.images.length} fotos</span> : null}
+                    </div>
+                  )}
 
-                  {post.images.length > 1 ? (
+                  {post.postType !== "before_after" && post.images.length > 1 ? (
                     <div className="feed-post-thumbs">
                       {post.images.slice(0, 4).map((image) => (
                         <div key={image.id} className="feed-post-thumb">
@@ -129,7 +197,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                       ))}
                     </div>
                   ) : null}
-                </div>
+                  </div>
 
                 <div className="feed-post-body">
                   <div className="feed-post-header">
@@ -146,7 +214,16 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                     </form>
                   </div>
 
-                  {post.service ? <span className="feed-stat-pill">Serviço vinculado: {post.service.name}</span> : null}
+                  <div className="feed-post-stats">
+                    <span className="feed-stat-pill">Formato: {getFeedPostTypeLabel(post.postType)}</span>
+                    {post.service ? <span className="feed-stat-pill">Serviço vinculado: {post.service.name}</span> : null}
+                    {post.staffMember ? (
+                      <span className="feed-stat-pill">
+                        Profissional: {post.staffMember.name}
+                        {post.staffMember.role ? ` • ${post.staffMember.role}` : ""}
+                      </span>
+                    ) : null}
+                  </div>
                   {post.caption ? <p className="feed-post-caption">{post.caption}</p> : null}
 
                   <div className="feed-post-stats">
@@ -185,13 +262,25 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
         <div className="section-heading">
           <div>
             <h2>Nova publicação</h2>
-            <p className="muted">Suba uma galeria, ligue a postagem a um serviço e transforme o feed em mais um ponto de agendamento.</p>
+            <p className="muted">
+              Publique galeria, antes e depois ou vídeo curto, ligue o conteúdo a um serviço e transforme o feed em mais
+              um ponto de descoberta e agendamento.
+            </p>
           </div>
         </div>
 
         <form action={createSalonPostAction} className="form-grid" encType="multipart/form-data" style={{ marginTop: 18 }}>
           <div className="field">
-            <label htmlFor="feed-title">Título da foto</label>
+            <label htmlFor="feed-type">Formato do post</label>
+            <select id="feed-type" name="postType" defaultValue="standard">
+              <option value="standard">Foto ou galeria</option>
+              <option value="before_after">Antes e depois</option>
+              <option value="reel">Vídeo curto</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="feed-title">Título da publicação</label>
             <input id="feed-title" name="title" placeholder="Ex.: Escova glow do dia" required />
           </div>
 
@@ -202,6 +291,19 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               {(services ?? []).map((service) => (
                 <option key={service.id} value={service.id}>
                   {service.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="feed-staff-member">Profissional em destaque</label>
+            <select id="feed-staff-member" name="staffMemberId" defaultValue="">
+              <option value="">Sem destaque direto</option>
+              {safeStaffMembers.map((staffMember) => (
+                <option key={staffMember.id} value={staffMember.id}>
+                  {staffMember.name}
+                  {staffMember.role ? ` • ${staffMember.role}` : ""}
                 </option>
               ))}
             </select>
@@ -227,7 +329,16 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               multiple
               required
             />
-            <small className="muted">PNG, JPG, WEBP ou SVG com até 4 MB cada. Até 5 imagens por publicação.</small>
+            <small className="muted">
+              Galeria: 1 a 5 imagens. Antes e depois: exatamente 2 imagens. Vídeo curto: 1 imagem de capa. Até 4 MB por
+              imagem.
+            </small>
+          </div>
+
+          <div className="field">
+            <label htmlFor="feed-video">Vídeo curto</label>
+            <input id="feed-video" name="video" type="file" accept="video/mp4,video/webm,video/quicktime" />
+            <small className="muted">Obrigatório apenas para o formato vídeo curto. Até 25 MB.</small>
           </div>
 
           <button type="submit" className="primary-button">

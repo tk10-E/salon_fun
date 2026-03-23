@@ -501,6 +501,7 @@ class _HomeScreenState extends _HomeScreenStateBase
                     },
                     onToggleLike: _togglePostLike,
                     onOpenComments: _openComments,
+                    onOpenVideo: _openPostVideo,
                     onBookService: (service) => _openBooking(service, data),
                     busyPostIds: _busyPostIds,
                   ),

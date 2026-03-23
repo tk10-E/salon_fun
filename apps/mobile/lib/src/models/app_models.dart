@@ -443,9 +443,7 @@ class LoyaltyProgramInfo {
       cashbackPercent: _readDouble(map['cashback_percent']),
       isActive: (map['is_active'] ?? false) as bool,
       vipRewardServiceId: _readNullableString(map['vip_reward_service_id']),
-      vipRewardServiceName: _readNullableString(
-        map['vip_reward_service_name'],
-      ),
+      vipRewardServiceName: _readNullableString(map['vip_reward_service_name']),
       tiers: _readListMap(
         map['tiers'],
       ).map(LoyaltyTierBenefit.fromMap).toList(),
@@ -1266,6 +1264,34 @@ class SmartScheduleOpportunityFeed {
   }
 }
 
+enum SalonPostType {
+  standard,
+  beforeAfter,
+  reel;
+
+  static SalonPostType fromRaw(String? value) {
+    switch (value) {
+      case 'before_after':
+        return SalonPostType.beforeAfter;
+      case 'reel':
+        return SalonPostType.reel;
+      default:
+        return SalonPostType.standard;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case SalonPostType.beforeAfter:
+        return 'Antes e depois';
+      case SalonPostType.reel:
+        return 'Video curto';
+      case SalonPostType.standard:
+        return 'Foto';
+    }
+  }
+}
+
 class SalonPost {
   const SalonPost({
     required this.id,
@@ -1277,6 +1303,10 @@ class SalonPost {
     required this.commentCount,
     required this.likedByMe,
     required this.comments,
+    this.postType = SalonPostType.standard,
+    this.videoUrl,
+    this.staffMemberName,
+    this.staffMemberRole,
     this.linkedService,
   });
 
@@ -1289,9 +1319,15 @@ class SalonPost {
   final int commentCount;
   final bool likedByMe;
   final List<SalonPostComment> comments;
+  final SalonPostType postType;
+  final String? videoUrl;
+  final String? staffMemberName;
+  final String? staffMemberRole;
   final ServiceItem? linkedService;
 
   String get coverImageUrl => imageUrls.first;
+  bool get isBeforeAfter => postType == SalonPostType.beforeAfter;
+  bool get isReel => postType == SalonPostType.reel;
 
   SalonPost copyWith({
     int? likeCount,
@@ -1309,6 +1345,10 @@ class SalonPost {
       commentCount: commentCount ?? this.commentCount,
       likedByMe: likedByMe ?? this.likedByMe,
       comments: comments ?? this.comments,
+      postType: postType,
+      videoUrl: videoUrl,
+      staffMemberName: staffMemberName,
+      staffMemberRole: staffMemberRole,
       linkedService: linkedService,
     );
   }
@@ -1332,6 +1372,12 @@ class SalonPost {
         : Map<String, dynamic>.from(
             (serviceData ?? <String, dynamic>{}) as Map,
           );
+    final staffData = map['staff_members'];
+    final staffMap = staffData is List
+        ? (staffData.isNotEmpty
+              ? Map<String, dynamic>.from(staffData.first as Map)
+              : <String, dynamic>{})
+        : Map<String, dynamic>.from((staffData ?? <String, dynamic>{}) as Map);
 
     return SalonPost(
       id: map['id'] as String,
@@ -1343,6 +1389,10 @@ class SalonPost {
       commentCount: comments.length,
       likedByMe: likes.any((like) => like['customer_id'] == currentCustomerId),
       comments: comments,
+      postType: SalonPostType.fromRaw(_readNullableString(map['post_type'])),
+      videoUrl: _readNullableString(map['video_url']),
+      staffMemberName: _readNullableString(staffMap['name']),
+      staffMemberRole: _readNullableString(staffMap['role']),
       linkedService: serviceMap.isEmpty
           ? null
           : ServiceItem.fromMap(serviceMap),

@@ -6,7 +6,7 @@ mixin _SalonRepositoryFeedMixin on _SalonRepositoryBase {
       final data = await client
           .from('salon_posts')
           .select(
-            'id,title,caption,image_path,created_at,services(id,name,price,duration),salon_post_images(image_path,sort_order),salon_post_likes(customer_id),salon_post_comments(id,customer_id,customer_name,body,created_at)',
+            'id,title,caption,image_path,post_type,video_path,created_at,services(id,name,price,duration),staff_members(name,role),salon_post_images(image_path,sort_order),salon_post_likes(customer_id),salon_post_comments(id,customer_id,customer_name,body,created_at)',
           )
           .order('created_at', ascending: false);
 
@@ -29,8 +29,14 @@ mixin _SalonRepositoryFeedMixin on _SalonRepositoryBase {
                       )
                       .toList()
                 : [_buildSalonPostImageUrl(imagePath)];
+            final videoPath = _readNullableString(postMap['video_path']);
             return SalonPost.fromMap(
-              postMap,
+              {
+                ...postMap,
+                'video_url': videoPath == null
+                    ? null
+                    : _buildSalonPostImageUrl(videoPath),
+              },
               currentCustomerId: customerId,
               imageUrls: imageUrls,
             );

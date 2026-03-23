@@ -20,6 +20,7 @@ class HomeFeedTab extends StatelessWidget {
     required this.onOpenComments,
     required this.onBookService,
     required this.busyPostIds,
+    this.onOpenVideo,
   });
 
   final CustomerProfile profile;
@@ -31,10 +32,13 @@ class HomeFeedTab extends StatelessWidget {
   final Future<void> Function(SalonPost post) onOpenComments;
   final Future<void> Function(ServiceItem service) onBookService;
   final Set<String> busyPostIds;
+  final Future<void> Function(SalonPost post)? onOpenVideo;
 
   @override
   Widget build(BuildContext context) {
-    final linkedPostsCount = posts.where((post) => post.linkedService != null).length;
+    final linkedPostsCount = posts
+        .where((post) => post.linkedService != null)
+        .length;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -57,7 +61,7 @@ class HomeFeedTab extends StatelessWidget {
             eyebrow: 'Feed do salão',
             title: 'Resultados, novidades e inspirações',
             description:
-                'Veja cortes, unhas, sobrancelhas e outros resultados publicados pelo salão, curta e comente sem sair do app.',
+                'Veja cortes, unhas, sobrancelhas e outros resultados publicados pelo salão, incluindo antes e depois e videos curtos.',
           ),
           const SizedBox(height: 16),
           if (posts.isEmpty)
@@ -90,6 +94,9 @@ class HomeFeedTab extends StatelessWidget {
                       onToggleLike: () => onToggleLike(post),
                       onOpenComments: () => onOpenComments(post),
                       onContactSalon: onWhatsApp,
+                      onOpenVideo: post.videoUrl == null || onOpenVideo == null
+                          ? null
+                          : () => onOpenVideo!(post),
                       onBookService: post.linkedService == null
                           ? null
                           : () => onBookService(post.linkedService!),
