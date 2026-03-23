@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 const links = [
   { href: "/dashboard", label: "Resumo" },
   { href: "/dashboard/feed", label: "Feed do salão" },
+  { href: "/dashboard/instagram", label: "Instagram" },
   { href: "/dashboard/services", label: "Serviços" },
   { href: "/dashboard/benefits", label: "Comercial e retenção" },
   { href: "/dashboard/notifications", label: "Avisos enviados" },

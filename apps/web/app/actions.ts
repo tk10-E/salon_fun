@@ -31,6 +31,14 @@ import {
   deleteSalonPostCommentActionImpl,
 } from "./_actions/feed";
 import {
+  approveInstagramMentionActionImpl,
+  disconnectInstagramConnectionActionImpl,
+  publishInstagramMentionActionImpl,
+  rejectInstagramMentionActionImpl,
+  saveInstagramConnectionActionImpl,
+  validateInstagramConnectionTokenActionImpl,
+} from "./_actions/instagram";
+import {
   createStaffBlockActionImpl,
   createStaffMemberActionImpl,
   deleteStaffBlockActionImpl,
@@ -160,6 +168,30 @@ export async function deleteSalonPostAction(formData: FormData) {
 
 export async function deleteSalonPostCommentAction(formData: FormData) {
   return deleteSalonPostCommentActionImpl(formData);
+}
+
+export async function saveInstagramConnectionAction(formData: FormData) {
+  return saveInstagramConnectionActionImpl(formData);
+}
+
+export async function disconnectInstagramConnectionAction() {
+  return disconnectInstagramConnectionActionImpl();
+}
+
+export async function validateInstagramConnectionTokenAction(formData: FormData) {
+  return validateInstagramConnectionTokenActionImpl(formData);
+}
+
+export async function approveInstagramMentionAction(formData: FormData) {
+  return approveInstagramMentionActionImpl(formData);
+}
+
+export async function rejectInstagramMentionAction(formData: FormData) {
+  return rejectInstagramMentionActionImpl(formData);
+}
+
+export async function publishInstagramMentionAction(formData: FormData) {
+  return publishInstagramMentionActionImpl(formData);
 }
 
 export async function saveStaffCommissionSettingsAction(formData: FormData) {
