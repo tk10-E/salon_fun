@@ -835,6 +835,11 @@ button {
   padding: 28px;
 }
 
+.command-center--embedded {
+  display: grid;
+  gap: 18px;
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;
@@ -876,6 +881,58 @@ button {
 .insight-card__footer {
   display: flex;
   justify-content: flex-start;
+}
+
+.command-center-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.command-card {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border-radius: 22px;
+  border: 1px solid rgba(220, 202, 182, 0.84);
+  box-shadow: var(--shadow-soft);
+}
+
+.command-card h3 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+}
+
+.command-card--warm {
+  background:
+    linear-gradient(145deg, rgba(255, 246, 238, 0.98), rgba(252, 231, 214, 0.94)),
+    rgba(255, 250, 244, 0.94);
+}
+
+.command-card--soft {
+  background:
+    linear-gradient(145deg, rgba(255, 250, 244, 0.96), rgba(245, 236, 226, 0.94)),
+    rgba(255, 250, 244, 0.94);
+}
+
+.command-card--accent {
+  background:
+    linear-gradient(145deg, rgba(250, 239, 230, 0.98), rgba(239, 221, 203, 0.94)),
+    rgba(255, 250, 244, 0.94);
+}
+
+.command-card__highlight {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.command-card__footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 2px;
 }
 
 .list-row__content {

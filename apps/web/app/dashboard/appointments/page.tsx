@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { updateAppointmentStatusAction } from "@/app/actions";
+import { ActionCommandCenter } from "@/components/ActionCommandCenter";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import {
@@ -9,7 +10,7 @@ import {
   SmartScheduleSuggestions,
 } from "@/components/SmartScheduleSuggestions";
 import { requireOwnerSalon } from "@/lib/auth";
-import { formatDateTime } from "@/lib/formatters";
+import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { createClient } from "@/lib/supabase/server";
 
 type AppointmentsPageProps = {
@@ -240,6 +241,102 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
     ),
   );
   const staffMembers = (staffMembersResult.data ?? []) as StaffMemberOption[];
+  const awaitingCustomerResponseCount = appointments.filter(
+    (appointment) =>
+      appointment.status === "confirmed" &&
+      appointment.customer_confirmation_requested_at &&
+      !appointment.customer_presence_confirmed_at,
+  ).length;
+  const actionableSuggestions = (smartSchedule.suggestions ?? []).slice(0, 3);
+  const actionableOpportunityRevenue = actionableSuggestions.reduce(
+    (accumulator, suggestion) => accumulator + Number(suggestion.suggested_service.price ?? 0),
+    0,
+  );
+  const bestSuggestion = actionableSuggestions[0];
+  const agendaCommandCards = [
+    {
+      eyebrow: "Agora",
+      title:
+        (boardResponse.overview.pending ?? 0) > 0
+          ? "Pendências do salão que pedem resposta imediata"
+          : "Sem pedidos parados aguardando o salão",
+      highlight: `${boardResponse.overview.pending ?? 0} pendências`,
+      description:
+        (boardResponse.overview.pending ?? 0) > 0
+          ? "Aprovar rápido reduz desistência e abre espaço para encaixar o que faz mais sentido no dia."
+          : "A triagem da agenda está em dia. Dá para usar a energia na ocupação inteligente e na retenção.",
+      support:
+        (boardResponse.overview.pending ?? 0) > 0
+          ? "Comece por aqui para não perder cliente que já demonstrou intenção de compra."
+          : "Fila de confirmação zerada neste recorte.",
+      href: "/dashboard/appointments?status=pending",
+      ctaLabel: (boardResponse.overview.pending ?? 0) > 0 ? "Responder pedidos" : "Ver agenda completa",
+      tone: "warm" as const,
+    },
+    {
+      eyebrow: "Confirmação",
+      title:
+        awaitingCustomerResponseCount > 0
+          ? "Clientes aguardando resposta do lembrete"
+          : "Nenhuma confirmação pendurada agora",
+      highlight: `${awaitingCustomerResponseCount} em aberto`,
+      description:
+        awaitingCustomerResponseCount > 0
+          ? "Esses horários já foram lembrados no app e ainda dependem de retorno. Vale acompanhar antes de a vaga virar desperdício."
+          : "As confirmações já voltaram ou ainda não precisaram ser disparadas.",
+      support:
+        awaitingCustomerResponseCount > 0
+          ? "Monitorar isso cedo ajuda a reaproveitar vaga antes da última hora."
+          : "Agenda confirmada sem fila de resposta visível nesta página.",
+      href: "/dashboard/appointments?status=confirmed",
+      ctaLabel: "Acompanhar confirmações",
+      tone: "soft" as const,
+    },
+    {
+      eyebrow: "Oportunidade",
+      title:
+        actionableSuggestions.length > 0
+          ? "Janelas livres com chance real de virar caixa"
+          : "Nenhum encaixe estratégico visível agora",
+      highlight:
+        actionableSuggestions.length > 0
+          ? formatCurrency(actionableOpportunityRevenue)
+          : "Agenda encaixada",
+      description:
+        actionableSuggestions.length > 0
+          ? "Os melhores intervalos do dia já estão mapeados. Atacar esses encaixes tende a gerar receita sem estressar a jornada da equipe."
+          : "Quando surgir uma janela livre compatível com algum serviço, ela passa a aparecer aqui automaticamente.",
+      support:
+        bestSuggestion == null
+          ? "Sem gap vendável neste momento."
+          : `${bestSuggestion.staff_member_name} • ${bestSuggestion.suggested_service.name} • ${bestSuggestion.gap_minutes} min livres.`,
+      href: "/dashboard/appointments#encaixes-inteligentes",
+      ctaLabel: actionableSuggestions.length > 0 ? "Usar encaixes" : "Ver agenda do dia",
+      tone: "accent" as const,
+    },
+    {
+      eyebrow: "Fechamento",
+      title:
+        (boardResponse.overview.awaiting_completion ?? 0) > 0
+          ? "Atendimentos já liberados para conclusão"
+          : "Nada pendente de fechamento no momento",
+      highlight: `${boardResponse.overview.awaiting_completion ?? 0} para fechar`,
+      description:
+        (boardResponse.overview.awaiting_completion ?? 0) > 0
+          ? "Concluir no tempo certo alimenta comissão, histórico, fidelidade e inteligência do salão sem buraco operacional."
+          : "O histórico está sendo fechado no tempo certo nesta leitura da agenda.",
+      support:
+        (boardResponse.overview.awaiting_completion ?? 0) > 0
+          ? "Esse fechamento mantém relatórios e automações consistentes."
+          : "Sem atendimento passado aguardando ação do dono.",
+      href: "/dashboard/appointments?status=awaiting-completion",
+      ctaLabel:
+        (boardResponse.overview.awaiting_completion ?? 0) > 0
+          ? "Concluir atendimentos"
+          : "Abrir histórico da agenda",
+      tone: "soft" as const,
+    },
+  ];
 
   const appointmentSections = ([
     {
@@ -277,6 +374,7 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
   return (
     <div className="page-grid">
       <SmartScheduleSuggestions
+        sectionId="encaixes-inteligentes"
         title="Encaixes inteligentes de hoje"
         description="O painel aponta os melhores intervalos livres entre atendimentos para vender encaixes sem criar conflito na jornada dos profissionais."
         suggestions={smartSchedule.suggestions ?? []}
@@ -296,6 +394,15 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
             <FlashMessage message={searchParams.message} tone={searchParams.tone} />
           </div>
         ) : null}
+
+        <div style={{ marginTop: 18 }}>
+          <ActionCommandCenter
+            title="Operação que merece atenção agora"
+            description="Em vez de navegar no escuro, o painel já destaca onde a agenda pede ação imediata para proteger receita e evitar ociosidade."
+            cards={agendaCommandCards}
+            framed={false}
+          />
+        </div>
 
         <form method="get" className="services-toolbar" style={{ marginTop: 18 }}>
           <div className="appointments-toolbar__grid">

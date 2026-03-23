@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ActionCommandCenter } from "@/components/ActionCommandCenter";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import { SalonIntelligencePanel } from "@/components/SalonIntelligencePanel";
@@ -126,6 +127,13 @@ function formatAppointmentStatus(status: AppointmentListItem["status"]) {
   }
 }
 
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
@@ -205,6 +213,83 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }) as DashboardIntelligenceResponse;
 
   const recentAppointments = (recentAppointmentsResult.data ?? []) as AppointmentListItem[];
+  const highValueOpportunities = (smartSchedule.suggestions ?? []).slice(0, 3);
+  const opportunityRevenue = highValueOpportunities.reduce(
+    (accumulator, suggestion) => accumulator + Number(suggestion.suggested_service.price ?? 0),
+    0,
+  );
+  const bestOpportunity = highValueOpportunities[0];
+  const nextTopCustomerWithoutReturn = (dashboardIntelligence.top_customers ?? []).find(
+    (customer) => customer.upcoming_appointments === 0,
+  );
+  const actionCards = [
+    {
+      eyebrow: "Prioridade 1",
+      title:
+        (pendingCount ?? 0) > 0
+          ? "Feche os pedidos que ainda travam a agenda"
+          : "Agenda sem pedidos pendentes para aprovar",
+      highlight: `${pendingCount ?? 0} ${Number(pendingCount ?? 0) === 1 ? "pedido" : "pedidos"}`,
+      description:
+        (pendingCount ?? 0) > 0
+          ? "Cada pedido parado segura receita, bloqueia encaixe e aumenta o risco de o cliente desistir antes da confirmação."
+          : "A recepção já está respondendo rápido. Vale usar essa folga para puxar rebook e preencher janelas vazias.",
+      support:
+        (pendingCount ?? 0) > 0
+          ? "Resolver essa fila primeiro protege faturamento e evita cancelamento por demora."
+          : "Sem backlog de aprovação hoje.",
+      href: "/dashboard/appointments?status=pending",
+      ctaLabel: (pendingCount ?? 0) > 0 ? "Resolver pendências" : "Abrir agenda",
+      tone: "warm" as const,
+    },
+    {
+      eyebrow: "Prioridade 2",
+      title:
+        highValueOpportunities.length > 0
+          ? "Transforme horários ociosos em atendimento agora"
+          : "Nenhum encaixe estratégico está vazando receita agora",
+      highlight:
+        highValueOpportunities.length > 0
+          ? `${new Intl.NumberFormat("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }).format(opportunityRevenue)}`
+          : "Agenda bem preenchida",
+      description:
+        highValueOpportunities.length > 0
+          ? "O sistema já mapeou as janelas com melhor chance de venda para hoje. O caminho mais rápido é agir nos encaixes de maior ticket primeiro."
+          : "Quando surgir uma janela livre entre atendimentos, ela entra aqui com o melhor serviço e o profissional ideal.",
+      support:
+        bestOpportunity == null
+          ? "Sem gap estratégico neste momento."
+          : `${bestOpportunity.staff_member_name} • ${bestOpportunity.suggested_service.name} às ${formatTime(bestOpportunity.suggested_start)}.`,
+      href: "/dashboard/appointments#encaixes-inteligentes",
+      ctaLabel: highValueOpportunities.length > 0 ? "Trabalhar encaixes" : "Ver agenda do dia",
+      tone: "soft" as const,
+    },
+    {
+      eyebrow: "Prioridade 3",
+      title:
+        (growthAutomation.overview.due_now_customers ?? 0) > 0
+          ? "Puxe de volta quem já esfriou de verdade"
+          : "Mantenha o rebook ativo antes do cliente sumir",
+      highlight: `${growthAutomation.overview.due_now_customers ?? 0} em winback`,
+      description:
+        (growthAutomation.overview.due_now_customers ?? 0) > 0
+          ? "Esses clientes já passaram da janela saudável de retorno. Um incentivo agora tem impacto direto na ocupação das próximas semanas."
+          : "A base ainda não virou winback pesado, então o foco é agir antes do cliente sumir da rotina do salão.",
+      support:
+        nextTopCustomerWithoutReturn == null
+          ? `${growthAutomation.overview.smart_rebook_due_customers ?? 0} clientes já estão na janela ideal de rebook.`
+          : `${nextTopCustomerWithoutReturn.name} já gerou ${new Intl.NumberFormat("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            }).format(Number(nextTopCustomerWithoutReturn.total_spent ?? 0))} e está sem próxima agenda.`,
+      href: "/dashboard/benefits/automations",
+      ctaLabel: "Abrir retenção",
+      tone: "accent" as const,
+    },
+  ];
 
   return (
     <div className="page-grid">
@@ -255,6 +340,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </p>
         </article>
       </section>
+
+      <ActionCommandCenter
+        title="Plano de ação do dia"
+        description="O painel já sabe onde a agenda está vazando receita. Aqui ficam as três frentes que mais tendem a virar faturamento com menos esforço do dono."
+        cards={actionCards}
+      />
 
       <SalonIntelligencePanel
         lapsedCustomers={dashboardIntelligence.lapsed_customers ?? []}

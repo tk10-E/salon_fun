@@ -27,6 +27,7 @@ export type SmartScheduleSuggestion = {
 type SmartScheduleSuggestionsProps = {
   title?: string;
   description?: string;
+  sectionId?: string;
   targetDayLabel?: string;
   suggestions: SmartScheduleSuggestion[];
 };
@@ -54,11 +55,12 @@ function formatGapKind(kind: SmartScheduleSuggestion["gap_kind"]) {
 export function SmartScheduleSuggestions({
   title = "Encaixes inteligentes",
   description = "O sistema cruza jornada, bloqueios, serviços e agendamentos para sugerir encaixes reais sem conflito.",
+  sectionId,
   targetDayLabel,
   suggestions,
 }: SmartScheduleSuggestionsProps) {
   return (
-    <section className="card content-card">
+    <section id={sectionId} className="card content-card">
       <div className="section-heading">
         <div>
           <h2>{title}</h2>

@@ -215,6 +215,10 @@ describe("dashboard page UI", () => {
     render(ui);
 
     expect(screen.getByText("Resumo atualizado.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Plano de ação do dia" })).toBeInTheDocument();
+    expect(screen.getByText("Feche os pedidos que ainda travam a agenda")).toBeInTheDocument();
+    expect(screen.getByText("R$ 120,00")).toBeInTheDocument();
+    expect(screen.getByText("Abrir retenção")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Inteligência do salão" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Janelas com chance real de venda" })).toBeInTheDocument();
     expect(screen.getAllByText("Encaixe premium").length).toBeGreaterThan(0);

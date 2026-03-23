@@ -194,6 +194,10 @@ describe("appointments page UI", () => {
     expect(screen.getByText("Encaixe premium")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Agendamentos" })).toBeInTheDocument();
     expect(screen.getByText("Agenda atualizada com sucesso.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Operação que merece atenção agora" })).toBeInTheDocument();
+    expect(screen.getByText("Pendências do salão que pedem resposta imediata")).toBeInTheDocument();
+    expect(screen.getByText("1 em aberto")).toBeInTheDocument();
+    expect(screen.getByText("R$ 120,00")).toBeInTheDocument();
     expect(screen.getByLabelText("Buscar agenda")).toBeInTheDocument();
     expect(screen.getByText("3 agendamentos encontrados")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Confirmados" })).toBeInTheDocument();
