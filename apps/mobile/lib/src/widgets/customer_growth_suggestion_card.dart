@@ -86,6 +86,8 @@ class CustomerGrowthSuggestionCard extends StatelessWidget {
               color: const Color(0xFF705A4B),
               height: 1.45,
             ),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -246,27 +248,27 @@ class CustomerGrowthSuggestionCard extends StatelessWidget {
 
   String get _description {
     if (suggestion.hasIncentive) {
-      return 'Você está há ${suggestion.inactiveDays ?? 30} dias sem vir ao salão. Reserve ${suggestion.serviceName} pelo app e aproveite o incentivo para voltar ao ritmo.';
+      return 'Você está há ${suggestion.inactiveDays ?? 30} dias sem vir. Reserve ${suggestion.serviceName} e aproveite o incentivo para voltar.';
     }
 
     if (suggestion.isCombo) {
       if (suggestion.isHabitBased) {
-        return 'Depois de ${suggestion.basedOnServiceName}, esse complemento combina bem com a visita que você costuma fazer ${suggestion.habitWeekday ?? 'no melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''}.';
+        return 'Depois de ${suggestion.basedOnServiceName}, esse complemento combina com a visita que você costuma fazer ${suggestion.habitWeekday ?? 'no melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''}.';
       }
 
-      return 'Depois de ${suggestion.basedOnServiceName}, esse serviço costuma ser um dos complementos mais pedidos no salão. Dá para aproveitar a próxima visita com mais valor.';
+      return 'Depois de ${suggestion.basedOnServiceName}, esse complemento costuma combinar bem com a próxima visita.';
     }
 
     switch (suggestion.urgency) {
       case 'due_now':
         if (suggestion.isHabitBased) {
-          return 'Seu ciclo ideal já abriu e o app percebeu que você costuma agendar ${suggestion.habitWeekday ?? 'no melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''}. Reservar agora ajuda a pegar esse horário antes de lotar.';
+          return 'Seu ciclo ideal já abriu. Reservar agora ajuda a pegar ${suggestion.habitWeekday ?? 'o melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''} antes de lotar.';
         }
 
         return 'Seu último ${suggestion.basedOnServiceName} já passou da janela ideal de ${suggestion.recommendedIntervalDays ?? 30} dias. Reservar agora ajuda a pegar os melhores horários.';
       case 'due_soon':
         if (suggestion.isHabitBased) {
-          return 'Seu próximo ${suggestion.basedOnServiceName} está chegando e o app já puxou o padrão que você costuma seguir ${suggestion.habitWeekday ?? 'no melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''}.';
+          return 'Seu próximo ${suggestion.basedOnServiceName} está chegando e o app puxou o padrão que você costuma seguir ${suggestion.habitWeekday ?? 'no melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''}.';
         }
 
         return 'O ciclo ideal para ${suggestion.basedOnServiceName} fecha em breve. Se quiser, já dá para deixar sua próxima visita encaminhada.';
@@ -274,13 +276,13 @@ class CustomerGrowthSuggestionCard extends StatelessWidget {
         final recommendedDate = suggestion.recommendedBookingDate;
         if (recommendedDate != null) {
           if (suggestion.isHabitBased) {
-            return 'Você tem um padrão claro de retorno ${suggestion.habitWeekday ?? 'no melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''}. O app já pode deixar esse horário encaminhado para ${DateFormat('dd/MM').format(recommendedDate)}.';
+            return 'Você costuma voltar ${suggestion.habitWeekday ?? 'no melhor dia'}${suggestion.habitPeriod != null ? ' ${suggestion.habitPeriod}' : ''}. O app já pode deixar esse horário encaminhado para ${DateFormat('dd/MM').format(recommendedDate)}.';
           }
 
-          return 'Seu último ${suggestion.basedOnServiceName} foi recente, mas o app já pode deixar o retorno previsto para ${DateFormat('dd/MM').format(recommendedDate)} sem você esquecer depois.';
+          return 'O app já pode deixar seu retorno previsto para ${DateFormat('dd/MM').format(recommendedDate)}.';
         }
 
-        return 'O app identificou um bom momento para você voltar sem depender de lembrete manual.';
+        return 'O app identificou um bom momento para você voltar.';
     }
   }
 }

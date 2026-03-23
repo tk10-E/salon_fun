@@ -76,6 +76,12 @@ button {
   cursor: pointer;
 }
 
+button,
+a,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .auth-page,
 .setup-page {
   display: grid;
@@ -512,7 +518,15 @@ button {
   border-radius: 14px;
   padding: 13px 18px;
   font-weight: 700;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  position: relative;
+  overflow: hidden;
+  will-change: transform, box-shadow, background-color;
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    opacity 0.18s ease;
 }
 
 .primary-button:disabled,
@@ -541,14 +555,52 @@ button {
   color: var(--text);
 }
 
+.secondary-button:hover {
+  background: rgba(231, 216, 198, 0.92);
+  box-shadow: 0 10px 22px rgba(39, 23, 15, 0.08);
+  transform: translateY(-1px);
+}
+
 .success-button {
   background: rgba(46, 107, 75, 0.14);
   color: var(--success);
 }
 
+.success-button:hover {
+  background: rgba(46, 107, 75, 0.18);
+  box-shadow: 0 10px 22px rgba(46, 107, 75, 0.12);
+  transform: translateY(-1px);
+}
+
 .danger-button {
   background: rgba(166, 59, 48, 0.12);
   color: var(--danger);
+}
+
+.danger-button:hover {
+  background: rgba(166, 59, 48, 0.16);
+  box-shadow: 0 10px 22px rgba(166, 59, 48, 0.12);
+  transform: translateY(-1px);
+}
+
+.primary-button:active,
+.secondary-button:active,
+.success-button:active,
+.danger-button:active,
+.commercial-nav__link:active,
+.nav-link:active {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: none;
+}
+
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.success-button:focus-visible,
+.danger-button:focus-visible,
+.commercial-nav__link:focus-visible,
+.nav-link:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px rgba(168, 86, 45, 0.14);
 }
 
 .inline-actions {
@@ -709,14 +761,27 @@ button {
 .sidebar-nav {
   display: grid;
   gap: 8px;
+  position: relative;
 }
 
 .nav-link {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 14px 16px;
   border-radius: 14px;
   color: var(--muted);
   border: 1px solid transparent;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  will-change: transform, background-color, box-shadow;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease,
+    transform 0.14s ease,
+    box-shadow 0.16s ease;
 }
 
 .nav-link--active,
@@ -727,8 +792,69 @@ button {
   transform: translateX(2px);
 }
 
+.nav-link--pending {
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text);
+  border-color: rgba(168, 86, 45, 0.18);
+  transform: translateX(3px) scale(0.992);
+  box-shadow: 0 12px 24px rgba(39, 23, 15, 0.08);
+}
+
+.nav-link__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(168, 86, 45, 0.18);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  flex-shrink: 0;
+}
+
+.nav-link:hover .nav-link__pulse,
+.nav-link--active .nav-link__pulse,
+.nav-link--pending .nav-link__pulse {
+  background: var(--accent);
+  box-shadow: 0 0 0 6px rgba(168, 86, 45, 0.12);
+  transform: scale(1.04);
+}
+
+.sidebar-progress {
+  position: absolute;
+  top: -12px;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+
+.sidebar-progress::before {
+  content: "";
+  display: block;
+  width: 34%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(168, 86, 45, 0.14), rgba(168, 86, 45, 0.9), rgba(255, 255, 255, 0.3));
+  transform: translateX(-120%);
+}
+
+.sidebar-progress--active {
+  opacity: 1;
+}
+
+.sidebar-progress--active::before {
+  animation: dashboard-progress-slide 0.9s ease-in-out infinite;
+}
+
 .content-area {
   padding: 36px 32px 44px;
+}
+
+.dashboard-main {
+  min-width: 0;
+  animation: dashboard-fade-in 0.24s ease-out;
 }
 
 .page-header {
@@ -737,6 +863,15 @@ button {
   align-items: center;
   gap: 16px;
   margin-bottom: 28px;
+  position: sticky;
+  top: 20px;
+  z-index: 8;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(220, 202, 182, 0.72);
+  background: rgba(255, 249, 242, 0.76);
+  box-shadow: 0 18px 36px rgba(39, 23, 15, 0.08);
+  backdrop-filter: blur(10px);
 }
 
 .page-grid {
@@ -764,6 +899,35 @@ button {
   gap: 10px;
   min-height: 196px;
   align-content: start;
+}
+
+.sidebar-code-card,
+.content-card,
+.metric-card,
+.list-row,
+.insight-card,
+.appointments-overview__card,
+.appointment-status-section,
+.appointment-card,
+.customer-card,
+.service-editor-card,
+.feed-composer-card,
+.feed-post-card,
+.team-member-card,
+.team-block-card,
+.services-toolbar,
+.referral-event-card,
+.code-card,
+.brand-preview-card,
+.schedule-preview-card,
+.empty-state,
+.flash {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+  will-change: transform, box-shadow;
 }
 
 .metric-card--warm {
@@ -898,6 +1062,13 @@ button {
   border-radius: 22px;
   border: 1px solid rgba(220, 202, 182, 0.84);
   box-shadow: var(--shadow-soft);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.command-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 34px rgba(39, 23, 15, 0.1);
+  border-color: rgba(168, 86, 45, 0.18);
 }
 
 .command-card::before {
@@ -1014,6 +1185,106 @@ button {
 
 .appointments-overview__card--cancelled {
   background: linear-gradient(135deg, rgba(253, 244, 242, 0.98), rgba(249, 232, 228, 0.92));
+}
+
+.dashboard-loading-shell {
+  display: grid;
+  gap: 26px;
+}
+
+.dashboard-loading-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-loading-grid--stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-loading-grid--content {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.dashboard-loading-card {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-height: 180px;
+}
+
+.dashboard-loading-card--tall {
+  min-height: 320px;
+}
+
+.dashboard-loading-line,
+.dashboard-loading-pill {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(220, 202, 182, 0.36);
+}
+
+.dashboard-loading-line::after,
+.dashboard-loading-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.7),
+    rgba(255, 255, 255, 0)
+  );
+  animation: dashboard-skeleton-shimmer 1.25s ease-in-out infinite;
+}
+
+.dashboard-loading-line {
+  height: 14px;
+}
+
+.dashboard-loading-pill {
+  width: 140px;
+  height: 34px;
+}
+
+.dashboard-loading-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-loading-stats {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (hover: hover) {
+  .sidebar-code-card:hover,
+  .content-card:hover,
+  .metric-card:hover,
+  .list-row:hover,
+  .insight-card:hover,
+  .appointments-overview__card:hover,
+  .appointment-status-section:hover,
+  .appointment-card:hover,
+  .customer-card:hover,
+  .service-editor-card:hover,
+  .feed-composer-card:hover,
+  .feed-post-card:hover,
+  .team-member-card:hover,
+  .team-block-card:hover,
+  .services-toolbar:hover,
+  .referral-event-card:hover,
+  .code-card:hover,
+  .brand-preview-card:hover,
+  .schedule-preview-card:hover,
+  .empty-state:hover,
+  .flash:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 34px rgba(39, 23, 15, 0.1);
+    border-color: rgba(168, 86, 45, 0.18);
+  }
 }
 
 .appointment-status-board {
@@ -2291,6 +2562,9 @@ button {
   .two-column-grid,
   .insights-grid,
   .stats-grid,
+  .dashboard-loading-grid--stats,
+  .dashboard-loading-grid--content,
+  .dashboard-loading-stats,
   .brand-settings-grid,
   .schedule-settings-grid {
     grid-template-columns: 1fr;
@@ -2306,6 +2580,11 @@ button {
   .sidebar {
     position: static;
     height: auto;
+  }
+
+  .page-header {
+    position: static;
+    top: auto;
   }
 
   .hero-card h1,
@@ -2449,5 +2728,76 @@ button {
   .auth-capability-card,
   .auth-proof-item {
     padding: 16px;
+  }
+}
+
+@keyframes dashboard-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes dashboard-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes dashboard-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .dashboard-main,
+  .sidebar-progress--active::before,
+  .dashboard-loading-line::after,
+  .dashboard-loading-pill::after {
+    animation: none !important;
+  }
+
+  .primary-button,
+  .secondary-button,
+  .success-button,
+  .danger-button,
+  .commercial-nav__link,
+  .nav-link,
+  .sidebar-code-card,
+  .content-card,
+  .metric-card,
+  .list-row,
+  .insight-card,
+  .appointments-overview__card,
+  .appointment-status-section,
+  .appointment-card,
+  .customer-card,
+  .service-editor-card,
+  .feed-composer-card,
+  .feed-post-card,
+  .team-member-card,
+  .team-block-card,
+  .services-toolbar,
+  .referral-event-card,
+  .code-card,
+  .brand-preview-card,
+  .schedule-preview-card,
+  .empty-state,
+  .flash {
+    transition: none !important;
   }
 }

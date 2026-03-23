@@ -47,7 +47,7 @@ void main() {
       );
       expect(find.text('Próximo passo'), findsOneWidget);
       expect(
-        find.textContaining('Use essa foto como referência para decidir'),
+        find.textContaining('Use essa referência para decidir'),
         findsOneWidget,
       );
 
@@ -72,7 +72,9 @@ void main() {
       expect(find.text('Cancelar horário'), findsOneWidget);
       expect(find.text('Próximo passo'), findsOneWidget);
       expect(
-        find.textContaining('Confirme agora para manter Hidratação premium com Ana'),
+        find.textContaining(
+          'Confirme agora para manter Hidratação premium com Ana',
+        ),
         findsOneWidget,
       );
 
@@ -86,10 +88,7 @@ void main() {
         find.textContaining('continua reservado para você'),
         findsOneWidget,
       );
-      expect(
-        find.textContaining('vaga protegida'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('vaga protegida'), findsOneWidget);
       expect(find.text('Confirmar presença'), findsNothing);
       expect(find.text('Cancelar horário'), findsNothing);
     });
@@ -124,10 +123,7 @@ void main() {
         find.textContaining('o horário foi liberado para a agenda'),
         findsOneWidget,
       );
-      expect(
-        find.textContaining('reaproveitar esse encaixe'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('reaproveitar esse encaixe'), findsOneWidget);
       expect(find.text('Confirmar presença'), findsNothing);
       expect(find.text('Cancelar horário'), findsNothing);
     });

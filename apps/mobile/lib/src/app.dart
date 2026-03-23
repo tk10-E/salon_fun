@@ -163,7 +163,15 @@ class _SalonClientAppState extends State<SalonClientApp> {
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.92),
         labelStyle: TextStyle(color: branding.mutedText),
+        floatingLabelStyle: TextStyle(
+          color: branding.primary,
+          fontWeight: FontWeight.w700,
+        ),
         hintStyle: TextStyle(color: branding.mutedText.withValues(alpha: 0.62)),
+        prefixIconColor: branding.mutedText.withValues(alpha: 0.82),
+        suffixIconColor: branding.mutedText.withValues(alpha: 0.82),
+        errorStyle: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
+        errorMaxLines: 2,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
           vertical: 16,
@@ -183,6 +191,14 @@ class _SalonClientAppState extends State<SalonClientApp> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(color: branding.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFD5655A), width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFC94D43), width: 1.6),
         ),
       ),
       textTheme: ThemeData.light(useMaterial3: true).textTheme.copyWith(

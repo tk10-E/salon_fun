@@ -42,7 +42,7 @@ export function DashboardShell({ salonCode, salonName, children }: DashboardShel
           </form>
         </header>
 
-        <main>{children}</main>
+        <main className="dashboard-main">{children}</main>
       </div>
     </div>
   );

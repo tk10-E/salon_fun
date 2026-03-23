@@ -49,7 +49,11 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         expect(
-          find.text('O que entra no seu app ao conectar com Salon Fun'),
+          find.text('O que libera depois da conexão com Salon Fun'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Último passo para entrar em Salon Fun.'),
           findsOneWidget,
         );
         expect(
@@ -57,14 +61,13 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Falar com o salão'), findsOneWidget);
+        expect(find.textContaining('agenda liberada'), findsOneWidget);
         expect(
-          find.textContaining(
-            'agenda liberada e benefícios prontos para aparecer',
-          ),
+          find.textContaining('benefícios prontos para aparecer'),
           findsOneWidget,
         );
 
-        await tester.tap(find.text('Entrar em Salon Fun'));
+        await tester.tap(find.text('Conectar Salon Fun e continuar'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
@@ -90,7 +93,8 @@ class _FakeJoinSalonRepository extends SalonRepository {
   final List<_JoinRequest> joinRequests = [];
 
   @override
-  Future<SalonJoinPreview?> getSalonJoinPreview(String joinCode) async => preview;
+  Future<SalonJoinPreview?> getSalonJoinPreview(String joinCode) async =>
+      preview;
 
   @override
   Future<void> joinSalon({

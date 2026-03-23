@@ -681,36 +681,36 @@ String _descriptionFor(String type) {
   switch (type) {
     case 'promotion_published':
     case 'promotion_updated':
-      return 'O salão publicou ou atualizou uma promoção. Você pode abrir o app e conferir os detalhes com calma antes de agendar.';
+      return 'O salão publicou ou atualizou uma promoção. Abra o app para ver os detalhes e decidir se vale aproveitar.';
     case 'winback_offer':
-      return 'O salão ativou uma oferta de retorno porque você está há um tempo sem visitar. Se fizer sentido para você, dá para aproveitar esse incentivo direto no app.';
+      return 'O salão ativou uma oferta de retorno para facilitar sua próxima visita.';
     case 'smart_rebook_prompt':
-      return 'O app identificou seu padrão de retorno e o salão usou isso para sugerir um novo horário antes da sua rotina esfriar. É um lembrete comportamental, não um disparo genérico.';
+      return 'O app percebeu que já é um bom momento para reservar o próximo horário.';
     case 'membership_published':
     case 'membership_updated':
-      return 'Um plano mensal foi publicado ou atualizado no salão. Abra o app para ver valores, benefícios e vigência.';
+      return 'Um plano mensal foi publicado ou atualizado. Abra o app para ver valores e benefícios.';
     case 'loyalty_program_updated':
-      return 'O salão atualizou o clube de fidelidade com pontos, cashback ou novos níveis de desconto progressivo.';
+      return 'O salão atualizou a fidelidade com pontos, cashback ou novos níveis.';
     case 'loyalty_tier_unlocked':
     case 'loyalty_vip_unlocked':
-      return 'Seu histórico no salão liberou um novo nível de fidelidade. Abra o app para ver o desconto atual, o ranking e o cashback acumulado.';
+      return 'Seu histórico no salão liberou um novo nível de fidelidade. Abra o app para ver seus benefícios.';
     case 'referral_program_updated':
-      return 'O salão atualizou o programa de indicação. Confira as regras e os benefícios ativos no app.';
+      return 'O salão atualizou o programa de indicação. Confira as regras no app.';
     case 'service_published':
     case 'service_updated':
-      return 'O catálogo do salão mudou. Novos serviços e ajustes de preço ou duração podem aparecer na sua agenda.';
+      return 'O catálogo do salão mudou. Veja serviços, preços ou duração atualizados.';
     case 'feed_post_published':
-      return 'O salão publicou uma foto nova no feed. O preview abaixo usa os dados reais da publicação para você conferir antes de abrir o restante do app.';
+      return 'O salão publicou um novo resultado no feed. Veja o preview abaixo antes de abrir o app.';
     case 'appointment_confirmed':
       return 'Seu horário foi confirmado pelo salão. Agora você já pode se programar para comparecer no atendimento.';
     case 'appointment_reminder_1h':
-      return 'Este é um lembrete automático enviado uma hora antes do seu atendimento para você se organizar com antecedência.';
+      return 'Falta uma hora para o seu atendimento. Organize-se para chegar com calma.';
     case 'appointment_confirmation_required':
-      return 'O salão pediu sua confirmação de presença nos 30 minutos finais antes do atendimento. Você pode confirmar ou cancelar agora mesmo.';
+      return 'O salão pediu sua confirmação de presença. Você pode confirmar ou cancelar agora.';
     case 'appointment_auto_cancelled_unconfirmed':
-      return 'Como a presença não foi confirmada a tempo, o sistema liberou o horário para evitar perda na agenda do salão.';
+      return 'Como a presença não foi confirmada a tempo, o horário foi liberado.';
     case 'appointment_staff_reassigned':
-      return 'O salão precisou trocar o profissional responsável pelo seu horário. O atendimento continua reservado e este aviso confirma quem assume a agenda a partir de agora.';
+      return 'O salão trocou o profissional do seu horário. O atendimento continua reservado.';
     case 'appointment_cancelled':
       return 'O salão cancelou o horário. Abra o app para verificar os detalhes e escolher um novo atendimento se necessário.';
     case 'appointment_completed':
@@ -718,9 +718,9 @@ String _descriptionFor(String type) {
     case 'vacancy_alert':
       return 'Um horário foi liberado no salão. Se ainda estiver disponível, você pode aproveitar essa vaga no app.';
     case 'referral_qualified':
-      return 'Uma indicação sua concluiu a primeira visita e o app atualizou seu progresso dentro da meta necessária para liberar a próxima recompensa.';
+      return 'Uma indicação sua concluiu a primeira visita e seu progresso foi atualizado.';
     case 'referral_reward_unlocked':
-      return 'Você atingiu a quantidade de indicações validadas exigida pelo salão e a recompensa já ficou registrada no sistema para uso futuro.';
+      return 'Sua recompensa por indicação já foi liberada no sistema.';
     default:
       return 'O salão enviou uma atualização importante. Abra o app sempre que quiser revisar esse aviso.';
   }
@@ -735,13 +735,13 @@ String? _nextStepFor(NotificationTapPayload notification) {
 
   switch (type) {
     case 'feed_post_published':
-      return 'Use essa foto como referência para decidir com mais segurança e depois abra o feed para curtir, comentar ou reservar o serviço ligado ao resultado.';
+      return 'Use essa referência para decidir com mais segurança e abra o feed para reservar ou conversar com o salão.';
     case 'vacancy_alert':
       return 'Se esse horário fizer sentido para você, vale tentar reservar logo antes que outro cliente pegue o encaixe.';
     case 'winback_offer':
-      return 'Se a oferta fizer sentido, aproveite esse incentivo para voltar ao salão antes que sua rotina esfrie mais.';
+      return 'Se a oferta combinar com você, aproveite para voltar ao salão.';
     case 'smart_rebook_prompt':
-      return 'Seu ciclo ideal já abriu. Deixar o próximo horário reservado agora costuma ser a melhor chance de manter frequência.';
+      return 'Seu momento de voltar chegou. Reservar agora ajuda a manter a rotina.';
     case 'appointment_confirmation_required':
       final target = serviceName == null || serviceName.isEmpty
           ? 'o seu horário'
@@ -751,9 +751,9 @@ String? _nextStepFor(NotificationTapPayload notification) {
       }
       return 'Confirme agora para manter $target reservado e evitar que a agenda seja liberada.';
     case 'appointment_confirmed':
-      return 'Seu horário já está confirmado. Agora vale só se organizar para chegar no tempo certo ou alinhar qualquer detalhe com o salão.';
+      return 'Seu horário está confirmado. Agora é só se organizar ou alinhar detalhes com o salão.';
     case 'appointment_reminder_1h':
-      return 'Esse é o momento de sair com antecedência ou avisar o salão se precisar ajustar algo de última hora.';
+      return 'Saia com antecedência ou avise o salão se precisar ajustar algo.';
     case 'appointment_staff_reassigned':
       return 'Confira o profissional responsável e siga com o horário se a troca continuar boa para você.';
     case 'appointment_auto_cancelled_unconfirmed':
@@ -761,14 +761,14 @@ String? _nextStepFor(NotificationTapPayload notification) {
     case 'appointment_cancelled':
       return 'Se ainda quiser manter a visita, procure um novo horário no app enquanto a agenda estiver aberta.';
     case 'appointment_completed':
-      return 'Depois da visita, vale abrir a carteira para conferir pontos, cashback ou desconto progressivo atualizados.';
+      return 'Depois da visita, vale abrir a carteira para conferir pontos, cashback ou desconto.';
     case 'loyalty_program_updated':
     case 'loyalty_tier_unlocked':
     case 'loyalty_vip_unlocked':
       return 'Abra sua carteira no app para conferir saldo, cashback e o nível de fidelidade que pode puxar a próxima visita.';
     case 'membership_published':
     case 'membership_updated':
-      return 'Compare o plano com a frequência que você realmente mantém no salão para ver se compensa travar esse valor.';
+      return 'Compare o plano com sua frequência no salão para ver se faz sentido.';
     case 'promotion_published':
     case 'promotion_updated':
       return 'Se a campanha combinar com o que você costuma fazer, vale aproveitar enquanto ela está ativa.';
@@ -776,7 +776,7 @@ String? _nextStepFor(NotificationTapPayload notification) {
     case 'service_updated':
       return 'Veja se esse serviço combina com sua rotina e já pense se faz sentido encaixar no próximo retorno.';
     case 'referral_program_updated':
-      return 'Se você gosta do salão, esse é um bom momento para compartilhar seu código enquanto a campanha está atualizada.';
+      return 'Se você gosta do salão, esse é um bom momento para compartilhar seu código.';
     case 'referral_qualified':
       return 'Sua meta andou. Vale acompanhar quantas indicações faltam para liberar a próxima recompensa.';
     case 'referral_reward_unlocked':
@@ -816,7 +816,7 @@ class _FeedPostPreviewCard extends StatelessWidget {
     );
     final formatLabel = switch (postType) {
       'before_after' => 'Antes e depois',
-      'reel' => 'Video curto',
+      'reel' => 'Vídeo curto',
       _ => 'Foto',
     };
 
@@ -877,7 +877,7 @@ class _FeedPostPreviewCard extends StatelessWidget {
               if (videoUrl != null)
                 const _FeedMetaChip(
                   icon: Icons.ondemand_video_rounded,
-                  label: 'Com video',
+                  label: 'Com vídeo',
                 ),
               if (publishedAt != null)
                 _FeedMetaChip(

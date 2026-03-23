@@ -58,13 +58,21 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(activeProfile?.id, 'customer-1');
-      expect(find.text('Salon Fun'), findsNWidgets(2));
+      expect(find.text('Salon Fun'), findsAtLeastNWidgets(2));
+      expect(
+        find.text('Tudo para decidir, reservar e falar com o salão.'),
+        findsOneWidget,
+      );
       expect(find.text('Destaques do dia'), findsOneWidget);
 
       await tester.tap(find.text('Feed'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
+      expect(
+        find.text('Inspirações, resultados e agenda em movimento.'),
+        findsOneWidget,
+      );
       expect(
         find.text('Seu próximo visual favorito vai aparecer aqui'),
         findsOneWidget,
@@ -74,6 +82,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
+      expect(
+        find.text('Seu histórico fica pronto para voltar na hora certa.'),
+        findsOneWidget,
+      );
       expect(find.text('Hidratação premium'), findsOneWidget);
       expect(find.text('Confirmar presença'), findsOneWidget);
     });
@@ -102,7 +114,7 @@ void main() {
           find.text(
             'Planos, pacotes e horários do salão organizados para você decidir e reservar mais rápido.',
           ),
-          findsOneWidget,
+          findsWidgets,
         );
       },
     );

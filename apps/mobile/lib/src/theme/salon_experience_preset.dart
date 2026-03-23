@@ -192,7 +192,7 @@ class SalonExperiencePreset {
 
   static const SalonExperiencePreset beautySalon = SalonExperiencePreset._(
     value: 'beauty_salon',
-    label: 'Salão feminino',
+    label: 'Salão',
     appBarLabel: 'Seu app do salão',
     segmentIcon: Icons.auto_awesome_rounded,
     heroSupportLine: 'Escolha, converse e reserve no mesmo lugar.',
@@ -242,11 +242,11 @@ class SalonExperiencePreset {
         'Tudo o que o cliente vê aqui passa a refletir a marca deste salão.',
     joinPendingTitle: 'Conecte sua conta ao salão certo.',
     joinPendingDescription:
-        'Digite o código que você recebeu para liberar horários, serviços, benefícios, comunicação e a identidade do seu salão.',
+        'Digite o código para liberar horários, benefícios e a identidade do seu salão no app.',
     joinConnectedDescription:
-        'Assim que confirmar, o app passa a mostrar a cor, os serviços, a agenda, os benefícios e os avisos da marca certa.',
+        'Ao confirmar, o app passa a mostrar agenda, benefícios e avisos da marca certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com a identidade correta, agenda liberada e benefícios prontos para aparecer já nesta etapa.',
+        'O cliente vai entrar em {salon} com agenda liberada, identidade certa e benefícios prontos para aparecer.',
     joinSuccessMessage:
         'Agora seu app está conectado a {salon}. Agenda, benefícios e contato já aparecem daqui para frente.',
     highlightCollectionLabel: 'Serviços do salão',
@@ -312,11 +312,11 @@ class SalonExperiencePreset {
         'Tudo o que o cliente vê aqui passa a refletir o estilo, as referências e a agenda deste studio.',
     joinPendingTitle: 'Conecte sua conta ao nail studio certo.',
     joinPendingDescription:
-        'Digite o código que você recebeu para liberar referências, manutenções, benefícios e a identidade do studio no app.',
+        'Digite o código para liberar referências, agenda, benefícios e a identidade do studio no app.',
     joinConnectedDescription:
-        'Assim que confirmar, o app passa a mostrar referências, agenda, benefícios e avisos com a marca certa.',
+        'Ao confirmar, o app passa a mostrar referências, agenda, benefícios e avisos da marca certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com as referências certas, agenda liberada e manutenção pronta para aparecer já nesta etapa.',
+        'O cliente vai entrar em {salon} com referências certas, agenda liberada e manutenção pronta para aparecer.',
     joinSuccessMessage:
         'Agora seu app está conectado a {salon}. Referências, agenda e benefícios já aparecem daqui para frente.',
     highlightCollectionLabel: 'Serviços do studio',
@@ -335,18 +335,18 @@ class SalonExperiencePreset {
     appBarLabel: 'Sua barbearia no app',
     segmentIcon: Icons.content_cut_rounded,
     heroSupportLine:
-        'Mantenha seu corte em dia, fale com a barbearia e reserve rapido.',
+        'Mantenha seu corte em dia, fale com a barbearia e reserve rápido.',
     agendaMetricLabel: 'Próximo corte',
     benefitsMetricLabel: 'Vantagens',
     portfolioMetricLabel: 'Estilos',
     momentumLabel: 'Ritmo da barbearia',
     momentumTitleWithFeed:
         'Seu próximo corte já pode começar por esse portfólio',
-    momentumTitleWithoutFeed: 'Sua próxima reserva pode sair mais rapido daqui',
+    momentumTitleWithoutFeed: 'Sua próxima reserva pode sair mais rápido daqui',
     momentumDescriptionWithFeed:
         'Estilos, vagas e benefícios aparecem juntos para transformar referência em corte marcado sem enrolação.',
     momentumDescriptionWithoutFeed:
-        'A agenda real da barbearia já está aqui com tudo que ajuda você a decidir rapido e voltar no tempo certo.',
+        'A agenda real da barbearia já ajuda você a decidir rápido e voltar no tempo certo.',
     benefitsPillLabel: 'Recorrência acompanhada no app',
     offersPillLabel: 'Combos e cortes ativos',
     feedPillLabel: 'Portfólio com estilos reais',
@@ -381,13 +381,13 @@ class SalonExperiencePreset {
         'Ative a experiência da sua barbearia com agenda, portfólio e benefícios personalizados.',
     joinKnownTagline:
         'Tudo o que o cliente vê aqui passa a refletir o estilo, os profissionais e a agenda desta barbearia.',
-    joinPendingTitle: 'Conecte sua conta a barbearia certa.',
+    joinPendingTitle: 'Conecte sua conta à barbearia certa.',
     joinPendingDescription:
-        'Digite o código que você recebeu para liberar cortes, agenda, benefícios e a identidade da barbearia no app.',
+        'Digite o código para liberar cortes, agenda, benefícios e a identidade da barbearia no app.',
     joinConnectedDescription:
-        'Assim que confirmar, o app passa a mostrar o portfólio, a agenda, os profissionais e os avisos da marca certa.',
+        'Ao confirmar, o app passa a mostrar portfólio, agenda, profissionais e avisos da marca certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com o estilo certo, agenda liberada e recorrência pronta para aparecer já nesta etapa.',
+        'O cliente vai entrar em {salon} com estilo certo, agenda liberada e recorrência pronta para aparecer.',
     joinSuccessMessage:
         'Agora seu app está conectado a {salon}. Agenda, portfólio e contato já aparecem daqui para frente.',
     highlightCollectionLabel: 'Assinaturas da barbearia',
@@ -412,7 +412,7 @@ class SalonExperiencePreset {
     momentumLabel: 'Ritmo do studio',
     momentumTitleWithFeed:
         'Seu próximo retoque já pode começar por essa vitrine',
-    momentumTitleWithoutFeed: 'Seu próximo retorno pode sair mais rapido daqui',
+    momentumTitleWithoutFeed: 'Seu próximo retorno pode sair mais rápido daqui',
     momentumDescriptionWithFeed:
         'Resultados, horários e benefícios aparecem juntos para transformar confiança em agendamento com mais facilidade.',
     momentumDescriptionWithoutFeed:
@@ -453,11 +453,11 @@ class SalonExperiencePreset {
         'Tudo o que o cliente vê aqui passa a refletir os resultados, a agenda e o cuidado deste studio.',
     joinPendingTitle: 'Conecte sua conta ao studio certo.',
     joinPendingDescription:
-        'Digite o código que você recebeu para liberar retoques, agenda, benefícios e a identidade do studio no app.',
+        'Digite o código para liberar retoques, agenda, benefícios e a identidade do studio no app.',
     joinConnectedDescription:
-        'Assim que confirmar, o app passa a mostrar resultados, agenda, benefícios e avisos com a marca certa.',
+        'Ao confirmar, o app passa a mostrar resultados, agenda, benefícios e avisos da marca certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com os resultados certos, agenda liberada e retorno pronto para aparecer já nesta etapa.',
+        'O cliente vai entrar em {salon} com os resultados certos, agenda liberada e retorno pronto para aparecer.',
     joinSuccessMessage:
         'Agora seu app está conectado a {salon}. Agenda, resultados e contato já aparecem daqui para frente.',
     highlightCollectionLabel: 'Cuidados do studio',
@@ -482,7 +482,7 @@ class SalonExperiencePreset {
     momentumLabel: 'Ritmo da clínica',
     momentumTitleWithFeed:
         'Seu próximo protocolo pode começar por essa vitrine',
-    momentumTitleWithoutFeed: 'Seu próximo cuidado pode sair mais rapido daqui',
+    momentumTitleWithoutFeed: 'Seu próximo cuidado pode sair mais rápido daqui',
     momentumDescriptionWithFeed:
         'Resultados, agenda e benefícios aparecem juntos para transformar confiança em continuidade do tratamento.',
     momentumDescriptionWithoutFeed:
@@ -520,13 +520,13 @@ class SalonExperiencePreset {
         'Ative a experiência da sua clínica com agenda, benefícios e resultados personalizados.',
     joinKnownTagline:
         'Tudo o que o cliente vê aqui passa a refletir os protocolos, a agenda e o acompanhamento desta clínica.',
-    joinPendingTitle: 'Conecte sua conta a clínica certa.',
+    joinPendingTitle: 'Conecte sua conta à clínica certa.',
     joinPendingDescription:
-        'Digite o código que você recebeu para liberar protocolos, agenda, benefícios e a identidade da clínica no app.',
+        'Digite o código para liberar protocolos, agenda, benefícios e a identidade da clínica no app.',
     joinConnectedDescription:
-        'Assim que confirmar, o app passa a mostrar resultados, agenda, benefícios e avisos com a marca certa.',
+        'Ao confirmar, o app passa a mostrar resultados, agenda, benefícios e avisos da marca certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com o protocolo certo, agenda liberada e continuidade pronta para aparecer já nesta etapa.',
+        'O cliente vai entrar em {salon} com o protocolo certo, agenda liberada e continuidade pronta para aparecer.',
     joinSuccessMessage:
         'Agora seu app está conectado a {salon}. Agenda, resultados e acompanhamento já aparecem daqui para frente.',
     highlightCollectionLabel: 'Protocolos da clínica',

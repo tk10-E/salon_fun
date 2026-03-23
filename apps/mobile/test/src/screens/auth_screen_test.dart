@@ -14,21 +14,39 @@ void main() {
   _sharedAuthTestClient;
 
   group('AuthScreen', () {
-    testWidgets('highlights return, benefits and contact in sign in mode', (
+    testWidgets('prioritizes the sign in action with concise supporting value', (
       tester,
     ) async {
       await _pumpAuthScreen(tester, repository: _FakeAuthRepository());
 
-      expect(find.text('Ao entrar, você volta com vantagem'), findsOneWidget);
+      expect(find.text('Entre e continue para o seu salão.'), findsOneWidget);
       expect(
-        find.text('Pontos, cashback, desconto ou pacote sempre à vista.'),
+        find.text(
+          'Seu login leva ao próximo passo: conectar o código do salão e liberar agenda, benefícios e contato.',
+        ),
         findsOneWidget,
       );
-      expect(find.text('Falar com o salão'), findsOneWidget);
-      expect(
-        find.text('Entre para decidir mais rápido e voltar mais vezes.'),
-        findsOneWidget,
+      expect(find.text('Tudo do seu salão em um só lugar.'), findsOneWidget);
+      expect(find.text('Contato que resolve rápido'), findsOneWidget);
+    });
+
+    testWidgets('shows the auth panel before the showcase on narrow layouts', (
+      tester,
+    ) async {
+      await _pumpAuthScreen(
+        tester,
+        repository: _FakeAuthRepository(),
+        size: const Size(430, 1400),
       );
+
+      final authPanelTop = tester.getTopLeft(
+        find.text('Entre e continue para o seu salão.'),
+      );
+      final showcaseTop = tester.getTopLeft(
+        find.text('Tudo do seu salão em um só lugar.'),
+      );
+
+      expect(authPanelTop.dy, lessThan(showcaseTop.dy));
     });
 
     testWidgets(
@@ -47,12 +65,16 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.text('Sua conta já nasce pronta para a experiência certa'),
+          find.text('Crie sua conta e continue para o seu salão.'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Sua conta começa simples e cresce com o salão.'),
           findsOneWidget,
         );
         expect(
           find.text(
-            'Fotos, inspirações e contato direto para decidir mais rápido.',
+            'Você cria o acesso agora e informa o código do salão depois para liberar a experiência certa.',
           ),
           findsOneWidget,
         );
@@ -64,7 +86,7 @@ void main() {
         await tester.enterText(find.byType(TextFormField).at(1), 'segredo123');
         await tester.enterText(find.byType(TextFormField).at(2), 'segredo123');
 
-        await tester.tap(find.byIcon(Icons.person_add_alt_1_rounded));
+        await tester.tap(find.text('Criar conta e continuar').last);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
@@ -73,11 +95,11 @@ void main() {
         expect(repository.signUpRequests.single.password, 'segredo123');
         expect(
           find.text(
-            'Conta criada com sucesso. Agora entre para informar o código do seu salão.',
+            'Conta criada com sucesso. Agora entre e continue para conectar o código do seu salão.',
           ),
           findsOneWidget,
         );
-        expect(find.text('Ao entrar, você volta com vantagem'), findsOneWidget);
+        expect(find.text('Entre e continue para o seu salão.'), findsOneWidget);
       },
     );
   });
@@ -86,8 +108,9 @@ void main() {
 Future<void> _pumpAuthScreen(
   WidgetTester tester, {
   required _FakeAuthRepository repository,
+  Size size = const Size(1200, 2200),
 }) async {
-  await tester.binding.setSurfaceSize(const Size(1200, 2200));
+  await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   await tester.pumpWidget(

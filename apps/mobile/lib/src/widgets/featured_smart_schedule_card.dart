@@ -48,10 +48,7 @@ class FeaturedSmartScheduleCard extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: Icon(
-                  Icons.bolt_rounded,
-                  color: branding.deep,
-                ),
+                child: Icon(Icons.bolt_rounded, color: branding.deep),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -85,6 +82,8 @@ class FeaturedSmartScheduleCard extends StatelessWidget {
               color: const Color(0xFF705A4B),
               height: 1.5,
             ),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -179,9 +178,7 @@ class _FeaturedInfoChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: branding.outline.withValues(alpha: 0.48),
-        ),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.48)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

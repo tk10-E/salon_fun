@@ -7,6 +7,7 @@ import '../../models/app_models.dart';
 import '../../theme/salon_branding.dart';
 import '../customer_growth_suggestion_card.dart';
 import '../empty_state.dart';
+import '../press_feedback.dart';
 import '../soft_card.dart';
 import 'home_appointment_card.dart';
 import 'home_history_brand_header.dart';
@@ -105,6 +106,16 @@ class HomeHistoryTab extends StatelessWidget {
                   title: _historyIntroTitle,
                   description: _historyIntroDescription,
                 ),
+                const SizedBox(height: 16),
+                _HistoryJourneyCard(
+                  branding: branding,
+                  upcomingCount: _upcomingCount,
+                  completedCount: _completedCount,
+                  cancelledCount: _cancelledCount,
+                  walletActive:
+                      insightData?.loyaltySummary?.hasVisibleContent == true,
+                  hasOffer: _featuredOffer != null,
+                ),
                 ..._buildReturnWidgets(context),
               ],
             );
@@ -128,6 +139,23 @@ class HomeHistoryTab extends StatelessWidget {
             appointment.status == 'confirmed') &&
         appointment.date.isAfter(DateTime.now()),
   );
+
+  int get _upcomingCount => appointments
+      .where(
+        (appointment) =>
+            (appointment.status == 'pending' ||
+                appointment.status == 'confirmed') &&
+            appointment.date.isAfter(DateTime.now()),
+      )
+      .length;
+
+  int get _completedCount => appointments
+      .where((appointment) => appointment.status == 'completed')
+      .length;
+
+  int get _cancelledCount => appointments
+      .where((appointment) => appointment.status == 'cancelled')
+      .length;
 
   String get _historyIntroTitle {
     if (_hasUpcomingAppointment) {
@@ -306,14 +334,41 @@ class _HistoryRetentionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SoftCard(
+      padding: const EdgeInsets.all(18),
+      gradient: const LinearGradient(
+        colors: [Color(0xFFFFFCF8), Color(0xFFF7EEE6)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: const Color(0xFFE5D7CA),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.88),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Color(0xFF6F4A32),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Text(
@@ -323,23 +378,224 @@ class _HistoryRetentionCard extends StatelessWidget {
               height: 1.45,
             ),
           ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _HistoryActionPill(
+                icon: Icons.bolt_rounded,
+                label: 'Menos atrito no retorno',
+              ),
+              if (showWalletAction)
+                const _HistoryActionPill(
+                  icon: Icons.account_balance_wallet_outlined,
+                  label: 'Carteira ativa',
+                ),
+              const _HistoryActionPill(
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'Contato direto',
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
               if (showWalletAction)
-                FilledButton.icon(
-                  onPressed: onOpenWallet,
-                  icon: const Icon(Icons.account_balance_wallet_outlined),
-                  label: const Text('Abrir carteira'),
+                PressFeedback(
+                  haptic: true,
+                  child: FilledButton.icon(
+                    onPressed: onOpenWallet,
+                    icon: const Icon(Icons.account_balance_wallet_outlined),
+                    label: const Text('Abrir carteira'),
+                  ),
                 ),
-              OutlinedButton.icon(
-                onPressed: onWhatsApp,
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
-                label: const Text('Falar com o salão'),
+              PressFeedback(
+                haptic: true,
+                child: OutlinedButton.icon(
+                  onPressed: onWhatsApp,
+                  icon: const Icon(Icons.chat_bubble_outline_rounded),
+                  label: const Text('Falar com o salão'),
+                ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryJourneyCard extends StatelessWidget {
+  const _HistoryJourneyCard({
+    required this.branding,
+    required this.upcomingCount,
+    required this.completedCount,
+    required this.cancelledCount,
+    required this.walletActive,
+    required this.hasOffer,
+  });
+
+  final SalonBranding branding;
+  final int upcomingCount;
+  final int completedCount;
+  final int cancelledCount;
+  final bool walletActive;
+  final bool hasOffer;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      padding: const EdgeInsets.all(18),
+      gradient: LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.98),
+          branding.highlightBackground.withValues(alpha: 0.7),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: branding.outline.withValues(alpha: 0.6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sua jornada com o salão em um olhar',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: const Color(0xFF2F231C),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            walletActive || hasOffer
+                ? 'Seu histórico agora também aponta retorno, benefícios e o melhor próximo passo.'
+                : 'Veja o que está por vir, o que já foi concluído e o ritmo da sua relação com o salão.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF705A4B),
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _HistoryMetricCard(
+                icon: Icons.event_available_rounded,
+                label: 'Próximos',
+                value: upcomingCount == 1
+                    ? '1 horário'
+                    : '$upcomingCount horários',
+              ),
+              _HistoryMetricCard(
+                icon: Icons.verified_rounded,
+                label: 'Concluídos',
+                value: completedCount == 1
+                    ? '1 atendimento'
+                    : '$completedCount atendimentos',
+              ),
+              _HistoryMetricCard(
+                icon: Icons.event_busy_rounded,
+                label: 'Cancelados',
+                value: cancelledCount == 1
+                    ? '1 ajuste'
+                    : '$cancelledCount ajustes',
+              ),
+              _HistoryMetricCard(
+                icon: walletActive
+                    ? Icons.account_balance_wallet_outlined
+                    : Icons.loyalty_rounded,
+                label: walletActive ? 'Carteira' : 'Retorno',
+                value: walletActive
+                    ? 'Acompanhando vantagens'
+                    : hasOffer
+                    ? 'Campanha ativa'
+                    : 'Histórico organizado',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryMetricCard extends StatelessWidget {
+  const _HistoryMetricCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE6D7C8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF6F4A32)),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF7A5E4E),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: const Color(0xFF2F231C),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryActionPill extends StatelessWidget {
+  const _HistoryActionPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE6D7C8)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF6F4A32)),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF6F4A32),
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),

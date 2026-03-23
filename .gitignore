@@ -15,6 +15,7 @@ build/
 .env
 .env.local
 apps/web/.env.local
+apps/web/tsconfig.tsbuildinfo
 apps/mobile/.env.production
 *firebase-adminsdk*.json
 apps/web/.next_*

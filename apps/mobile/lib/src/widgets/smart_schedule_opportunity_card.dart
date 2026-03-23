@@ -47,10 +47,7 @@ class SmartScheduleOpportunityCard extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.88),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(
-                  Icons.auto_awesome_rounded,
-                  color: branding.deep,
-                ),
+                child: Icon(Icons.auto_awesome_rounded, color: branding.deep),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -83,6 +80,8 @@ class SmartScheduleOpportunityCard extends StatelessWidget {
             style: theme.textTheme.bodyMedium?.copyWith(
               color: const Color(0xFF705A4B),
             ),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -214,9 +213,7 @@ class _InfoPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: branding.outline.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

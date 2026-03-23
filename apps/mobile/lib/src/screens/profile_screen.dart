@@ -624,7 +624,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Nome, telefone, preferências, alergias e produtos ajudam o salão a repetir o que funciona sem perder contexto da sua rotina.',
+                    'Nome, telefone e preferências ajudam o salão a atender você melhor.',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 18),
@@ -655,7 +655,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Preferências',
                       hintText:
-                          'Ex.: profissional que você costuma preferir, acabamento, estilo ou cuidados que gosta de repetir.',
+                          'Ex.: profissional preferido, estilo, acabamento ou cuidado que você gosta de repetir.',
                       prefixIcon: Icon(Icons.tune_rounded),
                       alignLabelWithHint: true,
                     ),
@@ -669,7 +669,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Alergias ou cuidados',
                       hintText:
-                          'Ex.: sensibilidade a quimica, fragrancia forte, cola ou ingredientes que o salão deve evitar.',
+                          'Ex.: sensibilidade a química, fragrância forte, cola ou ingredientes a evitar.',
                       prefixIcon: Icon(Icons.health_and_safety_outlined),
                       alignLabelWithHint: true,
                     ),
@@ -683,7 +683,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Produtos usados ou que você quer repetir',
                       hintText:
-                          'Ex.: linha reconstrutora, finalizador sem sulfato, esmalte hipoalergênico ou tratamento que costuma funcionar bem.',
+                          'Ex.: reconstrutor, finalizador sem sulfato, esmalte hipoalergênico ou outro produto que funciona bem.',
                       prefixIcon: Icon(Icons.spa_outlined),
                       alignLabelWithHint: true,
                     ),
@@ -755,7 +755,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Seu prontuário ajuda o salão a repetir resultados com mais precisão: o que você gosta, o que deve evitar e o que já funcionou bem.',
+                    'Seu prontuário reúne preferências, cuidados e o que já funcionou bem.',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 16),
@@ -764,7 +764,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       icon: Icons.spa_outlined,
                       title: 'Seu perfil de beleza começa aqui',
                       message:
-                          'Salve preferências, alergias e produtos importantes para o salão atender você com mais contexto nas próximas visitas.',
+                          'Salve preferências, alergias e produtos importantes para o salão cuidar melhor das próximas visitas.',
                       accentColor: Color(0xFF8E441F),
                     )
                   else ...[

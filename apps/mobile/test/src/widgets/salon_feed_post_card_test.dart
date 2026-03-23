@@ -45,6 +45,42 @@ void main() {
       expect(find.byType(PageView), findsOneWidget);
     });
 
+    testWidgets('keeps the photo clean and moves feed references below media', (
+      tester,
+    ) async {
+      await _pumpFeedCard(
+        tester,
+        post: _feedPost(
+          imageUrls: const ['https://example.com/post-1.jpg'],
+          linkedService: null,
+          staffMemberName: 'Maria',
+        ),
+      );
+
+      final mediaSection = find.ancestor(
+        of: find.byType(PageView),
+        matching: find.byType(ClipRRect),
+      );
+
+      expect(find.text('Resultado real'), findsOneWidget);
+      expect(find.text('Referência do salão'), findsOneWidget);
+      expect(find.text('Assinado por Maria'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: mediaSection,
+          matching: find.text('Resultado real'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: mediaSection,
+          matching: find.text('Referência do salão'),
+        ),
+        findsNothing,
+      );
+    });
+
     testWidgets('renders before and after labels for transformation posts', (
       tester,
     ) async {
@@ -85,16 +121,38 @@ void main() {
       );
 
       expect(find.text('Vídeo curto'), findsWidgets);
-      expect(
-        find.text('Assinado por Talita • Colorista'),
-        findsOneWidget,
-      );
-      expect(find.text('Ver em movimento'), findsOneWidget);
+      expect(find.text('Assinado por Talita • Colorista'), findsOneWidget);
+      expect(find.text('Assistir em movimento'), findsOneWidget);
 
-      await tester.tap(find.text('Ver em movimento'));
+      await tester.tap(find.text('Assistir em movimento'));
       await tester.pump();
 
       expect(openVideoCount, 1);
+    });
+
+    testWidgets('double tap on photo triggers like burst once', (tester) async {
+      var likeTapCount = 0;
+
+      await _pumpFeedCard(
+        tester,
+        post: _feedPost(imageUrls: const ['https://example.com/post-1.jpg']),
+        onToggleLike: () {
+          likeTapCount += 1;
+        },
+      );
+
+      await tester.tap(find.byType(PageView));
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tap(find.byType(PageView));
+      await tester.pump();
+
+      expect(likeTapCount, 1);
+      expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.byIcon(Icons.favorite_rounded), findsNothing);
     });
 
     testWidgets('shows only the first two preview comments', (tester) async {
@@ -125,10 +183,19 @@ void main() {
         ),
       );
 
-      expect(find.text('Primeiro comentário.'), findsOneWidget);
-      expect(find.text('Segundo comentário.'), findsOneWidget);
-      expect(find.text('Terceiro comentário.'), findsNothing);
-      expect(find.text('3 comentários'), findsOneWidget);
+      expect(
+        find.textContaining('Primeiro comentário.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Segundo comentário.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Terceiro comentário.', findRichText: true),
+        findsNothing,
+      );
+      expect(find.text('Ver 3 comentários'), findsOneWidget);
     });
 
     testWidgets('shows the booking CTA and triggers it when service exists', (
@@ -149,12 +216,9 @@ void main() {
       );
 
       expect(find.text('Quero esse resultado'), findsOneWidget);
-      expect(
-        find.text(
-          'Esse resultado mostra a assinatura do salão em Corte premium. Se você quer sair assim, dá para reservar agora mesmo pelo app.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Resultado real'), findsOneWidget);
+      expect(find.text('Corte premium'), findsAtLeastNWidgets(1));
+      expect(find.text('Resultado glossy'), findsOneWidget);
       expect(find.text('Falar com o salão'), findsOneWidget);
 
       await tester.tap(find.text('Quero esse resultado'));
@@ -185,15 +249,10 @@ void main() {
         expect(find.text('Quero esse resultado'), findsNothing);
         expect(find.text('Corte premium'), findsNothing);
         expect(find.text('60 min'), findsNothing);
-        expect(find.text('Quero entender esse resultado'), findsOneWidget);
-        expect(
-          find.text(
-            'Se esse visual te ganhou, fale com o salão para descobrir o melhor caminho até esse resultado.',
-          ),
-          findsOneWidget,
-        );
+        expect(find.text('Falar sobre esse resultado'), findsOneWidget);
+        expect(find.text('Resultado glossy'), findsOneWidget);
 
-        await tester.tap(find.text('Quero entender esse resultado'));
+        await tester.tap(find.text('Falar sobre esse resultado'));
         await tester.pump();
 
         expect(contactTapCount, 1);
@@ -232,9 +291,9 @@ void main() {
           greaterThanOrEqualTo(2),
         );
 
-        await tester.tap(find.text('1 curtida'));
+        await tester.tap(find.byTooltip('Curtir publicação'));
         await tester.pump();
-        await tester.tap(find.text('2 comentários'));
+        await tester.tap(find.text('Ver 2 comentários'));
         await tester.pump();
         await tester.tap(find.text('Quero esse resultado'));
         await tester.pump();
@@ -265,19 +324,21 @@ Future<void> _pumpFeedCard(
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: Center(
-          child: SalonFeedPostCard(
-            post: post,
-            branding: SalonBranding.fromName(
-              'Salon Fun',
-              overrideHexColor: '#C56B43',
+        body: SingleChildScrollView(
+          child: Center(
+            child: SalonFeedPostCard(
+              post: post,
+              branding: SalonBranding.fromName(
+                'Salon Fun',
+                overrideHexColor: '#C56B43',
+              ),
+              interactionBusy: interactionBusy,
+              onToggleLike: onToggleLike ?? () {},
+              onOpenComments: onOpenComments ?? () {},
+              onBookService: onBookService,
+              onContactSalon: onContactSalon,
+              onOpenVideo: onOpenVideo,
             ),
-            interactionBusy: interactionBusy,
-            onToggleLike: onToggleLike ?? () {},
-            onOpenComments: onOpenComments ?? () {},
-            onBookService: onBookService,
-            onContactSalon: onContactSalon,
-            onOpenVideo: onOpenVideo,
           ),
         ),
       ),

@@ -278,6 +278,40 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.64),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: branding.outline.withValues(alpha: 0.76),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.flag_outlined,
+                                  size: 16,
+                                  color: branding.deep,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  preview == null
+                                      ? 'Última etapa do acesso'
+                                      : 'Último passo para liberar ${preview.name}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: branding.deep,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           Row(
                             children: [
                               if (preview != null)
@@ -344,8 +378,8 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                           const SizedBox(height: 20),
                           Text(
                             preview == null
-                                ? preset.joinPendingTitle
-                                : 'Você está prestes a entrar em ${preview.name}.',
+                                ? 'Conecte seu salão para liberar sua experiência.'
+                                : 'Último passo para entrar em ${preview.name}.',
                             style: theme.textTheme.headlineSmall?.copyWith(
                               color: branding.deep,
                             ),
@@ -353,8 +387,8 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                           const SizedBox(height: 12),
                           Text(
                             preview == null
-                                ? preset.joinPendingDescription
-                                : preset.joinConnectedDescription,
+                                ? 'Depois do login, falta apenas informar o código do salão para liberar agenda, benefícios e contato no app.'
+                                : 'Seu login já está pronto. Agora confirme o código para liberar agenda, benefícios e contato com ${preview.name}.',
                             style: theme.textTheme.bodyLarge?.copyWith(
                               color: branding.mutedText,
                             ),
@@ -411,8 +445,8 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                               children: [
                                 Text(
                                   preview == null
-                                      ? 'O que esse código libera no app'
-                                      : 'O que entra no seu app ao conectar com ${preview.name}',
+                                      ? 'O que libera depois da conexão'
+                                      : 'O que libera depois da conexão com ${preview.name}',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     color: branding.deep,
                                     fontWeight: FontWeight.w900,
@@ -452,16 +486,47 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Seus dados de entrada',
+                            'Confirme para continuar',
                             style: theme.textTheme.titleLarge?.copyWith(
                               color: branding.deep,
                             ),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Preencha seu nome, confirme o código do salão e, se tiver, informe sua indicação antes do primeiro agendamento para não perder benefício ou vínculo de retorno.',
+                            'Seu login já foi concluído. Agora confirme seu nome e o código do salão para entrar na experiência certa.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: branding.mutedText,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: branding.highlightBackground,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: branding.outline.withValues(alpha: 0.74),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.rocket_launch_outlined,
+                                  color: branding.deep,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Quando você conectar o salão, o app já segue com agenda, benefícios e contato liberados.',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: branding.deep,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -569,9 +634,17 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                                     )
                                   : Text(
                                       preview == null
-                                          ? 'Continuar'
-                                          : 'Entrar em ${preview.name}',
+                                          ? 'Conectar salão e continuar'
+                                          : 'Conectar ${preview.name} e continuar',
                                     ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Se tiver código de indicação, adicione antes do primeiro agendamento.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: branding.mutedText,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],

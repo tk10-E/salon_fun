@@ -123,6 +123,10 @@ void main() {
           findsOneWidget,
         );
         expect(
+          find.text('Sua jornada com o salão em um olhar'),
+          findsOneWidget,
+        );
+        expect(
           find.text('Seu próximo retorno pode render vantagem dupla'),
           findsOneWidget,
         );
@@ -247,19 +251,22 @@ void main() {
       );
 
       expect(find.text('Resultado glossy'), findsOneWidget);
-      expect(find.text('1 comentário'), findsOneWidget);
-      expect(find.text('Talita'), findsOneWidget);
+      expect(find.text('Ver 1 comentário'), findsOneWidget);
+      expect(find.textContaining('Talita', findRichText: true), findsOneWidget);
+      expect(find.text('Destaques do feed'), findsOneWidget);
+      expect(find.text('Tudo'), findsOneWidget);
+      expect(find.text('Reserva'), findsOneWidget);
       expect(
         find.text('Seu próximo visual pode sair do feed de hoje'),
         findsOneWidget,
       );
 
-      await tester.ensureVisible(find.text('0 curtidas'));
-      await tester.tap(find.text('0 curtidas'));
+      await tester.ensureVisible(find.byTooltip('Curtir publicação'));
+      await tester.tap(find.byTooltip('Curtir publicação'));
       await tester.pump();
 
-      await tester.ensureVisible(find.text('1 comentário'));
-      await tester.tap(find.text('1 comentário'));
+      await tester.ensureVisible(find.text('Ver 1 comentário'));
+      await tester.tap(find.text('Ver 1 comentário'));
       await tester.pump();
 
       await tester.ensureVisible(find.text('Quero esse resultado'));
@@ -302,18 +309,242 @@ void main() {
           ),
         );
 
-        await tester.ensureVisible(find.text('0 curtidas'));
-        await tester.tap(find.text('0 curtidas'));
+        await tester.ensureVisible(find.byTooltip('Curtir publicação'));
+        await tester.tap(find.byTooltip('Curtir publicação'));
         await tester.pump();
 
-        await tester.ensureVisible(find.text('1 comentário'));
-        await tester.tap(find.text('1 comentário'));
+        await tester.ensureVisible(find.text('Ver 1 comentário'));
+        await tester.tap(find.text('Ver 1 comentário'));
         await tester.pump();
 
         expect(likeTapCount, 0);
         expect(commentTapCount, 0);
       },
     );
+
+    testWidgets('filters the feed when a story highlight is tapped', (
+      tester,
+    ) async {
+      final standardPost = _feedPost(title: 'Resultado glossy');
+      final reelPost = _feedPost(
+        id: 'post-2',
+        title: 'Brilho em movimento',
+        postType: SalonPostType.reel,
+        videoUrl: 'https://example.com/post.mp4',
+        linkedService: null,
+      );
+      final beforeAfterPost = _feedPost(
+        id: 'post-3',
+        title: 'Virada de visual',
+        postType: SalonPostType.beforeAfter,
+        imageUrls: const [
+          'https://example.com/before.jpg',
+          'https://example.com/after.jpg',
+        ],
+        linkedService: null,
+      );
+
+      await _pumpHomeTestApp(
+        tester,
+        HomeFeedTab(
+          profile: _profile(),
+          branding: _branding(),
+          posts: [standardPost, reelPost, beforeAfterPost],
+          onRefresh: () async {},
+          onWhatsApp: () {},
+          onToggleLike: (_) async {},
+          onOpenComments: (_) async {},
+          onBookService: (_) async {},
+          busyPostIds: const {},
+        ),
+      );
+
+      expect(find.text('Tudo'), findsOneWidget);
+      expect(find.text('Reel'), findsOneWidget);
+      expect(find.text('Antes e depois'), findsAtLeastNWidgets(1));
+      expect(find.text('Resultado glossy'), findsOneWidget);
+      expect(find.text('Brilho em movimento'), findsOneWidget);
+      expect(find.text('Virada de visual'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Reel'));
+      await tester.tap(find.text('Reel'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.text('Stories do feed'), findsOneWidget);
+      expect(find.text('Reels'), findsOneWidget);
+      expect(find.text('Brilho em movimento'), findsAtLeastNWidgets(1));
+      expect(find.text('Ver no feed'), findsOneWidget);
+
+      await tester.tap(find.text('Ver no feed'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.text('Reels para decidir mais rápido'), findsOneWidget);
+      expect(find.text('Ver tudo'), findsOneWidget);
+      expect(find.text('Brilho em movimento'), findsOneWidget);
+      expect(find.text('Resultado glossy'), findsNothing);
+      expect(find.text('Virada de visual'), findsNothing);
+
+      await tester.tap(find.text('Ver tudo'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Seu próximo visual pode sair do feed de hoje'),
+        findsOneWidget,
+      );
+      expect(find.text('Resultado glossy'), findsOneWidget);
+      expect(find.text('Virada de visual'), findsOneWidget);
+    });
+
+    testWidgets('auto advances stories and pauses on long press', (
+      tester,
+    ) async {
+      final firstReel = _feedPost(
+        id: 'post-1',
+        title: 'Brilho em movimento',
+        postType: SalonPostType.reel,
+        videoUrl: 'https://example.com/reel-1.mp4',
+        linkedService: null,
+      );
+      final secondReel = _feedPost(
+        id: 'post-2',
+        title: 'Luz em movimento',
+        postType: SalonPostType.reel,
+        videoUrl: 'https://example.com/reel-2.mp4',
+        linkedService: null,
+      );
+
+      await _pumpHomeTestApp(
+        tester,
+        HomeFeedTab(
+          profile: _profile(),
+          branding: _branding(),
+          posts: [firstReel, secondReel],
+          onRefresh: () async {},
+          onWhatsApp: () {},
+          onToggleLike: (_) async {},
+          onOpenComments: (_) async {},
+          onBookService: (_) async {},
+          busyPostIds: const {},
+        ),
+      );
+
+      await tester.tap(find.text('Reels'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.text('Stories do feed'), findsOneWidget);
+      expect(find.text('1/2'), findsOneWidget);
+      expect(find.text('Segure para pausar'), findsOneWidget);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(PageView)),
+      );
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pump(const Duration(seconds: 4));
+
+      expect(find.text('Pausado'), findsOneWidget);
+      expect(find.text('1/2'), findsOneWidget);
+
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('2/2'), findsOneWidget);
+    });
+
+    testWidgets('closes the story viewer when dragged down', (tester) async {
+      final reelPost = _feedPost(
+        id: 'post-1',
+        title: 'Brilho em movimento',
+        postType: SalonPostType.reel,
+        videoUrl: 'https://example.com/reel-1.mp4',
+        linkedService: null,
+      );
+
+      await _pumpHomeTestApp(
+        tester,
+        HomeFeedTab(
+          profile: _profile(),
+          branding: _branding(),
+          posts: [reelPost],
+          onRefresh: () async {},
+          onWhatsApp: () {},
+          onToggleLike: (_) async {},
+          onOpenComments: (_) async {},
+          onBookService: (_) async {},
+          busyPostIds: const {},
+        ),
+      );
+
+      await tester.tap(find.text('Reel'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.text('Stories do feed'), findsOneWidget);
+
+      await tester.drag(
+        find.byType(PageView),
+        const Offset(0, 220),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.text('Stories do feed'), findsNothing);
+      expect(find.text('Resultado glossy'), findsNothing);
+      expect(find.text('Brilho em movimento'), findsOneWidget);
+    });
+
+    testWidgets('closes the story viewer with a quick downward fling', (
+      tester,
+    ) async {
+      final reelPost = _feedPost(
+        id: 'post-1',
+        title: 'Brilho em movimento',
+        postType: SalonPostType.reel,
+        videoUrl: 'https://example.com/reel-1.mp4',
+        linkedService: null,
+      );
+
+      await _pumpHomeTestApp(
+        tester,
+        HomeFeedTab(
+          profile: _profile(),
+          branding: _branding(),
+          posts: [reelPost],
+          onRefresh: () async {},
+          onWhatsApp: () {},
+          onToggleLike: (_) async {},
+          onOpenComments: (_) async {},
+          onBookService: (_) async {},
+          busyPostIds: const {},
+        ),
+      );
+
+      await tester.tap(find.text('Reel'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.text('Stories do feed'), findsOneWidget);
+
+      await tester.fling(
+        find.byType(PageView),
+        const Offset(0, 110),
+        2200,
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pump(const Duration(milliseconds: 320));
+
+      expect(find.text('Stories do feed'), findsNothing);
+      expect(find.text('Brilho em movimento'), findsOneWidget);
+    });
 
     testWidgets('renders services tab and books a listed service', (
       tester,
@@ -351,6 +582,7 @@ void main() {
       );
 
       expect(find.text('Destaques do dia'), findsOneWidget);
+      expect(find.text('Visão rápida do salão'), findsOneWidget);
       expect(find.text('Escolha seu próximo cuidado'), findsOneWidget);
       expect(find.text('Corte premium'), findsOneWidget);
       expect(
@@ -433,26 +665,57 @@ AppointmentItem _appointmentRequiringPresence() {
   );
 }
 
-SalonPost _feedPost() {
+SalonPost _feedPost({
+  String id = 'post-1',
+  String title = 'Resultado glossy',
+  String? caption = 'Finalização com brilho intenso e corte em camadas.',
+  List<String> imageUrls = const ['https://example.com/post.jpg'],
+  DateTime? createdAt,
+  int likeCount = 0,
+  int? commentCount,
+  bool likedByMe = false,
+  List<SalonPostComment>? comments,
+  SalonPostType postType = SalonPostType.standard,
+  String? videoUrl,
+  String? staffMemberName,
+  String? staffMemberRole,
+  ServiceItem? linkedService = const ServiceItem(
+    id: 'service-1',
+    name: 'Corte premium',
+    price: 120,
+    duration: 60,
+    sortOrder: 0,
+    category: 'Cabelo',
+    description: 'Corte com acabamento e finalização.',
+  ),
+}) {
+  final resolvedComments =
+      comments ??
+      [
+        SalonPostComment(
+          id: 'comment-1',
+          customerId: 'customer-1',
+          customerName: 'Talita',
+          body: 'Amei o resultado final.',
+          createdAt: DateTime(2099, 4, 10, 16, 20),
+        ),
+      ];
+
   return SalonPost(
-    id: 'post-1',
-    title: 'Resultado glossy',
-    caption: 'Finalização com brilho intenso e corte em camadas.',
-    imageUrls: const ['https://example.com/post.jpg'],
-    createdAt: DateTime(2099, 4, 10, 16),
-    likeCount: 0,
-    commentCount: 1,
-    likedByMe: false,
-    comments: [
-      SalonPostComment(
-        id: 'comment-1',
-        customerId: 'customer-1',
-        customerName: 'Talita',
-        body: 'Amei o resultado final.',
-        createdAt: DateTime(2099, 4, 10, 16, 20),
-      ),
-    ],
-    linkedService: _service(),
+    id: id,
+    title: title,
+    caption: caption,
+    imageUrls: imageUrls,
+    createdAt: createdAt ?? DateTime(2099, 4, 10, 16),
+    likeCount: likeCount,
+    commentCount: commentCount ?? resolvedComments.length,
+    likedByMe: likedByMe,
+    comments: resolvedComments,
+    postType: postType,
+    videoUrl: videoUrl,
+    staffMemberName: staffMemberName,
+    staffMemberRole: staffMemberRole,
+    linkedService: linkedService,
   );
 }
 

@@ -1065,7 +1065,7 @@ class VacancyAlert {
   factory VacancyAlert.fromMap(Map<String, dynamic> map) {
     return VacancyAlert(
       id: map['id'] as String,
-      headline: (map['headline'] ?? 'Horario liberado') as String,
+      headline: (map['headline'] ?? 'Horário liberado') as String,
       body: (map['body'] ?? '') as String,
       startsAt: DateTime.parse(map['starts_at'] as String).toLocal(),
       endsAt: DateTime.parse(map['ends_at'] as String).toLocal(),
@@ -1293,7 +1293,7 @@ enum SalonPostType {
       case SalonPostType.beforeAfter:
         return 'Antes e depois';
       case SalonPostType.reel:
-        return 'Video curto';
+        return 'Vídeo curto';
       case SalonPostType.standard:
         return 'Foto';
     }
