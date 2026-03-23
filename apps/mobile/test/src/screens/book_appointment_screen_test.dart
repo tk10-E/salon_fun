@@ -194,7 +194,7 @@ void main() {
       expect(find.text('Resumo antes de confirmar'), findsOneWidget);
       expect(
         find.text(
-          'Seu horário entra no histórico do app assim que a reserva for confirmada.',
+          'Seu horário entra no histórico do app assim que a reserva for confirmada e já deixa a próxima visita mais fácil de repetir.',
         ),
         findsOneWidget,
       );

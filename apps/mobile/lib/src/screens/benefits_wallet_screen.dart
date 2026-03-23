@@ -162,7 +162,8 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
                     ),
                     const SizedBox(height: 20),
                   ] else
-                    const _WalletEmptyCard(
+                    _WalletEmptyCard(
+                      branding: _branding,
                       title: 'Seu clube de fidelidade ainda está vazio',
                       message:
                           'Assim que visitas concluídas começarem a gerar pontos e cashback, o saldo vai aparecer aqui.',
@@ -195,13 +196,14 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
                   ),
                   const SizedBox(height: 14),
                   if (snapshot.hasError)
-                    const _WalletEmptyCard(
+                    _WalletEmptyCard(
+                      branding: _branding,
                       title: 'Não foi possível carregar o extrato agora',
                       message:
                           'Atualize a tela em alguns instantes para buscar seus lançamentos mais recentes.',
                     )
                   else if (isWaitingTransactions)
-                    const _WalletLoadingCard()
+                    _WalletLoadingCard(branding: _branding)
                   else if (transactions.isEmpty)
                     EmptyState(
                       centered: true,
@@ -262,6 +264,22 @@ class _WalletHero extends StatelessWidget {
         ? 'Sem ranking'
         : '${loyaltySummary!.rankPosition}º lugar';
     final referralCode = referralSummary?.referralCode.trim();
+    final focusTitle = referralSummary?.availableRewardsCount != null &&
+            referralSummary!.availableRewardsCount > 0
+        ? 'Você já tem recompensa pronta para usar'
+        : loyaltySummary?.visitsToNextTier == 1
+        ? 'Falta só uma visita para subir de nível'
+        : (loyaltySummary?.cashbackBalance ?? 0) > 0
+        ? 'Seu cashback já pode ajudar no próximo retorno'
+        : 'Sua carteira já trabalha retenção a seu favor';
+    final focusMessage = referralSummary?.availableRewardsCount != null &&
+            referralSummary!.availableRewardsCount > 0
+        ? 'Abra a carteira sempre que for marcar a próxima visita e alinhe com o salão a melhor forma de usar esse benefício.'
+        : loyaltySummary?.visitsToNextTier == 1
+        ? 'Manter sua frequência agora pode puxar mais desconto, cashback e posição melhor no ranking do salão.'
+        : (loyaltySummary?.cashbackBalance ?? 0) > 0
+        ? 'Seu saldo já está disponível para entrar na decisão da próxima reserva com mais inteligência.'
+        : 'Pontos, indicações e visitas começam a aparecer aqui conforme sua relação com o salão evolui.';
 
     return SoftCard(
       padding: const EdgeInsets.all(22),
@@ -352,6 +370,64 @@ class _WalletHero extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _HeroMetricTile(
+                  label: 'Pontos',
+                  value: '${loyaltySummary?.pointsBalance ?? 0}',
+                  branding: branding,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _HeroMetricTile(
+                  label: 'Visitas',
+                  value: '${loyaltySummary?.completedVisits ?? 0}',
+                  branding: branding,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _HeroMetricTile(
+                  label: 'Prêmios',
+                  value: '${referralSummary?.availableRewardsCount ?? 0}',
+                  branding: branding,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  focusTitle,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: branding.deep,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  focusMessage,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: branding.mutedText,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -397,20 +473,28 @@ class _HeroChip extends StatelessWidget {
 }
 
 class _WalletLoadingCard extends StatelessWidget {
-  const _WalletLoadingCard();
+  const _WalletLoadingCard({required this.branding});
+
+  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
     return SoftCard(
+      borderColor: branding.outline.withValues(alpha: 0.6),
       child: Row(
-        children: const [
+        children: [
           SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: branding.deep,
+            ),
           ),
-          SizedBox(width: 12),
-          Expanded(child: Text('Buscando seus lançamentos mais recentes...')),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text('Buscando seus lançamentos mais recentes...'),
+          ),
         ],
       ),
     );
@@ -418,10 +502,15 @@ class _WalletLoadingCard extends StatelessWidget {
 }
 
 class _WalletEmptyCard extends StatelessWidget {
-  const _WalletEmptyCard({required this.title, required this.message});
+  const _WalletEmptyCard({
+    required this.title,
+    required this.message,
+    required this.branding,
+  });
 
   final String title;
   final String message;
+  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
@@ -429,9 +518,28 @@ class _WalletEmptyCard extends StatelessWidget {
 
     return SoftCard(
       padding: const EdgeInsets.all(18),
+      borderColor: branding.outline.withValues(alpha: 0.58),
+      gradient: LinearGradient(
+        colors: [
+          branding.primary.withValues(alpha: 0.08),
+          Colors.white.withValues(alpha: 0.96),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.86),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(Icons.auto_awesome_rounded, color: branding.deep),
+          ),
+          const SizedBox(height: 12),
           Text(
             title,
             style: theme.textTheme.titleMedium?.copyWith(
@@ -539,6 +647,60 @@ class _LoyaltyTransactionCard extends StatelessWidget {
                   positive: transaction.completedVisitDelta > 0,
                 ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            transaction.isRedemption
+                ? 'Movimento que reduziu saldo ou consumiu um benefício da sua carteira.'
+                : 'Movimento que fortaleceu sua carteira e ajuda no próximo retorno ao salão.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: branding.mutedText,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetricTile extends StatelessWidget {
+  const _HeroMetricTile({
+    required this.label,
+    required this.value,
+    required this.branding,
+  });
+
+  final String label;
+  final String value;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.84),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: branding.mutedText,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: branding.deep,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),

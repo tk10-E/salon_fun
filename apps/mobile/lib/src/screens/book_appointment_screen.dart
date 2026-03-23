@@ -671,6 +671,29 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                           color: branding.deep.withValues(alpha: 0.86),
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          if (widget.service.category?.trim().isNotEmpty == true)
+                            _HeroInfoChip(
+                              icon: serviceVisual.icon,
+                              label: widget.service.category!,
+                              branding: branding,
+                            ),
+                          _HeroInfoChip(
+                            icon: Icons.schedule_rounded,
+                            label: '${widget.service.duration} min',
+                            branding: branding,
+                          ),
+                          _HeroInfoChip(
+                            icon: Icons.sell_rounded,
+                            label: currency.format(widget.service.price),
+                            branding: branding,
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -978,7 +1001,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Seu horário entra no histórico do app assim que a reserva for confirmada.',
+                          'Seu horário entra no histórico do app assim que a reserva for confirmada e já deixa a próxima visita mais fácil de repetir.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 16),
@@ -987,16 +1010,22 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                           runSpacing: 10,
                           children: [
                             _SummaryPill(
+                              icon: Icons.event_rounded,
                               label: 'Data',
                               value: dateFormat.format(selectedSlot),
+                              branding: branding,
                             ),
                             _SummaryPill(
+                              icon: Icons.schedule_rounded,
                               label: 'Horário',
                               value: timeFormat.format(selectedSlot),
+                              branding: branding,
                             ),
                             _SummaryPill(
+                              icon: Icons.person_rounded,
                               label: 'Profissional',
                               value: _selectedStaffLabel(availability),
+                              branding: branding,
                             ),
                           ],
                         ),
@@ -1072,33 +1101,86 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
 }
 
 class _SummaryPill extends StatelessWidget {
-  const _SummaryPill({required this.label, required this.value});
+  const _SummaryPill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.branding,
+  });
 
+  final IconData icon;
   final String label;
   final String value;
+  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF5EC),
+        color: branding.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE3D5C7)),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          Icon(icon, size: 18, color: branding.deep),
+          const SizedBox(height: 10),
           Text(
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: const Color(0xFF8E441F),
+              color: branding.deep,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 4),
-          Text(value, style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.deep.withValues(alpha: 0.92),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroInfoChip extends StatelessWidget {
+  const _HeroInfoChip({
+    required this.icon,
+    required this.label,
+    required this.branding,
+  });
+
+  final IconData icon;
+  final String label;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: branding.deep),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.deep,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );

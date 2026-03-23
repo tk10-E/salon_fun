@@ -455,6 +455,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     final tierLabel = _loyaltySummary?.currentTier?.label;
     final referralCode = _referralSummary?.referralCode.trim();
+    final cashbackLabel = NumberFormat.currency(
+      locale: 'pt_BR',
+      symbol: 'R\$',
+    ).format(_loyaltySummary?.cashbackBalance ?? 0);
+    final favoritesCount =
+        _favoriteServices.length + _favoriteStaffMembers.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Minha conta')),
@@ -568,6 +574,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           label: 'Código $referralCode',
                           branding: _branding,
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _PreviewMetricBox(
+                          label: 'Visitas',
+                          value: '${_loyaltySummary?.completedVisits ?? 0}',
+                          branding: _branding,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _PreviewMetricBox(
+                          label: 'Cashback',
+                          value: cashbackLabel,
+                          branding: _branding,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _PreviewMetricBox(
+                          label: 'Favoritos',
+                          value: '$favoritesCount',
+                          branding: _branding,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -728,6 +762,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       title: 'Seu perfil de beleza começa aqui',
                       message:
                           'Salve preferências, alergias e produtos importantes para o salão atender você com mais contexto nas próximas visitas.',
+                      accentColor: Color(0xFF8E441F),
                     )
                   else ...[
                     if (_profile.preferences?.trim().isNotEmpty == true) ...[
@@ -735,6 +770,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.tune_rounded,
                         label: 'Preferências de resultado',
                         value: _profile.preferences!,
+                        branding: _branding,
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -743,6 +779,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.health_and_safety_outlined,
                         label: 'Alergias e cuidados',
                         value: _profile.allergies!,
+                        branding: _branding,
                         accentColor: const Color(0xFF8D5B28),
                       ),
                       const SizedBox(height: 12),
@@ -752,6 +789,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.spa_outlined,
                         label: 'Produtos usados ou preferidos',
                         value: _profile.beautyProducts!,
+                        branding: _branding,
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -770,6 +808,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: _ProfileAppointmentSummaryCard(
                                   appointment: appointment,
+                                  branding: _branding,
                                 ),
                               ),
                             )
@@ -816,6 +855,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       title: 'Seu histórico vai aparecer aqui',
                       message:
                           'Assim que seus atendimentos forem concluídos, o app registra datas, valores e profissional para facilitar o próximo retorno.',
+                      accentColor: Color(0xFF8E441F),
                     )
                   else
                     Column(
@@ -825,6 +865,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               padding: const EdgeInsets.only(bottom: 12),
                               child: _ProfileAppointmentSummaryCard(
                                 appointment: appointment,
+                                branding: _branding,
                               ),
                             ),
                           )
@@ -882,6 +923,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _BenefitFocusCard(
                     title: _benefitFocusTitle,
                     message: _benefitFocusMessage,
+                    branding: _branding,
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -940,6 +982,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       title: 'Você ainda não salvou favoritos',
                       message:
                           'Use o coracao nos serviços e na escolha de profissionais para montar sua rotina com menos atrito.',
+                      accentColor: Color(0xFF8E441F),
                     )
                   else ...[
                     if (_favoriteServices.isNotEmpty) ...[
@@ -960,6 +1003,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 label: service.name,
                                 detail:
                                     'R\$ ${service.price.toStringAsFixed(2).replaceAll('.', ',')}',
+                                branding: _branding,
                               ),
                             )
                             .toList(),
@@ -985,6 +1029,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 icon: Icons.person_rounded,
                                 label: staffMember.name,
                                 detail: staffMember.role,
+                                branding: _branding,
                               ),
                             )
                             .toList(),
@@ -1053,11 +1098,13 @@ class _ProfileSectionEmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
+    this.accentColor = const Color(0xFF8E441F),
   });
 
   final IconData icon;
   final String title;
   final String message;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1065,14 +1112,22 @@ class _ProfileSectionEmptyState extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F2EB),
+        color: accentColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5D3C3)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.2)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF8D5B28)),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: accentColor),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1090,7 +1145,7 @@ class _ProfileSectionEmptyState extends StatelessWidget {
                   message,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: const Color(0xFF765E4E),
-                    height: 1.45,
+                    height: 1.5,
                   ),
                 ),
               ],
@@ -1103,9 +1158,13 @@ class _ProfileSectionEmptyState extends StatelessWidget {
 }
 
 class _ProfileAppointmentSummaryCard extends StatelessWidget {
-  const _ProfileAppointmentSummaryCard({required this.appointment});
+  const _ProfileAppointmentSummaryCard({
+    required this.appointment,
+    required this.branding,
+  });
 
   final AppointmentItem appointment;
+  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
@@ -1117,20 +1176,36 @@ class _ProfileAppointmentSummaryCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFBF7),
+        color: Colors.white.withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE7D6C4)),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            appointment.serviceName,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: branding.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.auto_awesome_rounded, color: branding.deep),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  appointment.serviceName,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -1139,15 +1214,18 @@ class _ProfileAppointmentSummaryCard extends StatelessWidget {
                 icon: Icons.event_rounded,
                 label:
                     '${dateFormat.format(appointment.date)} • ${timeFormat.format(appointment.date)}',
+                branding: branding,
               ),
               _ProfileSummaryChip(
                 icon: Icons.sell_rounded,
                 label: currency.format(appointment.servicePrice),
+                branding: branding,
               ),
               if ((appointment.staffMemberName ?? '').trim().isNotEmpty)
                 _ProfileSummaryChip(
                   icon: Icons.person_rounded,
                   label: appointment.staffMemberName!,
+                  branding: branding,
                 ),
             ],
           ),
@@ -1161,12 +1239,14 @@ class _ProfileFavoriteChip extends StatelessWidget {
   const _ProfileFavoriteChip({
     required this.icon,
     required this.label,
+    required this.branding,
     this.detail,
   });
 
   final IconData icon;
   final String label;
   final String? detail;
+  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
@@ -1177,20 +1257,20 @@ class _ProfileFavoriteChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF5EC),
+        color: branding.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5D3C3)),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF8E441F)),
+          Icon(icon, size: 16, color: branding.deep),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
               composedLabel,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5F4334),
+                color: branding.deep,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1206,12 +1286,14 @@ class _ProfileBeautyNoteCard extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    required this.branding,
     this.accentColor = const Color(0xFF8E441F),
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final SalonBranding branding;
   final Color accentColor;
 
   @override
@@ -1220,14 +1302,22 @@ class _ProfileBeautyNoteCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFBF7),
+        color: Colors.white.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE7D6C4)),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.58)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: accentColor),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: accentColor),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1258,28 +1348,34 @@ class _ProfileBeautyNoteCard extends StatelessWidget {
 }
 
 class _ProfileSummaryChip extends StatelessWidget {
-  const _ProfileSummaryChip({required this.icon, required this.label});
+  const _ProfileSummaryChip({
+    required this.icon,
+    required this.label,
+    required this.branding,
+  });
 
   final IconData icon;
   final String label;
+  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F2EB),
+        color: branding.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.42)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF8E441F)),
+          Icon(icon, size: 16, color: branding.deep),
           const SizedBox(width: 8),
           Text(
             label,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF5F4334),
+              color: branding.deep,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1372,10 +1468,15 @@ class _MetricPreviewRow extends StatelessWidget {
 }
 
 class _BenefitFocusCard extends StatelessWidget {
-  const _BenefitFocusCard({required this.title, required this.message});
+  const _BenefitFocusCard({
+    required this.title,
+    required this.message,
+    required this.branding,
+  });
 
   final String title;
   final String message;
+  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
@@ -1383,14 +1484,14 @@ class _BenefitFocusCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F2EB),
+        color: branding.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5D3C3)),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.58)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.bolt_rounded, color: Color(0xFF8D5B28)),
+          Icon(Icons.bolt_rounded, color: branding.deep),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
