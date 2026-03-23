@@ -10,6 +10,8 @@ void main() {
         'points_per_visit': 12,
         'cashback_percent': 5,
         'is_active': true,
+        'vip_reward_service_id': 'service-1',
+        'vip_reward_service_name': 'Hidratação premium',
         'tiers': [
           {
             'label': 'Cliente Frequente',
@@ -55,6 +57,7 @@ void main() {
     expect(summary.rankPosition, 2);
     expect(summary.currentTier?.label, 'Cliente Frequente');
     expect(summary.nextTier?.isVip, isTrue);
+    expect(summary.program?.vipRewardServiceName, 'Hidratação premium');
     expect(summary.visitsToNextTier, 6);
     expect(summary.hasVisibleContent, isTrue);
   });

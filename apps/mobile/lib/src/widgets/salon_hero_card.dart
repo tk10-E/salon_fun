@@ -134,7 +134,7 @@ class SalonHeroCard extends StatelessWidget {
                         minimumSize: const Size(0, 50),
                       ),
                       icon: const FaIcon(FontAwesomeIcons.whatsapp, size: 18),
-                      label: const Text('Falar no WhatsApp'),
+                      label: const Text('Falar com o salão'),
                     ),
                   ],
                 ),

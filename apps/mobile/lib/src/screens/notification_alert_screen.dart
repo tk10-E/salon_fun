@@ -8,9 +8,14 @@ import '../theme/service_category_visual.dart';
 import '../widgets/cancel_appointment_sheet.dart';
 
 class NotificationAlertScreen extends StatefulWidget {
-  const NotificationAlertScreen({super.key, required this.notification});
+  const NotificationAlertScreen({
+    super.key,
+    required this.notification,
+    this.repository,
+  });
 
   final NotificationTapPayload notification;
+  final SalonRepository? repository;
 
   @override
   State<NotificationAlertScreen> createState() =>
@@ -36,7 +41,8 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
     return raw == null || raw.isEmpty ? null : raw;
   }
 
-  bool get _isFeedPostNotification => notification.type == 'feed_post_published';
+  bool get _isFeedPostNotification =>
+      notification.type == 'feed_post_published';
 
   String? get _postTitle {
     final raw = notification.data['postTitle']?.toString().trim();
@@ -84,7 +90,7 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
   @override
   void initState() {
     super.initState();
-    _repository = SalonRepository(Supabase.instance.client);
+    _repository = widget.repository ?? SalonRepository(Supabase.instance.client);
   }
 
   Future<void> _confirmPresence() async {
@@ -110,7 +116,7 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
           tone: _AppointmentAlertResolutionTone.success,
           title: 'Presença confirmada',
           message:
-              'Perfeito. O salão já recebeu sua confirmação e esse horário continua reservado para você.',
+              'Perfeito. O salão já recebeu sua confirmação e esse horário continua reservado para você. Isso ajuda a manter sua vaga protegida até o atendimento.',
         );
       });
     } on PostgrestException catch (error) {
@@ -180,7 +186,7 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
           tone: _AppointmentAlertResolutionTone.info,
           title: 'Horário cancelado',
           message:
-              'Seu cancelamento foi enviado ao salão e o horário foi liberado para a agenda.',
+              'Seu cancelamento foi enviado ao salão e o horário foi liberado para a agenda. Isso ajuda o salão a reaproveitar esse encaixe a tempo.',
         );
       });
     } on PostgrestException catch (error) {
@@ -357,6 +363,10 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
                       height: 1.55,
                     ),
                   ),
+                  if (_nextStepFor(notification) case final nextStep?) ...[
+                    const SizedBox(height: 18),
+                    _NextStepCard(message: nextStep),
+                  ],
                   if (_isFeedPostNotification) ...[
                     const SizedBox(height: 18),
                     _FeedPostPreviewCard(
@@ -530,6 +540,57 @@ class _ResolutionCard extends StatelessWidget {
   }
 }
 
+class _NextStepCard extends StatelessWidget {
+  const _NextStepCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F1E8),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE7D6C4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.bolt_rounded,
+            color: Color(0xFF8D5B28),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Próximo passo',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: const Color(0xFF2F231C),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF765E4E),
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AppointmentAlertResolution {
   const _AppointmentAlertResolution({
     required this.tone,
@@ -641,10 +702,70 @@ String _descriptionFor(String type) {
     case 'vacancy_alert':
       return 'Um horário foi liberado no salão. Se ainda estiver disponível, você pode aproveitar essa vaga no app.';
     case 'referral_qualified':
+      return 'Uma indicação sua concluiu a primeira visita e o app atualizou seu progresso dentro da meta necessária para liberar a próxima recompensa.';
     case 'referral_reward_unlocked':
-      return 'Sua indicação atingiu a etapa necessária e o benefício foi atualizado no sistema do salão.';
+      return 'Você atingiu a quantidade de indicações validadas exigida pelo salão e a recompensa já ficou registrada no sistema para uso futuro.';
     default:
       return 'O salão enviou uma atualização importante. Abra o app sempre que quiser revisar esse aviso.';
+  }
+}
+
+String? _nextStepFor(NotificationTapPayload notification) {
+  final type = notification.type;
+  final serviceName = notification.data['serviceName']?.toString().trim();
+  final staffMemberName =
+      notification.data['staffMemberName']?.toString().trim();
+
+  switch (type) {
+    case 'feed_post_published':
+      return 'Use essa foto como referência para decidir com mais segurança e depois abra o feed para curtir, comentar ou reservar o serviço ligado ao resultado.';
+    case 'vacancy_alert':
+      return 'Se esse horário fizer sentido para você, vale tentar reservar logo antes que outro cliente pegue o encaixe.';
+    case 'winback_offer':
+      return 'Se a oferta fizer sentido, aproveite esse incentivo para voltar ao salão antes que sua rotina esfrie mais.';
+    case 'smart_rebook_prompt':
+      return 'Seu ciclo ideal já abriu. Deixar o próximo horário reservado agora costuma ser a melhor chance de manter frequência.';
+    case 'appointment_confirmation_required':
+      final target = serviceName == null || serviceName.isEmpty
+          ? 'o seu horário'
+          : serviceName;
+      if (staffMemberName != null && staffMemberName.isNotEmpty) {
+        return 'Confirme agora para manter $target com $staffMemberName e evitar que a agenda seja liberada.';
+      }
+      return 'Confirme agora para manter $target reservado e evitar que a agenda seja liberada.';
+    case 'appointment_confirmed':
+      return 'Seu horário já está confirmado. Agora vale só se organizar para chegar no tempo certo ou alinhar qualquer detalhe com o salão.';
+    case 'appointment_reminder_1h':
+      return 'Esse é o momento de sair com antecedência ou avisar o salão se precisar ajustar algo de última hora.';
+    case 'appointment_staff_reassigned':
+      return 'Confira o profissional responsável e siga com o horário se a troca continuar boa para você.';
+    case 'appointment_auto_cancelled_unconfirmed':
+      return 'Abra a agenda assim que puder para tentar recuperar outro encaixe antes que os melhores horários sumam.';
+    case 'appointment_cancelled':
+      return 'Se ainda quiser manter a visita, procure um novo horário no app enquanto a agenda estiver aberta.';
+    case 'appointment_completed':
+      return 'Depois da visita, vale abrir a carteira para conferir pontos, cashback ou desconto progressivo atualizados.';
+    case 'loyalty_program_updated':
+    case 'loyalty_tier_unlocked':
+    case 'loyalty_vip_unlocked':
+      return 'Abra sua carteira no app para conferir saldo, cashback e o nível de fidelidade que pode puxar a próxima visita.';
+    case 'membership_published':
+    case 'membership_updated':
+      return 'Compare o plano com a frequência que você realmente mantém no salão para ver se compensa travar esse valor.';
+    case 'promotion_published':
+    case 'promotion_updated':
+      return 'Se a campanha combinar com o que você costuma fazer, vale aproveitar enquanto ela está ativa.';
+    case 'service_published':
+    case 'service_updated':
+      return 'Veja se esse serviço combina com sua rotina e já pense se faz sentido encaixar no próximo retorno.';
+    case 'referral_program_updated':
+      return 'Se você gosta do salão, esse é um bom momento para compartilhar seu código enquanto a campanha está atualizada.';
+    case 'referral_qualified':
+      return 'Sua meta andou. Vale acompanhar quantas indicações faltam para liberar a próxima recompensa.';
+    case 'referral_reward_unlocked':
+      return 'Guarde essa recompensa para usar na próxima visita e não deixar benefício parado.';
+    default:
+      return null;
   }
 }
 
@@ -711,10 +832,7 @@ class _FeedPostPreviewCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               if (serviceName != null)
-                _FeedMetaChip(
-                  icon: serviceVisual.icon,
-                  label: serviceName!,
-                ),
+                _FeedMetaChip(icon: serviceVisual.icon, label: serviceName!),
               if (publishedAt != null)
                 _FeedMetaChip(
                   icon: Icons.schedule_rounded,
@@ -741,7 +859,7 @@ class _FeedPostPreviewCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Abra a aba Feed do salão para ver a publicação completa, curtir ou comentar.',
+            'Abra a aba Feed do salão para ver a publicação completa, curtir, comentar ou usar esse resultado para decidir seu próximo agendamento.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: const Color(0xFF8D6B59),
               fontWeight: FontWeight.w700,

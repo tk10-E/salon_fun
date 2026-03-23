@@ -11,6 +11,7 @@ const links = [
   { href: "/dashboard/benefits", label: "Comercial e retenção" },
   { href: "/dashboard/notifications", label: "Avisos enviados" },
   { href: "/dashboard/team", label: "Equipe e agenda" },
+  { href: "/dashboard/operations", label: "Financeiro e estoque" },
   { href: "/dashboard/appointments", label: "Agendamentos" },
   { href: "/dashboard/customers", label: "Clientes" },
   { href: "/dashboard/settings", label: "Código para clientes" },

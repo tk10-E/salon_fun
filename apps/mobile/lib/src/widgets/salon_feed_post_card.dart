@@ -15,6 +15,7 @@ class SalonFeedPostCard extends StatefulWidget {
     required this.onToggleLike,
     required this.onOpenComments,
     this.onBookService,
+    this.onContactSalon,
   });
 
   final SalonPost post;
@@ -23,6 +24,7 @@ class SalonFeedPostCard extends StatefulWidget {
   final VoidCallback onToggleLike;
   final VoidCallback onOpenComments;
   final VoidCallback? onBookService;
+  final VoidCallback? onContactSalon;
 
   @override
   State<SalonFeedPostCard> createState() => _SalonFeedPostCardState();
@@ -154,7 +156,9 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                     runSpacing: 10,
                     children: [
                       _ActionChip(
-                        icon: linkedServiceVisual?.icon ?? Icons.auto_awesome_rounded,
+                        icon:
+                            linkedServiceVisual?.icon ??
+                            Icons.auto_awesome_rounded,
                         label: post.linkedService!.name,
                         busy: false,
                         branding: branding,
@@ -168,6 +172,15 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                         onTap: null,
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.onContactSalon != null
+                        ? 'Gostou desse resultado? Reserve ${post.linkedService!.name} no app ou fale com o salão para alinhar detalhes.'
+                        : 'Gostou desse resultado? Reserve ${post.linkedService!.name} direto pelo app.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF6D5647),
+                    ),
                   ),
                 ],
                 if (post.caption != null && post.caption!.isNotEmpty) ...[
@@ -213,12 +226,50 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: widget.onBookService,
+                      onPressed: () {
+                        if (widget.interactionBusy) {
+                          return;
+                        }
+
+                        widget.onBookService?.call();
+                      },
                       style: FilledButton.styleFrom(
                         backgroundColor: branding.primary,
                       ),
                       icon: const Icon(Icons.calendar_month_rounded, size: 18),
                       label: const Text('Agendar este serviço'),
+                    ),
+                  ),
+                  if (widget.onContactSalon != null) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: widget.interactionBusy
+                            ? null
+                            : widget.onContactSalon,
+                        icon: const Icon(Icons.chat_bubble_outline_rounded),
+                        label: const Text('Falar com o salão'),
+                      ),
+                    ),
+                  ],
+                ] else if (widget.onContactSalon != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Se esse visual combinou com você, fale com o salão para descobrir o melhor serviço e o melhor encaixe.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF6D5647),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: widget.interactionBusy
+                          ? null
+                          : widget.onContactSalon,
+                      icon: const Icon(Icons.chat_bubble_outline_rounded),
+                      label: const Text('Falar sobre esse resultado'),
                     ),
                   ),
                 ],

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
+import { SalonIntelligencePanel } from "@/components/SalonIntelligencePanel";
 import {
   buildSmartScheduleTargetDayLabel,
   SmartScheduleSuggestion,
@@ -74,6 +75,44 @@ type GrowthAutomationDashboardResponse = {
   }>;
 };
 
+type DashboardIntelligenceResponse = {
+  overview: {
+    tracked_due_now_customers: number;
+    tracked_lapsed_customers: number;
+    tracked_top_customers: number;
+    tracked_top_services: number;
+  };
+  lapsed_customers: Array<{
+    completed_visits: number;
+    id: string;
+    inactive_days: number;
+    last_service_category: string | null;
+    last_service_name: string;
+    last_visit_at: string;
+    name: string;
+    status: "at_risk" | "due_now";
+    total_spent: number | string;
+  }>;
+  top_customers: Array<{
+    completed_visits: number;
+    id: string;
+    last_visit_at: string | null;
+    name: string;
+    next_appointment_at: string | null;
+    total_spent: number | string;
+    upcoming_appointments: number;
+  }>;
+  top_services: Array<{
+    category: string | null;
+    completed_appointments: number;
+    id: string;
+    last_booked_at: string | null;
+    name: string;
+    total_revenue: number | string;
+    unique_customers: number;
+  }>;
+};
+
 function formatAppointmentStatus(status: AppointmentListItem["status"]) {
   switch (status) {
     case "confirmed":
@@ -97,6 +136,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     { count: pendingCount },
     recentAppointmentsResult,
     growthAutomationResult,
+    dashboardIntelligenceResult,
     smartScheduleResult,
   ] =
     await Promise.all([
@@ -114,6 +154,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         .order("date", { ascending: true })
         .limit(6),
       supabase.rpc("get_salon_growth_automation_dashboard"),
+      supabase.rpc("get_owner_dashboard_intelligence", {
+        lapsed_limit_input: 4,
+        top_customer_limit_input: 5,
+        top_service_limit_input: 5,
+      }),
       supabase.rpc("get_smart_schedule_opportunities", {}),
     ]);
   const smartSchedule = (smartScheduleResult.data ?? {
@@ -147,6 +192,17 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     },
     recent_runs: [],
   }) as GrowthAutomationDashboardResponse;
+  const dashboardIntelligence = (dashboardIntelligenceResult.data ?? {
+    overview: {
+      tracked_due_now_customers: 0,
+      tracked_lapsed_customers: 0,
+      tracked_top_customers: 0,
+      tracked_top_services: 0,
+    },
+    lapsed_customers: [],
+    top_customers: [],
+    top_services: [],
+  }) as DashboardIntelligenceResponse;
 
   const recentAppointments = (recentAppointmentsResult.data ?? []) as AppointmentListItem[];
 
@@ -199,6 +255,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </p>
         </article>
       </section>
+
+      <SalonIntelligencePanel
+        lapsedCustomers={dashboardIntelligence.lapsed_customers ?? []}
+        overview={dashboardIntelligence.overview}
+        smartScheduleSuggestions={smartSchedule.suggestions ?? []}
+        topCustomers={dashboardIntelligence.top_customers ?? []}
+        topServices={dashboardIntelligence.top_services ?? []}
+      />
 
       <section className="card content-card">
         <div className="section-heading">

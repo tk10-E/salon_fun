@@ -13,6 +13,7 @@ class HomeData {
     required this.notifications,
     required this.nextAvailableAt,
     required this.smartSchedule,
+    this.favoriteServiceIds = const <String>{},
   });
 
   final List<ServiceItem> services;
@@ -26,6 +27,7 @@ class HomeData {
   final List<CustomerNotificationItem> notifications;
   final DateTime? nextAvailableAt;
   final SmartScheduleOpportunityFeed? smartSchedule;
+  final Set<String> favoriteServiceIds;
 
   HomeData copyWith({
     List<ServiceItem>? services,
@@ -44,6 +46,7 @@ class HomeData {
     bool clearNextAvailableAt = false,
     SmartScheduleOpportunityFeed? smartSchedule,
     bool clearSmartSchedule = false,
+    Set<String>? favoriteServiceIds,
   }) {
     return HomeData(
       services: services ?? this.services,
@@ -64,7 +67,10 @@ class HomeData {
       nextAvailableAt: clearNextAvailableAt
           ? null
           : nextAvailableAt ?? this.nextAvailableAt,
-      smartSchedule: clearSmartSchedule ? null : smartSchedule ?? this.smartSchedule,
+      smartSchedule: clearSmartSchedule
+          ? null
+          : smartSchedule ?? this.smartSchedule,
+      favoriteServiceIds: favoriteServiceIds ?? this.favoriteServiceIds,
     );
   }
 }

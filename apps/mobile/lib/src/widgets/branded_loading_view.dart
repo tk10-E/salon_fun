@@ -11,19 +11,24 @@ class BrandedLoadingView extends StatelessWidget {
     this.eyebrow = 'Salon Fun',
     this.title = 'Preparando sua agenda',
     this.message = 'Estamos organizando seus dados para você entrar no app.',
+    this.branding,
+    this.logoUrl,
   });
 
   final String eyebrow;
   final String title;
   final String message;
+  final SalonBranding? branding;
+  final String? logoUrl;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final branding = SalonBranding.fromName(eyebrow);
+    final activeBranding = branding ?? SalonBranding.fromName(eyebrow);
 
     return Scaffold(
       body: AppBackdrop(
+        branding: activeBranding,
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -32,17 +37,18 @@ class BrandedLoadingView extends StatelessWidget {
               child: SoftCard(
                 padding: const EdgeInsets.all(28),
                 gradient: LinearGradient(
-                  colors: [branding.surface, branding.soft],
+                  colors: [activeBranding.surface, activeBranding.soft],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderColor: branding.outline,
+                borderColor: activeBranding.outline,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SalonBrandMark(
                       salonName: eyebrow,
-                      branding: branding,
+                      branding: activeBranding,
+                      logoUrl: logoUrl,
                       size: 88,
                       borderRadius: 28,
                     ),
@@ -58,7 +64,7 @@ class BrandedLoadingView extends StatelessWidget {
                     Text(
                       message,
                       style: theme.textTheme.bodyLarge?.copyWith(
-                        color: branding.deep.withValues(alpha: 0.84),
+                        color: activeBranding.deep.withValues(alpha: 0.84),
                       ),
                       textAlign: TextAlign.center,
                     ),

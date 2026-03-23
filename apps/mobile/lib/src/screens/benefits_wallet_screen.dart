@@ -131,10 +131,12 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Minha carteira')),
       body: AppBackdrop(
+        branding: _branding,
         child: FutureBuilder<List<LoyaltyTransactionItem>>(
           future: _transactionsFuture,
           builder: (context, snapshot) {
-            final transactions = snapshot.data ?? const <LoyaltyTransactionItem>[];
+            final transactions =
+                snapshot.data ?? const <LoyaltyTransactionItem>[];
             final isWaitingTransactions =
                 snapshot.connectionState == ConnectionState.waiting &&
                 !snapshot.hasData;
@@ -303,7 +305,7 @@ class _WalletHero extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Tudo o que você já acumulou em ${profile.salonName}.',
+                      'Pontos, cashback e vantagens que você já acumulou em ${profile.salonName}.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: branding.deep,
                         fontWeight: FontWeight.w700,
@@ -329,7 +331,9 @@ class _WalletHero extends StatelessWidget {
             runSpacing: 10,
             children: [
               _HeroChip(
-                label: loyaltySummary?.isVip == true ? 'Cliente VIP' : rankLabel,
+                label: loyaltySummary?.isVip == true
+                    ? 'Cliente VIP'
+                    : rankLabel,
                 branding: branding,
                 icon: loyaltySummary?.isVip == true
                     ? Icons.workspace_premium_rounded
@@ -406,9 +410,7 @@ class _WalletLoadingCard extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
           SizedBox(width: 12),
-          Expanded(
-            child: Text('Buscando seus lançamentos mais recentes...'),
-          ),
+          Expanded(child: Text('Buscando seus lançamentos mais recentes...')),
         ],
       ),
     );

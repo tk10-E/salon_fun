@@ -96,6 +96,48 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 </div>
               </div>
             </div>
+
+            <div className="brand-preview-mobile">
+              <div className="brand-preview-mobile__frame">
+                <div
+                  className="brand-preview-mobile__hero"
+                  style={{
+                    background: `linear-gradient(145deg, ${brandColor}, color-mix(in srgb, ${brandColor} 18%, #2F231C))`,
+                  }}
+                >
+                  <div className="brand-preview-mobile__brand">
+                    <div className="brand-preview-mobile__logo">
+                      {logoUrl ? (
+                        <Image src={logoUrl} alt={`Preview de ${salonName}`} fill sizes="44px" />
+                      ) : (
+                        <span>{initials}</span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{salonName}</strong>
+                      <span>{salon.tagline || "Seu salão dentro de um app único, com identidade própria."}</span>
+                    </div>
+                  </div>
+
+                  <div className="brand-preview-mobile__headline">
+                    O cliente entra e já reconhece que está no app do seu salão.
+                  </div>
+                </div>
+
+                <div className="brand-preview-mobile__cards">
+                  <div className="brand-preview-mobile__card">
+                    <span className="eyebrow">Agenda</span>
+                    <strong>Horários alinhados com sua operação</strong>
+                    <p>Agendamento, confirmação e encaixes com a cor e a assinatura da sua marca.</p>
+                  </div>
+                  <div className="brand-preview-mobile__card">
+                    <span className="eyebrow">Relacionamento</span>
+                    <strong>Comunicação com cara de atendimento próprio</strong>
+                    <p>Notificações, fidelidade, indicação e carteira aparecem com a identidade do salão.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <form action={updateSalonBrandingAction} className="form-grid" encType="multipart/form-data">

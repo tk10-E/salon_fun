@@ -1,8 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../models/app_models.dart';
 import '../repositories/salon_repository.dart';
+import '../theme/salon_branding.dart';
 import '../widgets/app_backdrop.dart';
+import '../widgets/salon_brand_mark.dart';
 import '../widgets/soft_card.dart';
 
 class JoinSalonScreen extends StatefulWidget {
@@ -23,14 +29,140 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
   final _nameController = TextEditingController();
   final _codeController = TextEditingController();
   final _referralCodeController = TextEditingController();
+  Timer? _previewDebounce;
+  SalonJoinPreview? _joinPreview;
+  String? _previewError;
+  bool _previewLoading = false;
   bool _loading = false;
+  int _previewRequestVersion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _codeController.addListener(_handleCodeChanged);
+  }
 
   @override
   void dispose() {
+    _previewDebounce?.cancel();
     _nameController.dispose();
+    _codeController.removeListener(_handleCodeChanged);
     _codeController.dispose();
     _referralCodeController.dispose();
     super.dispose();
+  }
+
+  String get _normalizedJoinCode => _codeController.text.trim().toUpperCase();
+
+  SalonBranding get _branding {
+    final preview = _joinPreview;
+    if (preview == null) {
+      return SalonBranding.fromName('Salon Fun', overrideHexColor: '#C56B43');
+    }
+
+    return SalonBranding.fromName(
+      preview.name,
+      overrideHexColor: preview.brandColor,
+    );
+  }
+
+  bool get _hasPreviewWhatsApp {
+    final digits = _joinPreview?.whatsappPhone?.replaceAll(RegExp(r'\D'), '');
+    return digits != null && digits.length >= 10;
+  }
+
+  List<String> get _valueHighlights {
+    final salonName = _joinPreview?.name;
+    final salonLabel = salonName == null || salonName.trim().isEmpty
+        ? 'o salão'
+        : salonName;
+
+    return [
+      'Agenda, serviços e identidade de $salonLabel no app.',
+      'Carteira com fidelidade, cashback, descontos e indicações quando esse salão ativar.',
+      'Contato rápido e avisos que ajudam você a decidir, reservar e voltar.',
+    ];
+  }
+
+  Future<void> _openPreviewWhatsApp() async {
+    final digits = _joinPreview?.whatsappPhone?.replaceAll(RegExp(r'\D'), '');
+    if (digits == null || digits.length < 10) {
+      _showMessage('O WhatsApp deste salão ainda não foi configurado.');
+      return;
+    }
+
+    final salonName = _joinPreview?.name ?? 'o salão';
+    final message = Uri.encodeComponent(
+      'Olá, estou entrando no app e queria confirmar meu código para conectar com $salonName.',
+    );
+    final uri = Uri.parse('https://wa.me/$digits?text=$message');
+    final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+
+    if (!launched && mounted) {
+      _showMessage(
+        'Não foi possível abrir o WhatsApp agora. Tente novamente em instantes.',
+      );
+    }
+  }
+
+  void _handleCodeChanged() {
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(const Duration(milliseconds: 320), () {
+      unawaited(_loadJoinPreview());
+    });
+  }
+
+  Future<void> _loadJoinPreview() async {
+    final normalizedCode = _normalizedJoinCode;
+    final shouldSearch = normalizedCode.length >= 4;
+
+    if (!shouldSearch) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _previewLoading = false;
+        _previewError = null;
+        _joinPreview = null;
+      });
+      return;
+    }
+
+    final requestVersion = ++_previewRequestVersion;
+    if (mounted) {
+      setState(() {
+        _previewLoading = true;
+        _previewError = null;
+      });
+    }
+
+    try {
+      final preview = await widget.repository.getSalonJoinPreview(
+        normalizedCode,
+      );
+
+      if (!mounted || requestVersion != _previewRequestVersion) {
+        return;
+      }
+
+      setState(() {
+        _joinPreview = preview;
+        _previewLoading = false;
+        _previewError = preview == null
+            ? 'Não encontramos um salão com esse código.'
+            : null;
+      });
+    } catch (_) {
+      if (!mounted || requestVersion != _previewRequestVersion) {
+        return;
+      }
+
+      setState(() {
+        _previewLoading = false;
+        _previewError = 'Não foi possível validar o código agora.';
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -50,7 +182,13 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Salão vinculado com sucesso.')),
+        SnackBar(
+          content: Text(
+            _joinPreview == null
+                ? 'Salão vinculado com sucesso. Agenda, benefícios e avisos já ficam organizados no app.'
+                : 'Agora seu app está conectado a ${_joinPreview!.name}. Agenda, benefícios e contato já aparecem daqui para frente.',
+          ),
+        ),
       );
     } on PostgrestException catch (error) {
       _showMessage(_humanizePostgrestError(error.message));
@@ -100,79 +238,111 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final branding = _branding;
+    final preview = _joinPreview;
+    final previewTagline = preview?.tagline?.trim();
 
     return Scaffold(
       body: AppBackdrop(
+        branding: branding,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 500),
+                constraints: const BoxConstraints(maxWidth: 560),
                 child: Column(
                   children: [
                     SoftCard(
                       padding: const EdgeInsets.all(28),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFFF4EA), Color(0xFFF4D6BF)],
+                      gradient: LinearGradient(
+                        colors: [branding.surface, branding.soft],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderColor: const Color(0xFFDDBEA7),
+                      borderColor: branding.outline,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              Container(
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.72),
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: const Color(0x26A8562D),
+                              if (preview != null)
+                                SalonBrandMark(
+                                  salonName: preview.name,
+                                  logoUrl: preview.logoUrl,
+                                  branding: branding,
+                                  size: 62,
+                                  borderRadius: 20,
+                                )
+                              else
+                                Container(
+                                  width: 62,
+                                  height: 62,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.88),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: branding.outline.withValues(
+                                        alpha: 0.74,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Image.asset(
+                                      'assets/branding/app_splash.png',
+                                    ),
                                   ),
                                 ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(10),
-                                  child: Image.asset(
-                                    'assets/branding/app_splash.png',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Código do salão',
-                                      style: theme.textTheme.labelLarge,
+                                      preview == null
+                                          ? 'Código do salão'
+                                          : preview.name,
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(
+                                            color: branding.deep,
+                                            fontWeight: FontWeight.w900,
+                                          ),
                                     ),
-                                    const SizedBox(height: 2),
+                                    const SizedBox(height: 4),
                                     Text(
-                                      'Ative a experiência personalizada do seu salão',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: const Color(0xFF6B4B3A),
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      previewTagline?.isNotEmpty == true
+                                          ? previewTagline!
+                                          : preview == null
+                                          ? 'Ative a experiência do seu salão com logo, agenda e benefícios personalizados.'
+                                          : 'Tudo o que o cliente vê aqui passa a refletir a marca deste salão.',
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: branding.mutedText,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ],
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 20),
                           Text(
-                            'Conecte sua conta ao salão certo.',
-                            style: theme.textTheme.headlineSmall,
+                            preview == null
+                                ? 'Conecte sua conta ao salão certo.'
+                                : 'Você está prestes a entrar em ${preview.name}.',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              color: branding.deep,
+                            ),
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Digite o código que você recebeu para ver seus serviços, escolher horários e acompanhar seus agendamentos.',
+                            preview == null
+                                ? 'Digite o código que você recebeu para liberar horários, serviços, benefícios, comunicação e a identidade do seu salão.'
+                                : 'Assim que confirmar, o app passa a mostrar a cor, os serviços, a agenda, os benefícios e os avisos da marca certa.',
                             style: theme.textTheme.bodyLarge?.copyWith(
-                              color: const Color(0xFF5F4334),
+                              color: branding.mutedText,
                             ),
                           ),
                           const SizedBox(height: 18),
@@ -182,60 +352,78 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.5),
+                              color: Colors.white.withValues(alpha: 0.58),
                               borderRadius: BorderRadius.circular(18),
                               border: Border.all(
-                                color: const Color(0x26A8562D),
+                                color: branding.outline.withValues(alpha: 0.8),
                               ),
                             ),
                             child: Row(
                               children: [
-                                const Icon(
-                                  Icons.lock_open_rounded,
-                                  color: Color(0xFF8E441F),
+                                Icon(
+                                  preview == null
+                                      ? Icons.key_rounded
+                                      : Icons.storefront_rounded,
+                                  color: branding.deep,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    'Exemplo de código: A1B2C3',
+                                    preview == null
+                                        ? 'Exemplo de código: A1B2C3'
+                                        : 'Código reconhecido: $_normalizedJoinCode',
                                     style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: const Color(0xFF5F4334),
-                                      fontWeight: FontWeight.w700,
+                                      color: branding.deep,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 18),
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.46),
-                              borderRadius: BorderRadius.circular(18),
+                              color: Colors.white.withValues(alpha: 0.62),
+                              borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: const Color(0x26A8562D),
+                                color: branding.outline.withValues(alpha: 0.76),
                               ),
                             ),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(
-                                  Icons.palette_outlined,
-                                  color: Color(0xFF8E441F),
+                                Text(
+                                  preview == null
+                                      ? 'O que esse código libera no app'
+                                      : 'O que entra no seu app ao conectar com ${preview.name}',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: branding.deep,
+                                    fontWeight: FontWeight.w900,
+                                  ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Depois do código, o app passa a mostrar a marca, os serviços e a agenda do seu salão.',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: const Color(0xFF5F4334),
-                                      fontWeight: FontWeight.w700,
+                                const SizedBox(height: 12),
+                                ..._valueHighlights.map(
+                                  (item) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: _JoinValueItem(
+                                      label: item,
+                                      branding: branding,
                                     ),
                                   ),
                                 ),
+                                if (_hasPreviewWhatsApp) ...[
+                                  const SizedBox(height: 6),
+                                  OutlinedButton.icon(
+                                    onPressed: _openPreviewWhatsApp,
+                                    icon: const Icon(
+                                      Icons.chat_bubble_outline_rounded,
+                                    ),
+                                    label: const Text('Falar com o salão'),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -245,14 +433,22 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                     const SizedBox(height: 20),
                     SoftCard(
                       padding: const EdgeInsets.all(22),
+                      borderColor: branding.outline.withValues(alpha: 0.74),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Seus dados', style: theme.textTheme.titleLarge),
+                          Text(
+                            'Seus dados de entrada',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: branding.deep,
+                            ),
+                          ),
                           const SizedBox(height: 6),
                           Text(
-                            'Preencha seu nome e o código informado pelo salão.',
-                            style: theme.textTheme.bodyMedium,
+                            'Preencha seu nome, confirme o código do salão e, se tiver, informe sua indicação antes do primeiro agendamento para não perder benefício ou vínculo de retorno.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: branding.mutedText,
+                            ),
                           ),
                           const SizedBox(height: 22),
                           TextField(
@@ -266,11 +462,72 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                           TextField(
                             controller: _codeController,
                             textCapitalization: TextCapitalization.characters,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Código do salão',
                               hintText: 'A1B2C3',
+                              prefixIcon: const Icon(Icons.password_rounded),
+                              suffixIcon: _previewLoading
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(14),
+                                      child: SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : preview != null
+                                  ? Icon(
+                                      Icons.verified_rounded,
+                                      color: branding.primary,
+                                    )
+                                  : null,
                             ),
                           ),
+                          if (_previewError != null) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              _previewError!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFFB44D2A),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ] else if (preview != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: branding.highlightBackground,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: branding.outline.withValues(
+                                    alpha: 0.8,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.verified_user_rounded,
+                                    color: branding.deep,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'O cliente vai entrar em ${preview.name} com a identidade correta, agenda liberada e benefícios prontos para aparecer já nesta etapa.',
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: branding.deep,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           TextField(
                             controller: _referralCodeController,
@@ -278,6 +535,7 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Código de indicação (opcional)',
                               hintText: 'INDIQUE8',
+                              prefixIcon: Icon(Icons.redeem_outlined),
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -292,7 +550,11 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text('Continuar'),
+                                  : Text(
+                                      preview == null
+                                          ? 'Continuar'
+                                          : 'Entrar em ${preview.name}',
+                                    ),
                             ),
                           ),
                         ],
@@ -305,6 +567,34 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _JoinValueItem extends StatelessWidget {
+  const _JoinValueItem({required this.label, required this.branding});
+
+  final String label;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.check_circle_rounded, size: 18, color: branding.deep),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.deep,
+              fontWeight: FontWeight.w700,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

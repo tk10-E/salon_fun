@@ -132,7 +132,7 @@ export function CommercialOverviewPanel({ data }: { data: BenefitsOverviewData }
           </div>
           <h3>Fidelidade e ranking</h3>
           <p className="muted">
-            Pontos por visita, cashback, desconto progressivo e nível VIP com leitura clara para o dono do salão.
+            Pontos por visita, cashback e níveis gamificados como Bronze, Prata e Ouro com leitura clara para o dono do salão.
           </p>
           <small className="list-meta">
             {data.loyaltyProgram
@@ -515,13 +515,21 @@ export function NewOfferPanel() {
 }
 
 export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) {
+  const referralGoal = data.referralProgram?.required_qualified_referrals ?? 10;
+  const rewardLabel =
+    data.referralProgram?.reward_service_name ??
+    data.referralProgram?.reward_for_referrer ??
+    "recompensa do salão";
+
   return (
     <>
       <section className="card content-card">
         <div className="section-heading">
           <div>
             <h2>Relatório de indicações</h2>
-            <p className="muted">O crédito só valida quando a pessoa baixa o app, agenda e o salão conclui o atendimento.</p>
+            <p className="muted">
+              Só conta quando a pessoa baixa o app, entra com o código, agenda e o salão conclui o primeiro atendimento.
+            </p>
           </div>
         </div>
 
@@ -583,6 +591,14 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
             <span className="eyebrow">Validadas no período</span>
             <p className="stat-value">{data.periodQualifiedCount}</p>
             <p className="metric-note">Concluídas e marcadas como atendidas dentro do recorte informado.</p>
+          </article>
+          <article className="card metric-card metric-card--soft">
+            <span className="eyebrow">Recompensas liberadas</span>
+            <p className="stat-value">{data.rewardUnlocksCount}</p>
+            <p className="metric-note">
+              {data.availableRewardUnlocksCount} disponíveis agora. Regra atual: {referralGoal} validadas liberam 1{" "}
+              {rewardLabel}.
+            </p>
           </article>
         </div>
 
@@ -656,12 +672,17 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
 }
 
 export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
+  const selectedRewardServiceName = data.referralProgram?.reward_service_name;
+  const requiredQualifiedReferrals = data.referralProgram?.required_qualified_referrals ?? 10;
+
   return (
     <section className="card content-card form-panel">
       <div className="section-heading">
         <div>
           <h2>Programa de indicação</h2>
-          <p className="muted">Esse programa aparece no app e só valida depois da visita concluída no salão.</p>
+          <p className="muted">
+            Configure uma regra auditável para o cliente não perder a recompensa e o salão saber exatamente quando ela foi liberada.
+          </p>
         </div>
       </div>
 
@@ -679,7 +700,14 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
                 ? data.referralProgram.description
                 : "O cliente verá esse programa na home do app com código próprio e acompanhamento das indicações."}
             </p>
-            <small className="list-meta">Benefício para quem indica: {data.referralProgram.reward_for_referrer}</small>
+            <small className="list-meta">
+              Regra atual: {requiredQualifiedReferrals} indicações validadas liberam 1{" "}
+              {selectedRewardServiceName ?? data.referralProgram.reward_for_referrer}.
+            </small>
+            <small className="list-meta">Descrição da recompensa: {data.referralProgram.reward_for_referrer}</small>
+            {selectedRewardServiceName ? (
+              <small className="list-meta">Serviço vinculado: {selectedRewardServiceName}</small>
+            ) : null}
             {data.referralProgram.reward_for_invited ? (
               <small className="list-meta">Benefício para quem entra: {data.referralProgram.reward_for_invited}</small>
             ) : null}
@@ -717,9 +745,37 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
             id="reward-for-referrer"
             name="rewardForReferrer"
             defaultValue={data.referralProgram?.reward_for_referrer ?? ""}
-            placeholder="Ex.: 15% de desconto no próximo atendimento"
+            placeholder="Ex.: 1 corte liberado a cada 10 indicações validadas"
             required
           />
+        </div>
+
+        <div className="split-grid">
+          <div className="field">
+            <label htmlFor="required-qualified-referrals">Indicações validadas para liberar a recompensa</label>
+            <input
+              id="required-qualified-referrals"
+              name="requiredQualifiedReferrals"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              defaultValue={requiredQualifiedReferrals}
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="reward-service-id">Serviço da recompensa</label>
+            <select id="reward-service-id" name="rewardServiceId" defaultValue={data.referralProgram?.reward_service_id ?? ""}>
+              <option value="">Usar apenas texto livre</option>
+              {data.serviceOptions.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.category ? `${service.category} • ${service.name}` : service.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="field">
@@ -739,7 +795,8 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
 
         <small className="muted">
           Quando ativo, cada cliente recebe um código próprio. A indicação só fica válida depois de baixar o app,
-          vincular ao salão, agendar e ter o atendimento marcado como concluído no painel.
+          vincular ao salão, agendar e ter o atendimento marcado como concluído. A recompensa do cliente só é liberada
+          quando a meta configurada acima é atingida, e o sistema registra isso para o salão não perder controle.
         </small>
 
         <button type="submit" className="primary-button">
@@ -756,7 +813,7 @@ export function LoyaltyOverviewSection({ data }: { data: LoyaltyPageData }) {
       <div className="section-heading">
         <div>
           <h2>Clube de fidelidade e ranking</h2>
-          <p className="muted">Pontos por visita, cashback, desconto progressivo e nível VIP atualizados a cada atendimento concluído.</p>
+          <p className="muted">Pontos por visita, cashback, ranking e escada gamificada de níveis atualizados a cada atendimento concluído.</p>
         </div>
       </div>
 
@@ -778,9 +835,12 @@ export function LoyaltyOverviewSection({ data }: { data: LoyaltyPageData }) {
               <small className="list-meta">
                 Cada visita concluída soma {data.loyaltyProgram.points_per_visit} pontos e {formatPercent(data.loyaltyProgram.cashback_percent)} de cashback.
               </small>
-              <small className="list-meta">
-                O nível máximo é {data.loyaltyProgram.vip_tier_name} com {formatPercent(data.loyaltyProgram.vip_discount_percent)} de desconto progressivo.
-              </small>
+          <small className="list-meta">
+            O nível máximo é {data.loyaltyProgram.vip_tier_name} com {formatPercent(data.loyaltyProgram.vip_discount_percent)} de desconto progressivo.
+          </small>
+          <small className="list-meta">
+            A leitura no app fica no formato de progressão: quanto falta para subir, quanto já acumulou e qual vantagem o próximo nível libera.
+          </small>
             </div>
           </div>
 
@@ -873,7 +933,7 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
       <div className="section-heading">
         <div>
           <h2>Programa de fidelidade</h2>
-          <p className="muted">Transforme visita concluída em pontos, cashback, desconto progressivo e status VIP no app do cliente.</p>
+          <p className="muted">Transforme visita concluída em pontos, cashback, desconto progressivo, status VIP e recompensa opcional de serviço no app do cliente.</p>
         </div>
       </div>
 
@@ -896,6 +956,12 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
             </small>
             <small className="list-meta">
               VIP em {data.loyaltyProgram.vip_min_visits} visitas com {formatPercent(data.loyaltyProgram.vip_discount_percent)} de desconto.
+            </small>
+            {data.loyaltyProgram.vip_reward_service_name ? (
+              <small className="list-meta">Ao chegar no {data.loyaltyProgram.vip_tier_name}, o cliente também libera {data.loyaltyProgram.vip_reward_service_name} como benefício.</small>
+            ) : null}
+            <small className="list-meta">
+              O ideal é manter a escada simples e memorável, como Bronze, Prata e Ouro.
             </small>
           </div>
         </div>
@@ -959,8 +1025,8 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
             <input
               id="tier-one-name"
               name="tierOneName"
-              defaultValue={data.loyaltyProgram?.tier_one_name ?? "Cliente Frequente"}
-              placeholder="Ex.: Cliente Frequente"
+              defaultValue={data.loyaltyProgram?.tier_one_name ?? "Bronze"}
+              placeholder="Ex.: Bronze"
               required
             />
           </div>
@@ -997,8 +1063,8 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
             <input
               id="tier-two-name"
               name="tierTwoName"
-              defaultValue={data.loyaltyProgram?.tier_two_name ?? "Cliente Ouro"}
-              placeholder="Ex.: Cliente Ouro"
+              defaultValue={data.loyaltyProgram?.tier_two_name ?? "Prata"}
+              placeholder="Ex.: Prata"
               required
             />
           </div>
@@ -1035,8 +1101,8 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
             <input
               id="vip-tier-name"
               name="vipTierName"
-              defaultValue={data.loyaltyProgram?.vip_tier_name ?? "Cliente VIP"}
-              placeholder="Ex.: Cliente VIP"
+              defaultValue={data.loyaltyProgram?.vip_tier_name ?? "Ouro"}
+              placeholder="Ex.: Ouro"
               required
             />
           </div>
@@ -1067,13 +1133,29 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
           </div>
         </div>
 
+        <div className="field">
+          <label htmlFor="vip-reward-service">Serviço grátis no Ouro</label>
+          <select id="vip-reward-service" name="vipRewardServiceId" defaultValue={data.loyaltyProgram?.vip_reward_service_id ?? ""}>
+            <option value="">Sem recompensa extra de serviço</option>
+            {data.serviceOptions.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.name}
+                {service.category ? ` • ${service.category}` : ""}
+              </option>
+            ))}
+          </select>
+          <small className="list-meta">
+            Opcional: quando o cliente chega no nível Ouro, o app passa a mostrar esse serviço como recompensa especial do programa.
+          </small>
+        </div>
+
         <label className="checkbox-field">
           <input type="checkbox" name="isActive" defaultChecked={data.loyaltyProgram?.is_active ?? false} />
           Ativar fidelidade no app do cliente
         </label>
 
         <small className="muted">
-          O programa só pontua quando o atendimento é marcado como concluído no painel. O cliente vê ranking, cashback, desconto atual e quanto falta para o próximo nível.
+          O programa só pontua quando o atendimento é marcado como concluído no painel. O cliente vê ranking, cashback, desconto atual e quanto falta para o próximo nível, como em um app financeiro.
         </small>
 
         <button type="submit" className="primary-button">

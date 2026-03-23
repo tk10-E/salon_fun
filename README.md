@@ -31,7 +31,14 @@ MVP simples de agendamento para salões com:
 1. Crie um projeto no Supabase.
 2. Em `Authentication > Providers`, deixe Email habilitado.
 3. Para acelerar o MVP, desabilite confirmação obrigatória de e-mail.
-4. Rode as migrations em `supabase/migrations/0001_mvp_schema.sql`, `supabase/migrations/0002_salon_branding.sql`, `supabase/migrations/0003_salon_feed.sql`, `supabase/migrations/0004_salon_feed_gallery.sql`, `supabase/migrations/0005_salon_schedule.sql`, `supabase/migrations/0006_salon_staff_and_blocks.sql`, `supabase/migrations/0007_appointment_cancellations_and_vacancy_alerts.sql` e `supabase/migrations/0008_push_notifications.sql`.
+4. Rode as migrations do diretório `supabase/migrations` até a mais recente do repositório:
+
+```bash
+supabase db push
+```
+
+Se o `db push` falhar por causa do pooler, siga o guia em [GUIA_DEPLOY_MIGRATIONS.md](/mnt/c/Users/tsilv/Downloads/salon fun/GUIA_DEPLOY_MIGRATIONS.md).
+
 5. Copie a `Project URL` e a `publishable key`.
 
 ## Rodando o painel web
@@ -96,7 +103,7 @@ do update set
   updated_at = timezone('utc', now());
 ```
 
-6. Rode `supabase db push` para aplicar a migration `0008`.
+6. Rode `supabase db push` para aplicar as migrations pendentes.
 
 Com isso, quando uma vaga for liberada:
 - o banco cria o alerta
@@ -132,3 +139,7 @@ Com isso, quando uma vaga for liberada:
 - marketplace de salões
 - pagamentos
 - galeria de imagens e conteúdo editorial
+
+## Operação
+
+- guia de deploy de migrations: [GUIA_DEPLOY_MIGRATIONS.md](/mnt/c/Users/tsilv/Downloads/salon fun/GUIA_DEPLOY_MIGRATIONS.md)

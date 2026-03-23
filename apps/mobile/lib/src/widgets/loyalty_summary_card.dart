@@ -30,6 +30,9 @@ class LoyaltySummaryCard extends StatelessWidget {
     final currentDiscountLabel = _percentLabel(
       currentTier?.discountPercent ?? 0,
     );
+    final vipRewardServiceName = program?.vipRewardServiceName?.trim();
+    final hasVipRewardService =
+        vipRewardServiceName != null && vipRewardServiceName.isNotEmpty;
 
     return SoftCard(
       padding: const EdgeInsets.all(20),
@@ -73,7 +76,9 @@ class LoyaltySummaryCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       summary.isVip
-                          ? 'Você já está no nível VIP do salão.'
+                          ? hasVipRewardService
+                              ? 'Você já está no nível mais alto e liberou $vipRewardServiceName.'
+                              : 'Você já está no nível mais alto do salão.'
                           : currentTier == null
                           ? 'A cada visita concluída você sobe de nível.'
                           : 'Seu nível atual é ${currentTier.label}.',
@@ -87,7 +92,7 @@ class LoyaltySummaryCard extends StatelessWidget {
               ),
               if (summary.isVip)
                 _BadgeChip(
-                  label: 'VIP',
+                  label: currentTier?.label ?? 'VIP',
                   background: branding.deep,
                   foreground: Colors.white,
                 )
@@ -139,7 +144,9 @@ class LoyaltySummaryCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   summary.isVip
-                      ? 'Seu desconto progressivo atual é de $currentDiscountLabel% e o cashback segue acumulando a cada visita.'
+                      ? hasVipRewardService
+                          ? 'Seu desconto progressivo atual é de $currentDiscountLabel% e o salão também libera $vipRewardServiceName como benefício do nível máximo.'
+                          : 'Seu desconto progressivo atual é de $currentDiscountLabel% e o cashback segue acumulando a cada visita.'
                       : currentTier != null && currentTier.discountPercent > 0
                       ? 'Seu desconto progressivo atual é de $currentDiscountLabel% no próximo atendimento.'
                       : 'Cada visita concluída soma $pointsPerVisit pontos e gera $cashbackPercent% de cashback.',
@@ -197,7 +204,11 @@ class LoyaltySummaryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     nextTier == null
-                        ? 'Você já desbloqueou o nível máximo do programa. Continue acumulando pontos e cashback nas próximas visitas.'
+                        ? hasVipRewardService
+                            ? 'Você já desbloqueou o nível máximo do programa. Continue acumulando pontos e cashback nas próximas visitas enquanto mantém $vipRewardServiceName como benefício especial do salão.'
+                            : 'Você já desbloqueou o nível máximo do programa. Continue acumulando pontos e cashback nas próximas visitas.'
+                        : nextTier.isVip && hasVipRewardService
+                        ? 'Faltam ${summary.visitsToNextTier} visita${summary.visitsToNextTier == 1 ? '' : 's'} para chegar em ${nextTier.label}, manter ${_percentLabel(nextTier.discountPercent)}% de desconto e liberar $vipRewardServiceName no app.'
                         : 'Faltam ${summary.visitsToNextTier} visita${summary.visitsToNextTier == 1 ? '' : 's'} para chegar em ${nextTier.label} e liberar ${_percentLabel(nextTier.discountPercent)}% de desconto.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: branding.deep,

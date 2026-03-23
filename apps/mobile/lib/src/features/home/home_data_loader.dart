@@ -4,6 +4,8 @@ import 'home_data.dart';
 abstract interface class HomeDataRepository {
   Future<List<ServiceItem>> getServices();
 
+  Future<Set<String>> getFavoriteServiceIds();
+
   Future<List<AppointmentItem>> getAppointments();
 
   Future<List<VacancyAlert>> getVacancyAlerts();
@@ -47,6 +49,7 @@ class HomeDataLoader {
     final servicesFuture = repository.getServices();
     final nextAvailableAtFuture = servicesFuture.then(_findNextAvailableSlot);
     final appointmentsFuture = repository.getAppointments();
+    final favoriteServiceIdsFuture = repository.getFavoriteServiceIds();
     final vacancyAlertsFuture = repository.getVacancyAlerts();
     final postsFuture = repository.getFeedPosts(customerId: customerId);
     final offersFuture = repository.getSalonOffers();
@@ -59,6 +62,7 @@ class HomeDataLoader {
 
     final services = await servicesFuture;
     final appointments = await appointmentsFuture;
+    final favoriteServiceIds = await favoriteServiceIdsFuture;
     final vacancyAlerts = await vacancyAlertsFuture;
     final posts = await postsFuture;
     final offers = await offersFuture;
@@ -86,6 +90,7 @@ class HomeDataLoader {
       ),
       nextAvailableAt: nextAvailableAt,
       smartSchedule: smartSchedule,
+      favoriteServiceIds: favoriteServiceIds,
     );
   }
 

@@ -480,8 +480,8 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 2),
                     Text(
                       _mode == _AuthMode.signIn
-                          ? 'Entre para continuar seu atendimento digital.'
-                          : 'Crie sua conta para começar com o salão certo.',
+                          ? 'Entre para agendar mais rápido, resgatar benefícios e falar com o salão.'
+                          : 'Crie sua conta para guardar agenda, benefícios e contato no mesmo app.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: const Color(0xFF6B4B3A),
                         fontWeight: FontWeight.w600,
@@ -495,15 +495,15 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 20),
           Text(
             _mode == _AuthMode.signIn
-                ? 'Uma entrada simples, com cara de app premium.'
-                : 'Cadastro rápido, seguro e pronto para produção.',
+                ? 'Entre e retome sua rotina com o salão.'
+                : 'Crie sua conta e deixe o salão a um passo.',
             style: theme.textTheme.headlineSmall?.copyWith(fontSize: 30),
           ),
           const SizedBox(height: 10),
           Text(
             _mode == _AuthMode.signIn
-                ? 'Entre com seu e-mail para ver seus horários, promoções, fidelidade e tudo que o salão liberou para você.'
-                : 'Depois de criar sua conta, o app vai pedir o código do salão para montar sua experiência com agenda, serviços e identidade personalizada.',
+                ? 'Entre com seu e-mail para ver próximos horários, benefícios ativos, inspirações e a conversa certa com o salão.'
+                : 'Depois de criar sua conta, o app pede o código do salão para liberar agenda, benefícios, inspirações e contato direto.',
             style: theme.textTheme.bodyLarge,
           ),
           const SizedBox(height: 20),
@@ -517,17 +517,21 @@ class _AuthScreenState extends State<AuthScreen> {
                       _feedback = null;
                       if (nextMode == _AuthMode.signUp &&
                           _signUpEmailController.text.trim().isEmpty) {
-                        _signUpEmailController.text =
-                            _signInEmailController.text.trim();
+                        _signUpEmailController.text = _signInEmailController
+                            .text
+                            .trim();
                       }
                       if (nextMode == _AuthMode.signIn &&
                           _signInEmailController.text.trim().isEmpty) {
-                        _signInEmailController.text =
-                            _signUpEmailController.text.trim();
+                        _signInEmailController.text = _signUpEmailController
+                            .text
+                            .trim();
                       }
                     });
                   },
           ),
+          const SizedBox(height: 16),
+          _AuthValuePanel(mode: _mode),
           const SizedBox(height: 16),
           if (_feedback != null) ...[
             _FeedbackBanner(feedback: _feedback!),
@@ -557,13 +561,10 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Entrar com minha conta',
-              style: theme.textTheme.titleLarge,
-            ),
+            Text('Entrar com minha conta', style: theme.textTheme.titleLarge),
             const SizedBox(height: 6),
             Text(
-              'Acesse sua agenda, seus benefícios e a comunicação direta com o salão.',
+              'Acesse sua agenda, seus benefícios, inspirações salvas e a comunicação direta com o salão.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
@@ -618,15 +619,15 @@ class _AuthScreenState extends State<AuthScreen> {
               items: [
                 _AuthMicroBenefit(
                   icon: Icons.schedule_rounded,
-                  label: 'Agenda no mesmo lugar',
+                  label: 'Agenda pronta para rebook',
                 ),
                 _AuthMicroBenefit(
                   icon: Icons.notifications_active_outlined,
-                  label: 'Lembretes e promoções',
+                  label: 'Avisos de vaga e promoções',
                 ),
                 _AuthMicroBenefit(
                   icon: Icons.workspace_premium_outlined,
-                  label: 'Fidelidade ativa',
+                  label: 'Cashback e pacotes ativos',
                 ),
               ],
             ),
@@ -701,7 +702,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 14),
             Text(
-              'Depois do login, o app confirma se sua conta já está vinculada ao salão certo.',
+              'Depois do login, o app confirma seu salão e já libera agenda, benefícios e contato em um só lugar.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: const Color(0xFF876F5F),
                 fontWeight: FontWeight.w600,
@@ -727,13 +728,10 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Criar minha conta',
-              style: theme.textTheme.titleLarge,
-            ),
+            Text('Criar minha conta', style: theme.textTheme.titleLarge),
             const SizedBox(height: 6),
             Text(
-              'Seu nome será pedido na próxima etapa, junto com o código do salão.',
+              'Em seguida, você conecta o código do salão para liberar agenda, benefícios e contato.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
@@ -741,7 +739,10 @@ class _AuthScreenState extends State<AuthScreen> {
               controller: _signUpEmailController,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
-              autofillHints: const [AutofillHints.newUsername, AutofillHints.email],
+              autofillHints: const [
+                AutofillHints.newUsername,
+                AutofillHints.email,
+              ],
               validator: (value) => validateAuthEmail(value ?? ''),
               decoration: const InputDecoration(
                 labelText: 'E-mail',
@@ -825,7 +826,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 14),
             Text(
-              'Ao continuar, você cria apenas a conta de acesso. A conexão com o salão acontece logo depois.',
+              'Ao continuar, você cria a conta de acesso. O próximo passo conecta seu salão e ativa a experiência certa.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: const Color(0xFF876F5F),
                 fontWeight: FontWeight.w600,
@@ -881,7 +882,7 @@ class _AuthShowcase extends StatelessWidget {
                     Text('Salon Fun', style: theme.textTheme.labelLarge),
                     const SizedBox(height: 2),
                     Text(
-                      'Relacionamento, agenda e retenção no mesmo app',
+                      'Agenda, benefícios e contato com o salão no mesmo app',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: const Color(0xFF6B4B3A),
                         fontWeight: FontWeight.w700,
@@ -895,13 +896,13 @@ class _AuthShowcase extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             mode == _AuthMode.signIn
-                ? 'Seu salão na palma da mão, com entrada de app profissional.'
-                : 'Cadastro limpo, seguro e pronto para o cliente voltar sempre.',
+                ? 'Entre para decidir mais rápido e voltar mais vezes.'
+                : 'Crie sua conta e deixe o salão sempre a um passo.',
             style: theme.textTheme.headlineMedium,
           ),
           const SizedBox(height: 14),
           Text(
-            'A experiência começa no acesso: agenda organizada, promoções, clube de fidelidade, vagas liberadas e comunicação com a marca certa.',
+            'A experiência começa no acesso: agenda organizada, inspiração para escolher, benefícios ativos, vagas liberadas e contato rápido com a marca certa.',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: const Color(0xFF5F4334),
             ),
@@ -917,34 +918,34 @@ class _AuthShowcase extends StatelessWidget {
               ),
               _ShowcasePill(
                 icon: Icons.loyalty_rounded,
-                label: 'Cashback, ranking e VIP',
+                label: 'Desconto, cashback e pacote',
               ),
               _ShowcasePill(
-                icon: Icons.campaign_rounded,
-                label: 'Promoções e recuperação',
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'Falar com o salão',
               ),
             ],
           ),
           const SizedBox(height: 22),
           const _ShowcaseFeature(
-            title: 'Agenda inteligente',
+            title: 'Agenda que converte',
             message:
-                'Veja os horários disponíveis, receba confirmação e acompanhe tudo sem depender de conversa solta no WhatsApp.',
+                'Veja horários disponíveis, confirme presença e faça rebook sem depender de conversa solta para fechar o retorno.',
             icon: Icons.calendar_month_rounded,
           ),
           const SizedBox(height: 12),
           const _ShowcaseFeature(
-            title: 'Comunicação ativa',
+            title: 'Benefícios que puxam retorno',
             message:
-                'Promoções, horários liberados e campanhas de retorno chegam direto no app, com a identidade do salão.',
-            icon: Icons.notifications_active_rounded,
+                'Cashback, pacote, indicação e promoções ficam visíveis no app, incentivando a próxima visita.',
+            icon: Icons.workspace_premium_rounded,
           ),
           const SizedBox(height: 12),
           const _ShowcaseFeature(
-            title: 'Fidelização real',
+            title: 'Inspiração que vira agendamento',
             message:
-                'O cliente acompanha pontos, cashback, indicação e benefícios sem atrito, como espera de um app premium.',
-            icon: Icons.workspace_premium_rounded,
+                'Fotos, resultados e comunicação do salão ajudam o cliente a decidir mais rápido o próximo serviço.',
+            icon: Icons.photo_library_outlined,
           ),
           const SizedBox(height: 20),
           Container(
@@ -975,14 +976,14 @@ class _AuthShowcase extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Conta segura e conexão com o salão depois',
+                        'Conta segura, valor liberado logo depois',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Primeiro você cria o acesso. Em seguida, o app conecta sua conta ao código do salão para carregar a experiência certa.',
+                        'Você cria o acesso uma vez e, na sequência, conecta o código do salão para carregar agenda, benefícios, inspirações e contato certo.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: const Color(0xFF5F4334),
                         ),
@@ -995,6 +996,112 @@ class _AuthShowcase extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AuthValuePanel extends StatelessWidget {
+  const _AuthValuePanel({required this.mode});
+
+  final _AuthMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final value = switch (mode) {
+      _AuthMode.signIn => const (
+        title: 'Ao entrar, você volta com vantagem',
+        message:
+            'O app devolve contexto, benefício e próximo passo logo no primeiro toque.',
+        items: [
+          'Próximo horário, histórico e rebook no mesmo lugar.',
+          'Pontos, cashback, desconto ou pacote sempre à vista.',
+          'Contato rápido quando você quiser alinhar o atendimento.',
+        ],
+      ),
+      _AuthMode.signUp => const (
+        title: 'Sua conta já nasce pronta para a experiência certa',
+        message:
+            'Depois do cadastro, basta informar o código do salão para destravar tudo.',
+        items: [
+          'Agenda e serviços personalizados do seu salão.',
+          'Benefícios, promoções e condições especiais.',
+          'Fotos, inspirações e contato direto para decidir mais rápido.',
+        ],
+      ),
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8F1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE5D5C6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value.title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: const Color(0xFF4A3124),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value.message,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF705A4B),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (final item in value.items) ...[
+            _AuthValueRow(message: item),
+            if (item != value.items.last) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthValueRow extends StatelessWidget {
+  const _AuthValueRow({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFEFE2),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: const Icon(
+            Icons.check_rounded,
+            size: 15,
+            color: Color(0xFFB55D34),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            message,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF5F4334),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1020,7 +1127,9 @@ class _ModeSelector extends StatelessWidget {
             child: _ModeSelectorButton(
               label: 'Entrar',
               selected: mode == _AuthMode.signIn,
-              onTap: onChanged == null ? null : () => onChanged!(_AuthMode.signIn),
+              onTap: onChanged == null
+                  ? null
+                  : () => onChanged!(_AuthMode.signIn),
             ),
           ),
           const SizedBox(width: 8),
@@ -1028,7 +1137,9 @@ class _ModeSelector extends StatelessWidget {
             child: _ModeSelectorButton(
               label: 'Criar conta',
               selected: mode == _AuthMode.signUp,
-              onTap: onChanged == null ? null : () => onChanged!(_AuthMode.signUp),
+              onTap: onChanged == null
+                  ? null
+                  : () => onChanged!(_AuthMode.signUp),
             ),
           ),
         ],
@@ -1089,20 +1200,20 @@ class _FeedbackBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final (background, foreground, border) = switch (feedback.tone) {
       _AuthFeedbackTone.success => (
-          const Color(0xFFEFF8F2),
-          const Color(0xFF2E6B4B),
-          const Color(0xFFBFE0CB),
-        ),
+        const Color(0xFFEFF8F2),
+        const Color(0xFF2E6B4B),
+        const Color(0xFFBFE0CB),
+      ),
       _AuthFeedbackTone.error => (
-          const Color(0xFFFFF0EE),
-          const Color(0xFFA63B30),
-          const Color(0xFFF0C9C5),
-        ),
+        const Color(0xFFFFF0EE),
+        const Color(0xFFA63B30),
+        const Color(0xFFF0C9C5),
+      ),
       _AuthFeedbackTone.info => (
-          const Color(0xFFFFF7EC),
-          const Color(0xFF8E441F),
-          const Color(0xFFE7D3BE),
-        ),
+        const Color(0xFFFFF7EC),
+        const Color(0xFF8E441F),
+        const Color(0xFFE7D3BE),
+      ),
     };
 
     final icon = switch (feedback.tone) {
@@ -1152,8 +1263,10 @@ class _PasswordStrengthBanner extends StatelessWidget {
     };
 
     final note = switch (strength) {
-      PasswordStrength.strong => 'Boa combinação de tamanho, letras e variação.',
-      PasswordStrength.medium => 'Já está aceitável, mas pode ficar mais forte.',
+      PasswordStrength.strong =>
+        'Boa combinação de tamanho, letras e variação.',
+      PasswordStrength.medium =>
+        'Já está aceitável, mas pode ficar mais forte.',
       PasswordStrength.weak => 'Misture letras, números e mais caracteres.',
     };
 
@@ -1178,10 +1291,7 @@ class _PasswordStrengthBanner extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: '${passwordStrengthLabel(strength)}. ',
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: TextStyle(color: color, fontWeight: FontWeight.w800),
                   ),
                   TextSpan(
                     text: note,
@@ -1224,7 +1334,8 @@ class _AuthStepChecklist extends StatelessWidget {
           _AuthStepRow(
             step: '2',
             title: 'Confirmar o e-mail, se necessário',
-            message: 'Alguns projetos pedem confirmação antes do primeiro login.',
+            message:
+                'Alguns projetos pedem confirmação antes do primeiro login.',
           ),
           SizedBox(height: 12),
           _AuthStepRow(
@@ -1277,9 +1388,9 @@ class _AuthStepRow extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 4),
               Text(

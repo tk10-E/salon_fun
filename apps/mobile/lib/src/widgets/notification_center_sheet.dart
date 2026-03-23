@@ -123,6 +123,7 @@ class _NotificationCenterSheetState extends State<NotificationCenterSheet> {
         .where((item) => !item.isRead)
         .length;
     final filteredNotifications = _filteredNotifications;
+    final insight = _insightForNotifications(_visibleNotifications);
 
     return SafeArea(
       top: false,
@@ -150,6 +151,13 @@ class _NotificationCenterSheetState extends State<NotificationCenterSheet> {
                 height: 1.5,
               ),
             ),
+            if (insight != null) ...[
+              const SizedBox(height: 16),
+              _NotificationInsightCard(
+                insight: insight,
+                branding: widget.branding,
+              ),
+            ],
             if (_visibleNotifications.isNotEmpty) ...[
               const SizedBox(height: 14),
               Align(
@@ -442,6 +450,76 @@ class _NotificationCard extends StatelessWidget {
               height: 1.5,
             ),
           ),
+          if (_recommendedActionFor(notification.type) case final action?) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8F1E8),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE7D6C4)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.bolt_rounded,
+                    size: 18,
+                    color: branding.deep,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Ação sugerida: $action',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF5F4B3E),
+                        fontWeight: FontWeight.w700,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationInsightCard extends StatelessWidget {
+  const _NotificationInsightCard({
+    required this.insight,
+    required this.branding,
+  });
+
+  final _NotificationInsight insight;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      borderColor: branding.outline.withValues(alpha: 0.74),
+      backgroundColor: branding.highlightBackground.withValues(alpha: 0.62),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            insight.title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            insight.message,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF705A4B),
+              height: 1.45,
+            ),
+          ),
         ],
       ),
     );
@@ -490,6 +568,13 @@ class _NotificationTypeMetadata {
   final IconData icon;
   final Color backgroundColor;
   final Color foregroundColor;
+}
+
+class _NotificationInsight {
+  const _NotificationInsight({required this.title, required this.message});
+
+  final String title;
+  final String message;
 }
 
 _NotificationTypeMetadata _metadataForType(String type) {
@@ -569,9 +654,15 @@ _NotificationTypeMetadata _metadataForType(String type) {
         foregroundColor: Color(0xFF3568B8),
       );
     case 'referral_qualified':
+      return const _NotificationTypeMetadata(
+        label: 'Indicação validada',
+        icon: Icons.people_alt_rounded,
+        backgroundColor: Color(0xFFEAF6EE),
+        foregroundColor: Color(0xFF2E6B4B),
+      );
     case 'referral_reward_unlocked':
       return const _NotificationTypeMetadata(
-        label: 'Benefício liberado',
+        label: 'Recompensa liberada',
         icon: Icons.card_giftcard_rounded,
         backgroundColor: Color(0xFFEAF6EE),
         foregroundColor: Color(0xFF2E6B4B),
@@ -632,6 +723,125 @@ _NotificationTypeMetadata _metadataForType(String type) {
         backgroundColor: Color(0xFFF3EEE8),
         foregroundColor: Color(0xFF6F5648),
       );
+  }
+}
+
+_NotificationInsight? _insightForNotifications(
+  List<CustomerNotificationItem> notifications,
+) {
+  if (notifications.isEmpty) {
+    return null;
+  }
+
+  final unread = notifications.where((item) => !item.isRead).toList();
+  final source = unread.isNotEmpty ? unread : notifications;
+
+  final agendaNotifications = source.where(
+    (item) =>
+        item.type == 'appointment_confirmation_required' ||
+        item.type == 'vacancy_alert' ||
+        item.type.startsWith('appointment_'),
+  );
+  if (agendaNotifications.isNotEmpty) {
+    return _NotificationInsight(
+      title: 'Sua agenda pede atenção agora',
+      message:
+          'Há aviso${agendaNotifications.length == 1 ? '' : 's'} que pode${agendaNotifications.length == 1 ? '' : 'm'} mexer no seu próximo horário. Vale olhar primeiro para confirmar, reagir ou aproveitar encaixe.',
+    );
+  }
+
+  final retentionNotifications = source.where(
+    (item) => item.type == 'winback_offer' || item.type == 'smart_rebook_prompt',
+  );
+  if (retentionNotifications.isNotEmpty) {
+    return _NotificationInsight(
+      title: 'Tem retorno com boa chance de virar reserva',
+      message:
+          'O salão puxou seu próximo agendamento com oferta ou rebook inteligente. Esses avisos costumam render melhor quando você age rápido.',
+    );
+  }
+
+  final benefitNotifications = source.where(
+    (item) =>
+        item.type.startsWith('membership_') ||
+        item.type.startsWith('loyalty_') ||
+        item.type == 'referral_reward_unlocked',
+  );
+  if (benefitNotifications.isNotEmpty) {
+    return _NotificationInsight(
+      title: 'Você tem vantagem nova para conferir',
+      message:
+          'Plano, fidelidade, cashback ou recompensa podem deixar sua próxima visita mais interessante se você usar isso a seu favor.',
+    );
+  }
+
+  final decisionNotifications = source.where(
+    (item) =>
+        item.type == 'feed_post_published' ||
+        item.type.startsWith('promotion_') ||
+        item.type.startsWith('service_'),
+  );
+  if (decisionNotifications.isNotEmpty) {
+    return _NotificationInsight(
+      title: 'Tem novidade que pode virar decisão',
+      message:
+          'Feed, campanhas e serviços novos ajudam você a escolher com mais segurança antes de reservar ou falar com o salão.',
+    );
+  }
+
+  return const _NotificationInsight(
+    title: 'Tudo o que mexe com sua relação com o salão fica aqui',
+    message:
+        'Agenda, benefícios e novidades aparecem organizados para você agir sem depender de conversa solta.',
+  );
+}
+
+String? _recommendedActionFor(String type) {
+  switch (type) {
+    case 'vacancy_alert':
+      return 'Reserve logo se esse encaixe fizer sentido para você.';
+    case 'appointment_confirmation_required':
+      return 'Confirme agora para não correr o risco de perder esse horário.';
+    case 'appointment_confirmed':
+      return 'Guarde esse horário no radar e fale com o salão se precisar alinhar algo.';
+    case 'appointment_reminder_1h':
+      return 'Saia com antecedência ou avise o salão se precisar ajustar algo agora.';
+    case 'appointment_staff_reassigned':
+      return 'Confira o profissional e mantenha o horário se tudo continuar fazendo sentido.';
+    case 'appointment_auto_cancelled_unconfirmed':
+      return 'Abra a agenda assim que puder para tentar recuperar outro encaixe.';
+    case 'appointment_cancelled':
+      return 'Procure outro horário no app ou reorganize a visita com o salão.';
+    case 'appointment_completed':
+      return 'Vale abrir sua carteira para ver pontos, cashback ou desconto dessa visita.';
+    case 'winback_offer':
+      return 'Use esse incentivo para voltar ao salão antes que sua rotina esfrie mais.';
+    case 'smart_rebook_prompt':
+      return 'Aproveite o lembrete e deixe seu próximo horário previsto enquanto seu ciclo ideal está aberto.';
+    case 'promotion_published':
+    case 'promotion_updated':
+      return 'Veja se a campanha combina com a próxima visita e aproveite enquanto estiver ativa.';
+    case 'membership_published':
+    case 'membership_updated':
+      return 'Compare o plano com sua frequência real para ver se ele melhora seu custo por visita.';
+    case 'loyalty_program_updated':
+      return 'Abra a carteira para entender o saldo, o cashback e o desconto progressivo atualizados.';
+    case 'loyalty_tier_unlocked':
+    case 'loyalty_vip_unlocked':
+      return 'Veja seu novo nível e use essa vantagem na próxima visita.';
+    case 'service_published':
+    case 'service_updated':
+      return 'Confira se esse serviço combina com o que você já costuma reservar.';
+    case 'feed_post_published':
+      return 'Use a foto como referência para decidir e reservar com mais segurança.';
+    case 'referral_program_updated':
+      return 'Veja as regras novas e compartilhe seu código enquanto a campanha estiver quente.';
+    case 'referral_qualified':
+      return 'Acompanhe quantas indicações faltam para liberar a próxima recompensa.';
+    case 'referral_reward_unlocked':
+      return 'Não deixe esse benefício parado. Use na próxima visita ao salão.';
+    default:
+      return null;
   }
 }
 

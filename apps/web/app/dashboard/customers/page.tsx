@@ -22,6 +22,8 @@ type LoyaltyTierSnapshot = {
 };
 
 type CustomerDirectoryItem = {
+  allergies?: string | null;
+  beauty_products?: string | null;
   cashback_balance: number | string;
   completed_visits: number;
   created_at: string;
@@ -33,7 +35,11 @@ type CustomerDirectoryItem = {
   next_appointment_at: string | null;
   pending_appointments: number;
   points_balance: number;
+  preferences?: string | null;
   referral_code: string | null;
+  last_completed_service_name?: string | null;
+  last_completed_staff_member_name?: string | null;
+  last_completed_at?: string | null;
   total_spent: number | string;
   upcoming_appointments: number;
 };
@@ -138,8 +144,23 @@ function formatTierDiscount(value: number | string) {
   }).format(numericValue);
 }
 
+function normalizeText(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function firstRelation<T extends { name?: string | null }>(
+  value: T | T[] | null,
+): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
 export default async function CustomersPage({ searchParams }: CustomersPageProps) {
-  await requireOwnerSalon();
+  const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
   const q = firstParam(searchParams?.q).trim();
@@ -184,6 +205,85 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
       ),
     ),
   );
+  const customerIds = customers.map((customer) => customer.id);
+  const customerBeautyProfileById = new Map<
+    string,
+    {
+      allergies: string | null;
+      beauty_products: string | null;
+      preferences: string | null;
+    }
+  >();
+  const latestCompletedHistoryByCustomerId = new Map<
+    string,
+    {
+      last_completed_at: string | null;
+      last_completed_service_name: string | null;
+      last_completed_staff_member_name: string | null;
+    }
+  >();
+
+  if (customerIds.length) {
+    const [beautyProfilesResult, completedAppointmentsResult] = await Promise.all([
+      supabase
+        .from("customers")
+        .select("id, preferences, allergies, beauty_products")
+        .in("id", customerIds),
+      supabase
+        .from("appointments")
+        .select("customer_id, date, completed_at, services(name), staff_members(name)")
+        .eq("salon_id", salon.id)
+        .eq("status", "completed")
+        .in("customer_id", customerIds)
+        .order("completed_at", { ascending: false, nullsFirst: false })
+        .order("date", { ascending: false }),
+    ]);
+
+    const beautyProfiles = (beautyProfilesResult.data ?? []) as Array<{
+      allergies?: string | null;
+      beauty_products?: string | null;
+      id: string;
+      preferences?: string | null;
+    }>;
+
+    for (const profile of beautyProfiles) {
+      customerBeautyProfileById.set(profile.id, {
+        allergies: normalizeText(profile.allergies),
+        beauty_products: normalizeText(profile.beauty_products),
+        preferences: normalizeText(profile.preferences),
+      });
+    }
+
+    const completedAppointments = (completedAppointmentsResult.data ?? []) as Array<{
+      completed_at: string | null;
+      customer_id: string;
+      date: string;
+      services: { name?: string | null } | { name?: string | null }[] | null;
+      staff_members: { name?: string | null } | { name?: string | null }[] | null;
+    }>;
+
+    for (const appointment of completedAppointments) {
+      if (latestCompletedHistoryByCustomerId.has(appointment.customer_id)) {
+        continue;
+      }
+
+      latestCompletedHistoryByCustomerId.set(appointment.customer_id, {
+        last_completed_at: appointment.completed_at ?? appointment.date,
+        last_completed_service_name: normalizeText(
+          firstRelation(appointment.services)?.name,
+        ),
+        last_completed_staff_member_name: normalizeText(
+          firstRelation(appointment.staff_members)?.name,
+        ),
+      });
+    }
+  }
+
+  const hydratedCustomers = customers.map((customer) => ({
+    ...customer,
+    ...customerBeautyProfileById.get(customer.id),
+    ...latestCompletedHistoryByCustomerId.get(customer.id),
+  }));
 
   return (
     <div className="page-grid">
@@ -288,7 +388,7 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               }
             />
           ) : (
-            customers.map((customer) => (
+            hydratedCustomers.map((customer) => (
               <article key={customer.id} className="list-row customer-card">
                 <div className="customer-card__content">
                   <div className="customer-card__header">
@@ -350,6 +450,46 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
                       <strong>{formatCurrency(Number(customer.total_spent ?? 0))}</strong>
                     </div>
                   </div>
+
+                  {customer.preferences ||
+                  customer.allergies ||
+                  customer.beauty_products ||
+                  customer.last_completed_service_name ? (
+                    <div className="customer-card__beauty">
+                      {customer.last_completed_service_name ? (
+                        <div className="customer-detail-item">
+                          <span className="customer-detail-item__label">Último resultado registrado</span>
+                          <strong>
+                            {customer.last_completed_service_name}
+                            {customer.last_completed_staff_member_name
+                              ? ` • com ${customer.last_completed_staff_member_name}`
+                              : ""}
+                            {customer.last_completed_at
+                              ? ` • ${formatDateTime(customer.last_completed_at)}`
+                              : ""}
+                          </strong>
+                        </div>
+                      ) : null}
+                      {customer.preferences ? (
+                        <div className="customer-detail-item">
+                          <span className="customer-detail-item__label">Preferências</span>
+                          <strong>{customer.preferences}</strong>
+                        </div>
+                      ) : null}
+                      {customer.beauty_products ? (
+                        <div className="customer-detail-item">
+                          <span className="customer-detail-item__label">Produtos usados ou preferidos</span>
+                          <strong>{customer.beauty_products}</strong>
+                        </div>
+                      ) : null}
+                      {customer.allergies ? (
+                        <div className="customer-detail-item">
+                          <span className="customer-detail-item__label">Alergias e cuidados</span>
+                          <strong>{customer.allergies}</strong>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   {customer.current_tier ? (
                     <small className="list-meta">

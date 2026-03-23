@@ -10,6 +10,7 @@ import 'screens/home_screen.dart';
 import 'screens/join_salon_screen.dart';
 import 'screens/notification_alert_screen.dart';
 import 'services/push_notification_service.dart';
+import 'theme/salon_branding.dart';
 import 'widgets/branded_loading_view.dart';
 
 class SalonClientApp extends StatefulWidget {
@@ -23,11 +24,13 @@ class _SalonClientAppState extends State<SalonClientApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   StreamSubscription<NotificationTapPayload>? _notificationTapSubscription;
   String? _lastOpenedNotificationKey;
+  CustomerProfile? _activeProfile;
 
   @override
   void initState() {
     super.initState();
-    _notificationTapSubscription = PushNotificationService.instance
+    _notificationTapSubscription = PushNotificationService
+        .instance
         .onNotificationTap
         .listen(_openNotificationAlert);
 
@@ -63,173 +66,236 @@ class _SalonClientAppState extends State<SalonClientApp> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFFC56B43),
-      brightness: Brightness.light,
-    );
+  void _handleActiveProfileChanged(CustomerProfile? profile) {
+    if (_sameBrandingProfile(_activeProfile, profile)) {
+      return;
+    }
 
-    return MaterialApp(
-      title: 'Salon Fun',
-      debugShowCheckedModeBanner: false,
-      navigatorKey: _navigatorKey,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: colorScheme,
-        scaffoldBackgroundColor: const Color(0xFFF6F0E8),
-        snackBarTheme: SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF2F231C),
-          contentTextStyle: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF6F0E8),
-          foregroundColor: Color(0xFF3D271B),
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          titleTextStyle: TextStyle(
-            color: Color(0xFF3D271B),
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        cardTheme: CardThemeData(
+    setState(() => _activeProfile = profile);
+  }
+
+  ThemeData _buildTheme(SalonBranding branding) {
+    final colorScheme =
+        ColorScheme.fromSeed(
+          seedColor: branding.primary,
+          brightness: Brightness.light,
+        ).copyWith(
+          primary: branding.primary,
+          secondary: branding.primary,
+          surface: Colors.white,
+          onSurface: branding.deep,
+        );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: Color.lerp(branding.surface, Colors.white, 0.35),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: branding.deep,
+        contentTextStyle: const TextStyle(
           color: Colors.white,
-          elevation: 0,
+          fontWeight: FontWeight.w600,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Color.lerp(branding.surface, Colors.white, 0.34),
+        foregroundColor: branding.deep,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleTextStyle: TextStyle(
+          color: branding.deep,
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: branding.outline.withValues(alpha: 0.72)),
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        dividerColor: Colors.transparent,
+        indicatorColor: branding.primary,
+        labelColor: branding.deep,
+        unselectedLabelColor: branding.mutedText,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: branding.primary,
+          foregroundColor: branding.onPrimary,
+          disabledBackgroundColor: branding.outline.withValues(alpha: 0.88),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          minimumSize: const Size.fromHeight(54),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: const BorderSide(color: Color(0xFFE3D5C7)),
-          ),
-        ),
-        tabBarTheme: const TabBarThemeData(
-          dividerColor: Colors.transparent,
-          indicatorColor: Color(0xFFC56B43),
-          labelColor: Color(0xFF3D271B),
-          unselectedLabelColor: Color(0xFF876F5F),
-          labelStyle: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFC56B43),
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: const Color(0xFFD8C1AF),
-            textStyle: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-            ),
-            minimumSize: const Size.fromHeight(54),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF8E441F),
-            side: const BorderSide(color: Color(0xFFDCC8B7)),
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-        chipTheme: ThemeData.light(useMaterial3: true).chipTheme.copyWith(
-          backgroundColor: Colors.white,
-          selectedColor: const Color(0x1FC56B43),
-          side: const BorderSide(color: Color(0xFFE3D5C7)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          labelStyle: const TextStyle(
-            color: Color(0xFF4C3427),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.9),
-          labelStyle: const TextStyle(color: Color(0xFF765E4E)),
-          hintStyle: const TextStyle(color: Color(0xFFB29986)),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 18,
-            vertical: 16,
-          ),
-          border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFFE1D5C8)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFFE1D5C8)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: const BorderSide(color: Color(0xFFC56B43), width: 1.5),
-          ),
-        ),
-        textTheme: ThemeData.light(useMaterial3: true).textTheme.copyWith(
-          headlineMedium: const TextStyle(
-            color: Color(0xFF2F231C),
-            fontSize: 34,
-            height: 1.02,
-            fontWeight: FontWeight.w800,
-          ),
-          headlineSmall: const TextStyle(
-            color: Color(0xFF2F231C),
-            fontSize: 28,
-            height: 1.05,
-            fontWeight: FontWeight.w800,
-          ),
-          titleLarge: const TextStyle(
-            color: Color(0xFF2F231C),
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
-          titleMedium: const TextStyle(
-            color: Color(0xFF2F231C),
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-          bodyLarge: const TextStyle(
-            color: Color(0xFF765E4E),
-            fontSize: 16,
-            height: 1.5,
-          ),
-          bodyMedium: const TextStyle(
-            color: Color(0xFF765E4E),
-            fontSize: 14,
-            height: 1.45,
-          ),
-          labelLarge: const TextStyle(
-            color: Color(0xFF8E441F),
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.4,
           ),
         ),
       ),
-      home: const _SessionGate(),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: branding.deep,
+          side: BorderSide(color: branding.outline.withValues(alpha: 0.9)),
+          minimumSize: const Size.fromHeight(50),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      chipTheme: ThemeData.light(useMaterial3: true).chipTheme.copyWith(
+        backgroundColor: Colors.white,
+        selectedColor: branding.chipBackground,
+        side: BorderSide(color: branding.outline.withValues(alpha: 0.84)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        labelStyle: TextStyle(
+          color: branding.deep,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.92),
+        labelStyle: TextStyle(color: branding.mutedText),
+        hintStyle: TextStyle(color: branding.mutedText.withValues(alpha: 0.62)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(
+            color: branding.outline.withValues(alpha: 0.8),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(
+            color: branding.outline.withValues(alpha: 0.8),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: branding.primary, width: 1.5),
+        ),
+      ),
+      textTheme: ThemeData.light(useMaterial3: true).textTheme.copyWith(
+        headlineMedium: TextStyle(
+          color: branding.deep,
+          fontSize: 34,
+          height: 1.02,
+          fontWeight: FontWeight.w800,
+        ),
+        headlineSmall: TextStyle(
+          color: branding.deep,
+          fontSize: 28,
+          height: 1.05,
+          fontWeight: FontWeight.w800,
+        ),
+        titleLarge: TextStyle(
+          color: branding.deep,
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+        ),
+        titleMedium: TextStyle(
+          color: branding.deep,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+        bodyLarge: TextStyle(
+          color: branding.mutedText,
+          fontSize: 16,
+          height: 1.5,
+        ),
+        bodyMedium: TextStyle(
+          color: branding.mutedText,
+          fontSize: 14,
+          height: 1.45,
+        ),
+        labelLarge: TextStyle(
+          color: branding.deep,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeBranding = _activeProfile == null
+        ? SalonBranding.fromName('Salon Fun', overrideHexColor: '#C56B43')
+        : SalonBranding.fromName(
+            _activeProfile!.salonName,
+            overrideHexColor: _activeProfile!.salonBrandColor,
+          );
+
+    return MaterialApp(
+      title: _activeProfile?.salonName ?? 'Salon Fun',
+      debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
+      theme: _buildTheme(activeBranding),
+      home: _SessionGate(onActiveProfileChanged: _handleActiveProfileChanged),
     );
   }
 }
 
-class _SessionGate extends StatelessWidget {
-  const _SessionGate();
+bool _sameBrandingProfile(CustomerProfile? left, CustomerProfile? right) {
+  if (identical(left, right)) {
+    return true;
+  }
+
+  if (left == null || right == null) {
+    return left == right;
+  }
+
+  return left.salonId == right.salonId &&
+      left.salonName == right.salonName &&
+      left.salonBrandColor == right.salonBrandColor &&
+      left.salonLogoUrl == right.salonLogoUrl &&
+      left.salonTagline == right.salonTagline;
+}
+
+class _SessionGate extends StatefulWidget {
+  const _SessionGate({required this.onActiveProfileChanged});
+
+  final ValueChanged<CustomerProfile?> onActiveProfileChanged;
+
+  @override
+  State<_SessionGate> createState() => _SessionGateState();
+}
+
+class _SessionGateState extends State<_SessionGate> {
+  late final SalonRepository _repository = SalonRepository(
+    Supabase.instance.client,
+  );
+  CustomerProfile? _reportedProfile;
+
+  void _reportActiveProfile(CustomerProfile? profile) {
+    if (_sameBrandingProfile(_reportedProfile, profile)) {
+      return;
+    }
+
+    _reportedProfile = profile;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      widget.onActiveProfileChanged(profile);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final repository = SalonRepository(Supabase.instance.client);
-
     return StreamBuilder<AuthState>(
-      stream: repository.authChanges,
+      stream: _repository.authChanges,
       initialData: AuthState(
         AuthChangeEvent.initialSession,
         Supabase.instance.client.auth.currentSession,
@@ -242,20 +308,28 @@ class _SessionGate extends StatelessWidget {
           );
         }
 
-        if (repository.currentUser == null) {
-          return AuthScreen(repository: repository);
+        if (_repository.currentUser == null) {
+          _reportActiveProfile(null);
+          return AuthScreen(repository: _repository);
         }
 
-        return _CustomerGate(repository: repository);
+        return _CustomerGate(
+          repository: _repository,
+          onActiveProfileChanged: _reportActiveProfile,
+        );
       },
     );
   }
 }
 
 class _CustomerGate extends StatefulWidget {
-  const _CustomerGate({required this.repository});
+  const _CustomerGate({
+    required this.repository,
+    required this.onActiveProfileChanged,
+  });
 
   final SalonRepository repository;
+  final ValueChanged<CustomerProfile?> onActiveProfileChanged;
 
   @override
   State<_CustomerGate> createState() => _CustomerGateState();
@@ -294,13 +368,19 @@ class _CustomerGateState extends State<_CustomerGate> {
         final profile = snapshot.data;
 
         if (profile == null) {
+          widget.onActiveProfileChanged(null);
           return JoinSalonScreen(
             repository: widget.repository,
             onJoined: _refreshProfile,
           );
         }
 
-        return HomeScreen(repository: widget.repository, profile: profile);
+        widget.onActiveProfileChanged(profile);
+        return HomeScreen(
+          repository: widget.repository,
+          profile: profile,
+          onActiveProfileChanged: widget.onActiveProfileChanged,
+        );
       },
     );
   }

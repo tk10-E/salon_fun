@@ -4,6 +4,10 @@ class CustomerProfile {
     required this.name,
     required this.salonId,
     required this.salonName,
+    this.phone,
+    this.preferences,
+    this.allergies,
+    this.beautyProducts,
     this.salonTagline,
     this.salonBrandColor,
     this.salonWhatsappPhone,
@@ -14,6 +18,10 @@ class CustomerProfile {
   final String name;
   final String salonId;
   final String salonName;
+  final String? phone;
+  final String? preferences;
+  final String? allergies;
+  final String? beautyProducts;
   final String? salonTagline;
   final String? salonBrandColor;
   final String? salonWhatsappPhone;
@@ -24,6 +32,14 @@ class CustomerProfile {
     String? name,
     String? salonId,
     String? salonName,
+    String? phone,
+    bool clearPhone = false,
+    String? preferences,
+    bool clearPreferences = false,
+    String? allergies,
+    bool clearAllergies = false,
+    String? beautyProducts,
+    bool clearBeautyProducts = false,
     String? salonTagline,
     String? salonBrandColor,
     String? salonWhatsappPhone,
@@ -34,6 +50,12 @@ class CustomerProfile {
       name: name ?? this.name,
       salonId: salonId ?? this.salonId,
       salonName: salonName ?? this.salonName,
+      phone: clearPhone ? null : phone ?? this.phone,
+      preferences: clearPreferences ? null : preferences ?? this.preferences,
+      allergies: clearAllergies ? null : allergies ?? this.allergies,
+      beautyProducts: clearBeautyProducts
+          ? null
+          : beautyProducts ?? this.beautyProducts,
       salonTagline: salonTagline ?? this.salonTagline,
       salonBrandColor: salonBrandColor ?? this.salonBrandColor,
       salonWhatsappPhone: salonWhatsappPhone ?? this.salonWhatsappPhone,
@@ -57,10 +79,46 @@ class CustomerProfile {
       name: map['name'] as String,
       salonId: map['salon_id'] as String,
       salonName: (salonMap['name'] ?? 'Salao') as String,
+      phone: _readNullableString(map['phone']),
+      preferences: _readNullableString(map['preferences']),
+      allergies: _readNullableString(map['allergies']),
+      beautyProducts: _readNullableString(map['beauty_products']),
       salonTagline: _readNullableString(salonMap['tagline']),
       salonBrandColor: _readNullableString(salonMap['brand_color']),
       salonWhatsappPhone: _readNullableString(salonMap['whatsapp_phone']),
       salonLogoUrl: salonLogoUrl,
+    );
+  }
+}
+
+class SalonJoinPreview {
+  const SalonJoinPreview({
+    required this.salonId,
+    required this.name,
+    this.tagline,
+    this.brandColor,
+    this.whatsappPhone,
+    this.logoUrl,
+  });
+
+  final String salonId;
+  final String name;
+  final String? tagline;
+  final String? brandColor;
+  final String? whatsappPhone;
+  final String? logoUrl;
+
+  factory SalonJoinPreview.fromMap(
+    Map<String, dynamic> map, {
+    String? salonLogoUrl,
+  }) {
+    return SalonJoinPreview(
+      salonId: (map['salon_id'] ?? map['id']) as String,
+      name: (map['name'] ?? 'Salão') as String,
+      tagline: _readNullableString(map['tagline']),
+      brandColor: _readNullableString(map['brand_color']),
+      whatsappPhone: _readNullableString(map['whatsapp_phone']),
+      logoUrl: salonLogoUrl,
     );
   }
 }
@@ -158,15 +216,21 @@ class ReferralProgramInfo {
   const ReferralProgramInfo({
     required this.title,
     required this.rewardForReferrer,
+    required this.requiredQualifiedReferrals,
     required this.isActive,
     this.description,
     this.rewardForInvited,
+    this.rewardServiceId,
+    this.rewardServiceName,
   });
 
   final String title;
   final String? description;
   final String rewardForReferrer;
   final String? rewardForInvited;
+  final int requiredQualifiedReferrals;
+  final String? rewardServiceId;
+  final String? rewardServiceName;
   final bool isActive;
 
   factory ReferralProgramInfo.fromMap(Map<String, dynamic> map) {
@@ -175,10 +239,58 @@ class ReferralProgramInfo {
       description: _readNullableString(map['description']),
       rewardForReferrer:
           (map['reward_for_referrer'] ??
-                  'Benefício liberado após a visita da indicação')
+                  'A recompensa é liberada quando a meta de indicações validadas é atingida.')
               as String,
       rewardForInvited: _readNullableString(map['reward_for_invited']),
+      requiredQualifiedReferrals: _readInt(
+        map['required_qualified_referrals'],
+        fallback: 10,
+      ),
+      rewardServiceId: _readNullableString(map['reward_service_id']),
+      rewardServiceName: _readNullableString(map['reward_service_name']),
       isActive: (map['is_active'] ?? false) as bool,
+    );
+  }
+}
+
+class ReferralRewardUnlockItem {
+  const ReferralRewardUnlockItem({
+    required this.id,
+    required this.thresholdReached,
+    required this.requiredQualifiedReferrals,
+    required this.rewardDescription,
+    required this.status,
+    required this.unlockedAt,
+    this.rewardServiceName,
+    this.redeemedAt,
+  });
+
+  final String id;
+  final int thresholdReached;
+  final int requiredQualifiedReferrals;
+  final String rewardDescription;
+  final String? rewardServiceName;
+  final String status;
+  final DateTime unlockedAt;
+  final DateTime? redeemedAt;
+
+  factory ReferralRewardUnlockItem.fromMap(Map<String, dynamic> map) {
+    return ReferralRewardUnlockItem(
+      id: map['id'] as String,
+      thresholdReached: _readInt(map['threshold_reached']),
+      requiredQualifiedReferrals: _readInt(
+        map['required_qualified_referrals'],
+        fallback: 10,
+      ),
+      rewardDescription:
+          (map['reward_description'] ?? 'Recompensa liberada no salão')
+              as String,
+      rewardServiceName: _readNullableString(map['reward_service_name']),
+      status: (map['status'] ?? 'available') as String,
+      unlockedAt: DateTime.parse(map['unlocked_at'] as String).toLocal(),
+      redeemedAt: map['redeemed_at'] == null
+          ? null
+          : DateTime.parse(map['redeemed_at'] as String).toLocal(),
     );
   }
 }
@@ -216,23 +328,38 @@ class ReferralSummary {
     required this.referralCode,
     required this.pendingCount,
     required this.qualifiedCount,
+    required this.currentCycleProgress,
+    required this.nextRewardRemaining,
+    required this.unlockedRewardsCount,
+    required this.availableRewardsCount,
     required this.referrals,
+    required this.rewardUnlocks,
     this.program,
   });
 
   final String referralCode;
   final int pendingCount;
   final int qualifiedCount;
+  final int currentCycleProgress;
+  final int nextRewardRemaining;
+  final int unlockedRewardsCount;
+  final int availableRewardsCount;
   final ReferralProgramInfo? program;
   final List<ReferralProgressItem> referrals;
+  final List<ReferralRewardUnlockItem> rewardUnlocks;
 
   bool get hasActiveProgram => program?.isActive == true;
+  int get requiredQualifiedReferrals =>
+      program?.requiredQualifiedReferrals ?? 10;
   bool get hasVisibleContent =>
       hasActiveProgram ||
       referralCode.trim().isNotEmpty ||
       pendingCount > 0 ||
       qualifiedCount > 0 ||
-      referrals.isNotEmpty;
+      unlockedRewardsCount > 0 ||
+      availableRewardsCount > 0 ||
+      referrals.isNotEmpty ||
+      rewardUnlocks.isNotEmpty;
 
   factory ReferralSummary.fromMap(Map<String, dynamic> map) {
     final referralCode = _readNullableString(map['referral_code']) ?? '';
@@ -244,12 +371,22 @@ class ReferralSummary {
       referralCode: referralCode,
       pendingCount: ((map['pending_count'] ?? 0) as num).toInt(),
       qualifiedCount: ((map['qualified_count'] ?? 0) as num).toInt(),
+      currentCycleProgress: ((map['current_cycle_progress'] ?? 0) as num)
+          .toInt(),
+      nextRewardRemaining: ((map['next_reward_remaining'] ?? 0) as num).toInt(),
+      unlockedRewardsCount: ((map['unlocked_rewards_count'] ?? 0) as num)
+          .toInt(),
+      availableRewardsCount: ((map['available_rewards_count'] ?? 0) as num)
+          .toInt(),
       program: programMap == null
           ? null
           : ReferralProgramInfo.fromMap(programMap),
       referrals: _readListMap(
         map['referrals'],
       ).map(ReferralProgressItem.fromMap).toList(),
+      rewardUnlocks: _readListMap(
+        map['reward_unlocks'],
+      ).map(ReferralRewardUnlockItem.fromMap).toList(),
     );
   }
 }
@@ -285,6 +422,8 @@ class LoyaltyProgramInfo {
     required this.isActive,
     required this.tiers,
     this.description,
+    this.vipRewardServiceId,
+    this.vipRewardServiceName,
   });
 
   final String title;
@@ -293,6 +432,8 @@ class LoyaltyProgramInfo {
   final double cashbackPercent;
   final bool isActive;
   final List<LoyaltyTierBenefit> tiers;
+  final String? vipRewardServiceId;
+  final String? vipRewardServiceName;
 
   factory LoyaltyProgramInfo.fromMap(Map<String, dynamic> map) {
     return LoyaltyProgramInfo(
@@ -301,6 +442,10 @@ class LoyaltyProgramInfo {
       pointsPerVisit: _readInt(map['points_per_visit'], fallback: 0),
       cashbackPercent: _readDouble(map['cashback_percent']),
       isActive: (map['is_active'] ?? false) as bool,
+      vipRewardServiceId: _readNullableString(map['vip_reward_service_id']),
+      vipRewardServiceName: _readNullableString(
+        map['vip_reward_service_name'],
+      ),
       tiers: _readListMap(
         map['tiers'],
       ).map(LoyaltyTierBenefit.fromMap).toList(),
@@ -706,6 +851,26 @@ class StaffMemberItem {
   }
 }
 
+class FavoriteStaffMemberItem {
+  const FavoriteStaffMemberItem({
+    required this.id,
+    required this.name,
+    this.role,
+  });
+
+  final String id;
+  final String name;
+  final String? role;
+
+  factory FavoriteStaffMemberItem.fromMap(Map<String, dynamic> map) {
+    return FavoriteStaffMemberItem(
+      id: map['id'] as String,
+      name: (map['name'] ?? 'Profissional') as String,
+      role: _readNullableString(map['role']),
+    );
+  }
+}
+
 class StaffBlockedRange {
   const StaffBlockedRange({
     required this.startsAt,
@@ -805,7 +970,8 @@ class AppointmentItem {
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
       customerConfirmationRequestedAt: clearCustomerConfirmationRequestedAt
           ? null
-          : customerConfirmationRequestedAt ?? this.customerConfirmationRequestedAt,
+          : customerConfirmationRequestedAt ??
+                this.customerConfirmationRequestedAt,
       customerPresenceConfirmedAt: clearCustomerPresenceConfirmedAt
           ? null
           : customerPresenceConfirmedAt ?? this.customerPresenceConfirmedAt,

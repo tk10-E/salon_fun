@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/app_models.dart';
 import '../repositories/salon_repository.dart';
@@ -11,12 +14,26 @@ import '../widgets/empty_state.dart';
 import '../widgets/salon_brand_mark.dart';
 import '../widgets/soft_card.dart';
 
+class BookAppointmentResult {
+  const BookAppointmentResult({
+    required this.message,
+    this.canOpenWhatsApp = false,
+    this.canOpenWallet = false,
+  });
+
+  final String message;
+  final bool canOpenWhatsApp;
+  final bool canOpenWallet;
+}
+
 class BookAppointmentScreen extends StatefulWidget {
   const BookAppointmentScreen({
     super.key,
     required this.repository,
     required this.service,
     required this.profile,
+    this.initialLoyaltySummary,
+    this.activeOffers = const [],
     this.initialDay,
     this.initialSlot,
     this.initialStaffMemberId,
@@ -26,6 +43,8 @@ class BookAppointmentScreen extends StatefulWidget {
   final SalonRepository repository;
   final ServiceItem service;
   final CustomerProfile profile;
+  final CustomerLoyaltySummary? initialLoyaltySummary;
+  final List<SalonOfferItem> activeOffers;
   final DateTime? initialDay;
   final DateTime? initialSlot;
   final String? initialStaffMemberId;
@@ -38,8 +57,11 @@ class BookAppointmentScreen extends StatefulWidget {
 class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   late DateTime _selectedDay;
   late Future<DayAvailability> _availabilityFuture;
+  DayAvailability? _currentAvailability;
   DateTime? _selectedSlot;
   String? _selectedStaffMemberId;
+  Set<String> _favoriteStaffMemberIds = <String>{};
+  final Set<String> _busyFavoriteStaffMemberIds = <String>{};
   bool _saving = false;
 
   @override
@@ -49,6 +71,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     _selectedSlot = widget.initialSlot;
     _selectedStaffMemberId = widget.initialStaffMemberId;
     _availabilityFuture = _loadAvailability(_selectedDay);
+    unawaited(_loadFavoriteStaffMemberIds());
   }
 
   DateTime _normalizeDay(DateTime date) {
@@ -60,6 +83,19 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       serviceId: widget.service.id,
       day: day,
     );
+  }
+
+  Future<void> _loadFavoriteStaffMemberIds() async {
+    try {
+      final ids = await widget.repository.getFavoriteStaffMemberIds();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _favoriteStaffMemberIds = ids);
+    } catch (_) {
+      // Keep the booking flow available even if favorites fail to load.
+    }
   }
 
   Future<void> _pickDate() async {
@@ -115,6 +151,21 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     return null;
   }
 
+  AvailableSlot? _resolvedSelectedSlot(DayAvailability? availability) {
+    final selectedSlot = _selectedSlot;
+    if (selectedSlot == null || availability == null) {
+      return null;
+    }
+
+    for (final slot in _visibleSlots(availability)) {
+      if (slot.startAt == selectedSlot) {
+        return slot;
+      }
+    }
+
+    return null;
+  }
+
   String _describeAvailability(DayAvailability availability) {
     if (!availability.isOpen) {
       return 'Salão fechado nesta data. Escolha outro dia para continuar.';
@@ -127,7 +178,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         : 'Horário de atendimento configurado pelo salão.';
 
     if (availability.availableSlots.isEmpty) {
-      return '$scheduleLabel Não há horários livres dentro dessa janela hoje.';
+      return '$scheduleLabel Não há horários livres dentro dessa janela hoje. Escolha outra data para encontrar um novo encaixe.';
     }
 
     final selectedStaff = _selectedStaffMember(availability);
@@ -138,7 +189,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       return '$scheduleLabel Exibindo apenas os horários de ${selectedStaff.name}.${selectedStaff.statusDetail != null ? " ${selectedStaff.statusDetail}" : ""}$nextAvailableLabel';
     }
 
-    return '$scheduleLabel Intervalos de ${availability.slotStepMinutes} minutos.';
+    return '$scheduleLabel Escolha o melhor horário e confirme sua reserva direto pelo app. Intervalos de ${availability.slotStepMinutes} minutos.';
   }
 
   String _staffPrimaryStatus(StaffMemberItem staffMember) {
@@ -159,13 +210,14 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   }
 
   String _staffSecondaryStatus(StaffMemberItem staffMember) {
-    final hoursLabel = staffMember.opensAtLabel != null &&
-            staffMember.closesAtLabel != null
+    final hoursLabel =
+        staffMember.opensAtLabel != null && staffMember.closesAtLabel != null
         ? 'Atende de ${staffMember.opensAtLabel} às ${staffMember.closesAtLabel}'
         : null;
 
     if (!staffMember.isOpen) {
-      return staffMember.statusDetail ?? 'Esse profissional não atende nessa data.';
+      return staffMember.statusDetail ??
+          'Esse profissional não atende nessa data.';
     }
 
     if (staffMember.availableSlotsCount > 0) {
@@ -183,6 +235,75 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     }
 
     return hoursLabel ?? 'Sem disponibilidade nesta data';
+  }
+
+  List<StaffMemberItem> _sortedStaffMembers(DayAvailability availability) {
+    final staffMembers = [...availability.staffMembers];
+    staffMembers.sort((left, right) {
+      final leftFavorite = _favoriteStaffMemberIds.contains(left.id);
+      final rightFavorite = _favoriteStaffMemberIds.contains(right.id);
+      if (leftFavorite != rightFavorite) {
+        return leftFavorite ? -1 : 1;
+      }
+
+      if (left.availableSlotsCount != right.availableSlotsCount) {
+        return right.availableSlotsCount.compareTo(left.availableSlotsCount);
+      }
+
+      return left.name.compareTo(right.name);
+    });
+    return staffMembers;
+  }
+
+  Future<void> _toggleFavoriteStaffMember(StaffMemberItem staffMember) async {
+    if (_busyFavoriteStaffMemberIds.contains(staffMember.id)) {
+      return;
+    }
+
+    final isFavorite = _favoriteStaffMemberIds.contains(staffMember.id);
+
+    setState(() => _busyFavoriteStaffMemberIds.add(staffMember.id));
+
+    try {
+      await widget.repository.toggleFavoriteStaffMember(
+        staffMemberId: staffMember.id,
+        isFavorite: !isFavorite,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        final updated = {..._favoriteStaffMemberIds};
+        if (isFavorite) {
+          updated.remove(staffMember.id);
+        } else {
+          updated.add(staffMember.id);
+        }
+        _favoriteStaffMemberIds = updated;
+      });
+
+      _showMessage(
+        isFavorite
+            ? '${staffMember.name} saiu dos seus profissionais salvos.'
+            : '${staffMember.name} foi salvo para facilitar seus próximos agendamentos.',
+      );
+    } on PostgrestException catch (error) {
+      final raw = error.message.toLowerCase();
+      final message = raw.contains('customer_favorite_staff_members')
+          ? 'Os profissionais salvos ainda não estão disponíveis agora.'
+          : 'Não foi possível atualizar seus profissionais salvos agora.';
+      _showMessage(message);
+    } catch (_) {
+      _showMessage(
+        'Não foi possível atualizar seus profissionais salvos agora.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyFavoriteStaffMemberIds.remove(staffMember.id));
+      }
+    }
   }
 
   String _selectedStaffEmptyTitle(StaffMemberItem staffMember) {
@@ -235,11 +356,118 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     return 'Não foi possível criar o agendamento.';
   }
 
+  bool get _canOpenWhatsApp {
+    final digits = widget.profile.salonWhatsappPhone?.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+    return digits != null && digits.length >= 10;
+  }
+
+  bool get _shouldHighlightWallet {
+    final loyaltySummary = widget.initialLoyaltySummary;
+    return loyaltySummary?.program?.isActive == true ||
+        loyaltySummary?.hasVisibleContent == true;
+  }
+
+  String? get _benefitMessage {
+    if (_shouldHighlightWallet) {
+      return 'Depois da visita, seus benefícios aparecem na carteira do app.';
+    }
+
+    if (widget.activeOffers.any((offer) => offer.isMembership)) {
+      return 'O salão também está com planos e pacotes ativos para manter sua rotina.';
+    }
+
+    if (widget.activeOffers.isNotEmpty) {
+      return 'O salão está com benefícios ativos para a sua próxima visita.';
+    }
+
+    return null;
+  }
+
+  String _selectedStaffLabel(DayAvailability? availability) {
+    final resolvedSlot = _resolvedSelectedSlot(availability);
+    final resolvedStaffName = resolvedSlot?.staffMemberName.trim();
+    if (resolvedStaffName != null && resolvedStaffName.isNotEmpty) {
+      return resolvedStaffName;
+    }
+
+    final selectedStaffName = availability == null
+        ? null
+        : _selectedStaffMember(availability)?.name.trim();
+    if (selectedStaffName != null && selectedStaffName.isNotEmpty) {
+      return selectedStaffName;
+    }
+
+    return 'Qualquer profissional disponível';
+  }
+
+  String _buildSuccessMessage(
+    DateTime selectedSlot,
+    DayAvailability? availability,
+  ) {
+    final dateLabel = DateFormat('dd/MM').format(selectedSlot);
+    final timeLabel = DateFormat('HH:mm').format(selectedSlot);
+    final staffLabel = _selectedStaffLabel(availability);
+    final hasSpecificStaff = staffLabel != 'Qualquer profissional disponível';
+    final summary =
+        'Reserva confirmada para $dateLabel às $timeLabel${hasSpecificStaff ? ' com $staffLabel' : ''}.';
+
+    if (_shouldHighlightWallet) {
+      return '$summary Seus benefícios aparecem na carteira após a visita.';
+    }
+
+    final benefitMessage = _benefitMessage;
+    if (benefitMessage != null) {
+      return '$summary $benefitMessage';
+    }
+
+    if (_canOpenWhatsApp) {
+      return '$summary Se precisar alinhar algo, fale com o salão no WhatsApp.';
+    }
+
+    return '$summary Acompanhe tudo no histórico do app.';
+  }
+
+  Future<void> _openWhatsAppForBooking() async {
+    final selectedSlot = _selectedSlot;
+    final whatsappDigits = widget.profile.salonWhatsappPhone?.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+
+    if (selectedSlot == null ||
+        whatsappDigits == null ||
+        whatsappDigits.length < 10) {
+      _showMessage(
+        'O WhatsApp de ${widget.profile.salonName} ainda não foi configurado no app.',
+      );
+      return;
+    }
+
+    final dateLabel = DateFormat('dd/MM').format(selectedSlot);
+    final timeLabel = DateFormat('HH:mm').format(selectedSlot);
+    final message = Uri.encodeComponent(
+      'Olá, reservei ${widget.service.name} para $dateLabel às $timeLabel pelo app e queria alinhar alguns detalhes.',
+    );
+    final uri = Uri.parse('https://wa.me/$whatsappDigits?text=$message');
+    final launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+
+    if (!launched && mounted) {
+      _showMessage(
+        'Não foi possível abrir o WhatsApp agora. Tente novamente em instantes.',
+      );
+    }
+  }
+
   Future<void> _saveAppointment() async {
     final selectedSlot = _selectedSlot;
     if (selectedSlot == null) {
       return;
     }
+
+    final resolvedSlot = _resolvedSelectedSlot(_currentAvailability);
 
     setState(() => _saving = true);
 
@@ -247,14 +475,21 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       await widget.repository.createAppointment(
         serviceId: widget.service.id,
         startAt: selectedSlot,
-        preferredStaffMemberId: _selectedStaffMemberId,
+        preferredStaffMemberId:
+            resolvedSlot?.staffMemberId ?? _selectedStaffMemberId,
       );
 
       if (!mounted) {
         return;
       }
 
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(
+        BookAppointmentResult(
+          message: _buildSuccessMessage(selectedSlot, _currentAvailability),
+          canOpenWhatsApp: _canOpenWhatsApp,
+          canOpenWallet: _shouldHighlightWallet,
+        ),
+      );
     } on PostgrestException catch (error) {
       _showMessage(_humanizeAppointmentError(error.message));
     } catch (_) {
@@ -295,16 +530,20 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         ),
       ),
       body: AppBackdrop(
+        branding: branding,
         child: FutureBuilder<DayAvailability>(
           future: _availabilityFuture,
           builder: (context, snapshot) {
             final availability = snapshot.data;
+            _currentAvailability = availability;
             final availableSlots = availability == null
                 ? const <AvailableSlot>[]
                 : _visibleSlots(availability);
             final selectedStaff = availability == null
                 ? null
                 : _selectedStaffMember(availability);
+            final selectedSlot = _selectedSlot;
+            final benefitMessage = _benefitMessage;
 
             if (_selectedSlot != null &&
                 !availableSlots.any((slot) => slot.startAt == _selectedSlot)) {
@@ -315,6 +554,19 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
 
                 setState(() {
                   _selectedSlot = null;
+                });
+              });
+            }
+
+            if (_selectedSlot == null && availableSlots.length == 1) {
+              final onlySlot = availableSlots.first;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted || _selectedSlot != null) {
+                  return;
+                }
+
+                setState(() {
+                  _selectedSlot = onlySlot.startAt;
                 });
               });
             }
@@ -333,7 +585,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (widget.service.imageUrl?.trim().isNotEmpty == true) ...[
+                      if (widget.service.imageUrl?.trim().isNotEmpty ==
+                          true) ...[
                         ClipRRect(
                           borderRadius: BorderRadius.circular(22),
                           child: AspectRatio(
@@ -341,9 +594,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                             child: Image.network(
                               widget.service.imageUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => Container(
-                                color: branding.surface,
-                              ),
+                              errorBuilder: (_, _, _) =>
+                                  Container(color: branding.surface),
                             ),
                           ),
                         ),
@@ -369,12 +621,16 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  widget.profile.salonTagline?.trim().isNotEmpty ==
+                                  widget.profile.salonTagline
+                                              ?.trim()
+                                              .isNotEmpty ==
                                           true
                                       ? widget.profile.salonTagline!
                                       : 'Reserva alinhada com a agenda real do profissional.',
                                   style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: const Color(0xFF5F4334)),
+                                      ?.copyWith(
+                                        color: const Color(0xFF5F4334),
+                                      ),
                                 ),
                               ],
                             ),
@@ -386,14 +642,16 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         widget.service.name,
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
-                      if (widget.service.category?.trim().isNotEmpty == true) ...[
+                      if (widget.service.category?.trim().isNotEmpty ==
+                          true) ...[
                         const SizedBox(height: 8),
                         Text(
                           widget.service.category!,
-                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: branding.deep.withValues(alpha: 0.74),
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: branding.deep.withValues(alpha: 0.74),
+                                fontWeight: FontWeight.w800,
+                              ),
                         ),
                       ],
                       const SizedBox(height: 10),
@@ -422,10 +680,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.auto_awesome_rounded,
-                          color: branding.deep,
-                        ),
+                        Icon(Icons.auto_awesome_rounded, color: branding.deep),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -495,6 +750,17 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                               : 'Filtrando a agenda de ${selectedStaff.name} com base nos horários e pausas desse profissional.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
+                        if (_favoriteStaffMemberIds.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Seus profissionais salvos aparecem primeiro para você decidir mais rápido.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: const Color(0xFF8E441F),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         Wrap(
                           spacing: 10,
@@ -504,8 +770,12 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                               title: 'Qualquer profissional',
                               subtitle:
                                   'Mostra todos os horários validados pela agenda do salão.',
-                              statusLabel: '${availableSlots.length} ${availableSlots.length == 1 ? 'horário visível' : 'horários visíveis'}',
+                              statusLabel:
+                                  '${availableSlots.length} ${availableSlots.length == 1 ? 'horário visível' : 'horários visíveis'}',
                               selected: selectedStaff == null,
+                              isFavorite: false,
+                              favoriteBusy: false,
+                              onToggleFavorite: () {},
                               onTap: () {
                                 setState(() {
                                   _selectedStaffMemberId = null;
@@ -513,13 +783,23 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                                 });
                               },
                             ),
-                            ...availability.staffMembers.map(
+                            ..._sortedStaffMembers(availability).map(
                               (staffMember) => _StaffSelectionCard(
                                 title: staffMember.name,
                                 subtitle: _staffSecondaryStatus(staffMember),
                                 detail: staffMember.role,
                                 statusLabel: _staffPrimaryStatus(staffMember),
                                 selected: selectedStaff?.id == staffMember.id,
+                                isFavorite: _favoriteStaffMemberIds.contains(
+                                  staffMember.id,
+                                ),
+                                favoriteBusy: _busyFavoriteStaffMemberIds
+                                    .contains(staffMember.id),
+                                onToggleFavorite: () {
+                                  unawaited(
+                                    _toggleFavoriteStaffMember(staffMember),
+                                  );
+                                },
                                 onTap: () {
                                   setState(() {
                                     _selectedStaffMemberId = staffMember.id;
@@ -536,7 +816,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                 if (availability != null &&
                     availability.staffMembers.isNotEmpty)
                   const SizedBox(height: 18),
-                if (selectedStaff != null && selectedStaff.blockedRanges.isNotEmpty)
+                if (selectedStaff != null &&
+                    selectedStaff.blockedRanges.isNotEmpty)
                   SoftCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,7 +838,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                                 (blockedRange) => Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Icon(
                                         Icons.block_flipped,
@@ -572,18 +854,18 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                                           children: [
                                             Text(
                                               '${timeFormat.format(blockedRange.startsAt)} às ${timeFormat.format(blockedRange.endsAt)}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleMedium,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.titleMedium,
                                             ),
                                             if ((blockedRange.reason ?? '')
                                                 .trim()
                                                 .isNotEmpty)
                                               Text(
                                                 blockedRange.reason!,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodyMedium,
+                                                style: Theme.of(
+                                                  context,
+                                                ).textTheme.bodyMedium,
                                               ),
                                           ],
                                         ),
@@ -597,7 +879,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                       ],
                     ),
                   ),
-                if (selectedStaff != null && selectedStaff.blockedRanges.isNotEmpty)
+                if (selectedStaff != null &&
+                    selectedStaff.blockedRanges.isNotEmpty)
                   const SizedBox(height: 18),
                 if (snapshot.connectionState == ConnectionState.waiting)
                   const SoftCard(
@@ -660,8 +943,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         const SizedBox(height: 8),
                         Text(
                           selectedStaff == null
-                              ? 'Selecione um horário validado pela agenda do salão.'
-                              : 'Selecione um horário livre com ${selectedStaff.name}.',
+                              ? 'Escolha o horário que fizer mais sentido para você e confirme a reserva no app.'
+                              : 'Selecione um horário livre com ${selectedStaff.name} para confirmar sem trocar de profissional.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 18),
@@ -683,6 +966,90 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                       ],
                     ),
                   ),
+                if (selectedSlot != null && availability != null) ...[
+                  const SizedBox(height: 18),
+                  SoftCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Resumo antes de confirmar',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Seu horário entra no histórico do app assim que a reserva for confirmada.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            _SummaryPill(
+                              label: 'Data',
+                              value: dateFormat.format(selectedSlot),
+                            ),
+                            _SummaryPill(
+                              label: 'Horário',
+                              value: timeFormat.format(selectedSlot),
+                            ),
+                            _SummaryPill(
+                              label: 'Profissional',
+                              value: _selectedStaffLabel(availability),
+                            ),
+                          ],
+                        ),
+                        if (benefitMessage != null) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.loyalty_rounded,
+                                size: 18,
+                                color: branding.deep,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  benefitMessage,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (_canOpenWhatsApp) ...[
+                          const SizedBox(height: 14),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline_rounded,
+                                size: 18,
+                                color: branding.deep,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Se quiser alinhar algo antes da visita, fale com o salão pelo WhatsApp.',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            onPressed: _openWhatsAppForBooking,
+                            icon: const Icon(Icons.open_in_new_rounded),
+                            label: const Text('Falar com o salão'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ],
             );
           },
@@ -704,6 +1071,40 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   }
 }
 
+class _SummaryPill extends StatelessWidget {
+  const _SummaryPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5EC),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE3D5C7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: const Color(0xFF8E441F),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(value, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+}
+
 class _StaffSelectionCard extends StatelessWidget {
   const _StaffSelectionCard({
     required this.title,
@@ -711,6 +1112,9 @@ class _StaffSelectionCard extends StatelessWidget {
     required this.statusLabel,
     required this.selected,
     required this.onTap,
+    required this.isFavorite,
+    required this.favoriteBusy,
+    required this.onToggleFavorite,
     this.detail,
   });
 
@@ -719,6 +1123,9 @@ class _StaffSelectionCard extends StatelessWidget {
   final String statusLabel;
   final bool selected;
   final VoidCallback onTap;
+  final bool isFavorite;
+  final bool favoriteBusy;
+  final VoidCallback onToggleFavorite;
   final String? detail;
 
   @override
@@ -736,7 +1143,9 @@ class _StaffSelectionCard extends StatelessWidget {
             color: selected ? const Color(0xFFFFF5EC) : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: selected ? const Color(0xFFC56B43) : const Color(0xFFE3D5C7),
+              color: selected
+                  ? const Color(0xFFC56B43)
+                  : const Color(0xFFE3D5C7),
               width: selected ? 1.6 : 1,
             ),
             boxShadow: selected
@@ -752,17 +1161,53 @@ class _StaffSelectionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: favoriteBusy ? null : onToggleFavorite,
+                    tooltip: isFavorite
+                        ? 'Remover dos salvos'
+                        : 'Salvar profissional',
+                    visualDensity: VisualDensity.compact,
+                    icon: favoriteBusy
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            isFavorite
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            size: 18,
+                            color: isFavorite
+                                ? const Color(0xFFC56B43)
+                                : const Color(0xFF8E441F),
+                          ),
+                  ),
+                ],
               ),
               if ((detail ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 4),
+                Text(detail!, style: Theme.of(context).textTheme.bodySmall),
+              ],
+              if (isFavorite) ...[
+                const SizedBox(height: 6),
                 Text(
-                  detail!,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  'Profissional salvo para seus próximos agendamentos.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF8E441F),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
               const SizedBox(height: 10),
@@ -773,10 +1218,7 @@ class _StaffSelectionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
             ],
           ),
         ),

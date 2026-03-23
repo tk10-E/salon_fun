@@ -196,6 +196,9 @@ class _FakeHomeDataRepository implements HomeDataRepository {
   Future<List<AppointmentItem>> getAppointments() async => appointments;
 
   @override
+  Future<Set<String>> getFavoriteServiceIds() async => const <String>{};
+
+  @override
   Future<List<CustomerNotificationItem>> getCustomerNotifications() async =>
       notifications;
 

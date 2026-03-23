@@ -448,6 +448,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      get_owner_dashboard_intelligence: {
+        Args: {
+          lapsed_limit_input?: number | null;
+          top_customer_limit_input?: number | null;
+          top_service_limit_input?: number | null;
+        };
+        Returns: Json;
+      };
       get_smart_schedule_opportunities: {
         Args: {
           target_day?: string | null;

@@ -196,7 +196,7 @@ export function formatNotificationType(type: string) {
     case "referral_qualified":
       return "Indicação validada";
     case "referral_reward_unlocked":
-      return "Benefício liberado";
+      return "Recompensa de indicação liberada";
     case "service_published":
       return "Serviço publicado";
     case "service_updated":

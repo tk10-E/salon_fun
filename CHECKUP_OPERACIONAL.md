@@ -7,7 +7,7 @@ Roteiro de validação funcional do produto em ambiente local com Supabase remot
 - Painel web: compila e sobe sem erro com `npm run build`
 - App cliente: `flutter analyze` sem issues
 - App cliente: `flutter test` passando
-- Supabase: migrations aplicadas até `0017`
+- Supabase: manter o remoto alinhado com a migration mais recente de `supabase/migrations`
 - Push: function `send-vacancy-push` ativa no Supabase
 
 ## Pré-requisitos
@@ -214,6 +214,50 @@ Validar o histórico de comunicação.
 - o app mostra avisos novos e vistos
 - o cliente pode apagar os avisos da própria central
 
+## Fluxo 9: Painel financeiro e estoque
+
+### Objetivo
+
+Validar o novo painel operacional do dono.
+
+### Passos
+
+1. No painel, acesse `/dashboard/operations`.
+2. Configure a comissão automática de pelo menos um profissional.
+3. Cadastre um produto no estoque.
+4. Registre uma entrada.
+5. Registre uma saída.
+
+### Resultado esperado
+
+- o painel mostra faturamento por dia
+- o bloco `Quem mais rende` aparece com o profissional correto
+- a comissão fica salva por profissional
+- o produto aparece na lista
+- os movimentos aparecem no histórico
+- produtos abaixo do mínimo entram em alerta
+
+## Fluxo 10: Fidelidade gameficada com Ouro
+
+### Objetivo
+
+Validar a fidelidade com Bronze, Prata, Ouro e recompensa especial opcional.
+
+### Passos
+
+1. No painel, acesse `/dashboard/benefits/loyalty`.
+2. Confirme os níveis `Bronze`, `Prata` e `Ouro`.
+3. Configure um serviço em `Serviço grátis no Ouro`.
+4. Salve o programa.
+5. No app do cliente, abra perfil/carteira.
+
+### Resultado esperado
+
+- o painel salva a regra sem erro
+- o cliente vê a escada Bronze, Prata e Ouro
+- ao existir serviço vinculado no Ouro, o app mostra esse benefício como recompensa especial
+- a fidelidade continua mostrando pontos, cashback e desconto progressivo normalmente
+
 ## Fluxos que merecem atenção extra
 
 - Push no Android físico:
@@ -233,3 +277,5 @@ O sistema pode ser considerado operacionalmente consistente quando:
 - indicação muda de pendente para validada
 - feed publica e recebe interação
 - o Android recebe e abre notificações reais
+- o painel financeiro/estoque opera sem erro
+- a fidelidade Bronze/Prata/Ouro com recompensa opcional é lida corretamente pelo app

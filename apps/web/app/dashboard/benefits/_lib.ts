@@ -41,6 +41,9 @@ type ReferralProgramRow = {
   reward_for_referrer: string;
   reward_for_invited: string | null;
   is_active: boolean;
+  required_qualified_referrals?: number | null;
+  reward_service_id?: string | null;
+  reward_service_name?: string | null;
   updated_at: string;
 };
 
@@ -80,6 +83,8 @@ export type LoyaltyProgramRow = {
   vip_tier_name: string;
   vip_min_visits: number;
   vip_discount_percent: number | string;
+  vip_reward_service_id?: string | null;
+  vip_reward_service_name?: string | null;
   is_active: boolean;
   tiers: LoyaltyTierSnapshot[];
 };
@@ -193,7 +198,14 @@ export type ReferralEntry = {
   used_referral_code: string;
 };
 
+export type ReferralServiceOption = {
+  id: string;
+  name: string;
+  category: string | null;
+};
+
 export type ReferralsPageData = {
+  availableRewardUnlocksCount: number;
   hasReferralFilters: boolean;
   pendingCountInPeriod: number;
   periodQualifiedCount: number;
@@ -201,14 +213,17 @@ export type ReferralsPageData = {
   referralEventsBaseCount: number;
   referralFrom: string;
   referralProgram: ReferralProgramRow | null;
+  rewardUnlocksCount: number;
   referralStatusFilter: string;
   referralTo: string;
+  serviceOptions: ReferralServiceOption[];
 };
 
 export type LoyaltyPageData = {
   loyaltyLeaderboard: LoyaltyLeaderboardItem[];
   loyaltyOverview: LoyaltyOverview;
   loyaltyProgram: LoyaltyProgramRow | null;
+  serviceOptions: ReferralServiceOption[];
 };
 
 export type GrowthAutomationPageData = {
@@ -510,9 +525,19 @@ export async function loadReferralsPageData(searchParams?: ReferralSearchParams)
     return query;
   })();
 
-  const [referralProgramResult, referralEventsResult] = await Promise.all([
+  const [referralProgramResult, referralEventsResult, rewardUnlocksCountResult, availableRewardUnlocksCountResult, servicesResult] = await Promise.all([
     supabase.from("salon_referral_programs").select("*").eq("salon_id", salon.id).maybeSingle(),
     referralEventsQuery,
+    supabase
+      .from("salon_referral_reward_unlocks")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id),
+    supabase
+      .from("salon_referral_reward_unlocks")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("status", "available"),
+    supabase.from("services").select("id, name, category").eq("salon_id", salon.id).order("category").order("name"),
   ]);
 
   const referralEventsBase = (referralEventsResult.data ?? []) as ReferralEventRow[];
@@ -563,30 +588,57 @@ export async function loadReferralsPageData(searchParams?: ReferralSearchParams)
     } satisfies ReferralEntry;
   });
 
+  const serviceOptions = ((servicesResult.data ?? []) as ReferralServiceOption[]).map((service) => ({
+    id: service.id,
+    name: service.name,
+    category: service.category ?? null,
+  }));
+  const rewardServiceMap = new Map(serviceOptions.map((service) => [service.id, service.name]));
+  const rawReferralProgram = (referralProgramResult.data ?? null) as ReferralProgramRow | null;
+  const referralProgram = rawReferralProgram
+    ? {
+        ...rawReferralProgram,
+        reward_service_name:
+          rawReferralProgram.reward_service_name ??
+          (rawReferralProgram.reward_service_id ? rewardServiceMap.get(rawReferralProgram.reward_service_id) ?? null : null),
+      }
+    : null;
+
   return {
+    availableRewardUnlocksCount: availableRewardUnlocksCountResult.count ?? 0,
     hasReferralFilters,
     pendingCountInPeriod: referralEventsBase.filter((event) => event.status === "pending").length,
     periodQualifiedCount,
     referralEvents,
     referralEventsBaseCount: referralEventsBase.length,
     referralFrom,
-    referralProgram: (referralProgramResult.data ?? null) as ReferralProgramRow | null,
+    referralProgram,
+    rewardUnlocksCount: rewardUnlocksCountResult.count ?? 0,
     referralStatusFilter,
     referralTo,
+    serviceOptions,
   };
 }
 
 export async function loadLoyaltyPageData(): Promise<LoyaltyPageData> {
-  await requireOwnerSalon();
+  const { salon } = await requireOwnerSalon();
   const supabase = createClient();
-  const loyaltyDashboard = ((
-    await supabase.rpc("get_salon_loyalty_dashboard")
-  ).data ?? defaultLoyaltyDashboard()) as LoyaltyDashboardResponse;
+  const [loyaltyDashboardResult, serviceOptionsResult] = await Promise.all([
+    supabase.rpc("get_salon_loyalty_dashboard"),
+    supabase.from("services").select("id, name, category").eq("salon_id", salon.id).order("category").order("name"),
+  ]);
+
+  const loyaltyDashboard = (loyaltyDashboardResult.data ?? defaultLoyaltyDashboard()) as LoyaltyDashboardResponse;
 
   return {
     loyaltyLeaderboard: loyaltyDashboard.leaderboard,
     loyaltyOverview: loyaltyDashboard.overview,
     loyaltyProgram: loyaltyDashboard.program,
+    serviceOptions: ((serviceOptionsResult.data ?? []) as ReferralServiceOption[]).map((service) => ({
+      id: service.id,
+      name: service.name,
+      category: service.category ?? null,
+    })),
   };
 }
 

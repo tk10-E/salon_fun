@@ -12,11 +12,17 @@ class PremiumServiceCard extends StatelessWidget {
     required this.service,
     required this.branding,
     required this.onBook,
+    this.isFavorite = false,
+    this.favoriteBusy = false,
+    this.onToggleFavorite,
   });
 
   final ServiceItem service;
   final SalonBranding branding;
   final VoidCallback onBook;
+  final bool isFavorite;
+  final bool favoriteBusy;
+  final VoidCallback? onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -69,10 +75,7 @@ class PremiumServiceCard extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.92),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Icon(
-                        serviceVisual.icon,
-                        color: branding.deep,
-                      ),
+                      child: Icon(serviceVisual.icon, color: branding.deep),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -99,6 +102,28 @@ class PremiumServiceCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (onToggleFavorite != null)
+                      IconButton(
+                        onPressed: favoriteBusy ? null : onToggleFavorite,
+                        tooltip: isFavorite
+                            ? 'Remover dos favoritos'
+                            : 'Salvar nos favoritos',
+                        icon: favoriteBusy
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                isFavorite
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: isFavorite
+                                    ? const Color(0xFFC56B43)
+                                    : branding.deep,
+                              ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -129,6 +154,16 @@ class PremiumServiceCard extends StatelessWidget {
                     color: const Color(0xFF7D6657),
                   ),
                 ),
+                if (isFavorite) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Salvo nos seus favoritos para facilitar o próximo agendamento.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF8E441F),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
