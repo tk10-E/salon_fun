@@ -11,6 +11,7 @@ class SalonHeroCard extends StatelessWidget {
     required this.branding,
     required this.subtitle,
     this.logoUrl,
+    this.metrics = const <SalonHeroMetric>[],
     required this.onWhatsApp,
   });
 
@@ -18,6 +19,7 @@ class SalonHeroCard extends StatelessWidget {
   final SalonBranding branding;
   final String subtitle;
   final String? logoUrl;
+  final List<SalonHeroMetric> metrics;
   final VoidCallback onWhatsApp;
 
   @override
@@ -114,13 +116,37 @@ class SalonHeroCard extends StatelessWidget {
                             subtitle,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               color: Colors.white.withValues(alpha: 0.88),
+                              height: 1.42,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Escolha, converse e reserve no mesmo lugar.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.76),
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                ],
+              ),
+                if (metrics.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: metrics
+                        .map(
+                          (metric) => _HeroMetricChip(
+                            metric: metric,
+                            branding: branding,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
                 const SizedBox(height: 22),
                 Wrap(
                   spacing: 12,
@@ -145,6 +171,18 @@ class SalonHeroCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class SalonHeroMetric {
+  const SalonHeroMetric({
+    required this.label,
+    required this.value,
+    this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData? icon;
 }
 
 class _HeroAvatar extends StatelessWidget {
@@ -229,6 +267,60 @@ class _AvatarFallback extends StatelessWidget {
           color: branding.deep,
           fontWeight: FontWeight.w900,
         ),
+      ),
+    );
+  }
+}
+
+class _HeroMetricChip extends StatelessWidget {
+  const _HeroMetricChip({
+    required this.metric,
+    required this.branding,
+  });
+
+  final SalonHeroMetric metric;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (metric.icon != null) ...[
+                Icon(metric.icon, size: 15, color: branding.onPrimary),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                metric.label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.82),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            metric.value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }

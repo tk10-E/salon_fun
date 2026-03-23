@@ -96,7 +96,42 @@ class HomeServicesTab extends StatelessWidget {
             branding: branding,
             subtitle: heroSubtitle,
             logoUrl: profile.salonLogoUrl,
+            metrics: [
+              SalonHeroMetric(
+                label: 'Próximo horário',
+                value: nextAvailableLabel,
+                icon: Icons.schedule_rounded,
+              ),
+              SalonHeroMetric(
+                label: 'Benefícios',
+                value: data.offers.isNotEmpty
+                    ? '${data.offers.length} ativos'
+                    : data.loyaltySummary?.hasVisibleContent == true
+                    ? 'Carteira ativa'
+                    : 'No app',
+                icon: Icons.card_giftcard_rounded,
+              ),
+              SalonHeroMetric(
+                label: 'Vitrine',
+                value: data.posts.isEmpty
+                    ? 'Em atualização'
+                    : data.posts.length == 1
+                    ? '1 inspiração'
+                    : '${data.posts.length} inspirações',
+                icon: Icons.auto_awesome_rounded,
+              ),
+            ],
             onWhatsApp: onWhatsApp,
+          ),
+          const SizedBox(height: 22),
+          _HomeMomentumCard(
+            branding: branding,
+            nextAvailableLabel: nextAvailableLabel,
+            hasFeed: data.posts.isNotEmpty,
+            hasOffers: data.offers.isNotEmpty,
+            hasBenefits:
+                data.loyaltySummary?.hasVisibleContent == true ||
+                data.referralSummary?.hasVisibleContent == true,
           ),
           const SizedBox(height: 22),
           if (data.growthSuggestions?.hasVisibleContent == true) ...[
@@ -230,6 +265,11 @@ class HomeServicesTab extends StatelessWidget {
             nextAvailableLabel: nextAvailableLabel,
             serviceCount: data.services.length,
             todayAttendanceLabel: todayAttendanceLabel,
+            offerCount: data.offers.length,
+            feedCount: data.posts.length,
+            hasBenefits:
+                data.loyaltySummary?.hasVisibleContent == true ||
+                data.referralSummary?.hasVisibleContent == true,
           ),
           if ((data.smartSchedule?.suggestions.length ?? 0) > 1) ...[
             const SizedBox(height: 28),
@@ -375,6 +415,125 @@ class HomeServicesTab extends StatelessWidget {
               onToggleFavorite: onToggleFavoriteService,
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _HomeMomentumCard extends StatelessWidget {
+  const _HomeMomentumCard({
+    required this.branding,
+    required this.nextAvailableLabel,
+    required this.hasFeed,
+    required this.hasOffers,
+    required this.hasBenefits,
+  });
+
+  final SalonBranding branding;
+  final String nextAvailableLabel;
+  final bool hasFeed;
+  final bool hasOffers;
+  final bool hasBenefits;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = hasFeed
+        ? 'Seu próximo visual pode começar agora'
+        : 'Sua próxima reserva pode sair mais rápido daqui';
+    final description = hasFeed
+        ? 'Horários, inspirações e benefícios estão no mesmo lugar para transformar vontade em agendamento sem atrito.'
+        : 'A agenda real do salão já está aqui com tudo que ajuda você a decidir melhor e voltar com mais frequência.';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.68)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x101A120D),
+            blurRadius: 22,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Momento do salão',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: branding.deep,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: const Color(0xFF2F231C),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.mutedText,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _MomentumPill(
+                label: 'Agenda aberta em $nextAvailableLabel',
+                branding: branding,
+              ),
+              _MomentumPill(
+                label: hasBenefits ? 'Benefícios acompanhados no app' : 'Contato direto com o salão',
+                branding: branding,
+              ),
+              _MomentumPill(
+                label: hasOffers
+                    ? 'Planos e ofertas ativos'
+                    : hasFeed
+                    ? 'Vitrine com resultados reais'
+                    : 'Escolha com mais clareza',
+                branding: branding,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MomentumPill extends StatelessWidget {
+  const _MomentumPill({required this.label, required this.branding});
+
+  final String label;
+  final SalonBranding branding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: branding.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.58)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: branding.deep,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

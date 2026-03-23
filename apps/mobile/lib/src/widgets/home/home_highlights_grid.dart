@@ -10,12 +10,18 @@ class HomeHighlightsGrid extends StatelessWidget {
     required this.nextAvailableLabel,
     required this.serviceCount,
     required this.todayAttendanceLabel,
+    required this.offerCount,
+    required this.feedCount,
+    required this.hasBenefits,
   });
 
   final SalonBranding branding;
   final String nextAvailableLabel;
   final int serviceCount;
   final String todayAttendanceLabel;
+  final int offerCount;
+  final int feedCount;
+  final bool hasBenefits;
 
   @override
   Widget build(BuildContext context) {
@@ -59,10 +65,36 @@ class HomeHighlightsGrid extends StatelessWidget {
             SizedBox(
               width: width,
               child: SalonHighlightCard(
-                icon: Icons.today_rounded,
-                label: 'Atendimento hoje',
-                value: todayAttendanceLabel,
-                note: 'Sua relação com o salão em um olhar',
+                icon: hasBenefits
+                    ? Icons.card_giftcard_rounded
+                    : Icons.today_rounded,
+                label: hasBenefits
+                    ? 'Benefícios no app'
+                    : 'Atendimento hoje',
+                value: hasBenefits
+                    ? offerCount > 0
+                        ? '$offerCount ativos'
+                        : 'Carteira ativa'
+                    : todayAttendanceLabel,
+                note: hasBenefits
+                    ? 'Cashback, fidelidade e vantagens acompanhadas no seu ritmo'
+                    : 'Sua relação com o salão em um olhar',
+                branding: branding,
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: SalonHighlightCard(
+                icon: Icons.photo_library_outlined,
+                label: 'Vitrine do salão',
+                value: feedCount == 0
+                    ? 'Em atualização'
+                    : feedCount == 1
+                    ? '1 inspiração'
+                    : '$feedCount inspirações',
+                note: feedCount == 0
+                    ? 'Quando o salão publicar, a vitrine aparece aqui para inspirar sua próxima visita'
+                    : 'Resultados reais para escolher com mais desejo e confiança',
                 branding: branding,
               ),
             ),

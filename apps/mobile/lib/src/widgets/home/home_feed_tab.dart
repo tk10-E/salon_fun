@@ -189,6 +189,14 @@ class _FeedConversionCard extends StatelessWidget {
               height: 1.45,
             ),
           ),
+          const SizedBox(height: 10),
+          Text(
+            'Peça a referência, marque o serviço ou converse com o salão sem sair do app.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.76),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,
