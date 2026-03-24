@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildRedirectNotice } from "@/app/_actions/shared";
 import { getOwnerSalon } from "@/lib/auth";
 import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
+import { loadMetaAccounts, subscribeMetaPageToWebhook, syncInstagramActivity } from "@/lib/instagram-sync";
 import {
   buildInstagramMetaRedirectUri,
   getInstagramMetaAppId,
@@ -12,7 +13,6 @@ import {
   INSTAGRAM_META_GRAPH_VERSION,
   pickInstagramPageAccount,
   resolveInstagramOAuthState,
-  type InstagramMetaPageAccount,
 } from "@/lib/instagram-oauth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -20,10 +20,6 @@ const INSTAGRAM_PATH = "/dashboard/instagram";
 
 type MetaTokenResponse = {
   access_token?: string;
-};
-
-type MetaAccountsResponse = {
-  data?: InstagramMetaPageAccount[];
 };
 
 function redirectToInstagramDashboard(
@@ -79,25 +75,6 @@ async function exchangeMetaCodeForToken(code: string, redirectUri: string) {
 
   const longLivedPayload = (await longLivedResponse.json()) as MetaTokenResponse;
   return longLivedPayload.access_token ?? tokenPayload.access_token;
-}
-
-async function loadMetaAccounts(accessToken: string) {
-  const accountsUrl = new URL(
-    `https://graph.facebook.com/${INSTAGRAM_META_GRAPH_VERSION}/me/accounts`,
-  );
-  accountsUrl.searchParams.set(
-    "fields",
-    "id,name,instagram_business_account{id,username}",
-  );
-  accountsUrl.searchParams.set("access_token", accessToken);
-
-  const accountsResponse = await fetch(accountsUrl);
-  if (!accountsResponse.ok) {
-    throw new Error(await accountsResponse.text());
-  }
-
-  const payload = (await accountsResponse.json()) as MetaAccountsResponse;
-  return Array.isArray(payload.data) ? payload.data : [];
 }
 
 export async function GET(request: NextRequest) {
@@ -177,24 +154,46 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { error } = await supabase.from("instagram_connections").upsert(
+    const encryptedAccessToken = encryptInstagramAccessToken(accessToken);
+    const connectionWarnings: string[] = [];
+
+    if (selectedAccount.access_token) {
+      try {
+        await subscribeMetaPageToWebhook({
+          pageId: selectedAccount.id,
+          pageAccessToken: selectedAccount.access_token,
+        });
+      } catch (error) {
+        connectionWarnings.push(
+          error instanceof Error
+            ? `Nao foi possivel ativar a assinatura automatica das menções na Meta: ${error.message}`
+            : "Nao foi possivel ativar a assinatura automatica das menções na Meta.",
+        );
+      }
+    }
+
+    const { data: savedConnection, error } = await supabase.from("instagram_connections").upsert(
       {
         salon_id: salon.id,
         instagram_user_id: String(selectedAccount.instagram_business_account.id),
         instagram_username: selectedAccount.instagram_business_account.username.replace(/^@/, ""),
         facebook_page_id: selectedAccount.id,
-        access_token_ciphertext: encryptInstagramAccessToken(accessToken),
+        access_token_ciphertext: encryptedAccessToken,
         connection_status: "active",
         auto_publish_owned_posts: existingConnection?.auto_publish_owned_posts ?? false,
         require_mention_approval: existingConnection?.require_mention_approval ?? true,
         import_story_mentions: existingConnection?.import_story_mentions ?? true,
         last_sync_at: new Date().toISOString(),
-        last_error: null,
+        last_error: connectionWarnings.length ? connectionWarnings.join(" | ").slice(0, 600) : null,
       },
       { onConflict: "salon_id" },
-    );
+    )
+      .select(
+        "id,salon_id,instagram_user_id,instagram_username,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+      )
+      .single();
 
-    if (error) {
+    if (error || !savedConnection) {
       return redirectToInstagramDashboard(
         request,
         "Nao foi possivel salvar a conexao automatica com a Meta no painel.",
@@ -202,12 +201,46 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    try {
+      const syncResult = await syncInstagramActivity({
+        supabase,
+        connection: savedConnection,
+      });
+
+      if (syncResult.warnings.length) {
+        connectionWarnings.push(...syncResult.warnings);
+      }
+
+      await supabase
+        .from("instagram_connections")
+        .update({
+          last_sync_at: new Date().toISOString(),
+          last_error: connectionWarnings.length ? connectionWarnings.join(" | ").slice(0, 600) : null,
+        })
+        .eq("id", savedConnection.id);
+    } catch (error) {
+      connectionWarnings.push(
+        error instanceof Error
+          ? `A sincronizacao inicial do Instagram falhou: ${error.message}`
+          : "A sincronizacao inicial do Instagram falhou.",
+      );
+
+      await supabase
+        .from("instagram_connections")
+        .update({
+          last_error: connectionWarnings.join(" | ").slice(0, 600),
+        })
+        .eq("id", savedConnection.id);
+    }
+
     revalidatePath(INSTAGRAM_PATH);
 
     return redirectToInstagramDashboard(
       request,
-      "Instagram conectado com a Meta e salvo automaticamente no painel.",
-      "success",
+      connectionWarnings.length
+        ? "Instagram conectado. Se algo ainda nao aparecer, use o botao de sincronizacao no painel."
+        : "Instagram conectado com a Meta e salvo automaticamente no painel.",
+      connectionWarnings.length ? "info" : "success",
     );
   } catch (error) {
     const message =

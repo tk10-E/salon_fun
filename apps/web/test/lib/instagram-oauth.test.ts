@@ -50,6 +50,7 @@ describe("instagram oauth helpers", () => {
     );
     expect(url.searchParams.get("state")).toBe("signed-state");
     expect(url.searchParams.get("scope")).toContain("instagram_manage_comments");
+    expect(url.searchParams.get("scope")).toContain("pages_manage_metadata");
     expect(url.searchParams.get("scope")).toContain("pages_show_list");
   });
 

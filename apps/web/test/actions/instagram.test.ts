@@ -37,6 +37,7 @@ vi.mock("next/cache", () => ({
 import {
   publishInstagramMentionActionImpl,
   saveInstagramConnectionActionImpl,
+  syncInstagramActivityActionImpl,
   validateInstagramConnectionTokenActionImpl,
 } from "@/app/_actions/instagram";
 import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
@@ -280,5 +281,122 @@ describe("instagram actions", () => {
     );
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
     expect(location).toBe("/dashboard/instagram?message=Token+validado+com+sucesso+na+API+da+Meta.&tone=success");
+  });
+
+  it("syncs recent instagram media and mentions into the moderation inbox", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "connection-1",
+        salon_id: "salon-1",
+        instagram_user_id: "17841442717327141",
+        instagram_username: "jctecnologi07",
+        access_token_ciphertext: encryptInstagramAccessToken("EAAB-test-token"),
+        require_mention_approval: true,
+        import_story_mentions: true,
+        auto_publish_owned_posts: false,
+      },
+      error: null,
+    });
+    const mentionsUpsert = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "instagram_connections") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle,
+              })),
+            })),
+            update,
+          };
+        }
+
+        if (table === "instagram_mentions") {
+          return {
+            upsert: mentionsUpsert,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "media-1",
+                caption: "Novo post do salão",
+                media_type: "IMAGE",
+                media_url: "https://cdn.instagram.example/media-1.jpg",
+                permalink: "https://instagram.com/p/media-1",
+                timestamp: "2026-03-24T10:00:00.000Z",
+                username: "jctecnologi07",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "tag-1",
+                caption: "Marcando o salão",
+                media_type: "IMAGE",
+                media_url: "https://cdn.instagram.example/tag-1.jpg",
+                permalink: "https://instagram.com/p/tag-1",
+                timestamp: "2026-03-24T11:00:00.000Z",
+                username: "cliente_real",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ) as typeof fetch;
+
+    const location = await captureRedirect(syncInstagramActivityActionImpl(), redirectMock);
+
+    expect(mentionsUpsert).toHaveBeenNthCalledWith(
+      1,
+      [
+        expect.objectContaining({
+          salon_id: "salon-1",
+          source_type: "owned_post",
+          external_media_id: "media-1",
+        }),
+      ],
+      { onConflict: "dedupe_key" },
+    );
+    expect(mentionsUpsert).toHaveBeenNthCalledWith(
+      2,
+      [
+        expect.objectContaining({
+          salon_id: "salon-1",
+          source_type: "post_mention",
+          external_media_id: "tag-1",
+          moderation_status: "pending",
+        }),
+      ],
+      { onConflict: "dedupe_key" },
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_error: null,
+      }),
+    );
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
+    expect(location).toBe(
+      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+do+Instagram+foram+atualizados.&tone=success",
+    );
   });
 });

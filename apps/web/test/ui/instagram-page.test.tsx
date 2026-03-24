@@ -12,6 +12,7 @@ const {
   approveInstagramMentionActionMock,
   rejectInstagramMentionActionMock,
   publishInstagramMentionActionMock,
+  syncInstagramActivityActionMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
   approveInstagramMentionActionMock: vi.fn(),
   rejectInstagramMentionActionMock: vi.fn(),
   publishInstagramMentionActionMock: vi.fn(),
+  syncInstagramActivityActionMock: vi.fn(),
 }));
 
 vi.mock("@/app/actions", () => ({
@@ -30,6 +32,7 @@ vi.mock("@/app/actions", () => ({
   approveInstagramMentionAction: approveInstagramMentionActionMock,
   rejectInstagramMentionAction: rejectInstagramMentionActionMock,
   publishInstagramMentionAction: publishInstagramMentionActionMock,
+  syncInstagramActivityAction: syncInstagramActivityActionMock,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -150,6 +153,7 @@ describe("instagram page UI", () => {
     expect(
       screen.getByRole("link", { name: "Reconectar Instagram" }),
     ).toHaveAttribute("href", "/dashboard/instagram/connect");
+    expect(screen.getByRole("button", { name: "Sincronizar agora" })).toBeInTheDocument();
     expect(screen.getByText("Sua conta profissional já está conectada")).toBeInTheDocument();
     expect(screen.getByText("@docebeleza")).toBeInTheDocument();
     expect(screen.getByText("Pendentes")).toBeInTheDocument();

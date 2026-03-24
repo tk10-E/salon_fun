@@ -38,6 +38,7 @@ import {
   publishInstagramMentionActionImpl,
   rejectInstagramMentionActionImpl,
   saveInstagramConnectionActionImpl,
+  syncInstagramActivityActionImpl,
   validateInstagramConnectionTokenActionImpl,
 } from "./_actions/instagram";
 import {
@@ -186,6 +187,10 @@ export async function saveInstagramConnectionAction(formData: FormData) {
 
 export async function disconnectInstagramConnectionAction() {
   return disconnectInstagramConnectionActionImpl();
+}
+
+export async function syncInstagramActivityAction() {
+  return syncInstagramActivityActionImpl();
 }
 
 export async function validateInstagramConnectionTokenAction(formData: FormData) {

@@ -6,6 +6,7 @@ export const INSTAGRAM_OAUTH_STATE_COOKIE = "instagram_meta_oauth_state";
 export const INSTAGRAM_META_OAUTH_SCOPES = [
   "instagram_basic",
   "instagram_manage_comments",
+  "pages_manage_metadata",
   "pages_show_list",
   "pages_read_engagement",
   "business_management",
@@ -19,6 +20,7 @@ type InstagramOAuthStatePayload = {
 export type InstagramMetaPageAccount = {
   id: string;
   name?: string;
+  access_token?: string;
   instagram_business_account?: {
     id?: string;
     username?: string;

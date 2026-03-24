@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { decryptInstagramAccessToken, encryptInstagramAccessToken } from "@/lib/instagram-crypto";
+import { syncInstagramActivity, type InstagramConnectionSyncRecord } from "@/lib/instagram-sync";
 import { createClient } from "@/lib/supabase/server";
 
 import { buildRedirectNotice } from "./shared";
@@ -84,6 +85,23 @@ async function loadMentionForOwner(salonId: string, mentionId: string) {
   return data as InstagramMentionRecord;
 }
 
+async function loadInstagramConnectionForOwner(salonId: string) {
+  const supabase = createClient() as any;
+  const { data, error } = await supabase
+    .from("instagram_connections")
+    .select(
+      "id,salon_id,instagram_user_id,instagram_username,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+    )
+    .eq("salon_id", salonId)
+    .maybeSingle();
+
+  if (error || !data) {
+    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Conecte o Instagram do salao antes de sincronizar.", "error"));
+  }
+
+  return data as InstagramConnectionSyncRecord;
+}
+
 export async function saveInstagramConnectionActionImpl(formData: FormData) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient() as any;
@@ -148,6 +166,54 @@ export async function disconnectInstagramConnectionActionImpl() {
 
   revalidatePath(INSTAGRAM_PATH);
   redirect(buildRedirectNotice(INSTAGRAM_PATH, "Conexão do Instagram removida.", "success"));
+}
+
+export async function syncInstagramActivityActionImpl() {
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient() as any;
+  const connection = await loadInstagramConnectionForOwner(salon.id);
+  let noticeMessage = "";
+  let noticeTone: "success" | "info" = "success";
+
+  try {
+    const result = await syncInstagramActivity({
+      supabase,
+      connection,
+    });
+
+    await supabase
+      .from("instagram_connections")
+      .update({
+        last_sync_at: new Date().toISOString(),
+        last_error: result.warnings.length ? result.warnings.join(" | ").slice(0, 600) : null,
+      })
+      .eq("id", connection.id);
+
+    revalidatePath(INSTAGRAM_PATH);
+
+    const importedItems = result.mentionsUpserted + result.ownedPostsUpserted;
+    if (result.warnings.length) {
+      noticeMessage = `Sincronizacao concluida com alertas. ${importedItems} item(ns) atualizados.`;
+      noticeTone = "info";
+    } else {
+      noticeMessage =
+        importedItems > 0
+          ? `Sincronizacao concluida. ${importedItems} item(ns) do Instagram foram atualizados.`
+          : "Sincronizacao concluida. Nenhum conteudo novo foi encontrado agora.";
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Nao foi possivel sincronizar o Instagram agora.";
+    await supabase
+      .from("instagram_connections")
+      .update({
+        last_error: detail.slice(0, 600),
+      })
+      .eq("id", connection.id);
+
+    redirect(buildRedirectNotice(INSTAGRAM_PATH, detail, "error"));
+  }
+
+  redirect(buildRedirectNotice(INSTAGRAM_PATH, noticeMessage, noticeTone));
 }
 
 export async function approveInstagramMentionActionImpl(formData: FormData) {

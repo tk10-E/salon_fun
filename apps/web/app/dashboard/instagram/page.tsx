@@ -6,6 +6,7 @@ import {
   approveInstagramMentionAction,
   publishInstagramMentionAction,
   rejectInstagramMentionAction,
+  syncInstagramActivityAction,
 } from "@/app/actions";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
@@ -181,9 +182,22 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           </div>
 
           <div className="instagram-connection-card__actions">
-            {canUseAutomaticMetaConnect ? (
+            {safeConnection ? (
+              <div className="row-actions">
+                <form action={syncInstagramActivityAction}>
+                  <button type="submit" className="secondary-button">
+                    Sincronizar agora
+                  </button>
+                </form>
+                {canUseAutomaticMetaConnect ? (
+                  <Link href="/dashboard/instagram/connect" className="primary-button">
+                    Reconectar Instagram
+                  </Link>
+                ) : null}
+              </div>
+            ) : canUseAutomaticMetaConnect ? (
               <Link href="/dashboard/instagram/connect" className="primary-button">
-                {safeConnection ? "Reconectar Instagram" : "Conectar Instagram"}
+                Conectar Instagram
               </Link>
             ) : (
               <p className="muted">
@@ -191,7 +205,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
               </p>
             )}
             <p className="instagram-connection-card__hint">
-              Depois da autorização, as menções entram automaticamente nesta área para revisão e publicação.
+              Depois da autorização, as menções entram automaticamente nesta área para revisão e publicação. Se algo atrasar, use a sincronização manual.
             </p>
           </div>
         </div>
