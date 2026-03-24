@@ -11,8 +11,14 @@ const { createClientMock, redirectMock } = vi.hoisted(() => ({
   redirectMock: vi.fn(),
 }));
 
+const headersMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: createClientMock,
+}));
+
+vi.mock("next/headers", () => ({
+  headers: headersMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -24,6 +30,15 @@ import { signInActionImpl, signOutActionImpl, signUpActionImpl } from "@/app/_ac
 describe("auth actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    headersMock.mockReturnValue({
+      get(name: string) {
+        if (name === "origin") {
+          return "https://painel.jc7desenvolvimento.online";
+        }
+
+        return null;
+      },
+    });
     redirectMock.mockImplementation((location: string) => {
       throw new Error(`${TEST_REDIRECT_PREFIX}${location}`);
     });
@@ -86,6 +101,9 @@ describe("auth actions", () => {
     expect(signUp).toHaveBeenCalledWith({
       email: "new@salon.fun",
       password: "123456",
+      options: {
+        emailRedirectTo: "https://painel.jc7desenvolvimento.online/login",
+      },
     });
     expect(location).toBe("/onboarding");
   });

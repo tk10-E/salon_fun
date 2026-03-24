@@ -4,6 +4,7 @@ abstract final class SupabaseConfig {
   static const _publishableKey = String.fromEnvironment(
     'SUPABASE_PUBLISHABLE_KEY',
   );
+  static const authRedirectUrl = String.fromEnvironment('AUTH_REDIRECT_URL');
 
   static String get anonKey =>
       _publishableKey.isNotEmpty ? _publishableKey : _anonKey;

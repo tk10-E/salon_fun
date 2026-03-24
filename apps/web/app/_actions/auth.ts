@@ -1,8 +1,26 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 
 import { buildRedirectNotice } from "./shared";
+
+function buildEmailRedirectUrl() {
+  const headerStore = headers();
+  const origin = headerStore.get("origin")?.trim();
+
+  if (origin) {
+    return `${origin.replace(/\/+$/, "")}/login`;
+  }
+
+  const host = headerStore.get("x-forwarded-host")?.trim() ?? headerStore.get("host")?.trim();
+  if (!host) {
+    return undefined;
+  }
+
+  const protocol = headerStore.get("x-forwarded-proto")?.trim() || "https";
+  return `${protocol}://${host.replace(/\/+$/, "")}/login`;
+}
 
 export async function signInActionImpl(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -25,10 +43,16 @@ export async function signUpActionImpl(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const supabase = createClient();
+  const emailRedirectTo = buildEmailRedirectUrl();
 
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: emailRedirectTo
+      ? {
+          emailRedirectTo,
+        }
+      : undefined,
   });
 
   if (error) {

@@ -8,7 +8,8 @@ App Flutter do cliente para o MVP de agendamento.
 flutter pub get
 flutter run \
   --dart-define=SUPABASE_URL=https://your-project.supabase.co \
-  --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-key \
+  --dart-define=AUTH_REDIRECT_URL=https://painel.example.com/login
 ```
 
 ## Push no Android
@@ -33,4 +34,20 @@ Para desenvolvimento local, use um wildcard como:
 
 ```text
 http://localhost:*
+```
+
+## Redirect de e-mail no app nativo
+
+Se o cadastro ou reset de senha for iniciado no Android/iOS, o Supabase usa o `Site URL` do projeto quando nenhum redirect eh informado.
+
+Para evitar links indo para `localhost`, gere o app com uma URL publica:
+
+```bash
+flutter build apk --release --dart-define-from-file=.env.production
+```
+
+E dentro do arquivo `.env.production` inclua:
+
+```text
+AUTH_REDIRECT_URL=https://painel.example.com/login
 ```

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../features/home/home_data_loader.dart';
 import '../models/app_models.dart';
+import '../supabase_config.dart';
 import '../services/push_token_sync_service.dart';
 
 part 'salon_repository_appointments.dart';
@@ -30,6 +31,11 @@ abstract class _SalonRepositoryBase {
   User? get currentUser;
 
   String? _emailRedirectTo() {
+    final configuredRedirect = SupabaseConfig.authRedirectUrl.trim();
+    if (configuredRedirect.isNotEmpty) {
+      return configuredRedirect;
+    }
+
     if (!kIsWeb) {
       return null;
     }
