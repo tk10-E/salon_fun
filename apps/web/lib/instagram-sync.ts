@@ -227,6 +227,16 @@ function mapFacebookPostNode(node: Record<string, unknown>): MetaMediaNode | nul
   };
 }
 
+function isFacebookMentionNode(
+  node: Record<string, unknown>,
+  pageId: string,
+) {
+  const fromNode = (node.from ?? {}) as Record<string, unknown>;
+  const authorId = normalizeNonEmptyString(fromNode.id);
+
+  return Boolean(authorId && authorId !== pageId);
+}
+
 async function fetchGraphCollection(args: {
   path: string;
   accessToken: string;
@@ -354,28 +364,15 @@ export async function subscribeMetaPageToWebhook(args: {
 
   const requestBody = new URLSearchParams();
   requestBody.set("access_token", args.pageAccessToken);
-  requestBody.set("subscribed_fields", "feed,mention,comments");
+  requestBody.set("subscribed_fields", "feed");
 
-  let response = await fetch(url, {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: requestBody,
   });
-
-  if (!response.ok) {
-    const fallbackBody = new URLSearchParams();
-    fallbackBody.set("access_token", args.pageAccessToken);
-
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: fallbackBody,
-    });
-  }
 
   if (!response.ok) {
     throw new Error(await response.text());
@@ -418,7 +415,7 @@ export async function syncInstagramActivity(args: {
       : Promise.resolve([]),
     args.connection.facebook_page_id
       ? fetchFacebookCollection({
-          path: `${args.connection.facebook_page_id}/tagged`,
+          path: `${args.connection.facebook_page_id}/feed`,
           accessToken: facebookAccessToken,
         })
       : Promise.resolve([]),
@@ -468,11 +465,14 @@ export async function syncInstagramActivity(args: {
 
   const facebookMentions =
     facebookTaggedPostsResult.status === "fulfilled"
-      ? facebookTaggedPostsResult.value.map(mapFacebookPostNode).filter(isMetaMediaNode)
+      ? facebookTaggedPostsResult.value
+          .filter((item) => isFacebookMentionNode(item, args.connection.facebook_page_id ?? ""))
+          .map(mapFacebookPostNode)
+          .filter(isMetaMediaNode)
       : [];
   if (facebookTaggedPostsResult.status === "rejected") {
     warnings.push(
-      `Nao foi possivel sincronizar as marcacoes da pagina no Facebook: ${
+      `Nao foi possivel sincronizar o feed da pagina no Facebook: ${
         facebookTaggedPostsResult.reason instanceof Error
           ? facebookTaggedPostsResult.reason.message
           : String(facebookTaggedPostsResult.reason)
