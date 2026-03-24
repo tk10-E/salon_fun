@@ -945,6 +945,15 @@ async function processWebhookPayload(
             : connection.require_mention_approval
             ? "pending"
             : "approved";
+        const { data: existingMention } = await supabase
+          .from("instagram_mentions")
+          .select("moderation_status,published_post_id")
+          .eq("salon_id", connection.salon_id)
+          .eq("dedupe_key", dedupeKey)
+          .maybeSingle();
+        const effectiveModerationStatus = existingMention?.published_post_id
+          ? "published"
+          : existingMention?.moderation_status ?? moderationStatus;
 
         const { data: mentionRow, error: mentionError } = await supabase
           .from("instagram_mentions")
@@ -963,7 +972,7 @@ async function processWebhookPayload(
               media_url: mediaContext.mediaUrl,
               thumbnail_url: mediaContext.thumbnailUrl,
               mentioned_at: mediaContext.mentionedAt,
-              moderation_status: moderationStatus,
+              moderation_status: effectiveModerationStatus,
             },
             { onConflict: "dedupe_key" },
           )

@@ -44,7 +44,9 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
+  approveInstagramMentionActionImpl,
   publishInstagramMentionActionImpl,
+  rejectInstagramMentionActionImpl,
   saveInstagramConnectionActionImpl,
   syncInstagramActivityActionImpl,
   validateInstagramConnectionTokenActionImpl,
@@ -187,6 +189,104 @@ describe("instagram actions", () => {
     expect(location).toBe("/dashboard/instagram?message=Men%C3%A7%C3%A3o+publicada+no+feed+do+app+com+sucesso.&tone=success");
   });
 
+  it("does not allow approving a mention that is already published", async () => {
+    const maybeSingleMention = vi.fn().mockResolvedValue({
+      data: {
+        id: "mention-1",
+        salon_id: "salon-1",
+        platform: "instagram",
+        source_type: "post_mention",
+        media_type: "image",
+        author_username: "cliente_real",
+        caption: "Amei esse resultado",
+        permalink: "https://instagram.com/p/abc",
+        media_url: "https://cdn.instagram.example/mention.jpg",
+        thumbnail_url: null,
+        moderation_status: "approved",
+        published_post_id: "post-1",
+      },
+      error: null,
+    });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "instagram_mentions") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: maybeSingleMention,
+                })),
+              })),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      approveInstagramMentionActionImpl(
+        makeFormData({
+          mentionId: "mention-1",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe("/dashboard/instagram?message=Essa+men%C3%A7%C3%A3o+j%C3%A1+foi+publicada+no+feed+do+app.&tone=info");
+  });
+
+  it("does not allow rejecting a mention that is already published", async () => {
+    const maybeSingleMention = vi.fn().mockResolvedValue({
+      data: {
+        id: "mention-1",
+        salon_id: "salon-1",
+        platform: "instagram",
+        source_type: "post_mention",
+        media_type: "image",
+        author_username: "cliente_real",
+        caption: "Amei esse resultado",
+        permalink: "https://instagram.com/p/abc",
+        media_url: "https://cdn.instagram.example/mention.jpg",
+        thumbnail_url: null,
+        moderation_status: "approved",
+        published_post_id: "post-1",
+      },
+      error: null,
+    });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "instagram_mentions") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: maybeSingleMention,
+                })),
+              })),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      rejectInstagramMentionActionImpl(
+        makeFormData({
+          mentionId: "mention-1",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe("/dashboard/instagram?message=Essa+men%C3%A7%C3%A3o+j%C3%A1+foi+publicada+no+feed+do+app.&tone=info");
+  });
+
   it("validates a facebook-login instagram token through the connected page", async () => {
     const maybeSingle = vi.fn().mockResolvedValue({
       data: {
@@ -266,6 +366,11 @@ describe("instagram actions", () => {
       error: null,
     });
     const mentionsUpsert = vi.fn().mockResolvedValue({ error: null });
+    const selectExistingMentions = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        in: vi.fn().mockResolvedValue({ data: [], error: null }),
+      })),
+    }));
     const update = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),
     }));
@@ -285,6 +390,7 @@ describe("instagram actions", () => {
 
         if (table === "instagram_mentions") {
           return {
+            select: selectExistingMentions,
             upsert: mentionsUpsert,
           };
         }
@@ -396,6 +502,11 @@ describe("instagram actions", () => {
       error: null,
     });
     const mentionsUpsert = vi.fn().mockResolvedValue({ error: null });
+    const selectExistingMentions = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        in: vi.fn().mockResolvedValue({ data: [], error: null }),
+      })),
+    }));
     const update = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),
     }));
@@ -415,6 +526,7 @@ describe("instagram actions", () => {
 
         if (table === "instagram_mentions") {
           return {
+            select: selectExistingMentions,
             upsert: mentionsUpsert,
           };
         }
@@ -538,6 +650,11 @@ describe("instagram actions", () => {
       error: null,
     });
     const mentionsUpsert = vi.fn().mockResolvedValue({ error: null });
+    const selectExistingMentions = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        in: vi.fn().mockResolvedValue({ data: [], error: null }),
+      })),
+    }));
     const updateEq = vi.fn().mockResolvedValue({ error: null });
     const update = vi.fn(() => ({
       eq: updateEq,
@@ -558,6 +675,7 @@ describe("instagram actions", () => {
 
         if (table === "instagram_mentions") {
           return {
+            select: selectExistingMentions,
             upsert: mentionsUpsert,
           };
         }

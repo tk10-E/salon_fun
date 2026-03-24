@@ -252,6 +252,12 @@ export async function approveInstagramMentionActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(INSTAGRAM_PATH, "Menção inválida.", "error"));
   }
 
+  const mention = await loadMentionForOwner(salon.id, mentionId);
+
+  if (mention.published_post_id) {
+    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Essa menção já foi publicada no feed do app.", "info"));
+  }
+
   const { error } = await supabase
     .from("instagram_mentions")
     .update({
@@ -278,6 +284,12 @@ export async function rejectInstagramMentionActionImpl(formData: FormData) {
 
   if (!mentionId) {
     redirect(buildRedirectNotice(INSTAGRAM_PATH, "Menção inválida.", "error"));
+  }
+
+  const mention = await loadMentionForOwner(salon.id, mentionId);
+
+  if (mention.published_post_id) {
+    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Essa menção já foi publicada no feed do app.", "info"));
   }
 
   const { error } = await supabase

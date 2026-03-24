@@ -289,7 +289,7 @@ async function upsertMetaMedia(args: {
   items: MetaMediaNode[];
   sourceType: MentionSourceType;
 }) {
-  const rows = args.items.map((item) => ({
+  const baseRows = args.items.map((item) => ({
     salon_id: args.connection.salon_id,
     instagram_connection_id: args.connection.id,
     dedupe_key: sha256Hex(
@@ -320,9 +320,43 @@ async function upsertMetaMedia(args: {
     moderation_status: buildModerationStatus(args.connection, args.sourceType),
   }));
 
-  if (!rows.length) {
+  if (!baseRows.length) {
     return 0;
   }
+
+  const dedupeKeys = baseRows.map((row) => row.dedupe_key);
+  const { data: existingMentions, error: existingMentionsError } = await args.supabase
+    .from("instagram_mentions")
+    .select("dedupe_key,moderation_status,published_post_id")
+    .eq("salon_id", args.connection.salon_id)
+    .in("dedupe_key", dedupeKeys);
+
+  if (existingMentionsError) {
+    throw existingMentionsError;
+  }
+
+  const existingMentionsByKey = new Map(
+    ((existingMentions ?? []) as Array<{
+      dedupe_key: string;
+      moderation_status: "pending" | "approved" | "rejected" | "published";
+      published_post_id: string | null;
+    }>).map((mention) => [mention.dedupe_key, mention]),
+  );
+
+  const rows = baseRows.map((row) => {
+    const existingMention = existingMentionsByKey.get(row.dedupe_key);
+
+    if (!existingMention) {
+      return row;
+    }
+
+    return {
+      ...row,
+      moderation_status: existingMention.published_post_id
+        ? "published"
+        : existingMention.moderation_status,
+    };
+  });
 
   const { error } = await args.supabase
     .from("instagram_mentions")

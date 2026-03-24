@@ -97,6 +97,10 @@ function getMentionStatusLabel(status: InstagramMentionRecord["moderation_status
   }
 }
 
+function getEffectiveMentionStatus(mention: Pick<InstagramMentionRecord, "moderation_status" | "published_post_id">) {
+  return mention.published_post_id ? "published" : mention.moderation_status;
+}
+
 function getConnectionStatusLabel(status: InstagramConnectionRecord["connection_status"]) {
   switch (status) {
     case "error":
@@ -148,9 +152,9 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
 
   const safeConnection = (connection ?? null) as InstagramConnectionRecord | null;
   const safeMentions = ((mentions ?? []) as InstagramMentionRecord[]);
-  const pendingCount = safeMentions.filter((item) => item.moderation_status === "pending").length;
-  const approvedCount = safeMentions.filter((item) => item.moderation_status === "approved").length;
-  const publishedCount = safeMentions.filter((item) => item.moderation_status === "published").length;
+  const pendingCount = safeMentions.filter((item) => getEffectiveMentionStatus(item) === "pending").length;
+  const approvedCount = safeMentions.filter((item) => getEffectiveMentionStatus(item) === "approved").length;
+  const publishedCount = safeMentions.filter((item) => getEffectiveMentionStatus(item) === "published").length;
 
   return (
     <div className="two-column-grid">
@@ -322,9 +326,9 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           ) : (
             safeMentions.map((mention) => {
               const previewUrl = mention.thumbnail_url ?? mention.media_url;
-              const canPublish =
-                mention.moderation_status === "approved" ||
-                mention.moderation_status === "published";
+              const effectiveStatus = getEffectiveMentionStatus(mention);
+              const alreadyPublished = effectiveStatus === "published";
+              const canPublish = effectiveStatus === "approved" || alreadyPublished;
 
               return (
                 <article
@@ -349,7 +353,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                     <div className="feed-post-header">
                       <div>
                         <div className="feed-post-kicker">
-                          <span className="feed-format-badge">{getMentionStatusLabel(mention.moderation_status)}</span>
+                          <span className="feed-format-badge">{getMentionStatusLabel(effectiveStatus)}</span>
                           <span className="feed-format-badge">{getMentionPlatformLabel(mention.platform)}</span>
                           <span className="feed-post-date">
                             {mention.mentioned_at ? formatDateTime(mention.mentioned_at) : "Sem data disponível"}
@@ -382,7 +386,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                     {mention.moderation_note ? <p className="muted">{mention.moderation_note}</p> : null}
 
                     <div className="row-actions" style={{ marginTop: 14 }}>
-                      {mention.moderation_status !== "published" ? (
+                      {!alreadyPublished ? (
                         <>
                           <form action={approveInstagramMentionAction}>
                             <input type="hidden" name="mentionId" value={mention.id} />
@@ -405,9 +409,9 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                           <button
                             type="submit"
                             className="primary-button"
-                            disabled={mention.moderation_status === "published"}
+                            disabled={alreadyPublished}
                           >
-                            {mention.moderation_status === "published" ? "Já publicado" : "Publicar no feed do app"}
+                            {alreadyPublished ? "Já publicado" : "Publicar no feed do app"}
                           </button>
                         </form>
                       ) : null}

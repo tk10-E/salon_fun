@@ -174,4 +174,67 @@ describe("instagram page UI", () => {
     expect(screen.getByText("Página: Salon Fun")).toBeInTheDocument();
     expect(screen.getAllByText("Facebook").length).toBeGreaterThan(0);
   });
+
+  it("treats already linked mentions as published even if the old status comes back", async () => {
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "instagram_connections") {
+          return {
+            select: vi.fn(() =>
+              createQuery({
+                id: "connection-1",
+                instagram_user_id: "17841400000000000",
+                instagram_username: "docebeleza",
+                facebook_page_id: "123456789",
+                facebook_page_name: "Salon Fun",
+                connection_status: "active",
+                auto_publish_owned_posts: false,
+                require_mention_approval: true,
+                import_story_mentions: true,
+                last_webhook_at: "2026-03-23T13:00:00.000Z",
+                last_sync_at: "2026-03-23T12:00:00.000Z",
+                last_error: null,
+              }),
+            ),
+          };
+        }
+
+        if (table === "instagram_mentions") {
+          return {
+            select: vi.fn(() =>
+              createQuery([
+                {
+                  id: "mention-1",
+                  platform: "instagram",
+                  source_type: "post_mention",
+                  media_type: "image",
+                  author_username: "cliente_real",
+                  caption: "Amei o resultado no salão",
+                  permalink: "https://instagram.com/p/abc",
+                  media_url: "https://cdn.example.com/mention.jpg",
+                  thumbnail_url: null,
+                  moderation_status: "approved",
+                  moderation_note: null,
+                  mentioned_at: "2026-03-23T11:00:00.000Z",
+                  published_post_id: "post-1",
+                  published_at: "2026-03-23T11:10:00.000Z",
+                },
+              ]),
+            ),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const ui = await InstagramPage({});
+
+    render(ui);
+
+    expect(screen.getByText("Publicada")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Já publicado" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Aprovar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rejeitar" })).not.toBeInTheDocument();
+  });
 });
