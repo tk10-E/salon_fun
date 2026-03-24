@@ -70,6 +70,10 @@ export function getInstagramMetaAppSecret() {
   return appSecret;
 }
 
+export function getInstagramMetaConfigId() {
+  return process.env.INSTAGRAM_META_CONFIG_ID?.trim() || null;
+}
+
 export function getInstagramMetaRedirectOrigin() {
   const rawOrigin = process.env.INSTAGRAM_META_REDIRECT_ORIGIN?.trim();
 
@@ -175,11 +179,18 @@ export function buildInstagramMetaAuthorizeUrl(args: {
   state: string;
 }) {
   const url = new URL(`https://www.facebook.com/${INSTAGRAM_META_GRAPH_VERSION}/dialog/oauth`);
+  const configId = getInstagramMetaConfigId();
+
   url.searchParams.set("client_id", getInstagramMetaAppId());
   url.searchParams.set("redirect_uri", args.redirectUri);
   url.searchParams.set("state", args.state);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", INSTAGRAM_META_OAUTH_SCOPES.join(","));
+
+  if (configId) {
+    url.searchParams.set("config_id", configId);
+  } else {
+    url.searchParams.set("scope", INSTAGRAM_META_OAUTH_SCOPES.join(","));
+  }
 
   return url.toString();
 }

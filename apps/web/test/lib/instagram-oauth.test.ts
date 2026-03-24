@@ -12,17 +12,24 @@ import {
 describe("instagram oauth helpers", () => {
   const originalConnectionSecret = process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET;
   const originalMetaAppId = process.env.INSTAGRAM_META_APP_ID;
+  const originalMetaConfigId = process.env.INSTAGRAM_META_CONFIG_ID;
   const originalMetaRedirectOrigin = process.env.INSTAGRAM_META_REDIRECT_ORIGIN;
 
   beforeEach(() => {
     process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET = "test-instagram-connection-secret";
     process.env.INSTAGRAM_META_APP_ID = "1490951809405535";
+    delete process.env.INSTAGRAM_META_CONFIG_ID;
     delete process.env.INSTAGRAM_META_REDIRECT_ORIGIN;
   });
 
   afterEach(() => {
     process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET = originalConnectionSecret;
     process.env.INSTAGRAM_META_APP_ID = originalMetaAppId;
+    if (originalMetaConfigId) {
+      process.env.INSTAGRAM_META_CONFIG_ID = originalMetaConfigId;
+    } else {
+      delete process.env.INSTAGRAM_META_CONFIG_ID;
+    }
     process.env.INSTAGRAM_META_REDIRECT_ORIGIN = originalMetaRedirectOrigin;
   });
 
@@ -52,6 +59,21 @@ describe("instagram oauth helpers", () => {
     expect(url.searchParams.get("scope")).toContain("instagram_manage_comments");
     expect(url.searchParams.get("scope")).toContain("pages_manage_metadata");
     expect(url.searchParams.get("scope")).toContain("pages_show_list");
+  });
+
+  it("uses the Meta business login configuration when a config id is provided", () => {
+    process.env.INSTAGRAM_META_CONFIG_ID = "business-config-123";
+
+    const url = new URL(
+      buildInstagramMetaAuthorizeUrl({
+        redirectUri: "https://painel.example.com/dashboard/instagram/connect/callback",
+        state: "signed-state",
+      }),
+    );
+
+    expect(url.searchParams.get("config_id")).toBe("business-config-123");
+    expect(url.searchParams.has("scope")).toBe(false);
+    expect(url.searchParams.get("response_type")).toBe("code");
   });
 
   it("falls back to the cookie state when Meta does not echo the query state", () => {
