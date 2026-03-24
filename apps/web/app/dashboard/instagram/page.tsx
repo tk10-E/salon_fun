@@ -26,6 +26,7 @@ type InstagramConnectionRecord = {
   instagram_user_id: string;
   instagram_username: string;
   facebook_page_id: string | null;
+  facebook_page_name: string | null;
   connection_status: "active" | "inactive" | "error";
   auto_publish_owned_posts: boolean;
   require_mention_approval: boolean;
@@ -37,6 +38,7 @@ type InstagramConnectionRecord = {
 
 type InstagramMentionRecord = {
   id: string;
+  platform: "instagram" | "facebook";
   source_type: "post_mention" | "story_mention" | "owned_post" | "comment_mention";
   media_type: "image" | "video" | "carousel" | "story" | "unknown";
   author_username: string | null;
@@ -51,16 +53,34 @@ type InstagramMentionRecord = {
   published_at: string | null;
 };
 
-function getMentionSourceLabel(sourceType: InstagramMentionRecord["source_type"]) {
-  switch (sourceType) {
+function getMentionPlatformLabel(platform: InstagramMentionRecord["platform"]) {
+  return platform === "facebook" ? "Facebook" : "Instagram";
+}
+
+function getMentionAuthorLabel(mention: Pick<InstagramMentionRecord, "platform" | "author_username">) {
+  if (!mention.author_username) {
+    return "Autor não identificado";
+  }
+
+  if (mention.platform === "instagram" && !mention.author_username.startsWith("@")) {
+    return `@${mention.author_username}`;
+  }
+
+  return mention.author_username;
+}
+
+function getMentionSourceLabel(mention: Pick<InstagramMentionRecord, "platform" | "source_type">) {
+  const platformLabel = getMentionPlatformLabel(mention.platform);
+
+  switch (mention.source_type) {
     case "story_mention":
       return "Story marcando o salão";
     case "owned_post":
-      return "Post do próprio salão";
+      return `Post do próprio salão no ${platformLabel}`;
     case "comment_mention":
-      return "Menção em comentário";
+      return `Menção em comentário no ${platformLabel}`;
     default:
-      return "Post marcando o salão";
+      return `Post marcando o salão no ${platformLabel}`;
   }
 }
 
@@ -111,14 +131,14 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
     supabase
       .from("instagram_connections")
       .select(
-        "id,instagram_user_id,instagram_username,facebook_page_id,connection_status,auto_publish_owned_posts,require_mention_approval,import_story_mentions,last_webhook_at,last_sync_at,last_error",
+        "id,instagram_user_id,instagram_username,facebook_page_id,facebook_page_name,connection_status,auto_publish_owned_posts,require_mention_approval,import_story_mentions,last_webhook_at,last_sync_at,last_error",
       )
       .eq("salon_id", salon.id)
       .maybeSingle(),
     supabase
       .from("instagram_mentions")
       .select(
-        "id,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,moderation_note,mentioned_at,published_post_id,published_at",
+        "id,platform,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,moderation_note,mentioned_at,published_post_id,published_at",
       )
       .eq("salon_id", salon.id)
       .order("mentioned_at", { ascending: false, nullsFirst: false })
@@ -137,9 +157,9 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
       <section className="card content-card">
         <div className="section-heading">
           <div>
-            <h2>Instagram do salão</h2>
+            <h2>Instagram e Facebook do salão</h2>
             <p className="muted">
-              Conecte a conta profissional do salão para puxar posts e marcações para o app. Quando a mídia vier pronta, o feed publica sozinho e esta área vira seu acompanhamento e fallback.
+              Conecte a conta profissional do salão na Meta para puxar posts e marcações do Instagram e da página do Facebook para o app. Quando a mídia vier pronta, o feed publica sozinho e esta área vira seu acompanhamento e fallback.
             </p>
           </div>
         </div>
@@ -156,7 +176,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
             <h3>
               {safeConnection
                 ? "Sua conta profissional já está conectada"
-                : "Conecte o Instagram profissional do salão"}
+                : "Conecte o Instagram e a página do salão"}
             </h3>
             <p className="muted">
               A conexão acontece no fluxo oficial da Meta e a conta fica salva automaticamente no painel, sem expor etapas técnicas para o usuário.
@@ -173,6 +193,9 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                   Nenhuma conta vinculada
                 </span>
               )}
+              {safeConnection?.facebook_page_name ? (
+                <span className="instagram-info-pill">Página: {safeConnection.facebook_page_name}</span>
+              ) : null}
               {safeConnection?.last_sync_at ? (
                 <span className="instagram-info-pill">
                   Validada em {formatDateTime(safeConnection.last_sync_at)}
@@ -191,13 +214,13 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                 </form>
                 {canUseAutomaticMetaConnect ? (
                   <Link href="/dashboard/instagram/connect" className="primary-button">
-                    Reconectar Instagram
+                    Reconectar Meta
                   </Link>
                 ) : null}
               </div>
             ) : canUseAutomaticMetaConnect ? (
               <Link href="/dashboard/instagram/connect" className="primary-button">
-                Conectar Instagram
+                Conectar Meta
               </Link>
             ) : (
               <p className="muted">
@@ -241,7 +264,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
             <strong>Como esse painel funciona</strong>
             <ul className="feed-composer-tip-list">
               <li>Conecte a conta profissional do salão uma única vez.</li>
-              <li>As menções chegam nesta área para você revisar com calma.</li>
+              <li>As menções do Instagram e do Facebook chegam nesta área para você revisar com calma.</li>
               <li>Publique no app só o que fortalece a marca e a prova social do salão.</li>
             </ul>
           </article>
@@ -257,12 +280,12 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                       ? `Última atividade recebida em ${formatDateTime(safeConnection.last_webhook_at)}.`
                       : "Aguarde as próximas marcações aparecerem na caixa de menções."}
                   </li>
-                  <li>Se quiser atualizar a autorização, use o botão de reconexão acima.</li>
+                  <li>Se quiser atualizar a autorização do Instagram ou Facebook, use o botão de reconexão acima.</li>
                 </>
               ) : (
                 <>
                   <li>Você autoriza a conta em um fluxo seguro e guiado.</li>
-                  <li>As novas marcações começam a aparecer automaticamente nesta fila.</li>
+                  <li>As novas marcações do Instagram e da página do Facebook começam a aparecer automaticamente nesta fila.</li>
                   <li>O restante da moderação continua sendo feito aqui no painel.</li>
                 </>
               )}
@@ -313,11 +336,11 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                       <div className="feed-post-media feed-post-media--fit">
                         <img
                           src={previewUrl}
-                          alt={mention.author_username ? `Menção de @${mention.author_username}` : "Preview da menção"}
+                          alt={mention.author_username ? `Menção de ${getMentionAuthorLabel(mention)}` : "Preview da menção"}
                           className="feed-post-media__image"
                           style={{ width: "100%", height: "100%" }}
                         />
-                        <span className="feed-gallery-count">{getMentionSourceLabel(mention.source_type)}</span>
+                        <span className="feed-gallery-count">{getMentionSourceLabel(mention)}</span>
                       </div>
                     </div>
                   ) : null}
@@ -327,13 +350,14 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                       <div>
                         <div className="feed-post-kicker">
                           <span className="feed-format-badge">{getMentionStatusLabel(mention.moderation_status)}</span>
+                          <span className="feed-format-badge">{getMentionPlatformLabel(mention.platform)}</span>
                           <span className="feed-post-date">
                             {mention.mentioned_at ? formatDateTime(mention.mentioned_at) : "Sem data disponível"}
                           </span>
                         </div>
-                        <h3>{mention.author_username ? `@${mention.author_username}` : "Autor não identificado"}</h3>
+                        <h3>{getMentionAuthorLabel(mention)}</h3>
                         <p className="feed-post-signature">
-                          {getMentionSourceLabel(mention.source_type)}
+                          {getMentionSourceLabel(mention)}
                           {mention.media_type !== "unknown" ? ` • ${mention.media_type}` : ""}
                         </p>
                       </div>
@@ -343,15 +367,15 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                       {mention.source_type === "story_mention"
                         ? "Story recebida pela conta conectada. Se a mídia vier completa, ela também pode virar prova social no feed."
                         : mention.source_type === "owned_post"
-                        ? "Conteúdo do próprio salão vindo da conexão do Instagram, já preparado para entrar no feed do app."
-                        : "Prova social gerada por cliente marcando o salão no Instagram. Quando a mídia chega correta, o feed publica sozinho."}
+                        ? `Conteúdo do próprio salão vindo do ${getMentionPlatformLabel(mention.platform)}, já preparado para entrar no feed do app.`
+                        : `Prova social gerada por cliente marcando o salão no ${getMentionPlatformLabel(mention.platform)}. Quando a mídia chega correta, o feed publica sozinho.`}
                     </p>
 
                     {mention.caption ? <p className="feed-post-caption">{mention.caption}</p> : null}
                     {mention.permalink ? (
                       <p className="muted">
                         <a href={mention.permalink} target="_blank" rel="noreferrer">
-                          Ver no Instagram
+                          Ver no {getMentionPlatformLabel(mention.platform)}
                         </a>
                       </p>
                     ) : null}

@@ -8,12 +8,16 @@ const graphApiBaseUrl =
 const importedFeedAssetMaxBytes = 25 * 1024 * 1024;
 
 type SupabaseClient = ReturnType<typeof createClient>;
+type MetaPlatform = "instagram" | "facebook";
 
 type InstagramConnectionRow = {
   id: string;
   salon_id: string;
   instagram_user_id: string;
   instagram_username: string;
+  facebook_page_id: string | null;
+  facebook_page_name: string | null;
+  facebook_page_access_token_ciphertext: string | null;
   access_token_ciphertext: string;
   require_mention_approval: boolean;
   import_story_mentions: boolean;
@@ -30,11 +34,13 @@ type MentionMediaType = "image" | "video" | "carousel" | "story" | "unknown";
 
 type WebhookClassification = {
   handled: boolean;
+  platform: MetaPlatform;
   sourceType: MentionSourceType;
   eventType: string;
 };
 
 type MediaContext = {
+  platform: MetaPlatform;
   externalMediaId: string | null;
   authorUsername: string | null;
   caption: string | null;
@@ -48,6 +54,7 @@ type MediaContext = {
 type InstagramMentionRow = {
   id: string;
   salon_id: string;
+  platform: MetaPlatform;
   source_type: MentionSourceType;
   media_type: MentionMediaType;
   author_username: string | null;
@@ -173,6 +180,7 @@ async function decryptInstagramAccessToken(ciphertext: string): Promise<string> 
 function mapMediaType(rawType: string | null): MentionMediaType {
   switch ((rawType ?? "").toUpperCase()) {
     case "IMAGE":
+    case "PHOTO":
       return "image";
     case "VIDEO":
     case "REEL":
@@ -186,6 +194,73 @@ function mapMediaType(rawType: string | null): MentionMediaType {
   }
 }
 
+function collectFacebookAttachmentNodes(value: unknown): Array<Record<string, unknown>> {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const attachment = value as Record<string, unknown>;
+  const directNodes = Array.isArray(attachment.data)
+    ? attachment.data.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object",
+      )
+    : [];
+
+  const nestedNodes = directNodes.flatMap((node) =>
+    collectFacebookAttachmentNodes(node.subattachments),
+  );
+
+  return [...directNodes, ...nestedNodes];
+}
+
+function summarizeFacebookAttachments(value: unknown): {
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  mediaType: MentionMediaType;
+} {
+  const attachmentNodes = collectFacebookAttachmentNodes(value);
+  let fallbackImageUrl: string | null = null;
+
+  for (const node of attachmentNodes) {
+    const media = (node.media ?? {}) as Record<string, unknown>;
+    const imageNode = (media.image ?? {}) as Record<string, unknown>;
+    const imageUrl =
+      normalizeNonEmptyString(imageNode.src) ||
+      normalizeNonEmptyString(node.url) ||
+      normalizeNonEmptyString(media.source);
+    const sourceUrl = normalizeNonEmptyString(media.source);
+    const rawType =
+      normalizeNonEmptyString(node.media_type) ||
+      normalizeNonEmptyString(node.type);
+    const mediaType = mapMediaType(rawType);
+
+    fallbackImageUrl ??= imageUrl;
+
+    if (mediaType === "video" && sourceUrl) {
+      return {
+        mediaUrl: sourceUrl,
+        thumbnailUrl: imageUrl ?? sourceUrl,
+        mediaType: "video",
+      };
+    }
+
+    if (imageUrl) {
+      return {
+        mediaUrl: imageUrl,
+        thumbnailUrl: imageUrl,
+        mediaType: mediaType === "unknown" ? "image" : mediaType,
+      };
+    }
+  }
+
+  return {
+    mediaUrl: fallbackImageUrl,
+    thumbnailUrl: fallbackImageUrl,
+    mediaType: fallbackImageUrl ? "image" : "unknown",
+  };
+}
+
 function buildImportedAssetPath(salonId: string, url: string, fallbackExtension: string, prefix = "instagram"): string {
   const pathname = new URL(url).pathname;
   const extension = pathname.includes(".")
@@ -196,10 +271,17 @@ function buildImportedAssetPath(salonId: string, url: string, fallbackExtension:
 }
 
 function buildImportedPostTitle(mention: InstagramMentionRow): string {
+  const platformLabel = mention.platform === "facebook" ? "Facebook" : "Instagram";
+  const authorLabel = mention.author_username
+    ? mention.platform === "instagram" && !mention.author_username.startsWith("@")
+      ? `@${mention.author_username}`
+      : mention.author_username
+    : null;
+
   if (mention.source_type === "owned_post") {
-    return mention.author_username
-      ? `Instagram do salão • @${mention.author_username}`
-      : "Instagram do salão";
+    return authorLabel
+      ? `${platformLabel} do salão • ${authorLabel}`
+      : `${platformLabel} do salão`;
   }
 
   if (mention.source_type === "story_mention") {
@@ -208,9 +290,9 @@ function buildImportedPostTitle(mention: InstagramMentionRow): string {
       : "Story marcando o salão";
   }
 
-  return mention.author_username
-    ? `Cliente marcou o salão • @${mention.author_username}`
-    : "Cliente marcou o salão";
+  return authorLabel
+    ? `Cliente marcou o salão no ${platformLabel} • ${authorLabel}`
+    : `Cliente marcou o salão no ${platformLabel}`;
 }
 
 async function downloadImportedAsset(url: string, fallbackContentType: string) {
@@ -325,7 +407,7 @@ async function importMentionIntoFeed(args: {
       supabase,
       salonId: mention.salon_id,
       asset: coverAsset,
-      prefix: "instagram-cover",
+      prefix: `${mention.platform}-cover`,
     });
     uploadedPaths.push(coverPath);
 
@@ -338,7 +420,7 @@ async function importMentionIntoFeed(args: {
         supabase,
         salonId: mention.salon_id,
         asset: videoAsset,
-        prefix: "instagram-video",
+        prefix: `${mention.platform}-video`,
       });
       uploadedPaths.push(videoPath);
       postType = "reel";
@@ -357,6 +439,7 @@ async function importMentionIntoFeed(args: {
         created_by_user_id: ownerUserId,
         source_type: sourceType,
         instagram_mention_id: mention.id,
+        external_platform: mention.platform,
         external_permalink: mention.permalink,
         external_author_username: mention.author_username,
         external_media_url: mention.media_url,
@@ -411,14 +494,70 @@ function classifyWebhookChange(
   field: string | null,
   value: Record<string, unknown>,
   connection: InstagramConnectionRow,
+  platform: MetaPlatform,
 ): WebhookClassification {
   const normalizedField = (field ?? "").toLowerCase();
   const mediaProductType = normalizeNonEmptyString(value.media_product_type)?.toLowerCase();
   const authorUsername = normalizeNonEmptyString(value.username)?.toLowerCase();
 
+  if (platform === "facebook") {
+    const item = normalizeNonEmptyString(value.item)?.toLowerCase();
+    const actorId =
+      normalizeNonEmptyString((value.from as Record<string, unknown> | undefined)?.id) ||
+      normalizeNonEmptyString(value.sender_id);
+    const isOwnPageActivity =
+      Boolean(connection.facebook_page_id) &&
+      Boolean(actorId) &&
+      actorId === connection.facebook_page_id;
+
+    if (normalizedField.includes("mention")) {
+      return {
+        handled: true,
+        platform,
+        sourceType: "post_mention",
+        eventType: "facebook_mention",
+      };
+    }
+
+    if (normalizedField.includes("comment")) {
+      return {
+        handled: true,
+        platform,
+        sourceType: "comment_mention",
+        eventType: "facebook_comment_mention",
+      };
+    }
+
+    if (normalizedField === "feed") {
+      if (item === "comment") {
+        return {
+          handled: false,
+          platform,
+          sourceType: "comment_mention",
+          eventType: "facebook_comment",
+        };
+      }
+
+      return {
+        handled: true,
+        platform,
+        sourceType: isOwnPageActivity ? "owned_post" : "post_mention",
+        eventType: isOwnPageActivity ? "facebook_owned_post" : "facebook_feed_mention",
+      };
+    }
+
+    return {
+      handled: false,
+      platform,
+      sourceType: "post_mention",
+      eventType: `facebook_${normalizedField || "unknown"}`,
+    };
+  }
+
   if (normalizedField.includes("story")) {
     return {
       handled: connection.import_story_mentions,
+      platform,
       sourceType: "story_mention",
       eventType: "story_mention",
     };
@@ -427,6 +566,7 @@ function classifyWebhookChange(
   if (normalizedField.includes("mention")) {
     return {
       handled: true,
+      platform,
       sourceType: normalizedField.includes("comment") ? "comment_mention" : "post_mention",
       eventType: normalizedField.includes("comment") ? "comment_mention" : "mention",
     };
@@ -439,6 +579,7 @@ function classifyWebhookChange(
   ) {
     return {
       handled: true,
+      platform,
       sourceType: "owned_post",
       eventType: "owned_post",
     };
@@ -446,6 +587,7 @@ function classifyWebhookChange(
 
   return {
     handled: false,
+    platform,
     sourceType: "post_mention",
     eventType: normalizedField || "unknown",
   };
@@ -470,6 +612,7 @@ async function fetchInstagramMediaContext(args: {
 
   const payload = await response.json() as Record<string, unknown>;
   return {
+    platform: "instagram",
     externalMediaId: normalizeNonEmptyString(payload.id),
     authorUsername: normalizeNonEmptyString(payload.username),
     caption: normalizeNonEmptyString(payload.caption),
@@ -481,6 +624,50 @@ async function fetchInstagramMediaContext(args: {
   };
 }
 
+async function fetchFacebookMediaContext(args: {
+  mediaId: string;
+  accessToken: string;
+}): Promise<Partial<MediaContext>> {
+  const url = new URL(`${graphApiBaseUrl}/${args.mediaId}`);
+  url.searchParams.set(
+    "fields",
+    "id,message,story,permalink_url,created_time,from{id,name},full_picture,attachments{media,media_type,type,url,subattachments}",
+  );
+  url.searchParams.set("access_token", args.accessToken);
+
+  const response = await fetch(url, { method: "GET" });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`facebook_graph_lookup_failed:${detail}`);
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  const fromNode = (payload.from ?? {}) as Record<string, unknown>;
+  const attachmentSummary = summarizeFacebookAttachments(payload.attachments);
+  const fallbackPreview = normalizeNonEmptyString(payload.full_picture);
+  const mediaUrl = attachmentSummary.mediaUrl ?? fallbackPreview;
+  const thumbnailUrl = attachmentSummary.thumbnailUrl ?? fallbackPreview ?? mediaUrl;
+
+  return {
+    platform: "facebook",
+    externalMediaId: normalizeNonEmptyString(payload.id),
+    authorUsername:
+      normalizeNonEmptyString(fromNode.name) ||
+      normalizeNonEmptyString(fromNode.id),
+    caption:
+      normalizeNonEmptyString(payload.message) ||
+      normalizeNonEmptyString(payload.story),
+    permalink: normalizeNonEmptyString(payload.permalink_url),
+    mediaUrl,
+    thumbnailUrl,
+    mediaType:
+      attachmentSummary.mediaType === "unknown" && mediaUrl
+        ? "image"
+        : attachmentSummary.mediaType,
+    mentionedAt: normalizeNonEmptyString(payload.created_time),
+  };
+}
+
 async function resolveMediaContext(args: {
   change: Record<string, unknown>;
   classification: WebhookClassification;
@@ -488,35 +675,55 @@ async function resolveMediaContext(args: {
 }): Promise<MediaContext> {
   const value = (args.change.value ?? {}) as Record<string, unknown>;
   const externalMediaId =
+    normalizeNonEmptyString(value.post_id) ||
+    normalizeNonEmptyString(value.comment_id) ||
     normalizeNonEmptyString(value.media_id) ||
     normalizeNonEmptyString(value.id) ||
     normalizeNonEmptyString((value.media as Record<string, unknown> | undefined)?.id) ||
     null;
+  const facebookAttachmentSummary = summarizeFacebookAttachments(value.attachments);
+  const fallbackFacebookPreview = normalizeNonEmptyString(value.full_picture);
 
   const directContext: MediaContext = {
+    platform: args.classification.platform,
     externalMediaId,
     authorUsername:
       normalizeNonEmptyString(value.username) ||
+      normalizeNonEmptyString((value.from as Record<string, unknown> | undefined)?.name) ||
       normalizeNonEmptyString((value.from as Record<string, unknown> | undefined)?.username) ||
+      normalizeNonEmptyString(value.sender_name) ||
       null,
     caption:
       normalizeNonEmptyString(value.caption) ||
       normalizeNonEmptyString(value.text) ||
       normalizeNonEmptyString(value.message) ||
+      normalizeNonEmptyString(value.story) ||
       null,
-    permalink: normalizeNonEmptyString(value.permalink),
+    permalink:
+      normalizeNonEmptyString(value.permalink) ||
+      normalizeNonEmptyString(value.permalink_url),
     mediaUrl:
       normalizeNonEmptyString(value.media_url) ||
+      facebookAttachmentSummary.mediaUrl ||
+      fallbackFacebookPreview ||
       normalizeNonEmptyString((value.media as Record<string, unknown> | undefined)?.media_url) ||
       null,
     thumbnailUrl:
       normalizeNonEmptyString(value.thumbnail_url) ||
+      facebookAttachmentSummary.thumbnailUrl ||
+      fallbackFacebookPreview ||
       normalizeNonEmptyString((value.media as Record<string, unknown> | undefined)?.thumbnail_url) ||
       null,
-    mediaType: mapMediaType(
-      normalizeNonEmptyString(value.media_type) ||
-        normalizeNonEmptyString(value.media_product_type),
-    ),
+    mediaType:
+      args.classification.platform === "facebook"
+        ? facebookAttachmentSummary.mediaType === "unknown" &&
+          (facebookAttachmentSummary.mediaUrl || fallbackFacebookPreview)
+          ? "image"
+          : facebookAttachmentSummary.mediaType
+        : mapMediaType(
+            normalizeNonEmptyString(value.media_type) ||
+              normalizeNonEmptyString(value.media_product_type),
+          ),
     mentionedAt:
       normalizeNonEmptyString(value.timestamp) ||
       normalizeNonEmptyString(value.created_time) ||
@@ -531,13 +738,25 @@ async function resolveMediaContext(args: {
   }
 
   try {
-    const accessToken = await decryptInstagramAccessToken(
-      args.connection.access_token_ciphertext,
-    );
-    const fetchedContext = await fetchInstagramMediaContext({
-      mediaId: directContext.externalMediaId,
-      accessToken,
-    });
+    const accessToken =
+      args.classification.platform === "facebook" &&
+      args.connection.facebook_page_access_token_ciphertext
+        ? await decryptInstagramAccessToken(
+            args.connection.facebook_page_access_token_ciphertext,
+          )
+        : await decryptInstagramAccessToken(
+            args.connection.access_token_ciphertext,
+          );
+    const fetchedContext =
+      args.classification.platform === "facebook"
+        ? await fetchFacebookMediaContext({
+            mediaId: directContext.externalMediaId,
+            accessToken,
+          })
+        : await fetchInstagramMediaContext({
+            mediaId: directContext.externalMediaId,
+            accessToken,
+          });
 
     return {
       ...directContext,
@@ -602,42 +821,16 @@ async function processWebhookPayload(
 
   for (const entry of entries) {
     const row = (entry ?? {}) as Record<string, unknown>;
-    const instagramUserId =
+    const entryLookupKey =
       normalizeNonEmptyString(row.id) ||
       normalizeNonEmptyString(row.instagram_user_id) ||
+      normalizeNonEmptyString(row.facebook_page_id) ||
       normalizeNonEmptyString((row.value as Record<string, unknown> | undefined)?.instagram_user_id);
 
-    if (!instagramUserId) {
+    if (!entryLookupKey) {
       ignored += 1;
       continue;
     }
-
-    if (!connectionCache.has(instagramUserId)) {
-      const { data } = await supabase
-        .from("instagram_connections")
-        .select(
-          "id,salon_id,instagram_user_id,instagram_username,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
-        )
-        .eq("instagram_user_id", instagramUserId)
-        .eq("connection_status", "active")
-        .maybeSingle();
-
-      connectionCache.set(instagramUserId, (data ?? null) as InstagramConnectionRow | null);
-    }
-
-    const connection = connectionCache.get(instagramUserId);
-    if (!connection) {
-      ignored += 1;
-      continue;
-    }
-
-    await supabase
-      .from("instagram_connections")
-      .update({
-        last_webhook_at: new Date().toISOString(),
-        last_error: null,
-      })
-      .eq("id", connection.id);
 
     const changes = Array.isArray(row.changes) ? row.changes : [];
     if (!changes.length) {
@@ -649,12 +842,66 @@ async function processWebhookPayload(
       received += 1;
       const change = (rawChange ?? {}) as Record<string, unknown>;
       const value = (change.value ?? {}) as Record<string, unknown>;
+      const changeInstagramUserId =
+        normalizeNonEmptyString(value.instagram_user_id) ||
+        normalizeNonEmptyString(value.ig_id);
+      const connectionLookupKey = changeInstagramUserId || entryLookupKey;
+
+      if (!connectionLookupKey) {
+        ignored += 1;
+        continue;
+      }
+
+      if (!connectionCache.has(connectionLookupKey)) {
+        const { data } = await supabase
+          .from("instagram_connections")
+          .select(
+            "id,salon_id,instagram_user_id,instagram_username,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+          )
+          .or(
+            `instagram_user_id.eq.${connectionLookupKey},facebook_page_id.eq.${connectionLookupKey}`,
+          )
+          .eq("connection_status", "active")
+          .maybeSingle();
+
+        connectionCache.set(
+          connectionLookupKey,
+          (data ?? null) as InstagramConnectionRow | null,
+        );
+      }
+
+      const connection = connectionCache.get(connectionLookupKey);
+      if (!connection) {
+        ignored += 1;
+        continue;
+      }
+
+      const entryPlatform: MetaPlatform = changeInstagramUserId
+        ? "instagram"
+        : connection.facebook_page_id === connectionLookupKey
+          ? "facebook"
+          : "instagram";
       const field = normalizeNonEmptyString(change.field);
-      const classification = classifyWebhookChange(field, value, connection);
+      const classification = classifyWebhookChange(
+        field,
+        value,
+        connection,
+        entryPlatform,
+      );
+
+      await supabase
+        .from("instagram_connections")
+        .update({
+          last_webhook_at: new Date().toISOString(),
+          last_error: null,
+        })
+        .eq("id", connection.id);
+
       const eventKey = await sha256Hex(
         JSON.stringify({
           salonId: connection.salon_id,
-          instagramUserId,
+          platform: entryPlatform,
+          connectionLookupKey,
           field,
           value,
           entryTime: row.time ?? null,
@@ -684,6 +931,7 @@ async function processWebhookPayload(
         const dedupeKey = await sha256Hex(
           JSON.stringify({
             salonId: connection.salon_id,
+            platform: mediaContext.platform,
             sourceType: classification.sourceType,
             externalMediaId: mediaContext.externalMediaId,
             permalink: mediaContext.permalink,
@@ -705,6 +953,7 @@ async function processWebhookPayload(
               salon_id: connection.salon_id,
               instagram_connection_id: connection.id,
               dedupe_key: dedupeKey,
+              platform: mediaContext.platform,
               external_media_id: mediaContext.externalMediaId,
               source_type: classification.sourceType,
               media_type: mediaContext.mediaType,
@@ -719,7 +968,7 @@ async function processWebhookPayload(
             { onConflict: "dedupe_key" },
           )
           .select(
-            "id,salon_id,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
+            "id,salon_id,platform,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
           )
           .single();
 

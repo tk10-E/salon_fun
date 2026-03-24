@@ -85,6 +85,7 @@ describe("instagram page UI", () => {
                 instagram_user_id: "17841400000000000",
                 instagram_username: "docebeleza",
                 facebook_page_id: "123456789",
+                facebook_page_name: "Salon Fun",
                 connection_status: "active",
                 auto_publish_owned_posts: false,
                 require_mention_approval: true,
@@ -103,6 +104,7 @@ describe("instagram page UI", () => {
               createQuery([
                 {
                   id: "mention-1",
+                  platform: "facebook",
                   source_type: "post_mention",
                   media_type: "image",
                   author_username: "cliente_real",
@@ -148,10 +150,10 @@ describe("instagram page UI", () => {
 
     render(ui);
 
-    expect(screen.getByRole("heading", { name: "Instagram do salão" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Instagram e Facebook do salão" })).toBeInTheDocument();
     expect(screen.getByText("Conexão do Instagram atualizada com sucesso.")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Reconectar Instagram" }),
+      screen.getByRole("link", { name: "Reconectar Meta" }),
     ).toHaveAttribute("href", "/dashboard/instagram/connect");
     expect(screen.getByRole("button", { name: "Sincronizar agora" })).toBeInTheDocument();
     expect(screen.getByText("Sua conta profissional já está conectada")).toBeInTheDocument();
@@ -164,10 +166,12 @@ describe("instagram page UI", () => {
     expect(screen.queryByRole("button", { name: "Validar token" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Desconectar" })).not.toBeInTheDocument();
     expect(screen.getByText("Caixa de menções")).toBeInTheDocument();
-    expect(screen.getByText("@cliente_real")).toBeInTheDocument();
+    expect(screen.getByText("cliente_real")).toBeInTheDocument();
     expect(screen.getByText("Amei o resultado no salão")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Aprovar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rejeitar" })).toBeInTheDocument();
     expect(screen.getByText("Resumo da conexão atual")).toBeInTheDocument();
+    expect(screen.getByText("Página: Salon Fun")).toBeInTheDocument();
+    expect(screen.getAllByText("Facebook").length).toBeGreaterThan(0);
   });
 });

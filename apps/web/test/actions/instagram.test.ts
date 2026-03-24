@@ -132,6 +132,7 @@ describe("instagram actions", () => {
       data: {
         id: "mention-1",
         salon_id: "salon-1",
+        platform: "instagram",
         source_type: "post_mention",
         media_type: "image",
         author_username: "cliente_real",
@@ -373,7 +374,149 @@ describe("instagram actions", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
     expect(location).toBe(
-      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+do+Instagram+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
+      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+da+Meta+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
+    );
+  });
+
+  it("syncs facebook page posts and tagged mentions into the moderation inbox", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "connection-1",
+        salon_id: "salon-1",
+        instagram_user_id: "17841442717327141",
+        instagram_username: "jctecnologi07",
+        facebook_page_id: "1120032767849275",
+        facebook_page_name: "Salon Fun",
+        facebook_page_access_token_ciphertext: encryptInstagramAccessToken("EAAB-page-token"),
+        access_token_ciphertext: encryptInstagramAccessToken("EAAB-test-token"),
+        require_mention_approval: true,
+        import_story_mentions: true,
+        auto_publish_owned_posts: false,
+      },
+      error: null,
+    });
+    const mentionsUpsert = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "instagram_connections") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle,
+              })),
+            })),
+            update,
+          };
+        }
+
+        if (table === "instagram_mentions") {
+          return {
+            upsert: mentionsUpsert,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "fb-post-1",
+                message: "Post da página",
+                permalink_url: "https://facebook.com/page/posts/fb-post-1",
+                created_time: "2026-03-24T12:00:00.000Z",
+                from: {
+                  id: "1120032767849275",
+                  name: "Salon Fun",
+                },
+                full_picture: "https://cdn.facebook.example/page-post.jpg",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "fb-tag-1",
+                message: "Cliente marcando a página",
+                permalink_url: "https://facebook.com/page/posts/fb-tag-1",
+                created_time: "2026-03-24T13:00:00.000Z",
+                from: {
+                  id: "user-99",
+                  name: "Cliente Real",
+                },
+                full_picture: "https://cdn.facebook.example/tagged-post.jpg",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ) as typeof fetch;
+
+    autoPublishInstagramMentionsMock.mockResolvedValue({
+      publishedCount: 2,
+      warnings: [],
+    });
+
+    const location = await captureRedirect(
+      syncInstagramActivityActionImpl(),
+      redirectMock,
+    );
+
+    expect(mentionsUpsert).toHaveBeenNthCalledWith(
+      1,
+      [
+        expect.objectContaining({
+          salon_id: "salon-1",
+          platform: "facebook",
+          source_type: "owned_post",
+          external_media_id: "fb-post-1",
+          author_username: "Salon Fun",
+        }),
+      ],
+      { onConflict: "dedupe_key" },
+    );
+    expect(mentionsUpsert).toHaveBeenNthCalledWith(
+      2,
+      [
+        expect.objectContaining({
+          salon_id: "salon-1",
+          platform: "facebook",
+          source_type: "post_mention",
+          external_media_id: "fb-tag-1",
+          author_username: "Cliente Real",
+          moderation_status: "pending",
+        }),
+      ],
+      { onConflict: "dedupe_key" },
+    );
+    expect(location).toBe(
+      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+da+Meta+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
     );
   });
 });

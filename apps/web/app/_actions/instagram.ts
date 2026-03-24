@@ -17,6 +17,7 @@ const FEED_PATH = "/dashboard/feed";
 type InstagramMentionRecord = {
   id: string;
   salon_id: string;
+  platform: "instagram" | "facebook";
   source_type: "post_mention" | "story_mention" | "owned_post" | "comment_mention";
   media_type: "image" | "video" | "carousel" | "story" | "unknown";
   author_username: string | null;
@@ -42,7 +43,7 @@ async function loadMentionForOwner(salonId: string, mentionId: string) {
   const { data, error } = await supabase
     .from("instagram_mentions")
     .select(
-      "id,salon_id,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
+      "id,salon_id,platform,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
     )
     .eq("id", mentionId)
     .eq("salon_id", salonId)
@@ -60,7 +61,7 @@ async function loadInstagramConnectionForOwner(salonId: string) {
   const { data, error } = await supabase
     .from("instagram_connections")
     .select(
-      "id,salon_id,instagram_user_id,instagram_username,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+      "id,salon_id,instagram_user_id,instagram_username,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
     )
     .eq("salon_id", salonId)
     .maybeSingle();
@@ -86,7 +87,7 @@ export async function saveInstagramConnectionActionImpl(formData: FormData) {
 
   const { data: existingConnection } = await supabase
     .from("instagram_connections")
-    .select("id, access_token_ciphertext")
+    .select("id, access_token_ciphertext, facebook_page_name, facebook_page_access_token_ciphertext")
     .eq("salon_id", salon.id)
     .maybeSingle();
 
@@ -110,6 +111,9 @@ export async function saveInstagramConnectionActionImpl(formData: FormData) {
         instagram_user_id: instagramUserId,
         instagram_username: instagramUsername.replace(/^@/, ""),
         facebook_page_id: facebookPageId,
+        facebook_page_name: existingConnection?.facebook_page_name ?? null,
+        facebook_page_access_token_ciphertext:
+          existingConnection?.facebook_page_access_token_ciphertext ?? null,
         access_token_ciphertext: accessTokenCiphertext,
         connection_status: "active",
         auto_publish_owned_posts: autoPublishOwnedPosts,
@@ -189,11 +193,14 @@ export async function syncInstagramActivityActionImpl() {
     } else {
       noticeMessage =
         importedItems > 0
-          ? `Sincronizacao concluida. ${importedItems} item(ns) do Instagram foram atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`
-          : "Sincronizacao concluida. Nenhum conteudo novo foi encontrado agora.";
+          ? `Sincronizacao concluida. ${importedItems} item(ns) da Meta foram atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`
+          : "Sincronizacao concluida. Nenhum conteudo novo da Meta foi encontrado agora.";
     }
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Nao foi possivel sincronizar o Instagram agora.";
+    const detail =
+      error instanceof Error
+        ? error.message
+        : "Nao foi possivel sincronizar Instagram e Facebook agora.";
     await supabase
       .from("instagram_connections")
       .update({

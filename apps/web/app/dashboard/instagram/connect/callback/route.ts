@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
     const { data: existingConnection } = await supabase
       .from("instagram_connections")
       .select(
-        "id,facebook_page_id,instagram_user_id,instagram_username,auto_publish_owned_posts,require_mention_approval,import_story_mentions",
+        "id,facebook_page_id,instagram_user_id,instagram_username,facebook_page_access_token_ciphertext,auto_publish_owned_posts,require_mention_approval,import_story_mentions",
       )
       .eq("salon_id", salon.id)
       .maybeSingle();
@@ -157,6 +157,9 @@ export async function GET(request: NextRequest) {
     }
 
     const encryptedAccessToken = encryptInstagramAccessToken(accessToken);
+    const encryptedPageAccessToken = selectedAccount.access_token
+      ? encryptInstagramAccessToken(selectedAccount.access_token)
+      : existingConnection?.facebook_page_access_token_ciphertext ?? null;
     const connectionWarnings: string[] = [];
 
     if (selectedAccount.access_token) {
@@ -180,6 +183,8 @@ export async function GET(request: NextRequest) {
         instagram_user_id: String(selectedAccount.instagram_business_account.id),
         instagram_username: selectedAccount.instagram_business_account.username.replace(/^@/, ""),
         facebook_page_id: selectedAccount.id,
+        facebook_page_name: selectedAccount.name ?? null,
+        facebook_page_access_token_ciphertext: encryptedPageAccessToken,
         access_token_ciphertext: encryptedAccessToken,
         connection_status: "active",
         auto_publish_owned_posts: existingConnection?.auto_publish_owned_posts ?? false,
@@ -191,7 +196,7 @@ export async function GET(request: NextRequest) {
       { onConflict: "salon_id" },
     )
       .select(
-        "id,salon_id,instagram_user_id,instagram_username,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+        "id,salon_id,instagram_user_id,instagram_username,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
       )
       .single();
 

@@ -9,6 +9,7 @@ export const INSTAGRAM_META_OAUTH_SCOPES = [
   "pages_manage_metadata",
   "pages_show_list",
   "pages_read_engagement",
+  "pages_read_user_content",
   "business_management",
 ] as const;
 

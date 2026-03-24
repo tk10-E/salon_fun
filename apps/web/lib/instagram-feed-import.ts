@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 
 const IMPORTED_FEED_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 
+type MetaPlatform = "instagram" | "facebook";
 type InstagramMentionMediaType = "image" | "video" | "carousel" | "story" | "unknown";
 
 export type InstagramFeedImportMention = {
   id: string;
   salon_id: string;
+  platform: MetaPlatform;
   source_type: "post_mention" | "story_mention" | "owned_post" | "comment_mention";
   media_type: InstagramMentionMediaType;
   author_username: string | null;
@@ -35,10 +37,17 @@ function buildImportedAssetPath(salonId: string, url: string, fallbackExtension:
 }
 
 function buildImportedPostTitle(mention: InstagramFeedImportMention) {
+  const platformLabel = mention.platform === "facebook" ? "Facebook" : "Instagram";
+  const authorLabel = mention.author_username
+    ? mention.platform === "instagram" && !mention.author_username.startsWith("@")
+      ? `@${mention.author_username}`
+      : mention.author_username
+    : null;
+
   if (mention.source_type === "owned_post") {
-    return mention.author_username
-      ? `Instagram do salão • @${mention.author_username}`
-      : "Instagram do salão";
+    return authorLabel
+      ? `${platformLabel} do salão • ${authorLabel}`
+      : `${platformLabel} do salão`;
   }
 
   if (mention.source_type === "story_mention") {
@@ -47,9 +56,9 @@ function buildImportedPostTitle(mention: InstagramFeedImportMention) {
       : "Story marcando o salão";
   }
 
-  return mention.author_username
-    ? `Cliente marcou o salão • @${mention.author_username}`
-    : "Cliente marcou o salão";
+  return authorLabel
+    ? `Cliente marcou o salão no ${platformLabel} • ${authorLabel}`
+    : `Cliente marcou o salão no ${platformLabel}`;
 }
 
 async function downloadImportedAsset(url: string, fallbackContentType: string) {
@@ -142,7 +151,7 @@ export async function importInstagramMentionIntoFeed(args: {
       supabase,
       salonId,
       asset: coverAsset,
-      prefix: "instagram-cover",
+      prefix: `${mention.platform}-cover`,
     });
     uploadedPaths.push(coverPath);
 
@@ -155,7 +164,7 @@ export async function importInstagramMentionIntoFeed(args: {
         supabase,
         salonId,
         asset: videoAsset,
-        prefix: "instagram-video",
+        prefix: `${mention.platform}-video`,
       });
       uploadedPaths.push(videoPath);
       postType = "reel";
@@ -177,6 +186,7 @@ export async function importInstagramMentionIntoFeed(args: {
         created_by_user_id: ownerUserId,
         source_type: sourceType,
         instagram_mention_id: mention.id,
+        external_platform: mention.platform,
         external_permalink: mention.permalink,
         external_author_username: mention.author_username,
         external_media_url: mention.media_url,
@@ -238,7 +248,7 @@ export async function autoPublishInstagramMentions(args: {
   const { data, error } = await args.supabase
     .from("instagram_mentions")
     .select(
-      "id,salon_id,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
+      "id,salon_id,platform,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
     )
     .eq("salon_id", args.salonId)
     .is("published_post_id", null)
