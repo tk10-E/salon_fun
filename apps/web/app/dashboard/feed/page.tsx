@@ -187,9 +187,15 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                   {post.postType === "before_after" && post.images.length >= 2 ? (
                     <div className="feed-before-after-grid">
                       {post.images.slice(0, 2).map((image, index) => (
-                        <div key={image.id} className="feed-before-after-frame">
+                        <div key={image.id} className="feed-before-after-frame feed-before-after-frame--fit">
                           <span className="feed-before-after-label">{index === 0 ? "Antes" : "Depois"}</span>
-                          <Image src={image.publicUrl} alt={`${post.title} ${index === 0 ? "antes" : "depois"}`} fill sizes="(max-width: 960px) 50vw, 200px" />
+                          <Image
+                            src={image.publicUrl}
+                            alt={`${post.title} ${index === 0 ? "antes" : "depois"}`}
+                            className="feed-post-media__image"
+                            fill
+                            sizes="(max-width: 960px) 50vw, 200px"
+                          />
                         </div>
                       ))}
                     </div>
@@ -201,8 +207,14 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                       <span className="feed-gallery-count">Vídeo curto</span>
                     </div>
                   ) : (
-                    <div className="feed-post-media">
-                      <Image src={post.images[0].publicUrl} alt={post.title} fill sizes="(max-width: 960px) 100vw, 420px" />
+                    <div className="feed-post-media feed-post-media--fit">
+                      <Image
+                        src={post.images[0].publicUrl}
+                        alt={post.title}
+                        className="feed-post-media__image"
+                        fill
+                        sizes="(max-width: 960px) 100vw, 420px"
+                      />
                       {post.images.length > 1 ? <span className="feed-gallery-count">{post.images.length} fotos</span> : null}
                     </div>
                   )}

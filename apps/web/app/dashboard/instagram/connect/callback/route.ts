@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { buildRedirectNotice } from "@/app/_actions/shared";
 import { getOwnerSalon } from "@/lib/auth";
+import { autoPublishInstagramMentions } from "@/lib/instagram-feed-import";
 import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
 import { loadMetaAccounts, subscribeMetaPageToWebhook, syncInstagramActivity } from "@/lib/instagram-sync";
 import {
@@ -17,6 +18,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 
 const INSTAGRAM_PATH = "/dashboard/instagram";
+const FEED_PATH = "/dashboard/feed";
 
 type MetaTokenResponse = {
   access_token?: string;
@@ -202,6 +204,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
+      let autoPublishedCount = 0;
       const syncResult = await syncInstagramActivity({
         supabase,
         connection: savedConnection,
@@ -211,6 +214,17 @@ export async function GET(request: NextRequest) {
         connectionWarnings.push(...syncResult.warnings);
       }
 
+      const autoPublishResult = await autoPublishInstagramMentions({
+        supabase,
+        salonId: salon.id,
+        ownerUserId: user.id,
+      });
+      autoPublishedCount = autoPublishResult.publishedCount;
+
+      if (autoPublishResult.warnings.length) {
+        connectionWarnings.push(...autoPublishResult.warnings);
+      }
+
       await supabase
         .from("instagram_connections")
         .update({
@@ -218,6 +232,10 @@ export async function GET(request: NextRequest) {
           last_error: connectionWarnings.length ? connectionWarnings.join(" | ").slice(0, 600) : null,
         })
         .eq("id", savedConnection.id);
+
+      if (autoPublishedCount > 0) {
+        revalidatePath(FEED_PATH);
+      }
     } catch (error) {
       connectionWarnings.push(
         error instanceof Error

@@ -11,11 +11,15 @@ const {
   redirectMock,
   revalidatePathMock,
   requireOwnerSalonMock,
+  autoPublishInstagramMentionsMock,
+  importInstagramMentionIntoFeedMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   redirectMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
+  autoPublishInstagramMentionsMock: vi.fn(),
+  importInstagramMentionIntoFeedMock: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -24,6 +28,11 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/auth", () => ({
   requireOwnerSalon: requireOwnerSalonMock,
+}));
+
+vi.mock("@/lib/instagram-feed-import", () => ({
+  autoPublishInstagramMentions: autoPublishInstagramMentionsMock,
+  importInstagramMentionIntoFeed: importInstagramMentionIntoFeedMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -55,6 +64,14 @@ describe("instagram actions", () => {
     requireOwnerSalonMock.mockResolvedValue({
       salon: { id: "salon-1" },
       user: { id: "owner-1" },
+    });
+    autoPublishInstagramMentionsMock.mockResolvedValue({
+      publishedCount: 0,
+      warnings: [],
+    });
+    importInstagramMentionIntoFeedMock.mockResolvedValue({
+      postId: "post-1",
+      created: true,
     });
   });
 
@@ -127,23 +144,6 @@ describe("instagram actions", () => {
       },
       error: null,
     });
-    const upload = vi.fn().mockResolvedValue({ error: null });
-    const remove = vi.fn().mockResolvedValue(undefined);
-    const insertPost = vi.fn(() => ({
-      select: vi.fn(() => ({
-        single: vi.fn().mockResolvedValue({
-          data: { id: "post-1" },
-          error: null,
-        }),
-      })),
-    }));
-    const insertGallery = vi.fn().mockResolvedValue({ error: null });
-    const updateMention = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    }));
-
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "instagram_mentions") {
@@ -155,40 +155,12 @@ describe("instagram actions", () => {
                 })),
               })),
             })),
-            update: updateMention,
-          };
-        }
-
-        if (table === "salon_posts") {
-          return {
-            insert: insertPost,
-          };
-        }
-
-        if (table === "salon_post_images") {
-          return {
-            insert: insertGallery,
           };
         }
 
         throw new Error(`Unexpected table ${table}`);
       }),
-      storage: {
-        from: vi.fn(() => ({
-          upload,
-          remove,
-        })),
-      },
     });
-
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(Uint8Array.from([1, 2, 3]), {
-        status: 200,
-        headers: {
-          "content-type": "image/jpeg",
-        },
-      }),
-    ) as typeof fetch;
 
     const location = await captureRedirect(
       publishInstagramMentionActionImpl(
@@ -199,21 +171,16 @@ describe("instagram actions", () => {
       redirectMock,
     );
 
-    expect(upload).toHaveBeenCalledTimes(1);
-    expect(insertPost).toHaveBeenCalledWith(
+    expect(importInstagramMentionIntoFeedMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        salon_id: "salon-1",
-        source_type: "instagram_mention",
-        instagram_mention_id: "mention-1",
-        external_author_username: "cliente_real",
+        salonId: "salon-1",
+        ownerUserId: "owner-1",
+        mention: expect.objectContaining({
+          id: "mention-1",
+          author_username: "cliente_real",
+        }),
       }),
     );
-    expect(insertGallery).toHaveBeenCalledWith([
-      expect.objectContaining({
-        post_id: "post-1",
-        sort_order: 0,
-      }),
-    ]);
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
     expect(location).toBe("/dashboard/instagram?message=Men%C3%A7%C3%A3o+publicada+no+feed+do+app+com+sucesso.&tone=success");
@@ -363,6 +330,10 @@ describe("instagram actions", () => {
           { status: 200, headers: { "content-type": "application/json" } },
         ),
       ) as typeof fetch;
+    autoPublishInstagramMentionsMock.mockResolvedValue({
+      publishedCount: 2,
+      warnings: [],
+    });
 
     const location = await captureRedirect(syncInstagramActivityActionImpl(), redirectMock);
 
@@ -394,9 +365,15 @@ describe("instagram actions", () => {
         last_error: null,
       }),
     );
+    expect(autoPublishInstagramMentionsMock).toHaveBeenCalledWith({
+      supabase: expect.anything(),
+      salonId: "salon-1",
+      ownerUserId: "owner-1",
+    });
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
     expect(location).toBe(
-      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+do+Instagram+foram+atualizados.&tone=success",
+      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+do+Instagram+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
     );
   });
 });

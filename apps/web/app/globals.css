@@ -2325,7 +2325,7 @@ a,
 
 .feed-post-media {
   position: relative;
-  min-height: 300px;
+  min-height: 320px;
   border-radius: 20px;
   overflow: hidden;
   background: rgba(245, 236, 228, 0.96);
@@ -2333,6 +2333,17 @@ a,
 
 .feed-post-media img {
   object-fit: cover;
+}
+
+.feed-post-media--fit {
+  background:
+    linear-gradient(180deg, rgba(248, 241, 234, 0.98), rgba(240, 227, 214, 0.98));
+}
+
+.feed-post-media--fit img,
+.feed-post-media__image {
+  object-fit: contain;
+  object-position: center;
 }
 
 .feed-post-video {
@@ -2364,7 +2375,7 @@ a,
 
 .feed-before-after-frame {
   position: relative;
-  min-height: 300px;
+  min-height: 320px;
   border-radius: 20px;
   overflow: hidden;
   background: rgba(245, 236, 228, 0.96);
@@ -2372,6 +2383,16 @@ a,
 
 .feed-before-after-frame img {
   object-fit: cover;
+}
+
+.feed-before-after-frame--fit {
+  background:
+    linear-gradient(180deg, rgba(248, 241, 234, 0.98), rgba(240, 227, 214, 0.98));
+}
+
+.feed-before-after-frame--fit img {
+  object-fit: contain;
+  object-position: center;
 }
 
 .feed-before-after-label {

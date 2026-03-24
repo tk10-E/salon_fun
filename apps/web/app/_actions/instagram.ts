@@ -1,12 +1,10 @@
 "use server";
 
-import { Buffer } from "node:buffer";
-import { randomUUID } from "node:crypto";
-
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import { autoPublishInstagramMentions, importInstagramMentionIntoFeed } from "@/lib/instagram-feed-import";
 import { decryptInstagramAccessToken, encryptInstagramAccessToken } from "@/lib/instagram-crypto";
 import { syncInstagramActivity, type InstagramConnectionSyncRecord } from "@/lib/instagram-sync";
 import { createClient } from "@/lib/supabase/server";
@@ -15,7 +13,6 @@ import { buildRedirectNotice } from "./shared";
 
 const INSTAGRAM_PATH = "/dashboard/instagram";
 const FEED_PATH = "/dashboard/feed";
-const IMPORTED_FEED_ASSET_MAX_BYTES = 8 * 1024 * 1024;
 
 type InstagramMentionRecord = {
   id: string;
@@ -38,33 +35,6 @@ function normalizeNonEmptyString(value: FormDataEntryValue | null) {
 
   const normalized = value.trim();
   return normalized.length ? normalized : null;
-}
-
-function buildImportedAssetPath(salonId: string, url: string, fallbackExtension: string) {
-  const pathname = new URL(url).pathname;
-  const extension = pathname.includes(".")
-    ? pathname.split(".").pop()?.toLowerCase() ?? fallbackExtension
-    : fallbackExtension;
-
-  return `${salonId}/instagram-${randomUUID()}.${extension}`;
-}
-
-function buildImportedPostTitle(mention: InstagramMentionRecord) {
-  if (mention.source_type === "owned_post") {
-    return mention.author_username
-      ? `Instagram do salão • @${mention.author_username}`
-      : "Instagram do salão";
-  }
-
-  if (mention.source_type === "story_mention") {
-    return mention.author_username
-      ? `Story marcando o salão • @${mention.author_username}`
-      : "Story marcando o salão";
-  }
-
-  return mention.author_username
-    ? `Cliente marcou o salão • @${mention.author_username}`
-    : "Cliente marcou o salão";
 }
 
 async function loadMentionForOwner(salonId: string, mentionId: string) {
@@ -169,7 +139,7 @@ export async function disconnectInstagramConnectionActionImpl() {
 }
 
 export async function syncInstagramActivityActionImpl() {
-  const { salon } = await requireOwnerSalon();
+  const { salon, user } = await requireOwnerSalon();
   const supabase = createClient() as any;
   const connection = await loadInstagramConnectionForOwner(salon.id);
   let noticeMessage = "";
@@ -180,6 +150,7 @@ export async function syncInstagramActivityActionImpl() {
       supabase,
       connection,
     });
+    const combinedWarnings = [...result.warnings];
 
     await supabase
       .from("instagram_connections")
@@ -192,13 +163,33 @@ export async function syncInstagramActivityActionImpl() {
     revalidatePath(INSTAGRAM_PATH);
 
     const importedItems = result.mentionsUpserted + result.ownedPostsUpserted;
-    if (result.warnings.length) {
-      noticeMessage = `Sincronizacao concluida com alertas. ${importedItems} item(ns) atualizados.`;
+    const autoPublishResult = await autoPublishInstagramMentions({
+      supabase,
+      salonId: salon.id,
+      ownerUserId: user.id,
+    });
+
+    if (autoPublishResult.warnings.length) {
+      combinedWarnings.push(...autoPublishResult.warnings);
+      await supabase
+        .from("instagram_connections")
+        .update({
+          last_error: combinedWarnings.join(" | ").slice(0, 600),
+        })
+        .eq("id", connection.id);
+    }
+
+    if (autoPublishResult.publishedCount > 0) {
+      revalidatePath(FEED_PATH);
+    }
+
+    if (combinedWarnings.length) {
+      noticeMessage = `Sincronizacao concluida com alertas. ${importedItems} item(ns) atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`;
       noticeTone = "info";
     } else {
       noticeMessage =
         importedItems > 0
-          ? `Sincronizacao concluida. ${importedItems} item(ns) do Instagram foram atualizados.`
+          ? `Sincronizacao concluida. ${importedItems} item(ns) do Instagram foram atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`
           : "Sincronizacao concluida. Nenhum conteudo novo foi encontrado agora.";
     }
   } catch (error) {
@@ -289,96 +280,21 @@ export async function publishInstagramMentionActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(INSTAGRAM_PATH, "Essa menção foi rejeitada e precisa ser aprovada antes de publicar.", "error"));
   }
 
-  const assetUrl = mention.media_url ?? mention.thumbnail_url;
-  if (!assetUrl) {
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "A menção não trouxe uma mídia válida para publicar no app.", "error"));
-  }
-
-  const assetResponse = await fetch(assetUrl);
-  if (!assetResponse.ok) {
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Não foi possível baixar a mídia da publicação marcada.", "error"));
-  }
-
-  const bytes = Buffer.from(await assetResponse.arrayBuffer());
-  if (bytes.byteLength > IMPORTED_FEED_ASSET_MAX_BYTES) {
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "A mídia marcada no Instagram é grande demais para importar no feed.", "error"));
-  }
-
-  const contentType = assetResponse.headers.get("content-type")?.trim() || "image/jpeg";
-  const uploadPath = buildImportedAssetPath(
-    salon.id,
-    assetUrl,
-    contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg",
-  );
-
-  const { error: uploadError } = await supabase.storage
-    .from("salon-posts")
-    .upload(uploadPath, bytes, {
-      contentType,
-      upsert: false,
+  try {
+    await importInstagramMentionIntoFeed({
+      supabase,
+      salonId: salon.id,
+      ownerUserId: user.id,
+      mention,
     });
-
-  if (uploadError) {
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Não foi possível importar a mídia para o storage do app.", "error"));
-  }
-
-  const postTitle = buildImportedPostTitle(mention);
-  const postCaption = mention.caption?.trim() || mention.permalink || null;
-  const sourceType = mention.source_type === "owned_post" ? "instagram_owned_post" : "instagram_mention";
-
-  const { data: createdPost, error: postError } = await supabase
-    .from("salon_posts")
-    .insert({
-      salon_id: salon.id,
-      title: postTitle,
-      caption: postCaption,
-      image_path: uploadPath,
-      post_type: "standard",
-      created_by_user_id: user.id,
-      source_type: sourceType,
-      instagram_mention_id: mention.id,
-      external_permalink: mention.permalink,
-      external_author_username: mention.author_username,
-      external_media_url: mention.media_url,
-      external_thumbnail_url: mention.thumbnail_url,
-    })
-    .select("id")
-    .single();
-
-  if (postError || !createdPost) {
-    await supabase.storage.from("salon-posts").remove([uploadPath]);
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Não foi possível transformar a menção em post do feed.", "error"));
-  }
-
-  const { error: galleryError } = await supabase.from("salon_post_images").insert([
-    {
-      post_id: createdPost.id,
-      image_path: uploadPath,
-      sort_order: 0,
-    },
-  ]);
-
-  if (galleryError) {
-    await supabase.from("salon_posts").delete().eq("id", createdPost.id);
-    await supabase.storage.from("salon-posts").remove([uploadPath]);
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Não foi possível salvar a mídia importada no feed.", "error"));
-  }
-
-  const { error: mentionUpdateError } = await supabase
-    .from("instagram_mentions")
-    .update({
-      moderation_status: "published",
-      approved_by_user_id: user.id,
-      approved_at: new Date().toISOString(),
-      published_post_id: createdPost.id,
-      published_at: new Date().toISOString(),
-      moderation_note: "Publicada no feed do app.",
-    })
-    .eq("id", mention.id)
-    .eq("salon_id", salon.id);
-
-  if (mentionUpdateError) {
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "A menção virou post, mas o status não pôde ser sincronizado. Revise o painel.", "error"));
+  } catch (error) {
+    redirect(
+      buildRedirectNotice(
+        INSTAGRAM_PATH,
+        error instanceof Error ? error.message : "Não foi possível transformar a menção em post do feed.",
+        "error",
+      ),
+    );
   }
 
   revalidatePath(INSTAGRAM_PATH);

@@ -139,7 +139,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           <div>
             <h2>Instagram do salão</h2>
             <p className="muted">
-              Conecte a conta profissional do salão e use esta área para revisar menções antes de publicar no app do cliente.
+              Conecte a conta profissional do salão para puxar posts e marcações para o app. Quando a mídia vier pronta, o feed publica sozinho e esta área vira seu acompanhamento e fallback.
             </p>
           </div>
         </div>
@@ -205,7 +205,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
               </p>
             )}
             <p className="instagram-connection-card__hint">
-              Depois da autorização, as menções entram automaticamente nesta área para revisão e publicação. Se algo atrasar, use a sincronização manual.
+              Depois da autorização, posts do salão e marcações de clientes entram automaticamente no feed sempre que a mídia estiver pronta. Se algo atrasar, use a sincronização manual.
             </p>
           </div>
         </div>
@@ -292,8 +292,8 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
               }
               description={
                 safeConnection
-                  ? "Depois de conectar a conta profissional, as novas marcações entram aqui para revisão e publicação."
-                  : "Assim que o Instagram profissional estiver conectado, as marcações aparecem aqui para você revisar com segurança."
+                  ? "Depois de conectar a conta profissional, os novos conteúdos entram aqui para acompanhamento e eventual revisão se algo não puder ser publicado automaticamente."
+                  : "Assim que o Instagram profissional estiver conectado, os conteúdos aparecem aqui para você acompanhar o que entrou no feed."
               }
             />
           ) : (
@@ -310,11 +310,12 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                 >
                   {previewUrl ? (
                     <div className="feed-post-visual">
-                      <div className="feed-post-media">
+                      <div className="feed-post-media feed-post-media--fit">
                         <img
                           src={previewUrl}
                           alt={mention.author_username ? `Menção de @${mention.author_username}` : "Preview da menção"}
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          className="feed-post-media__image"
+                          style={{ width: "100%", height: "100%" }}
                         />
                         <span className="feed-gallery-count">{getMentionSourceLabel(mention.source_type)}</span>
                       </div>
@@ -340,10 +341,10 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
 
                     <p className="feed-post-note">
                       {mention.source_type === "story_mention"
-                        ? "Story recebida pela conta conectada. Aprove rápido se fizer sentido para prova social."
+                        ? "Story recebida pela conta conectada. Se a mídia vier completa, ela também pode virar prova social no feed."
                         : mention.source_type === "owned_post"
-                        ? "Conteúdo do próprio salão vindo da conexão do Instagram."
-                        : "Prova social gerada por cliente marcando o salão no Instagram."}
+                        ? "Conteúdo do próprio salão vindo da conexão do Instagram, já preparado para entrar no feed do app."
+                        : "Prova social gerada por cliente marcando o salão no Instagram. Quando a mídia chega correta, o feed publica sozinho."}
                     </p>
 
                     {mention.caption ? <p className="feed-post-caption">{mention.caption}</p> : null}

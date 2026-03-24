@@ -5,6 +5,7 @@ const encoder = new TextEncoder();
 const graphApiBaseUrl =
   Deno.env.get("INSTAGRAM_GRAPH_API_BASE_URL")?.trim() ||
   "https://graph.facebook.com/v23.0";
+const importedFeedAssetMaxBytes = 25 * 1024 * 1024;
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -42,6 +43,20 @@ type MediaContext = {
   thumbnailUrl: string | null;
   mediaType: MentionMediaType;
   mentionedAt: string | null;
+};
+
+type InstagramMentionRow = {
+  id: string;
+  salon_id: string;
+  source_type: MentionSourceType;
+  media_type: MentionMediaType;
+  author_username: string | null;
+  caption: string | null;
+  permalink: string | null;
+  media_url: string | null;
+  thumbnail_url: string | null;
+  moderation_status: "pending" | "approved" | "rejected" | "published";
+  published_post_id: string | null;
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -168,6 +183,227 @@ function mapMediaType(rawType: string | null): MentionMediaType {
       return "story";
     default:
       return "unknown";
+  }
+}
+
+function buildImportedAssetPath(salonId: string, url: string, fallbackExtension: string, prefix = "instagram"): string {
+  const pathname = new URL(url).pathname;
+  const extension = pathname.includes(".")
+    ? pathname.split(".").pop()?.toLowerCase() ?? fallbackExtension
+    : fallbackExtension;
+
+  return `${salonId}/${prefix}-${crypto.randomUUID()}.${extension}`;
+}
+
+function buildImportedPostTitle(mention: InstagramMentionRow): string {
+  if (mention.source_type === "owned_post") {
+    return mention.author_username
+      ? `Instagram do salão • @${mention.author_username}`
+      : "Instagram do salão";
+  }
+
+  if (mention.source_type === "story_mention") {
+    return mention.author_username
+      ? `Story marcando o salão • @${mention.author_username}`
+      : "Story marcando o salão";
+  }
+
+  return mention.author_username
+    ? `Cliente marcou o salão • @${mention.author_username}`
+    : "Cliente marcou o salão";
+}
+
+async function downloadImportedAsset(url: string, fallbackContentType: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("Não foi possível baixar a mídia do Instagram para o feed.");
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > importedFeedAssetMaxBytes) {
+    throw new Error("A mídia do Instagram é grande demais para o feed do app.");
+  }
+
+  return {
+    bytes,
+    contentType: response.headers.get("content-type")?.trim() || fallbackContentType,
+    sourceUrl: url,
+  };
+}
+
+async function uploadImportedAsset(args: {
+  supabase: SupabaseClient;
+  salonId: string;
+  asset: Awaited<ReturnType<typeof downloadImportedAsset>>;
+  prefix: string;
+}) {
+  const fallbackExtension = args.asset.contentType.includes("png")
+    ? "png"
+    : args.asset.contentType.includes("webp")
+    ? "webp"
+    : args.asset.contentType.includes("mp4")
+    ? "mp4"
+    : args.asset.contentType.includes("quicktime")
+    ? "mov"
+    : "jpg";
+  const uploadPath = buildImportedAssetPath(args.salonId, args.asset.sourceUrl, fallbackExtension, args.prefix);
+
+  const { error } = await args.supabase.storage
+    .from("salon-posts")
+    .upload(uploadPath, args.asset.bytes, {
+      contentType: args.asset.contentType,
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error("Não foi possível importar a mídia do Instagram para o storage.");
+  }
+
+  return uploadPath;
+}
+
+async function removeImportedAssets(supabase: SupabaseClient, uploadedPaths: string[]) {
+  if (!uploadedPaths.length) {
+    return;
+  }
+
+  await supabase.storage.from("salon-posts").remove(uploadedPaths);
+}
+
+async function loadSalonOwnerUserId(
+  supabase: SupabaseClient,
+  cache: Map<string, string | null>,
+  salonId: string,
+) {
+  if (!cache.has(salonId)) {
+    const { data, error } = await supabase
+      .from("salons")
+      .select("owner_user_id")
+      .eq("id", salonId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    cache.set(salonId, normalizeNonEmptyString(data?.owner_user_id) ?? null);
+  }
+
+  const ownerUserId = cache.get(salonId) ?? null;
+  if (!ownerUserId) {
+    throw new Error("Não foi possível localizar o responsável pelo salão para publicar no feed.");
+  }
+
+  return ownerUserId;
+}
+
+async function importMentionIntoFeed(args: {
+  supabase: SupabaseClient;
+  mention: InstagramMentionRow;
+  ownerUserId: string;
+}) {
+  const { mention, ownerUserId, supabase } = args;
+
+  if (mention.published_post_id || mention.moderation_status === "rejected") {
+    return { created: false };
+  }
+
+  const uploadedPaths: string[] = [];
+
+  try {
+    if (mention.media_type === "video" && !mention.thumbnail_url) {
+      throw new Error("O vídeo do Instagram não trouxe uma capa válida para o feed.");
+    }
+
+    const coverAssetUrl = mention.thumbnail_url ?? mention.media_url;
+    if (!coverAssetUrl) {
+      throw new Error("A publicação do Instagram não trouxe uma mídia válida para o feed.");
+    }
+
+    const coverAsset = await downloadImportedAsset(coverAssetUrl, "image/jpeg");
+    const coverPath = await uploadImportedAsset({
+      supabase,
+      salonId: mention.salon_id,
+      asset: coverAsset,
+      prefix: "instagram-cover",
+    });
+    uploadedPaths.push(coverPath);
+
+    let postType: "standard" | "reel" = "standard";
+    let videoPath: string | null = null;
+
+    if (mention.media_type === "video" && mention.media_url) {
+      const videoAsset = await downloadImportedAsset(mention.media_url, "video/mp4");
+      videoPath = await uploadImportedAsset({
+        supabase,
+        salonId: mention.salon_id,
+        asset: videoAsset,
+        prefix: "instagram-video",
+      });
+      uploadedPaths.push(videoPath);
+      postType = "reel";
+    }
+
+    const sourceType = mention.source_type === "owned_post" ? "instagram_owned_post" : "instagram_mention";
+    const { data: createdPost, error: postError } = await supabase
+      .from("salon_posts")
+      .insert({
+        salon_id: mention.salon_id,
+        title: buildImportedPostTitle(mention),
+        caption: mention.caption?.trim() || mention.permalink || null,
+        image_path: coverPath,
+        post_type: postType,
+        video_path: videoPath,
+        created_by_user_id: ownerUserId,
+        source_type: sourceType,
+        instagram_mention_id: mention.id,
+        external_permalink: mention.permalink,
+        external_author_username: mention.author_username,
+        external_media_url: mention.media_url,
+        external_thumbnail_url: mention.thumbnail_url,
+      })
+      .select("id")
+      .single();
+
+    if (postError || !createdPost) {
+      throw new Error("Não foi possível transformar a mídia do Instagram em post do feed.");
+    }
+
+    const { error: imageError } = await supabase.from("salon_post_images").insert([
+      {
+        post_id: createdPost.id,
+        image_path: coverPath,
+        sort_order: 0,
+      },
+    ]);
+
+    if (imageError) {
+      await supabase.from("salon_posts").delete().eq("id", createdPost.id);
+      throw new Error("Não foi possível salvar a capa da publicação importada.");
+    }
+
+    const now = new Date().toISOString();
+    const { error: mentionError } = await supabase
+      .from("instagram_mentions")
+      .update({
+        moderation_status: "published",
+        approved_by_user_id: ownerUserId,
+        approved_at: now,
+        published_post_id: createdPost.id,
+        published_at: now,
+        moderation_note: "Publicada automaticamente no feed do app.",
+      })
+      .eq("id", mention.id)
+      .eq("salon_id", mention.salon_id);
+
+    if (mentionError) {
+      throw new Error("A mídia foi importada, mas o status da menção não pôde ser atualizado.");
+    }
+
+    return { created: true };
+  } catch (error) {
+    await removeImportedAssets(supabase, uploadedPaths);
+    throw error;
   }
 }
 
@@ -350,7 +586,7 @@ async function upsertWebhookEvent(args: {
 async function processWebhookPayload(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
-): Promise<{ received: number; ignored: number; mentionsUpserted: number }> {
+): Promise<{ received: number; ignored: number; mentionsUpserted: number; postsPublished: number }> {
   const entries = Array.isArray(payload.entry)
     ? payload.entry
     : Array.isArray(payload.entries)
@@ -358,9 +594,11 @@ async function processWebhookPayload(
     : [];
 
   const connectionCache = new Map<string, InstagramConnectionRow | null>();
+  const salonOwnerCache = new Map<string, string | null>();
   let received = 0;
   let ignored = 0;
   let mentionsUpserted = 0;
+  let postsPublished = 0;
 
   for (const entry of entries) {
     const row = (entry ?? {}) as Record<string, unknown>;
@@ -460,17 +698,7 @@ async function processWebhookPayload(
             ? "pending"
             : "approved";
 
-        await upsertWebhookEvent({
-          supabase,
-          salonId: connection.salon_id,
-          connectionId: connection.id,
-          eventKey,
-          eventType: classification.eventType,
-          payload: { entry: row, change },
-          processingStatus: "processed",
-        });
-
-        const { error: mentionError } = await supabase
+        const { data: mentionRow, error: mentionError } = await supabase
           .from("instagram_mentions")
           .upsert(
             {
@@ -489,13 +717,38 @@ async function processWebhookPayload(
               moderation_status: moderationStatus,
             },
             { onConflict: "dedupe_key" },
-          );
+          )
+          .select(
+            "id,salon_id,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
+          )
+          .single();
 
-        if (mentionError) {
-          throw mentionError;
+        if (mentionError || !mentionRow) {
+          throw mentionError ?? new Error("Não foi possível salvar a mídia do Instagram recebida no webhook.");
         }
 
         mentionsUpserted += 1;
+
+        const ownerUserId = await loadSalonOwnerUserId(supabase, salonOwnerCache, connection.salon_id);
+        const importResult = await importMentionIntoFeed({
+          supabase,
+          mention: mentionRow as InstagramMentionRow,
+          ownerUserId,
+        });
+
+        if (importResult.created) {
+          postsPublished += 1;
+        }
+
+        await upsertWebhookEvent({
+          supabase,
+          salonId: connection.salon_id,
+          connectionId: connection.id,
+          eventKey,
+          eventType: classification.eventType,
+          payload: { entry: row, change },
+          processingStatus: "processed",
+        });
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         await upsertWebhookEvent({
@@ -516,7 +769,7 @@ async function processWebhookPayload(
     }
   }
 
-  return { received, ignored, mentionsUpserted };
+  return { received, ignored, mentionsUpserted, postsPublished };
 }
 
 Deno.serve(async (request: Request) => {
@@ -571,6 +824,7 @@ Deno.serve(async (request: Request) => {
       received: result.received,
       ignored: result.ignored,
       mentions_upserted: result.mentionsUpserted,
+      posts_published: result.postsPublished,
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
