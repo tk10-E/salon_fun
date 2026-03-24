@@ -56,13 +56,11 @@ function createQuery(data: unknown) {
 describe("instagram page UI", () => {
   const originalMetaAppId = process.env.INSTAGRAM_META_APP_ID;
   const originalMetaAppSecret = process.env.INSTAGRAM_META_APP_SECRET;
-  const originalMetaRedirectOrigin = process.env.INSTAGRAM_META_REDIRECT_ORIGIN;
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.INSTAGRAM_META_APP_ID = "1490951809405535";
     process.env.INSTAGRAM_META_APP_SECRET = "meta-secret";
-    process.env.INSTAGRAM_META_REDIRECT_ORIGIN = "https://painel.jc7desenvolvimento.online";
     requireOwnerSalonMock.mockResolvedValue({
       salon: { id: "salon-1" },
     });
@@ -71,7 +69,6 @@ describe("instagram page UI", () => {
   afterEach(() => {
     process.env.INSTAGRAM_META_APP_ID = originalMetaAppId;
     process.env.INSTAGRAM_META_APP_SECRET = originalMetaAppSecret;
-    process.env.INSTAGRAM_META_REDIRECT_ORIGIN = originalMetaRedirectOrigin;
   });
 
   it("renders connection health and the moderation queue", async () => {
@@ -151,27 +148,22 @@ describe("instagram page UI", () => {
     expect(screen.getByRole("heading", { name: "Instagram do salão" })).toBeInTheDocument();
     expect(screen.getByText("Conexão do Instagram atualizada com sucesso.")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Reconectar com Meta" }),
+      screen.getByRole("link", { name: "Reconectar Instagram" }),
     ).toHaveAttribute("href", "/dashboard/instagram/connect");
-    expect(screen.getByText("Dominios do aplicativo:")).toBeInTheDocument();
-    expect(
-      screen.getByText("painel.jc7desenvolvimento.online"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "https://painel.jc7desenvolvimento.online/dashboard/instagram/connect/callback",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sua conta profissional já está conectada")).toBeInTheDocument();
+    expect(screen.getByText("@docebeleza")).toBeInTheDocument();
     expect(screen.getByText("Pendentes")).toBeInTheDocument();
     expect(screen.getByText("Aprovadas")).toBeInTheDocument();
     expect(screen.getByText("Publicadas")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("17841400000000000")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("docebeleza")).toBeInTheDocument();
+    expect(screen.queryByText("Configuração avançada e fallback manual")).not.toBeInTheDocument();
+    expect(screen.queryByText("Webhook da Meta")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Validar token" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Desconectar" })).not.toBeInTheDocument();
     expect(screen.getByText("Caixa de menções")).toBeInTheDocument();
     expect(screen.getByText("@cliente_real")).toBeInTheDocument();
     expect(screen.getByText("Amei o resultado no salão")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Aprovar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rejeitar" })).toBeInTheDocument();
-    expect(screen.getByText("Saúde da conexão")).toBeInTheDocument();
+    expect(screen.getByText("Resumo da conexão atual")).toBeInTheDocument();
   });
 });

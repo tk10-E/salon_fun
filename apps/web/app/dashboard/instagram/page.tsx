@@ -4,11 +4,8 @@ import Link from "next/link";
 
 import {
   approveInstagramMentionAction,
-  disconnectInstagramConnectionAction,
   publishInstagramMentionAction,
   rejectInstagramMentionAction,
-  saveInstagramConnectionAction,
-  validateInstagramConnectionTokenAction,
 } from "@/app/actions";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
@@ -53,15 +50,6 @@ type InstagramMentionRecord = {
   published_at: string | null;
 };
 
-type InstagramWebhookEventRecord = {
-  id: string;
-  event_type: string;
-  processing_status: string;
-  created_at: string;
-  processed_at: string | null;
-  last_error: string | null;
-};
-
 function getMentionSourceLabel(sourceType: InstagramMentionRecord["source_type"]) {
   switch (sourceType) {
     case "story_mention":
@@ -99,6 +87,17 @@ function getConnectionStatusLabel(status: InstagramConnectionRecord["connection_
   }
 }
 
+function getConnectionStatusClass(status: InstagramConnectionRecord["connection_status"] | null) {
+  switch (status) {
+    case "active":
+      return "instagram-status-pill instagram-status-pill--active";
+    case "error":
+      return "instagram-status-pill instagram-status-pill--error";
+    default:
+      return "instagram-status-pill instagram-status-pill--inactive";
+  }
+}
+
 export default async function InstagramPage({ searchParams }: InstagramPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient() as any;
@@ -107,7 +106,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
       process.env.INSTAGRAM_META_APP_SECRET?.trim(),
   );
 
-  const [{ data: connection }, { data: mentions }, { data: webhookEvents }] = await Promise.all([
+  const [{ data: connection }, { data: mentions }] = await Promise.all([
     supabase
       .from("instagram_connections")
       .select(
@@ -124,28 +123,13 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
       .order("mentioned_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(24),
-    supabase
-      .from("instagram_webhook_events")
-      .select("id,event_type,processing_status,created_at,processed_at,last_error")
-      .eq("salon_id", salon.id)
-      .order("created_at", { ascending: false })
-      .limit(8),
   ]);
 
   const safeConnection = (connection ?? null) as InstagramConnectionRecord | null;
   const safeMentions = ((mentions ?? []) as InstagramMentionRecord[]);
-  const safeEvents = ((webhookEvents ?? []) as InstagramWebhookEventRecord[]);
-  const metaRedirectOrigin = process.env.INSTAGRAM_META_REDIRECT_ORIGIN?.trim().replace(/\/+$/, "") ?? "";
-  const metaAppDomain = metaRedirectOrigin ? new URL(metaRedirectOrigin).hostname : null;
-  const metaCallbackUrl = metaRedirectOrigin
-    ? `${metaRedirectOrigin}/dashboard/instagram/connect/callback`
-    : null;
-
   const pendingCount = safeMentions.filter((item) => item.moderation_status === "pending").length;
   const approvedCount = safeMentions.filter((item) => item.moderation_status === "approved").length;
   const publishedCount = safeMentions.filter((item) => item.moderation_status === "published").length;
-  const webhookUrlBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
-  const webhookUrl = webhookUrlBase ? `${webhookUrlBase}/functions/v1/instagram-webhook` : "/functions/v1/instagram-webhook";
 
   return (
     <div className="two-column-grid">
@@ -154,7 +138,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           <div>
             <h2>Instagram do salão</h2>
             <p className="muted">
-              Conecte a conta profissional, receba menções via webhook da Meta e publique no feed do app só o que fizer sentido para a marca.
+              Conecte a conta profissional do salão e use esta área para revisar menções antes de publicar no app do cliente.
             </p>
           </div>
         </div>
@@ -165,193 +149,111 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           </div>
         ) : null}
 
-        <div className="dashboard-stats-grid" style={{ marginTop: 18 }}>
-          <article className="card dashboard-stat-card">
-            <span className="dashboard-stat-card__label">Pendentes</span>
-            <strong>{pendingCount}</strong>
-            <p className="muted">Menções aguardando revisão antes de entrar no feed.</p>
-          </article>
-          <article className="card dashboard-stat-card">
-            <span className="dashboard-stat-card__label">Aprovadas</span>
-            <strong>{approvedCount}</strong>
-            <p className="muted">Prontas para publicar no app quando você quiser.</p>
-          </article>
-          <article className="card dashboard-stat-card">
-            <span className="dashboard-stat-card__label">Publicadas</span>
-            <strong>{publishedCount}</strong>
-            <p className="muted">Já transformadas em conteúdo do feed do cliente.</p>
-          </article>
-        </div>
+        <div className="instagram-connection-card" style={{ marginTop: 18 }}>
+          <div className="instagram-connection-card__content">
+            <span className="eyebrow">Conexão oficial</span>
+            <h3>
+              {safeConnection
+                ? "Sua conta profissional já está conectada"
+                : "Conecte o Instagram profissional do salão"}
+            </h3>
+            <p className="muted">
+              A conexão acontece no fluxo oficial da Meta e a conta fica salva automaticamente no painel, sem expor etapas técnicas para o usuário.
+            </p>
 
-        <div className="feed-composer-tip-card" style={{ marginTop: 18 }}>
-          <strong>Conexao automatica com a Meta</strong>
-          <p className="muted" style={{ marginTop: 8 }}>
-            Para novos saloes, prefira o fluxo de login da Meta. Ele ja traz pagina, Instagram profissional e token para o painel sem copiar IDs na mao.
-          </p>
-          {metaAppDomain && metaCallbackUrl ? (
-            <div className="muted" style={{ marginTop: 12 }}>
-              <p style={{ margin: 0 }}>
-                Se a Meta bloquear a URL, cadastre estes valores no app:
-              </p>
-              <p style={{ margin: "8px 0 0" }}>
-                <strong>Dominios do aplicativo:</strong> <code>{metaAppDomain}</code>
-              </p>
-              <p style={{ margin: "8px 0 0" }}>
-                <strong>Redirect URI valido:</strong> <code>{metaCallbackUrl}</code>
-              </p>
+            <div className="instagram-connection-card__meta">
+              <span className={getConnectionStatusClass(safeConnection?.connection_status ?? null)}>
+                {safeConnection ? getConnectionStatusLabel(safeConnection.connection_status) : "Não conectada"}
+              </span>
+              {safeConnection ? (
+                <span className="instagram-info-pill">@{safeConnection.instagram_username}</span>
+              ) : (
+                <span className="instagram-info-pill instagram-info-pill--muted">
+                  Nenhuma conta vinculada
+                </span>
+              )}
+              {safeConnection?.last_sync_at ? (
+                <span className="instagram-info-pill">
+                  Validada em {formatDateTime(safeConnection.last_sync_at)}
+                </span>
+              ) : null}
             </div>
-          ) : null}
-          <div className="row-actions" style={{ marginTop: 14 }}>
+          </div>
+
+          <div className="instagram-connection-card__actions">
             {canUseAutomaticMetaConnect ? (
               <Link href="/dashboard/instagram/connect" className="primary-button">
-                {safeConnection ? "Reconectar com Meta" : "Conectar Instagram com Meta"}
+                {safeConnection ? "Reconectar Instagram" : "Conectar Instagram"}
               </Link>
             ) : (
               <p className="muted">
-                Configure <code>INSTAGRAM_META_APP_ID</code> e{" "}
-                <code>INSTAGRAM_META_APP_SECRET</code> para liberar a conexao automatica.
+                A conexão automática não está disponível no momento. Fale com o suporte do painel.
               </p>
             )}
+            <p className="instagram-connection-card__hint">
+              Depois da autorização, as menções entram automaticamente nesta área para revisão e publicação.
+            </p>
           </div>
         </div>
 
-        <div className="feed-composer-tip-card" style={{ marginTop: 18 }}>
-          <strong>Fluxo recomendado</strong>
-          <ul className="feed-composer-tip-list">
-            <li>Use conta profissional do Instagram conectada a uma página no ecossistema da Meta.</li>
-            <li>Deixe aprovação manual ligada para conteúdo de cliente.</li>
-            <li>Publique no app só o que reforça prova social real do salão.</li>
-          </ul>
-        </div>
-
-        <details
-          className="feed-composer-tip-card"
-          style={{ marginTop: 18 }}
-          open={!canUseAutomaticMetaConnect}
-        >
-          <summary style={{ cursor: "pointer", fontWeight: 700 }}>
-            Configuracao avancada e fallback manual
-          </summary>
-          <p className="muted" style={{ marginTop: 12 }}>
-            Essa area fica como plano B para suporte tecnico. No fluxo normal do salao, prefira o botao da Meta acima e deixe token e IDs fora da etapa principal.
-          </p>
-
-          <form action={saveInstagramConnectionAction} className="form-grid" style={{ marginTop: 18 }}>
-            <div className="field">
-              <label htmlFor="instagram-user-id">Instagram Business/Creator ID</label>
-              <input id="instagram-user-id" name="instagramUserId" defaultValue={safeConnection?.instagram_user_id ?? ""} placeholder="17841400000000000" />
-            </div>
-            <div className="field">
-              <label htmlFor="instagram-username">Usuário do Instagram</label>
-              <input id="instagram-username" name="instagramUsername" defaultValue={safeConnection?.instagram_username ?? ""} placeholder="docebeleza" />
-            </div>
-            <div className="field">
-              <label htmlFor="facebook-page-id">Facebook Page ID</label>
-              <input id="facebook-page-id" name="facebookPageId" defaultValue={safeConnection?.facebook_page_id ?? ""} placeholder="123456789012345" />
-            </div>
-            <div className="field">
-              <label htmlFor="instagram-access-token">Access token da Meta</label>
-              <input
-                id="instagram-access-token"
-                name="accessToken"
-                type="password"
-                autoComplete="off"
-                placeholder={safeConnection ? "Deixe em branco para manter o token salvo" : "Cole o token da conta profissional"}
-              />
-            </div>
-
-            <label className="checkbox-field">
-              <input
-                type="checkbox"
-                name="requireMentionApproval"
-                defaultChecked={safeConnection?.require_mention_approval ?? true}
-              />
-              <span>Exigir aprovação antes de publicar menções de clientes</span>
-            </label>
-            <label className="checkbox-field">
-              <input
-                type="checkbox"
-                name="importStoryMentions"
-                defaultChecked={safeConnection?.import_story_mentions ?? true}
-              />
-              <span>Importar story mentions para a fila do painel</span>
-            </label>
-            <label className="checkbox-field">
-              <input
-                type="checkbox"
-                name="autoPublishOwnedPosts"
-                defaultChecked={safeConnection?.auto_publish_owned_posts ?? false}
-              />
-              <span>Marcar posts do próprio salão como aprovados automaticamente</span>
-            </label>
-
-            <div className="row-actions">
-              <button type="submit" className="primary-button">
-                Salvar conexão
-              </button>
-            </div>
-          </form>
-        </details>
-
-        {safeConnection ? (
-          <div className="row-actions" style={{ marginTop: 12 }}>
-            <form action={validateInstagramConnectionTokenAction}>
-              <button type="submit" className="secondary-button">
-                Validar token
-              </button>
-            </form>
-            <form action={disconnectInstagramConnectionAction}>
-              <button type="submit" className="danger-button">
-                Desconectar
-              </button>
-            </form>
-          </div>
+        {safeConnection?.last_error ? (
+          <article className="instagram-alert-card instagram-alert-card--error" style={{ marginTop: 18 }}>
+            <span className="feed-post-meta-card__eyebrow">Último alerta</span>
+            <strong>{safeConnection.last_error}</strong>
+            <p className="muted">Se necessário, reconecte a conta pelo botão acima.</p>
+          </article>
         ) : null}
 
-        <div className="feed-post-meta-strip" style={{ marginTop: 18 }}>
-          <div className="feed-post-meta-card">
-            <span className="feed-post-meta-card__eyebrow">Status da conexão</span>
-            <strong>{safeConnection ? getConnectionStatusLabel(safeConnection.connection_status) : "Ainda não conectada"}</strong>
-          </div>
-          <div className="feed-post-meta-card">
-            <span className="feed-post-meta-card__eyebrow">Webhook da Meta</span>
-            <strong style={{ wordBreak: "break-all" }}>{webhookUrl}</strong>
-          </div>
+        <div className="stats-grid" style={{ marginTop: 18 }}>
+          <article className="card metric-card metric-card--warm instagram-metric-card">
+            <span className="eyebrow">Pendentes</span>
+            <strong className="stat-value">{pendingCount}</strong>
+            <p className="metric-note">Menções aguardando revisão antes de entrar no feed.</p>
+          </article>
+          <article className="card metric-card metric-card--soft instagram-metric-card">
+            <span className="eyebrow">Aprovadas</span>
+            <strong className="stat-value">{approvedCount}</strong>
+            <p className="metric-note">Conteúdos prontos para publicar quando você quiser.</p>
+          </article>
+          <article className="card metric-card metric-card--accent instagram-metric-card">
+            <span className="eyebrow">Publicadas</span>
+            <strong className="stat-value">{publishedCount}</strong>
+            <p className="metric-note">Posts que já viraram prova social no app do cliente.</p>
+          </article>
         </div>
 
-        {safeConnection?.last_sync_at || safeConnection?.last_webhook_at || safeConnection?.last_error ? (
-          <div className="row-list" style={{ marginTop: 18 }}>
-            <article className="feed-comment-item">
-              <strong>Saúde da conexão</strong>
-              {safeConnection.last_sync_at ? (
-                <span>Token validado em {formatDateTime(safeConnection.last_sync_at)}</span>
-              ) : null}
-              {safeConnection.last_webhook_at ? (
-                <span>Último webhook em {formatDateTime(safeConnection.last_webhook_at)}</span>
-              ) : null}
-              {safeConnection.last_error ? (
-                <span>Último erro: {safeConnection.last_error}</span>
-              ) : null}
-            </article>
-          </div>
-        ) : null}
+        <div className="instagram-guidance-grid" style={{ marginTop: 18 }}>
+          <article className="feed-composer-tip-card instagram-guidance-card">
+            <strong>Como esse painel funciona</strong>
+            <ul className="feed-composer-tip-list">
+              <li>Conecte a conta profissional do salão uma única vez.</li>
+              <li>As menções chegam nesta área para você revisar com calma.</li>
+              <li>Publique no app só o que fortalece a marca e a prova social do salão.</li>
+            </ul>
+          </article>
 
-        <div className="row-list" style={{ marginTop: 18 }}>
-          {safeEvents.length ? (
-            safeEvents.map((event) => (
-              <article key={event.id} className="feed-comment-item">
-                <div className="feed-comment-item__top">
-                  <strong>{event.event_type}</strong>
-                  <span>{event.processing_status}</span>
-                </div>
-                <span>Recebido em {formatDateTime(event.created_at)}</span>
-                {event.processed_at ? <span>Processado em {formatDateTime(event.processed_at)}</span> : null}
-                {event.last_error ? <span>{event.last_error}</span> : null}
-              </article>
-            ))
-          ) : (
-            <p className="muted">Quando a Meta começar a mandar webhooks, os eventos recentes aparecem aqui.</p>
-          )}
+          <article className="feed-composer-tip-card instagram-guidance-card">
+            <strong>{safeConnection ? "Resumo da conexão atual" : "O que acontece depois da conexão"}</strong>
+            <ul className="feed-composer-tip-list">
+              {safeConnection ? (
+                <>
+                  <li>Conta vinculada: @{safeConnection.instagram_username}.</li>
+                  <li>
+                    {safeConnection.last_webhook_at
+                      ? `Última atividade recebida em ${formatDateTime(safeConnection.last_webhook_at)}.`
+                      : "Aguarde as próximas marcações aparecerem na caixa de menções."}
+                  </li>
+                  <li>Se quiser atualizar a autorização, use o botão de reconexão acima.</li>
+                </>
+              ) : (
+                <>
+                  <li>Você autoriza a conta em um fluxo seguro e guiado.</li>
+                  <li>As novas marcações começam a aparecer automaticamente nesta fila.</li>
+                  <li>O restante da moderação continua sendo feito aqui no painel.</li>
+                </>
+              )}
+            </ul>
+          </article>
         </div>
       </section>
 
@@ -368,9 +270,17 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
         <div className="row-list" style={{ marginTop: 18 }}>
           {safeMentions.length === 0 ? (
             <EmptyStateCard
-              eyebrow="Nenhuma menção por enquanto"
-              title="A fila do Instagram ainda está vazia"
-              description="Depois de conectar a conta profissional e configurar o webhook na Meta, as marcações entram aqui para moderação."
+              eyebrow={safeConnection ? "Nenhuma menção por enquanto" : "Conecte sua conta para começar"}
+              title={
+                safeConnection
+                  ? "A fila do Instagram ainda está vazia"
+                  : "A caixa de menções será ativada depois da conexão"
+              }
+              description={
+                safeConnection
+                  ? "Depois de conectar a conta profissional, as novas marcações entram aqui para revisão e publicação."
+                  : "Assim que o Instagram profissional estiver conectado, as marcações aparecem aqui para você revisar com segurança."
+              }
             />
           ) : (
             safeMentions.map((mention) => {
@@ -380,7 +290,10 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                 mention.moderation_status === "published";
 
               return (
-                <article key={mention.id} className="feed-post-card">
+                <article
+                  key={mention.id}
+                  className={`feed-post-card${previewUrl ? "" : " feed-post-card--compact"}`}
+                >
                   {previewUrl ? (
                     <div className="feed-post-visual">
                       <div className="feed-post-media">
@@ -400,7 +313,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                         <div className="feed-post-kicker">
                           <span className="feed-format-badge">{getMentionStatusLabel(mention.moderation_status)}</span>
                           <span className="feed-post-date">
-                            {mention.mentioned_at ? formatDateTime(mention.mentioned_at) : "Sem data da Meta"}
+                            {mention.mentioned_at ? formatDateTime(mention.mentioned_at) : "Sem data disponível"}
                           </span>
                         </div>
                         <h3>{mention.author_username ? `@${mention.author_username}` : "Autor não identificado"}</h3>
@@ -413,7 +326,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
 
                     <p className="feed-post-note">
                       {mention.source_type === "story_mention"
-                        ? "Story recebida pelo webhook da Meta. Aprove rápido se fizer sentido para prova social."
+                        ? "Story recebida pela conta conectada. Aprove rápido se fizer sentido para prova social."
                         : mention.source_type === "owned_post"
                         ? "Conteúdo do próprio salão vindo da conexão do Instagram."
                         : "Prova social gerada por cliente marcando o salão no Instagram."}
@@ -434,13 +347,13 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                         <>
                           <form action={approveInstagramMentionAction}>
                             <input type="hidden" name="mentionId" value={mention.id} />
-                            <button type="submit" className="secondary-button">
+                            <button type="submit" className="success-button">
                               Aprovar
                             </button>
                           </form>
                           <form action={rejectInstagramMentionAction}>
                             <input type="hidden" name="mentionId" value={mention.id} />
-                            <button type="submit" className="secondary-button">
+                            <button type="submit" className="danger-button">
                               Rejeitar
                             </button>
                           </form>
