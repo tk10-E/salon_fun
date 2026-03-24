@@ -165,6 +165,7 @@ describe("auth actions", () => {
       provider: "google",
       options: {
         redirectTo: "https://painel.jc7desenvolvimento.online/auth/callback?next=%2Fdashboard",
+        scopes: "https://www.googleapis.com/auth/userinfo.email",
       },
     });
     expect(location).toBe("https://accounts.google.com/o/oauth2/v2/auth?client_id=test");

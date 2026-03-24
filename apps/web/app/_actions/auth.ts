@@ -89,6 +89,7 @@ export async function signInWithGoogleActionImpl(formData: FormData) {
     provider: "google",
     options: {
       redirectTo,
+      scopes: "https://www.googleapis.com/auth/userinfo.email",
     },
   });
 
