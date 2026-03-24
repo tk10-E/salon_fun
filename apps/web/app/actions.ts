@@ -2,6 +2,7 @@
 import {
   signInActionImpl,
   signInWithGoogleActionImpl,
+  sendPasswordResetActionImpl,
   signOutActionImpl,
   signUpActionImpl,
 } from "./_actions/auth";
@@ -65,6 +66,10 @@ export async function signInWithGoogleAction(formData: FormData) {
 
 export async function signUpAction(formData: FormData) {
   return signUpActionImpl(formData);
+}
+
+export async function sendPasswordResetAction(formData: FormData) {
+  return sendPasswordResetActionImpl(formData);
 }
 
 export async function signOutAction() {

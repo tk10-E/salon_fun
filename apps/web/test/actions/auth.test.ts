@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import {
+  sendPasswordResetActionImpl,
   signInActionImpl,
   signInWithGoogleActionImpl,
   signOutActionImpl,
@@ -98,6 +99,7 @@ describe("auth actions", () => {
         makeFormData({
           email: "new@salon.fun",
           password: "123456",
+          passwordConfirmation: "123456",
         }),
       ),
       redirectMock,
@@ -111,6 +113,29 @@ describe("auth actions", () => {
       },
     });
     expect(location).toBe("/onboarding");
+  });
+
+  it("rejects sign up when password confirmation does not match", async () => {
+    createClientMock.mockReturnValue({
+      auth: {
+        signUp: vi.fn(),
+      },
+    });
+
+    const location = await captureRedirect(
+      signUpActionImpl(
+        makeFormData({
+          email: "new@salon.fun",
+          password: "123456",
+          passwordConfirmation: "654321",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/login?message=Confirme+a+mesma+senha+nos+dois+campos+para+criar+a+conta.&tone=error",
+    );
   });
 
   it("starts the Google OAuth flow with the panel callback", async () => {
@@ -143,6 +168,35 @@ describe("auth actions", () => {
       },
     });
     expect(location).toBe("https://accounts.google.com/o/oauth2/v2/auth?client_id=test");
+  });
+
+  it("sends a password reset email with the recovery redirect", async () => {
+    const resetPasswordForEmail = vi.fn().mockResolvedValue({
+      data: {},
+      error: null,
+    });
+
+    createClientMock.mockReturnValue({
+      auth: {
+        resetPasswordForEmail,
+      },
+    });
+
+    const location = await captureRedirect(
+      sendPasswordResetActionImpl(
+        makeFormData({
+          email: "owner@salon.fun",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(resetPasswordForEmail).toHaveBeenCalledWith("owner@salon.fun", {
+      redirectTo: "https://painel.jc7desenvolvimento.online/auth/recovery",
+    });
+    expect(location).toBe(
+      "/login?message=Enviamos+um+link+de+recupera%C3%A7%C3%A3o+para+seu+e-mail.+Abra+a+mensagem+para+redefinir+a+senha.&tone=success",
+    );
   });
 
   it("signs out and redirects back to login", async () => {

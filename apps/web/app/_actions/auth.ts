@@ -31,6 +31,15 @@ function buildEmailRedirectUrl() {
   return `${origin}/login`;
 }
 
+function buildPasswordRecoveryUrl() {
+  const origin = buildAppOrigin();
+  if (!origin) {
+    return undefined;
+  }
+
+  return `${origin}/auth/recovery`;
+}
+
 function sanitizeNextPath(value: string | null | undefined) {
   if (!value || !value.startsWith("/")) {
     return "/dashboard";
@@ -93,8 +102,13 @@ export async function signInWithGoogleActionImpl(formData: FormData) {
 export async function signUpActionImpl(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const passwordConfirmation = String(formData.get("passwordConfirmation") ?? "");
   const supabase = createClient();
   const emailRedirectTo = buildEmailRedirectUrl();
+
+  if (password !== passwordConfirmation) {
+    redirect(buildRedirectNotice("/login", "Confirme a mesma senha nos dois campos para criar a conta.", "error"));
+  }
 
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -118,6 +132,37 @@ export async function signUpActionImpl(formData: FormData) {
     buildRedirectNotice(
       "/login",
       "Conta criada. Confira seu e-mail caso a confirmação esteja ativada.",
+      "success",
+    ),
+  );
+}
+
+export async function sendPasswordResetActionImpl(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  const supabase = createClient();
+  const redirectTo = buildPasswordRecoveryUrl();
+
+  if (!email) {
+    redirect(buildRedirectNotice("/login", "Informe o e-mail da conta para recuperar o acesso.", "error"));
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    email,
+    redirectTo
+      ? {
+          redirectTo,
+        }
+      : undefined,
+  );
+
+  if (error) {
+    redirect(buildRedirectNotice("/login", "Não foi possível enviar o e-mail de recuperação agora.", "error"));
+  }
+
+  redirect(
+    buildRedirectNotice(
+      "/login",
+      "Enviamos um link de recuperação para seu e-mail. Abra a mensagem para redefinir a senha.",
       "success",
     ),
   );

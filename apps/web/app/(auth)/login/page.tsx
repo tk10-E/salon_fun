@@ -1,4 +1,9 @@
-import { signInAction, signInWithGoogleAction, signUpAction } from "@/app/actions";
+import {
+  sendPasswordResetAction,
+  signInAction,
+  signInWithGoogleAction,
+  signUpAction,
+} from "@/app/actions";
 import { FlashMessage } from "@/components/FlashMessage";
 
 type LoginPageProps = {
@@ -83,7 +88,24 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                 <input type="hidden" name="next" value="/dashboard" />
                 <button type="submit" className="secondary-button auth-provider-button">
                   <span className="auth-provider-button__mark" aria-hidden="true">
-                    G
+                    <svg viewBox="0 0 18 18" role="presentation" focusable="false">
+                      <path
+                        fill="#4285F4"
+                        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.56 2.68-3.86 2.68-6.62Z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.02-3.7H1v2.34A9 9 0 0 0 9 18Z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M3.98 10.72A5.41 5.41 0 0 1 3.7 9c0-.6.1-1.18.28-1.72V4.94H1A9 9 0 0 0 0 9c0 1.45.35 2.82 1 4.06l2.98-2.34Z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M9 3.58c1.32 0 2.5.46 3.42 1.36l2.56-2.56C13.46.96 11.43 0 9 0A9 9 0 0 0 1 4.94l2.98 2.34c.7-2.12 2.68-3.7 5.02-3.7Z"
+                      />
+                    </svg>
                   </span>
                   <span>Continuar com Google</span>
                 </button>
@@ -116,6 +138,34 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                   Acessar minha conta
                 </button>
               </form>
+
+              <div className="auth-inline-divider" aria-hidden="true">
+                <span />
+              </div>
+
+              <form action={sendPasswordResetAction} className="form-grid auth-recovery-form">
+                <div className="auth-compact-copy">
+                  <strong>Recuperar conta</strong>
+                  <p className="muted">
+                    Envie um link seguro para redefinir a senha e retomar o acesso do salão.
+                  </p>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="recovery-email">E-mail da conta</label>
+                  <input
+                    id="recovery-email"
+                    name="email"
+                    type="email"
+                    placeholder="salao@email.com"
+                    required
+                  />
+                </div>
+
+                <button type="submit" className="secondary-button">
+                  Enviar link de recuperação
+                </button>
+              </form>
             </div>
 
             <div className="panel-card auth-form-card">
@@ -142,6 +192,18 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                     type="password"
                     minLength={6}
                     placeholder="Mínimo 6 caracteres"
+                    required
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="signup-password-confirmation">Confirmar senha</label>
+                  <input
+                    id="signup-password-confirmation"
+                    name="passwordConfirmation"
+                    type="password"
+                    minLength={6}
+                    placeholder="Repita a senha"
                     required
                   />
                   <span className="field-hint">
