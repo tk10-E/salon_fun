@@ -519,4 +519,114 @@ describe("instagram actions", () => {
       "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+da+Meta+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
     );
   });
+
+  it("refreshes the facebook page token before syncing when the saved connection only has a user token", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "connection-1",
+        salon_id: "salon-1",
+        instagram_user_id: "17841442717327141",
+        instagram_username: "jctecnologi07",
+        facebook_page_id: "1120032767849275",
+        facebook_page_name: "Salon Fun",
+        facebook_page_access_token_ciphertext: null,
+        access_token_ciphertext: encryptInstagramAccessToken("EAAB-user-token"),
+        require_mention_approval: true,
+        import_story_mentions: true,
+        auto_publish_owned_posts: false,
+      },
+      error: null,
+    });
+    const mentionsUpsert = vi.fn().mockResolvedValue({ error: null });
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const update = vi.fn(() => ({
+      eq: updateEq,
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "instagram_connections") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle,
+              })),
+            })),
+            update,
+          };
+        }
+
+        if (table === "instagram_mentions") {
+          return {
+            upsert: mentionsUpsert,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "1120032767849275",
+                name: "Salon Fun",
+                access_token: "EAAB-page-token",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ) as typeof fetch;
+
+    const location = await captureRedirect(
+      syncInstagramActivityActionImpl(),
+      redirectMock,
+    );
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        href: expect.stringContaining("/me/accounts?"),
+      }),
+      { method: "GET" },
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        facebook_page_access_token_ciphertext: expect.any(String),
+        last_error: null,
+      }),
+    );
+    expect(location).toBe(
+      "/dashboard/instagram?message=Sincronizacao+concluida.+Nenhum+conteudo+novo+da+Meta+foi+encontrado+agora.&tone=success",
+    );
+  });
 });

@@ -5,7 +5,12 @@ import { buildRedirectNotice } from "@/app/_actions/shared";
 import { getOwnerSalon } from "@/lib/auth";
 import { autoPublishInstagramMentions } from "@/lib/instagram-feed-import";
 import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
-import { loadMetaAccounts, subscribeMetaPageToWebhook, syncInstagramActivity } from "@/lib/instagram-sync";
+import {
+  loadMetaAccounts,
+  loadMetaPageAccessToken,
+  subscribeMetaPageToWebhook,
+  syncInstagramActivity,
+} from "@/lib/instagram-sync";
 import {
   buildInstagramMetaRedirectUri,
   getInstagramMetaAppId,
@@ -156,17 +161,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const pageAccessToken =
+      selectedAccount.access_token ??
+      (await loadMetaPageAccessToken({
+        userAccessToken: accessToken,
+        pageId: selectedAccount.id,
+      })) ??
+      null;
     const encryptedAccessToken = encryptInstagramAccessToken(accessToken);
-    const encryptedPageAccessToken = selectedAccount.access_token
-      ? encryptInstagramAccessToken(selectedAccount.access_token)
+    const encryptedPageAccessToken = pageAccessToken
+      ? encryptInstagramAccessToken(pageAccessToken)
       : existingConnection?.facebook_page_access_token_ciphertext ?? null;
     const connectionWarnings: string[] = [];
 
-    if (selectedAccount.access_token) {
+    if (pageAccessToken) {
       try {
         await subscribeMetaPageToWebhook({
           pageId: selectedAccount.id,
-          pageAccessToken: selectedAccount.access_token,
+          pageAccessToken,
         });
       } catch (error) {
         connectionWarnings.push(
@@ -175,6 +187,10 @@ export async function GET(request: NextRequest) {
             : "Nao foi possivel ativar a assinatura automatica das menções na Meta.",
         );
       }
+    } else if (selectedAccount.id) {
+      connectionWarnings.push(
+        "A Meta conectou a conta, mas nao devolveu um Page Access Token para a pagina do Facebook. O Instagram segue ativo e o Facebook pode ficar limitado ate uma nova autorizacao.",
+      );
     }
 
     const { data: savedConnection, error } = await supabase.from("instagram_connections").upsert(

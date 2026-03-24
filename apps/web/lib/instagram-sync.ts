@@ -336,6 +336,16 @@ export async function loadMetaAccounts(accessToken: string) {
   return rows as InstagramMetaPageAccount[];
 }
 
+export async function loadMetaPageAccessToken(args: {
+  userAccessToken: string;
+  pageId: string;
+}) {
+  const rows = await loadMetaAccounts(args.userAccessToken);
+  const matchingPage = rows.find((row) => normalizeNonEmptyString(row.id) === args.pageId);
+
+  return normalizeNonEmptyString(matchingPage?.access_token);
+}
+
 export async function subscribeMetaPageToWebhook(args: {
   pageId: string;
   pageAccessToken: string;

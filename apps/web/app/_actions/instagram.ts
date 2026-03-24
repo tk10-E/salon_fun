@@ -6,7 +6,11 @@ import { redirect } from "next/navigation";
 import { requireOwnerSalon } from "@/lib/auth";
 import { autoPublishInstagramMentions, importInstagramMentionIntoFeed } from "@/lib/instagram-feed-import";
 import { decryptInstagramAccessToken, encryptInstagramAccessToken } from "@/lib/instagram-crypto";
-import { syncInstagramActivity, type InstagramConnectionSyncRecord } from "@/lib/instagram-sync";
+import {
+  loadMetaPageAccessToken,
+  syncInstagramActivity,
+  type InstagramConnectionSyncRecord,
+} from "@/lib/instagram-sync";
 import { createClient } from "@/lib/supabase/server";
 
 import { buildRedirectNotice } from "./shared";
@@ -145,11 +149,36 @@ export async function disconnectInstagramConnectionActionImpl() {
 export async function syncInstagramActivityActionImpl() {
   const { salon, user } = await requireOwnerSalon();
   const supabase = createClient() as any;
-  const connection = await loadInstagramConnectionForOwner(salon.id);
+  let connection = await loadInstagramConnectionForOwner(salon.id);
   let noticeMessage = "";
   let noticeTone: "success" | "info" = "success";
 
   try {
+    if (!connection.facebook_page_access_token_ciphertext && connection.facebook_page_id) {
+      const userAccessToken = decryptInstagramAccessToken(connection.access_token_ciphertext);
+      const refreshedPageAccessToken = await loadMetaPageAccessToken({
+        userAccessToken,
+        pageId: connection.facebook_page_id,
+      });
+
+      if (refreshedPageAccessToken) {
+        const refreshedCiphertext = encryptInstagramAccessToken(refreshedPageAccessToken);
+
+        await supabase
+          .from("instagram_connections")
+          .update({
+            facebook_page_access_token_ciphertext: refreshedCiphertext,
+            last_error: null,
+          })
+          .eq("id", connection.id);
+
+        connection = {
+          ...connection,
+          facebook_page_access_token_ciphertext: refreshedCiphertext,
+        };
+      }
+    }
+
     const result = await syncInstagramActivity({
       supabase,
       connection,
