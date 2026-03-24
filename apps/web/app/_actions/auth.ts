@@ -5,12 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 
 import { buildRedirectNotice } from "./shared";
 
-function buildEmailRedirectUrl() {
+function buildAppOrigin() {
   const headerStore = headers();
   const origin = headerStore.get("origin")?.trim();
 
   if (origin) {
-    return `${origin.replace(/\/+$/, "")}/login`;
+    return origin.replace(/\/+$/, "");
   }
 
   const host = headerStore.get("x-forwarded-host")?.trim() ?? headerStore.get("host")?.trim();
@@ -19,7 +19,35 @@ function buildEmailRedirectUrl() {
   }
 
   const protocol = headerStore.get("x-forwarded-proto")?.trim() || "https";
-  return `${protocol}://${host.replace(/\/+$/, "")}/login`;
+  return `${protocol}://${host.replace(/\/+$/, "")}`;
+}
+
+function buildEmailRedirectUrl() {
+  const origin = buildAppOrigin();
+  if (!origin) {
+    return undefined;
+  }
+
+  return `${origin}/login`;
+}
+
+function sanitizeNextPath(value: string | null | undefined) {
+  if (!value || !value.startsWith("/")) {
+    return "/dashboard";
+  }
+
+  return value;
+}
+
+function buildGoogleCallbackUrl(nextPath = "/dashboard") {
+  const origin = buildAppOrigin();
+  if (!origin) {
+    return undefined;
+  }
+
+  const callbackUrl = new URL(`${origin}/auth/callback`);
+  callbackUrl.searchParams.set("next", sanitizeNextPath(nextPath));
+  return callbackUrl.toString();
 }
 
 export async function signInActionImpl(formData: FormData) {
@@ -37,6 +65,29 @@ export async function signInActionImpl(formData: FormData) {
   }
 
   redirect("/dashboard");
+}
+
+export async function signInWithGoogleActionImpl(formData: FormData) {
+  const nextPath = sanitizeNextPath(String(formData.get("next") ?? ""));
+  const redirectTo = buildGoogleCallbackUrl(nextPath);
+
+  if (!redirectTo) {
+    redirect(buildRedirectNotice("/login", "Não foi possível iniciar o login com Google agora.", "error"));
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+    },
+  });
+
+  if (error || !data?.url) {
+    redirect(buildRedirectNotice("/login", "Não foi possível iniciar o login com Google agora.", "error"));
+  }
+
+  redirect(data.url);
 }
 
 export async function signUpActionImpl(formData: FormData) {

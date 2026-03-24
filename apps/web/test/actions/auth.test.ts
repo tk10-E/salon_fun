@@ -25,7 +25,12 @@ vi.mock("next/navigation", () => ({
   redirect: redirectMock,
 }));
 
-import { signInActionImpl, signOutActionImpl, signUpActionImpl } from "@/app/_actions/auth";
+import {
+  signInActionImpl,
+  signInWithGoogleActionImpl,
+  signOutActionImpl,
+  signUpActionImpl,
+} from "@/app/_actions/auth";
 
 describe("auth actions", () => {
   beforeEach(() => {
@@ -106,6 +111,38 @@ describe("auth actions", () => {
       },
     });
     expect(location).toBe("/onboarding");
+  });
+
+  it("starts the Google OAuth flow with the panel callback", async () => {
+    const signInWithOAuth = vi.fn().mockResolvedValue({
+      data: {
+        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
+      },
+      error: null,
+    });
+
+    createClientMock.mockReturnValue({
+      auth: {
+        signInWithOAuth,
+      },
+    });
+
+    const location = await captureRedirect(
+      signInWithGoogleActionImpl(
+        makeFormData({
+          next: "/dashboard",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://painel.jc7desenvolvimento.online/auth/callback?next=%2Fdashboard",
+      },
+    });
+    expect(location).toBe("https://accounts.google.com/o/oauth2/v2/auth?client_id=test");
   });
 
   it("signs out and redirects back to login", async () => {

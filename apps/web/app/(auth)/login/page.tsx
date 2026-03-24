@@ -1,4 +1,4 @@
-import { signInAction, signUpAction } from "@/app/actions";
+import { signInAction, signInWithGoogleAction, signUpAction } from "@/app/actions";
 import { FlashMessage } from "@/components/FlashMessage";
 
 type LoginPageProps = {
@@ -69,6 +69,30 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
           </div>
 
           <div className="auth-form-stack">
+            <div className="panel-card auth-form-card auth-provider-card">
+              <div className="panel-card__header">
+                <span className="eyebrow">Acesso rápido</span>
+              </div>
+              <div className="auth-form-card__meta">
+                <h3>Continuar com Google</h3>
+                <p className="muted">
+                  Entre com sua conta profissional. Se for seu primeiro acesso, o cadastro do painel começa na hora.
+                </p>
+              </div>
+              <form action={signInWithGoogleAction} className="form-grid">
+                <input type="hidden" name="next" value="/dashboard" />
+                <button type="submit" className="secondary-button auth-provider-button">
+                  <span className="auth-provider-button__mark" aria-hidden="true">
+                    G
+                  </span>
+                  <span>Continuar com Google</span>
+                </button>
+                <p className="field-hint auth-provider-note">
+                  Ideal para um onboarding mais rápido, sem depender de senha no primeiro acesso.
+                </p>
+              </form>
+            </div>
+
             <div className="panel-card panel-card--accent auth-form-card">
               <div className="panel-card__header">
                 <span className="eyebrow">Sua conta</span>

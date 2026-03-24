@@ -4,13 +4,15 @@ import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-const { signInActionMock, signUpActionMock } = vi.hoisted(() => ({
+const { signInActionMock, signInWithGoogleActionMock, signUpActionMock } = vi.hoisted(() => ({
   signInActionMock: vi.fn(),
+  signInWithGoogleActionMock: vi.fn(),
   signUpActionMock: vi.fn(),
 }));
 
 vi.mock("@/app/actions", () => ({
   signInAction: signInActionMock,
+  signInWithGoogleAction: signInWithGoogleActionMock,
   signUpAction: signUpActionMock,
 }));
 
@@ -30,6 +32,8 @@ describe("login page UI", () => {
     expect(screen.getByLabelText("Senha", { selector: "#signin-password" })).toBeInTheDocument();
     expect(screen.getByLabelText("E-mail", { selector: "#signup-email" })).toBeInTheDocument();
     expect(screen.getByLabelText("Senha", { selector: "#signup-password" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Continuar com Google" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar com Google" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Acessar minha conta" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Começar agora" })).toBeInTheDocument();
     expect(screen.getByText("Conta criada com sucesso.")).toBeInTheDocument();

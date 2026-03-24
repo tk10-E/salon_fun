@@ -1,6 +1,7 @@
 "use server";
 import {
   signInActionImpl,
+  signInWithGoogleActionImpl,
   signOutActionImpl,
   signUpActionImpl,
 } from "./_actions/auth";
@@ -56,6 +57,10 @@ import {
 
 export async function signInAction(formData: FormData) {
   return signInActionImpl(formData);
+}
+
+export async function signInWithGoogleAction(formData: FormData) {
+  return signInWithGoogleActionImpl(formData);
 }
 
 export async function signUpAction(formData: FormData) {
