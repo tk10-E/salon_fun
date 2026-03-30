@@ -40,8 +40,10 @@ describe("notifications list UI", () => {
               status: "delivered",
               sent_count: 12,
               failed_count: 0,
+              deactivated_count: 0,
               response_status: 200,
               error_detail: null,
+              updated_at: "2026-03-20T15:01:00.000Z",
             },
           },
           {

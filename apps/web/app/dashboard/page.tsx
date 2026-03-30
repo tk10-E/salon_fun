@@ -1,25 +1,27 @@
 import Link from "next/link";
 
-import { ActionCommandCenter } from "@/components/ActionCommandCenter";
-import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
-import { SalonIntelligencePanel } from "@/components/SalonIntelligencePanel";
-import {
-  buildSmartScheduleTargetDayLabel,
-  SmartScheduleSuggestion,
-  SmartScheduleSuggestions,
-} from "@/components/SmartScheduleSuggestions";
 import { requireOwnerSalon } from "@/lib/auth";
+import { formatCurrency } from "@/lib/formatters";
 import { createClient } from "@/lib/supabase/server";
-import { formatDateTime } from "@/lib/formatters";
 
 type AppointmentListItem = {
   id: string;
   date: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
+  customer_id?: string | null;
   customers: { name: string } | { name: string }[] | null;
-  services: { category: string | null; name: string } | { category: string | null; name: string }[] | null;
+  services:
+    | { category: string | null; name: string; price?: number | string | null }
+    | { category: string | null; name: string; price?: number | string | null }[]
+    | null;
   staff_members: { name: string } | { name: string }[] | null;
+};
+
+type AppointmentRevenueItem = {
+  customer_id?: string | null;
+  date: string;
+  services: { price: number | string | null } | { price: number | string | null }[] | null;
 };
 
 type DashboardPageProps = {
@@ -29,51 +31,36 @@ type DashboardPageProps = {
   };
 };
 
+type SmartScheduleSuggestion = {
+  staff_member_name: string;
+  suggested_start: string;
+  headline: string;
+  detail: string;
+  suggested_service: {
+    name: string;
+    category: string | null;
+    price: number | string | null;
+  };
+};
+
 type SmartScheduleResponse = {
-  target_day: string;
-  timezone: string;
-  slot_step_minutes: number;
   suggestions: SmartScheduleSuggestion[];
 };
 
-type GrowthAutomationSettings = {
-  is_active: boolean;
-  winback_inactive_days: number;
-  winback_discount_percent: number;
-  winback_title: string;
-  winback_body_template: string;
-  smart_rebook_is_active: boolean;
-  smart_rebook_window_days: number;
-  smart_rebook_title: string;
-  smart_rebook_body_template: string;
-  updated_at: string | null;
-};
-
-type GrowthAutomationOverview = {
-  at_risk_customers: number;
-  due_now_customers: number;
-  smart_rebook_due_customers: number;
-  winbacks_sent_last_30d: number;
-  smart_rebooks_sent_last_30d: number;
-  recovered_customers_last_30d: number;
-};
-
-type GrowthAutomationDashboardResponse = {
-  settings: GrowthAutomationSettings;
-  overview: GrowthAutomationOverview;
-  recent_runs: Array<{
-    id: string;
-    automation_type: "winback_offer" | "smart_rebook_prompt";
-    customer_name: string;
-    sent_at: string;
-    inactive_days: number;
-    discount_percent: number;
-    service_name: string;
-    target_weekday: string | null;
-    target_period: string | null;
-    recovered: boolean;
-    recovered_appointment_at: string | null;
-  }>;
+type GrowthAutomationResponse = {
+  settings: {
+    is_active: boolean;
+    smart_rebook_is_active: boolean;
+    updated_at: string | null;
+  };
+  overview: {
+    at_risk_customers: number;
+    due_now_customers: number;
+    smart_rebook_due_customers: number;
+    recovered_customers_last_30d: number;
+    smart_rebooks_sent_last_30d: number;
+    winbacks_sent_last_30d: number;
+  };
 };
 
 type DashboardIntelligenceResponse = {
@@ -114,92 +101,230 @@ type DashboardIntelligenceResponse = {
   }>;
 };
 
-function formatAppointmentStatus(status: AppointmentListItem["status"]) {
-  switch (status) {
-    case "confirmed":
-      return "Confirmado";
-    case "completed":
-      return "Atendido";
-    case "cancelled":
-      return "Cancelado";
-    default:
-      return "Pendente";
-  }
+type OperationsDashboardResponse = {
+  overview: {
+    active_inventory_products: number;
+    active_staff_members: number;
+    average_ticket: number | string;
+    estimated_commissions: number | string;
+    low_stock_products: number;
+    top_staff_name: string | null;
+    top_staff_revenue: number | string;
+    total_revenue: number | string;
+  };
+  daily_revenue: Array<{
+    completed_appointments: number;
+    day: string;
+    total_revenue: number | string;
+  }>;
+  top_staff: Array<{
+    completed_appointments: number;
+    estimated_commission: number | string;
+    id: string;
+    name: string;
+    pending_appointments: number;
+    role: string | null;
+    total_revenue: number | string;
+    upcoming_appointments: number;
+  }>;
+};
+
+type InventoryProductSummary = {
+  id: string;
+  name: string;
+  brand: string | null;
+  current_stock: number | string;
+  minimum_stock: number | string;
+  unit: string;
+  is_active: boolean;
+};
+
+function firstRelation<T>(value: T | T[] | null) {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
-function formatTime(value: string) {
+function toSafeDate(value: string | Date) {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  return value.length <= 10 ? new Date(`${value}T12:00:00.000Z`) : new Date(value);
+}
+
+function capitalizeFirst(value: string) {
+  if (!value) {
+    return value;
+  }
+
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function getLocalDateKey(value: string | Date, timeZone: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(toSafeDate(value));
+}
+
+function getLocalMonthKey(value: string | Date, timeZone: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+  }).format(toSafeDate(value));
+}
+
+function buildRecentDayKeys(days: number, timeZone: string) {
+  const dayKeys = new Set<string>();
+
+  for (let offset = 0; offset < days; offset += 1) {
+    dayKeys.add(getLocalDateKey(new Date(Date.now() - offset * 24 * 60 * 60 * 1000), timeZone));
+  }
+
+  return dayKeys;
+}
+
+function getServicePrice(
+  value:
+    | AppointmentListItem["services"]
+    | AppointmentRevenueItem["services"],
+) {
+  const service = firstRelation(value);
+  return Number(service?.price ?? 0);
+}
+
+function formatTime(value: string, timeZone: string) {
   return new Intl.DateTimeFormat("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone,
   }).format(new Date(value));
+}
+
+function formatAgendaDate(value: string | Date, timeZone: string) {
+  return capitalizeFirst(
+    new Intl.DateTimeFormat("pt-BR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      timeZone,
+    }).format(toSafeDate(value)),
+  );
+}
+
+function formatCompactDate(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    timeZone,
+  }).format(new Date(value));
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function compactLabel(value: string) {
+  if (value.length <= 12) {
+    return value;
+  }
+
+  const [firstWord] = value.split(" ");
+  return firstWord || value.slice(0, 12);
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  const timeZone = salon.timezone ?? "America/Sao_Paulo";
+  const now = new Date();
+  const upcomingWindowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const upcomingWindowEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const recentWindowStart = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
-    { count: servicesCount },
     { count: customersCount },
     { count: pendingCount },
-    recentAppointmentsResult,
+    upcomingAppointmentsResult,
+    completedAppointmentsResult,
+    pendingRevenueAppointmentsResult,
     growthAutomationResult,
     dashboardIntelligenceResult,
     smartScheduleResult,
-  ] =
-    await Promise.all([
-      supabase.from("services").select("*", { count: "exact", head: true }).eq("salon_id", salon.id),
-      supabase.from("customers").select("*", { count: "exact", head: true }).eq("salon_id", salon.id),
-      supabase
-        .from("appointments")
-        .select("*", { count: "exact", head: true })
-        .eq("salon_id", salon.id)
-        .eq("status", "pending"),
-      supabase
-        .from("appointments")
-        .select("*,customers(name),services(category,name),staff_members(name)")
-        .eq("salon_id", salon.id)
-        .order("date", { ascending: true })
-        .limit(6),
-      supabase.rpc("get_salon_growth_automation_dashboard"),
-      supabase.rpc("get_owner_dashboard_intelligence", {
-        lapsed_limit_input: 4,
-        top_customer_limit_input: 5,
-        top_service_limit_input: 5,
-      }),
-      supabase.rpc("get_smart_schedule_opportunities", {}),
-    ]);
-  const smartSchedule = (smartScheduleResult.data ?? {
-    target_day: new Date().toISOString().slice(0, 10),
-    timezone: "America/Sao_Paulo",
-    slot_step_minutes: salon.slot_step_minutes ?? 30,
-    suggestions: [],
-  }) as SmartScheduleResponse;
+    operationsResult,
+    inventoryProductsResult,
+  ] = await Promise.all([
+    supabase.from("customers").select("*", { count: "exact", head: true }).eq("salon_id", salon.id),
+    supabase
+      .from("appointments")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("status", "pending"),
+    supabase
+      .from("appointments")
+      .select("id, date, status, customer_id, customers(name), services(category, name, price), staff_members(name)")
+      .eq("salon_id", salon.id)
+      .gte("date", upcomingWindowStart)
+      .lt("date", upcomingWindowEnd)
+      .order("date", { ascending: true })
+      .limit(24),
+    supabase
+      .from("appointments")
+      .select("customer_id, date, services(price)")
+      .eq("salon_id", salon.id)
+      .eq("status", "completed")
+      .gte("date", recentWindowStart)
+      .order("date", { ascending: false })
+      .limit(400),
+    supabase
+      .from("appointments")
+      .select("date, services(price)")
+      .eq("salon_id", salon.id)
+      .eq("status", "pending")
+      .order("date", { ascending: true })
+      .limit(200),
+    supabase.rpc("get_salon_growth_automation_dashboard"),
+    supabase.rpc("get_owner_dashboard_intelligence", {
+      lapsed_limit_input: 4,
+      top_customer_limit_input: 5,
+      top_service_limit_input: 5,
+    }),
+    supabase.rpc("get_smart_schedule_opportunities", {}),
+    supabase.rpc("get_owner_operations_dashboard", {
+      days_input: 7,
+      top_staff_limit_input: 4,
+    }),
+    supabase
+      .from("inventory_products")
+      .select("id, name, brand, current_stock, minimum_stock, unit, is_active")
+      .eq("salon_id", salon.id)
+      .eq("is_active", true)
+      .order("current_stock", { ascending: true })
+      .limit(4),
+  ]);
+
   const growthAutomation = (growthAutomationResult.data ?? {
     settings: {
       is_active: true,
-      winback_inactive_days: 30,
-      winback_discount_percent: 10,
-      winback_title: "Sentimos sua falta 😄",
-      winback_body_template:
-        "Já faz {inactive_days} dias desde seu último {service_name}. Volte esta semana e agende com {discount}% OFF pelo app.",
       smart_rebook_is_active: true,
-      smart_rebook_window_days: 4,
-      smart_rebook_title: "Você sempre agenda {service_name} {habit_weekday} 👀",
-      smart_rebook_body_template:
-        "Seu próximo {service_name} está chegando. Quer deixar para {target_weekday} {target_period}? Se quiser, ainda dá para encaixar {combo_service_name}.",
       updated_at: null,
     },
     overview: {
       at_risk_customers: 0,
       due_now_customers: 0,
-      winbacks_sent_last_30d: 0,
       smart_rebook_due_customers: 0,
-      smart_rebooks_sent_last_30d: 0,
       recovered_customers_last_30d: 0,
+      smart_rebooks_sent_last_30d: 0,
+      winbacks_sent_last_30d: 0,
     },
-    recent_runs: [],
-  }) as GrowthAutomationDashboardResponse;
+  }) as GrowthAutomationResponse;
   const dashboardIntelligence = (dashboardIntelligenceResult.data ?? {
     overview: {
       tracked_due_now_customers: 0,
@@ -211,287 +336,472 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     top_customers: [],
     top_services: [],
   }) as DashboardIntelligenceResponse;
+  const smartSchedule = (smartScheduleResult.data ?? {
+    suggestions: [],
+  }) as SmartScheduleResponse;
+  const operations = (operationsResult.data ?? {
+    overview: {
+      active_inventory_products: 0,
+      active_staff_members: 0,
+      average_ticket: 0,
+      estimated_commissions: 0,
+      low_stock_products: 0,
+      top_staff_name: null,
+      top_staff_revenue: 0,
+      total_revenue: 0,
+    },
+    daily_revenue: [],
+    top_staff: [],
+  }) as OperationsDashboardResponse;
 
-  const recentAppointments = (recentAppointmentsResult.data ?? []) as AppointmentListItem[];
-  const highValueOpportunities = (smartSchedule.suggestions ?? []).slice(0, 3);
-  const opportunityRevenue = highValueOpportunities.reduce(
-    (accumulator, suggestion) => accumulator + Number(suggestion.suggested_service.price ?? 0),
+  const upcomingAppointments = (upcomingAppointmentsResult.data ?? []) as AppointmentListItem[];
+  const completedAppointments = (completedAppointmentsResult.data ?? []) as AppointmentRevenueItem[];
+  const pendingRevenueAppointments = (pendingRevenueAppointmentsResult.data ?? []) as AppointmentRevenueItem[];
+  const inventoryProducts = (inventoryProductsResult.data ?? []) as InventoryProductSummary[];
+  const todayKey = getLocalDateKey(now, timeZone);
+  const currentMonthKey = getLocalMonthKey(now, timeZone);
+  const recentDayKeys = buildRecentDayKeys(7, timeZone);
+  const todayAppointments = upcomingAppointments.filter(
+    (appointment) => getLocalDateKey(appointment.date, timeZone) === todayKey && appointment.status !== "cancelled",
+  );
+  const todayPendingCount = todayAppointments.filter((appointment) => appointment.status === "pending").length;
+  const todayConfirmedCount = todayAppointments.filter((appointment) => appointment.status === "confirmed").length;
+  const todayForecastRevenue = todayAppointments.reduce(
+    (accumulator, appointment) => accumulator + getServicePrice(appointment.services),
     0,
   );
-  const bestOpportunity = highValueOpportunities[0];
-  const nextTopCustomerWithoutReturn = (dashboardIntelligence.top_customers ?? []).find(
+  const activeStaffToday = new Set(
+    todayAppointments
+      .map((appointment) => firstRelation(appointment.staff_members)?.name)
+      .filter((name): name is string => typeof name === "string" && name.length > 0),
+  ).size;
+  const monthRevenue = completedAppointments.reduce((accumulator, appointment) => {
+    if (getLocalMonthKey(appointment.date, timeZone) !== currentMonthKey) {
+      return accumulator;
+    }
+
+    return accumulator + getServicePrice(appointment.services);
+  }, 0);
+  const weekServedCustomerIds = new Set(
+    completedAppointments
+      .filter((appointment) => recentDayKeys.has(getLocalDateKey(appointment.date, timeZone)))
+      .map((appointment) => appointment.customer_id)
+      .filter((customerId): customerId is string => typeof customerId === "string" && customerId.length > 0),
+  );
+  const pendingRevenue = pendingRevenueAppointments.reduce(
+    (accumulator, appointment) => accumulator + getServicePrice(appointment.services),
+    0,
+  );
+  const lowStockProducts = inventoryProducts.filter(
+    (product) => Number(product.current_stock ?? 0) <= Number(product.minimum_stock ?? 0),
+  );
+  const topProfessionals = operations.top_staff.slice(0, 3);
+  const topServices = dashboardIntelligence.top_services.slice(0, 5);
+  const topServicesVolume = topServices.reduce(
+    (accumulator, service) => accumulator + Number(service.completed_appointments ?? 0),
+    0,
+  );
+  const maxServiceVolume = Math.max(
+    ...topServices.map((service) => Number(service.completed_appointments ?? 0)),
+    1,
+  );
+  const highValueOpportunities = smartSchedule.suggestions.slice(0, 3);
+  const automationLive = growthAutomation.settings.is_active || growthAutomation.settings.smart_rebook_is_active;
+  const nextTopCustomerWithoutReturn = dashboardIntelligence.top_customers.find(
     (customer) => customer.upcoming_appointments === 0,
   );
-  const actionCards = [
-    {
-      eyebrow: "Prioridade 1",
-      title:
-        (pendingCount ?? 0) > 0
-          ? "Feche os pedidos que ainda travam a agenda"
-          : "Agenda sem pedidos pendentes para aprovar",
-      highlight: `${pendingCount ?? 0} ${Number(pendingCount ?? 0) === 1 ? "pedido" : "pedidos"}`,
-      description:
-        (pendingCount ?? 0) > 0
-          ? "Cada pedido parado segura receita, bloqueia encaixe e aumenta o risco de o cliente desistir antes da confirmação."
-          : "A recepção já está respondendo rápido. Vale usar essa folga para puxar rebook e preencher janelas vazias.",
-      support:
-        (pendingCount ?? 0) > 0
-          ? "Resolver essa fila primeiro protege faturamento e evita cancelamento por demora."
-          : "Sem backlog de aprovação hoje.",
-      href: "/dashboard/appointments?status=pending",
-      ctaLabel: (pendingCount ?? 0) > 0 ? "Resolver pendências" : "Abrir agenda",
-      tone: "warm" as const,
-    },
-    {
-      eyebrow: "Prioridade 2",
-      title:
-        highValueOpportunities.length > 0
-          ? "Transforme horários ociosos em atendimento agora"
-          : "Nenhum encaixe estratégico está vazando receita agora",
-      highlight:
-        highValueOpportunities.length > 0
-          ? `${new Intl.NumberFormat("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            }).format(opportunityRevenue)}`
-          : "Agenda bem preenchida",
-      description:
-        highValueOpportunities.length > 0
-          ? "O sistema já mapeou as janelas com melhor chance de venda para hoje. O caminho mais rápido é agir nos encaixes de maior ticket primeiro."
-          : "Quando surgir uma janela livre entre atendimentos, ela entra aqui com o melhor serviço e o profissional ideal.",
-      support:
-        bestOpportunity == null
-          ? "Sem gap estratégico neste momento."
-          : `${bestOpportunity.staff_member_name} • ${bestOpportunity.suggested_service.name} às ${formatTime(bestOpportunity.suggested_start)}.`,
-      href: "/dashboard/appointments#encaixes-inteligentes",
-      ctaLabel: highValueOpportunities.length > 0 ? "Trabalhar encaixes" : "Ver agenda do dia",
-      tone: "soft" as const,
-    },
-    {
-      eyebrow: "Prioridade 3",
-      title:
-        (growthAutomation.overview.due_now_customers ?? 0) > 0
-          ? "Puxe de volta quem já esfriou de verdade"
-          : "Mantenha o rebook ativo antes do cliente sumir",
-      highlight: `${growthAutomation.overview.due_now_customers ?? 0} em winback`,
-      description:
-        (growthAutomation.overview.due_now_customers ?? 0) > 0
-          ? "Esses clientes já passaram da janela saudável de retorno. Um incentivo agora tem impacto direto na ocupação das próximas semanas."
-          : "A base ainda não virou winback pesado, então o foco é agir antes do cliente sumir da rotina do salão.",
-      support:
-        nextTopCustomerWithoutReturn == null
-          ? `${growthAutomation.overview.smart_rebook_due_customers ?? 0} clientes já estão na janela ideal de rebook.`
-          : `${nextTopCustomerWithoutReturn.name} já gerou ${new Intl.NumberFormat("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            }).format(Number(nextTopCustomerWithoutReturn.total_spent ?? 0))} e está sem próxima agenda.`,
-      href: "/dashboard/benefits/automations",
-      ctaLabel: "Abrir retenção",
-      tone: "accent" as const,
-    },
-  ];
 
   return (
-    <div className="page-grid">
+    <div className="page-grid dashboard-home">
       {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
 
-      <section className="stats-grid">
-        <article className="card metric-card metric-card--warm">
-          <span className="eyebrow">Serviços</span>
-          <p className="stat-value">{servicesCount ?? 0}</p>
-          <p className="metric-note">Mantenha sua vitrine de atendimentos sempre pronta.</p>
+      <section className="dashboard-summary-grid">
+        <article className="dashboard-highlight-card dashboard-highlight-card--lilac">
+          <span className="eyebrow">Agendamentos Hoje</span>
+          <strong>{todayAppointments.length}</strong>
+          <p>Hoje</p>
+          <small className="dashboard-highlight-card__note">
+            {todayPendingCount > 0 ? `${todayPendingCount} pendentes` : `${todayConfirmedCount} confirmados`}
+          </small>
+          <div className="dashboard-highlight-card__art dashboard-highlight-card__art--bars" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
         </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Clientes</span>
-          <p className="stat-value">{customersCount ?? 0}</p>
-          <p className="metric-note">Acompanhe quem já entrou na rotina do seu salão.</p>
+
+        <article className="dashboard-highlight-card dashboard-highlight-card--ice">
+          <span className="eyebrow">Clientes Atendidos</span>
+          <strong>{weekServedCustomerIds.size}</strong>
+          <p>Esta Semana</p>
+          <small className="dashboard-highlight-card__note">{customersCount ?? 0} clientes na base</small>
+          <div className="dashboard-highlight-card__art dashboard-highlight-card__art--grid" aria-hidden="true">
+            {Array.from({ length: 6 }, (_, index) => (
+              <span key={index} />
+            ))}
+          </div>
         </article>
-        <article className="card metric-card metric-card--accent">
-          <span className="eyebrow">Pendentes</span>
-          <p className="stat-value">{pendingCount ?? 0}</p>
-          <p className="metric-note">Pedidos que ainda precisam da sua confirmação.</p>
+
+        <article className="dashboard-highlight-card dashboard-highlight-card--amber">
+          <span className="eyebrow">Faturamento</span>
+          <strong>{formatCurrency(monthRevenue)}</strong>
+          <p>Este Mês</p>
+          <small className="dashboard-highlight-card__note">
+            Ticket medio {formatCurrency(Number(operations.overview.average_ticket ?? 0))}
+          </small>
+          <div className="dashboard-highlight-card__art dashboard-highlight-card__art--coins" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
         </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Clientes em risco</span>
-          <p className="stat-value">{growthAutomation.overview.at_risk_customers ?? 0}</p>
-          <p className="metric-note">
-            Clientes sem próxima agenda que já estão esfriando perto da janela de retorno.
-          </p>
-        </article>
-        <article className="card metric-card metric-card--warm">
-          <span className="eyebrow">Winbacks prontos</span>
-          <p className="stat-value">{growthAutomation.overview.due_now_customers ?? 0}</p>
-          <p className="metric-note">
-            Clientes que já entraram na régua de reativação configurada para este salão.
-          </p>
-        </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Rebooks inteligentes</span>
-          <p className="stat-value">{growthAutomation.overview.smart_rebook_due_customers ?? 0}</p>
-          <p className="metric-note">
-            Clientes com padrão claro de retorno e janela ideal abrindo para reservar antes de esfriar.
-          </p>
-        </article>
-        <article className="card metric-card metric-card--accent">
-          <span className="eyebrow">Recuperados em 30 dias</span>
-          <p className="stat-value">{growthAutomation.overview.recovered_customers_last_30d ?? 0}</p>
-          <p className="metric-note">
-            Clientes que voltaram a agendar depois dos pushes automáticos mais recentes.
-          </p>
+
+        <article className="dashboard-highlight-card dashboard-highlight-card--wave dashboard-highlight-card--wide">
+          <span className="eyebrow">Próximos Serviços</span>
+          <strong>{pendingCount ?? 0}</strong>
+          <p>Pendentes</p>
+          <small className="dashboard-highlight-card__note">
+            {highValueOpportunities.length > 0
+              ? `${highValueOpportunities.length} encaixes sugeridos`
+              : "Agenda estabilizada"}
+          </small>
+          <div className="dashboard-highlight-card__art dashboard-highlight-card__art--wave" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
         </article>
       </section>
 
-      <ActionCommandCenter
-        title="Plano de ação do dia"
-        description="O painel já sabe onde a agenda está vazando receita. Aqui ficam as três frentes que mais tendem a virar faturamento com menos esforço do dono."
-        cards={actionCards}
-      />
+      <section className="dashboard-reference-grid">
+        <article className="dashboard-panel dashboard-panel--agenda">
+          <div className="dashboard-panel__header">
+            <h2>Agenda do Dia</h2>
 
-      <SalonIntelligencePanel
-        lapsedCustomers={dashboardIntelligence.lapsed_customers ?? []}
-        overview={dashboardIntelligence.overview}
-        smartScheduleSuggestions={smartSchedule.suggestions ?? []}
-        topCustomers={dashboardIntelligence.top_customers ?? []}
-        topServices={dashboardIntelligence.top_services ?? []}
-      />
+            <Link href="/dashboard/appointments" className="dashboard-panel__link dashboard-panel__link--date">
+              <span>{formatAgendaDate(todayAppointments[0]?.date ?? now, timeZone)}</span>
+              <span className="dashboard-panel__link-icon" aria-hidden="true">
+                ›
+              </span>
+            </Link>
+          </div>
 
-      <section className="card content-card">
-        <div className="section-heading">
+          <div className="dashboard-agenda-list">
+            {!todayAppointments.length ? (
+              <div className="dashboard-empty">
+                Nenhum agendamento encontrado para hoje. Se abrir uma janela nova, ela vai aparecer aqui.
+              </div>
+            ) : (
+              todayAppointments.map((appointment) => {
+                const customer = firstRelation(appointment.customers);
+                const service = firstRelation(appointment.services);
+
+                return (
+                  <div key={appointment.id} className="dashboard-agenda-item">
+                    <div className="dashboard-agenda-item__content">
+                      <strong className="dashboard-agenda-item__time">{formatTime(appointment.date, timeZone)}</strong>
+                      <span className="dashboard-agenda-item__separator">—</span>
+                      <strong>{service?.name ?? "Servico do salao"}</strong>
+                      <span>{customer?.name ?? "Cliente"}</span>
+                    </div>
+
+                    {appointment.status === "pending" ? <span className="dashboard-agenda-item__flag" /> : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel dashboard-panel--finance">
+          <div className="dashboard-panel__header">
+            <h2>Resumo Financeiro</h2>
+          </div>
+
+          <div className="dashboard-finance-list">
+            <div className="dashboard-finance-row">
+              <div>
+                <span>Hoje</span>
+                <small>{todayAppointments.length} servicos previstos</small>
+              </div>
+              <strong>{formatCurrency(todayForecastRevenue)}</strong>
+            </div>
+
+            <div className="dashboard-finance-row">
+              <div>
+                <span>Mês Atual</span>
+                <small>{formatCurrency(Number(operations.overview.total_revenue ?? 0))} nos ultimos 7 dias</small>
+              </div>
+              <strong>{formatCurrency(monthRevenue)}</strong>
+            </div>
+
+            <div className="dashboard-finance-row dashboard-finance-row--accent">
+              <div>
+                <span>Pendências</span>
+                <small>{pendingCount ?? 0} agendamentos aguardando</small>
+              </div>
+              <Link href="/dashboard/operations" className="dashboard-finance-pill">
+                {formatCurrency(pendingRevenue)} a receber
+              </Link>
+            </div>
+          </div>
+        </article>
+
+        <article className="dashboard-panel dashboard-panel--ranking">
+          <div className="dashboard-panel__header">
+            <h2>Top Profissionais</h2>
+          </div>
+
+          <div className="dashboard-ranking-list">
+            {!topProfessionals.length ? (
+              <div className="dashboard-empty">O ranking aparece assim que houver atendimentos vinculados a profissionais.</div>
+            ) : (
+              topProfessionals.map((professional) => (
+                <div key={professional.id} className="dashboard-ranking-item">
+                  <div className="dashboard-ranking-item__identity">
+                    <span className="dashboard-avatar" aria-hidden="true">
+                      {getInitials(professional.name)}
+                    </span>
+
+                    <div>
+                      <strong>{professional.name}</strong>
+                      <span>{professional.completed_appointments} atendimentos</span>
+                    </div>
+                  </div>
+
+                  <div className="dashboard-ranking-item__meta">
+                    <span>{professional.role || "Atendimento do salao"}</span>
+                    <strong>›</strong>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel dashboard-panel--services">
+          <div className="dashboard-panel__header">
+            <h2>Estatísticas de Serviços</h2>
+          </div>
+
+          <div className="dashboard-service-stat-list">
+            {!topServices.length ? (
+              <div className="dashboard-empty">Quando os atendimentos forem concluídos, os serviços mais fortes aparecem aqui.</div>
+            ) : (
+              topServices.slice(0, 4).map((service) => {
+                const percentage =
+                  topServicesVolume === 0
+                    ? 0
+                    : Math.round((Number(service.completed_appointments ?? 0) / topServicesVolume) * 100);
+
+                return (
+                  <div key={service.id} className="dashboard-service-stat">
+                    <div className="dashboard-service-stat__header dashboard-service-stat__header--stacked">
+                      <span className="dashboard-service-stat__dot" aria-hidden="true" />
+                      <div>
+                        <strong>{service.name}</strong>
+                        <span>{service.category || "Atendimento"}</span>
+                      </div>
+                      <strong>{percentage}%</strong>
+                    </div>
+
+                    <div className="dashboard-progress" aria-hidden="true">
+                      <span className="dashboard-progress__fill" style={{ width: `${Math.max(percentage, 8)}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel dashboard-panel--stock">
+          <div className="dashboard-panel__header">
+            <h2>Produtos em Falta</h2>
+          </div>
+
+          <div className="dashboard-stock-list">
+            {!lowStockProducts.length ? (
+              <div className="dashboard-empty">Estoque sob controle no momento. O painel avisa quando algum item cair abaixo do minimo.</div>
+            ) : (
+              lowStockProducts.slice(0, 3).map((product) => (
+                <div key={product.id} className="dashboard-stock-item">
+                  <div>
+                    <strong>{product.name}</strong>
+                    <span>{product.brand || "Linha profissional"}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="dashboard-chart">
+            <div className="dashboard-chart__heading">
+              <h3>Serviços Realizados</h3>
+            </div>
+
+            {!topServices.length ? (
+              <div className="dashboard-empty">Sem historico suficiente para gerar o grafico agora.</div>
+            ) : (
+              <div className="dashboard-chart__bars" aria-label="Grafico de servicos realizados">
+                {topServices.map((service) => {
+                  const height = Math.max(
+                    20,
+                    Math.round((Number(service.completed_appointments ?? 0) / maxServiceVolume) * 100),
+                  );
+
+                  return (
+                    <div key={service.id} className="dashboard-chart__item">
+                      <span className="dashboard-chart__value">{service.completed_appointments}</span>
+                      <div className="dashboard-chart__bar-shell">
+                        <span className="dashboard-chart__bar" style={{ height: `${height}%` }} />
+                      </div>
+                      <span className="dashboard-chart__label">{compactLabel(service.name)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="dashboard-radar">
+        <div className="section-heading dashboard-radar__heading">
           <div>
-            <h2>Recuperação automática</h2>
+            <span className="eyebrow">Painel Inteligente</span>
+            <h2>Funções avançadas que o sistema já tem</h2>
             <p className="muted">
-              O painel e o app já estão lendo a mesma regra comercial. Quando um cliente some, o sistema entra com incentivo automático e o resultado aparece aqui.
+              O topo ficou mais limpo e fiel à referência. Aqui embaixo continuam os recursos de encaixe, retenção e automação do salão.
             </p>
           </div>
-
-          <Link href="/dashboard/benefits/automations" className="secondary-button">
-            Ajustar automação
-          </Link>
         </div>
 
-        <div className="stats-grid" style={{ marginTop: 18 }}>
-          <article className="card metric-card metric-card--soft">
-            <span className="eyebrow">Automação</span>
-            <p className="stat-value">
-              {growthAutomation.settings.is_active || growthAutomation.settings.smart_rebook_is_active ? "Ligada" : "Pausada"}
-            </p>
-            <p className="metric-note">
-              Hoje o painel trabalha com rebook inteligente até {growthAutomation.settings.smart_rebook_window_days} dias antes da janela ideal e winback após {growthAutomation.settings.winback_inactive_days} dias com {growthAutomation.settings.winback_discount_percent}% de incentivo.
-            </p>
-          </article>
-          <article className="card metric-card metric-card--soft">
-            <span className="eyebrow">Rebooks enviados</span>
-            <p className="stat-value">{growthAutomation.overview.smart_rebooks_sent_last_30d ?? 0}</p>
-            <p className="metric-note">Clientes abordados com push comportamental antes do ciclo ideal vencer.</p>
-          </article>
-          <article className="card metric-card metric-card--warm">
-            <span className="eyebrow">Winbacks enviados</span>
-            <p className="stat-value">{growthAutomation.overview.winbacks_sent_last_30d ?? 0}</p>
-            <p className="metric-note">Campanhas automáticas disparadas para clientes sem retorno nos últimos 30 dias.</p>
-          </article>
-          <article className="card metric-card metric-card--accent">
-            <span className="eyebrow">Último ajuste</span>
-            <p className="stat-value">
-              {growthAutomation.settings.updated_at ? "Personalizada" : "Padrão"}
-            </p>
-            <p className="metric-note">
-              {growthAutomation.settings.updated_at
-                ? `Configurada em ${formatDateTime(growthAutomation.settings.updated_at)}.`
-                : "Ainda está usando a regra padrão do sistema."}{" "}
-              Se mudar no painel, o app do cliente passa a refletir a mesma regra.
-            </p>
-          </article>
-        </div>
+        <div className="dashboard-radar__grid">
+          <article className="dashboard-panel dashboard-radar-card">
+            <div className="dashboard-panel__header">
+              <div>
+                <h2>Encaixes Inteligentes</h2>
+                <p className="muted">Oportunidades com maior chance de virar venda nas janelas livres.</p>
+              </div>
 
-        <div className="row-list" style={{ marginTop: 18 }}>
-          {!growthAutomation.recent_runs.length ? (
-            <EmptyStateCard
-              eyebrow="Sem disparos ainda"
-              title="A régua ainda não acionou nenhum push comercial"
-              description="Assim que algum cliente entrar na janela ideal de retorno ou virar winback, as campanhas automáticas aparecem aqui."
-            />
-          ) : (
-            growthAutomation.recent_runs.slice(0, 4).map((run) => (
-              <article key={run.id} className="list-row">
-                <div className="list-row__content">
-                  <div className="inline-actions" style={{ marginBottom: 8 }}>
-                    <span className={run.recovered ? "badge badge--confirmed" : "badge badge--pending"}>
-                      {run.recovered ? "Cliente recuperado" : "Aguardando retorno"}
-                    </span>
-                    <span className="badge badge--soft">
-                      {run.automation_type === "smart_rebook_prompt" ? "Rebook inteligente" : `${run.discount_percent}% OFF`}
-                    </span>
+              <Link href="/dashboard/appointments#encaixes-inteligentes" className="dashboard-panel__link">
+                Trabalhar agenda
+              </Link>
+            </div>
+
+            <div className="dashboard-radar-list">
+              {!highValueOpportunities.length ? (
+                <div className="dashboard-empty">Nenhuma janela premium aberta agora. A sugestao aparece assim que surgir o proximo gap relevante.</div>
+              ) : (
+                highValueOpportunities.map((suggestion, index) => (
+                  <div key={`${suggestion.staff_member_name}-${index}`} className="dashboard-radar-item">
+                    <div className="dashboard-radar-item__content">
+                      <strong>{suggestion.suggested_service.name}</strong>
+                      <span>
+                        {suggestion.staff_member_name} • {formatTime(suggestion.suggested_start, timeZone)}
+                      </span>
+                    </div>
+                      <div className="dashboard-radar-item__meta">
+                        <strong>{formatCurrency(Number(suggestion.suggested_service.price ?? 0))}</strong>
+                        <small>{suggestion.detail}</small>
+                      </div>
+                    </div>
+                ))
+              )}
+            </div>
+          </article>
+
+          <article className="dashboard-panel dashboard-radar-card">
+            <div className="dashboard-panel__header">
+              <div>
+                <h2>Clientes para Reativar</h2>
+                <p className="muted">Quem esfriou, quanto tempo ficou sem voltar e onde agir primeiro.</p>
+              </div>
+
+              <Link href="/dashboard/benefits/automations" className="dashboard-panel__link">
+                Abrir retencao
+              </Link>
+            </div>
+
+            <div className="dashboard-radar-list">
+              {!dashboardIntelligence.lapsed_customers.length ? (
+                <div className="dashboard-empty">Nenhum cliente fora da janela ideal agora. Bom sinal para a recorrencia do salao.</div>
+              ) : (
+                dashboardIntelligence.lapsed_customers.slice(0, 3).map((customer) => (
+                  <div key={customer.id} className="dashboard-radar-item">
+                    <div className="dashboard-radar-item__content">
+                      <strong>{customer.name}</strong>
+                      <span>
+                        {customer.inactive_days} dias sem voltar • {customer.last_service_name}
+                      </span>
+                    </div>
+
+                    <div className="dashboard-radar-item__meta">
+                      <span className={customer.status === "due_now" ? "badge badge--pending" : "badge badge--soft"}>
+                        {customer.status === "due_now" ? "Winback agora" : "Em risco"}
+                      </span>
+                      <small>{formatCurrency(Number(customer.total_spent ?? 0))} em historico</small>
+                    </div>
                   </div>
-                  <h3>{run.customer_name}</h3>
-                  <p className="muted list-description">
-                    {run.automation_type === "smart_rebook_prompt"
-                      ? `Disparo comportamental para remarcar ${run.service_name}${run.target_weekday ? ` em ${run.target_weekday}` : ""}${run.target_period ? ` ${run.target_period}` : ""}.`
-                      : `Disparo automático para reativar ${run.customer_name} após ${run.inactive_days} dias sem voltar ao salão.`}
-                  </p>
-                  <small className="list-meta">
-                    Baseado no serviço {run.service_name} • enviado em {formatDateTime(run.sent_at)}
-                  </small>
-                  {run.recovered_appointment_at ? (
-                    <small className="list-meta">
-                      Novo agendamento registrado para {formatDateTime(run.recovered_appointment_at)}
-                    </small>
-                  ) : null}
-                </div>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
+                ))
+              )}
+            </div>
+          </article>
 
-      <SmartScheduleSuggestions
-        suggestions={smartSchedule.suggestions ?? []}
-        targetDayLabel={buildSmartScheduleTargetDayLabel(smartSchedule.target_day)}
-      />
+          <article className="dashboard-panel dashboard-radar-card">
+            <div className="dashboard-panel__header">
+              <div>
+                <h2>Automações do Salão</h2>
+                <p className="muted">Rebook e winback com leitura executiva para o dono acompanhar resultado.</p>
+              </div>
 
-      <section className="card content-card">
-        <div className="section-heading">
-          <div>
-            <h2>Próximos agendamentos</h2>
-            <p className="muted">Os pedidos entram como pendentes e podem ser confirmados no painel.</p>
-          </div>
-        </div>
+              <Link href="/dashboard/benefits/automations" className="dashboard-panel__link">
+                Configurar
+              </Link>
+            </div>
 
-        <div className="table-list" style={{ marginTop: 16 }}>
-          {recentAppointments.length === 0 ? (
-            <EmptyStateCard
-              eyebrow="Agenda livre"
-              title="Nenhum agendamento por enquanto"
-              description="Assim que seus clientes começarem a marcar horários, os próximos atendimentos vão aparecer aqui."
-            />
-          ) : (
-            recentAppointments.map((appointment) => {
-              const customer = Array.isArray(appointment.customers)
-                ? appointment.customers[0]
-                : appointment.customers;
-              const service = Array.isArray(appointment.services)
-                ? appointment.services[0]
-                : appointment.services;
-              const staffMember = Array.isArray(appointment.staff_members)
-                ? appointment.staff_members[0]
-                : appointment.staff_members;
+            <div className="dashboard-radar-metrics">
+              <div className="dashboard-radar-metric">
+                <span>Em risco</span>
+                <strong>{growthAutomation.overview.at_risk_customers ?? 0}</strong>
+              </div>
+              <div className="dashboard-radar-metric">
+                <span>Winback</span>
+                <strong>{growthAutomation.overview.due_now_customers ?? 0}</strong>
+              </div>
+              <div className="dashboard-radar-metric">
+                <span>Recuperados</span>
+                <strong>{growthAutomation.overview.recovered_customers_last_30d ?? 0}</strong>
+              </div>
+            </div>
 
-              return (
-                <div key={appointment.id} className="list-row">
-                  <div className="list-row__content">
-                    <h3>{customer?.name ?? "Cliente"}</h3>
-                    <small className="list-meta">
-                      {service?.category ? `${service.category} • ` : ""}
-                      {service?.name ?? "Serviço"} • {formatDateTime(appointment.date)}
-                    </small>
-                    <small className="list-meta">Profissional: {staffMember?.name ?? "Equipe do salão"}</small>
-                  </div>
-                  <div className="list-row__aside">
-                    <span className={`badge badge--${appointment.status}`}>{formatAppointmentStatus(appointment.status)}</span>
-                  </div>
-                </div>
-              );
-            })
-          )}
+            <div className="dashboard-inline-pills">
+              <span className="dashboard-mini-pill">{growthAutomation.overview.smart_rebook_due_customers ?? 0} rebooks prontos</span>
+              <span className="dashboard-mini-pill">{automationLive ? "Motor ativo" : "Motor pausado"}</span>
+            </div>
+
+            <div className="dashboard-automation-note">
+              <strong>
+                {automationLive ? "Automacao ligada" : "Automacao pausada"}
+              </strong>
+              <p>
+                {nextTopCustomerWithoutReturn
+                  ? `${nextTopCustomerWithoutReturn.name} ja gerou ${formatCurrency(
+                      Number(nextTopCustomerWithoutReturn.total_spent ?? 0),
+                    )} e ainda esta sem proxima agenda.`
+                  : "O painel continua observando clientes de maior valor para sugerir o melhor momento de retorno."}
+              </p>
+              <small>
+                {growthAutomation.overview.smart_rebooks_sent_last_30d ?? 0} rebooks e{" "}
+                {growthAutomation.overview.winbacks_sent_last_30d ?? 0} winbacks enviados nos ultimos 30 dias.
+              </small>
+              {topServices[0]?.last_booked_at ? (
+                <small>Servico lider atualizado em {formatCompactDate(topServices[0].last_booked_at, timeZone)}.</small>
+              ) : null}
+            </div>
+          </article>
         </div>
       </section>
     </div>

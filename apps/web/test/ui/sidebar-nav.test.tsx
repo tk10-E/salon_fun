@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
+import type { MouseEventHandler } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,11 +16,11 @@ vi.mock("next/link", () => ({
     children?: ReactNode;
     href: string;
     className?: string;
-    onClick?: (event: unknown) => void;
+    onClick?: MouseEventHandler<HTMLAnchorElement>;
     onMouseEnter?: () => void;
     onTouchStart?: () => void;
     onFocus?: () => void;
-    "aria-busy"?: string;
+    "aria-busy"?: boolean | "false" | "true";
     "data-pending"?: string;
   }) => (
     <a

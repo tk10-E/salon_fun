@@ -188,36 +188,52 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
   const staffOptions = ((staffOptionsResult.data ?? []) as StaffOption[]).filter((staffMember) => staffMember.is_active);
 
   return (
-    <div className="page-grid">
+    <div className="page-grid dashboard-home operations-page">
       {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
 
-      <section className="stats-grid">
-        <article className="card metric-card metric-card--warm">
+      <section className="dashboard-panel operations-page__hero">
+        <div className="dashboard-panel__header">
+          <div>
+            <span className="eyebrow">Financeiro e estoque</span>
+            <h2>Operação do salão em tempo real</h2>
+            <p className="muted">
+              Receita, comissão, equipe e estoque no mesmo fluxo operacional, com leitura rápida para tomada de decisão.
+            </p>
+          </div>
+
+          <Link href="/dashboard" className="dashboard-panel__link">
+            Voltar ao dashboard
+          </Link>
+        </div>
+      </section>
+
+      <section className="stats-grid operations-stats-grid">
+        <article className="card metric-card metric-card--warm operations-metric-card">
           <span className="eyebrow">Faturamento 7 dias</span>
           <p className="stat-value">{formatCurrency(Number(operations.overview.total_revenue ?? 0))}</p>
           <p className="metric-note">Leitura rápida do caixa gerado pelos atendimentos concluídos mais recentes.</p>
         </article>
-        <article className="card metric-card metric-card--soft">
+        <article className="card metric-card metric-card--soft operations-metric-card">
           <span className="eyebrow">Ticket médio</span>
           <p className="stat-value">{formatCurrency(Number(operations.overview.average_ticket ?? 0))}</p>
           <p className="metric-note">Quanto cada atendimento concluído está deixando, em média, para o salão.</p>
         </article>
-        <article className="card metric-card metric-card--accent">
+        <article className="card metric-card metric-card--accent operations-metric-card">
           <span className="eyebrow">Comissão estimada</span>
           <p className="stat-value">{formatCurrency(Number(operations.overview.estimated_commissions ?? 0))}</p>
           <p className="metric-note">Estimativa automática baseada nas regras configuradas por profissional.</p>
         </article>
-        <article className="card metric-card metric-card--soft">
+        <article className="card metric-card metric-card--soft operations-metric-card">
           <span className="eyebrow">Estoque em alerta</span>
           <p className="stat-value">{operations.overview.low_stock_products ?? 0}</p>
           <p className="metric-note">Produtos que já chegaram ou passaram do mínimo definido no salão.</p>
         </article>
-        <article className="card metric-card metric-card--warm">
+        <article className="card metric-card metric-card--warm operations-metric-card">
           <span className="eyebrow">Equipe ativa</span>
           <p className="stat-value">{operations.overview.active_staff_members ?? 0}</p>
           <p className="metric-note">Profissionais ativos hoje puxando agenda, receita e comissão automática.</p>
         </article>
-        <article className="card metric-card metric-card--accent">
+        <article className="card metric-card metric-card--accent operations-metric-card">
           <span className="eyebrow">Quem mais rende</span>
           <p className="stat-value">{operations.overview.top_staff_name ?? "Sem ranking"}</p>
           <p className="metric-note">
@@ -228,9 +244,9 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
         </article>
       </section>
 
-      <div className="two-column-grid">
+      <div className="two-column-grid operations-layout">
         <section className="page-grid">
-          <section className="card content-card">
+          <section className="card content-card operations-card">
             <div className="section-heading">
               <div>
                 <span className="eyebrow">Painel profissional</span>
@@ -250,7 +266,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                 />
               ) : (
                 operations.daily_revenue.map((entry) => (
-                  <article key={entry.day} className="list-row">
+                  <article key={entry.day} className="list-row operations-row">
                     <div className="list-row__content">
                       <h3>{formatDate(entry.day)}</h3>
                       <p className="muted list-description">
@@ -268,7 +284,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </div>
           </section>
 
-          <section className="card content-card">
+          <section className="card content-card operations-card">
             <div className="section-heading">
               <div>
                 <h2>Profissionais que mais rendem</h2>
@@ -287,7 +303,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                 />
               ) : (
                 operations.top_staff.map((staffMember) => (
-                  <article key={staffMember.id} className="list-row customer-card">
+                  <article key={staffMember.id} className="list-row customer-card operations-row operations-record">
                     <div className="customer-card__content">
                       <div className="customer-card__header">
                         <div className="list-row__content">
@@ -336,7 +352,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </div>
           </section>
 
-          <section className="card content-card">
+          <section className="card content-card operations-card">
             <div className="section-heading">
               <div>
                 <h2>Agenda e comissão por funcionário</h2>
@@ -359,7 +375,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                 />
               ) : (
                 operations.staff_agenda.map((staffMember) => (
-                  <article key={staffMember.id} className="list-row service-editor-card">
+                  <article key={staffMember.id} className="list-row service-editor-card operations-row operations-record">
                     <div className="list-row__content">
                       <div className="inline-actions" style={{ marginBottom: 8 }}>
                         <span className={staffMember.is_active ? "badge badge--confirmed" : "badge badge--cancelled"}>
@@ -427,7 +443,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
         </section>
 
         <section className="page-grid">
-          <section className="card content-card form-panel">
+          <section className="card content-card form-panel operations-card operations-form-panel">
             <div className="section-heading">
               <div>
                 <h2>Controle de estoque</h2>
@@ -495,7 +511,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </form>
           </section>
 
-          <section className="card content-card">
+          <section className="card content-card operations-card">
             <div className="section-heading">
               <div>
                 <h2>Produtos e alertas</h2>
@@ -517,7 +533,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                   const isLowStock = Number(product.current_stock ?? 0) <= Number(product.minimum_stock ?? 0);
 
                   return (
-                    <article key={product.id} className="list-row customer-card">
+                    <article key={product.id} className="list-row customer-card operations-row operations-record">
                       <div className="customer-card__content">
                         <div className="customer-card__header">
                           <div className="list-row__content">
@@ -709,7 +725,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </div>
           </section>
 
-          <section className="card content-card">
+          <section className="card content-card operations-card">
             <div className="section-heading">
               <div>
                 <h2>Movimentos recentes</h2>
@@ -732,7 +748,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                   const staffMember = firstRelation(movement.staff_members);
 
                   return (
-                    <article key={movement.id} className="list-row">
+                    <article key={movement.id} className="list-row operations-row">
                       <div className="list-row__content">
                         <div className="inline-actions" style={{ marginBottom: 8 }}>
                           <span className="badge badge--soft">{formatMovementLabel(movement.movement_type)}</span>

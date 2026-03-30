@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,7 +19,7 @@ const {
 }));
 
 vi.mock("next/link", () => ({
-  default: (props: { children?: unknown; href: string; className?: string }) =>
+  default: (props: { children?: ReactNode; href: string; className?: string }) =>
     createElement("a", { href: props.href, className: props.className }, props.children),
 }));
 
