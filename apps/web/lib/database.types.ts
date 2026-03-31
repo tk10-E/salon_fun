@@ -1,4 +1,10 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export type Database = {
   public: {
@@ -320,6 +326,7 @@ export type Database = {
         Row: {
           brand_color: string;
           business_segment: string;
+          client_app_config: Json;
           created_at: string;
           id: string;
           join_code: string;
@@ -335,6 +342,7 @@ export type Database = {
         Insert: {
           brand_color?: string;
           business_segment?: string;
+          client_app_config?: Json;
           created_at?: string;
           id?: string;
           join_code?: string;
@@ -350,6 +358,7 @@ export type Database = {
         Update: {
           brand_color?: string;
           business_segment?: string;
+          client_app_config?: Json;
           created_at?: string;
           id?: string;
           join_code?: string;

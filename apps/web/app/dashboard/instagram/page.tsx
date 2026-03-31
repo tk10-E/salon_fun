@@ -8,6 +8,7 @@ import {
   rejectInstagramMentionAction,
   syncInstagramActivityAction,
 } from "@/app/actions";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
@@ -155,148 +156,149 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
   const pendingCount = safeMentions.filter((item) => getEffectiveMentionStatus(item) === "pending").length;
   const approvedCount = safeMentions.filter((item) => getEffectiveMentionStatus(item) === "approved").length;
   const publishedCount = safeMentions.filter((item) => getEffectiveMentionStatus(item) === "published").length;
+  const reviewQueueCount = pendingCount + approvedCount;
+  const latestMention = safeMentions[0] ?? null;
 
   return (
-    <div className="two-column-grid">
-      <section className="card content-card">
-        <div className="section-heading">
-          <div>
-            <h2>Instagram e Facebook do salão</h2>
+    <div className="page-grid workspace-page instagram-page">
+      <DashboardWorkspaceHero
+        eyebrow="Instagram + Facebook"
+        title="Instagram e Facebook do salão"
+        description="A conexão oficial continua sendo da Meta, mas a leitura operacional ficou mais forte: você sabe o que chegou, o que precisa de aprovação e o que já virou conteúdo no app do cliente."
+        highlight={{
+          label: "Conta conectada",
+          value: safeConnection ? `@${safeConnection.instagram_username}` : "Meta não conectada",
+          note: safeConnection
+            ? `${safeConnection.facebook_page_name ? `Página: ${safeConnection.facebook_page_name}. ` : ""}${safeConnection.last_sync_at ? `Validada em ${formatDateTime(safeConnection.last_sync_at)}.` : "Aguardando nova sincronização manual ou webhook."}`
+            : "Conecte a conta profissional do salão para puxar posts próprios e marcações reais para o app do cliente.",
+        }}
+        signals={[
+          {
+            label: "Status",
+            value: safeConnection ? getConnectionStatusLabel(safeConnection.connection_status) : "Não conectada",
+            tone:
+              safeConnection?.connection_status === "error"
+                ? "danger"
+                : safeConnection?.connection_status === "active"
+                ? "success"
+                : "soft",
+          },
+          {
+            label: "Stories",
+            value: safeConnection?.import_story_mentions ? "Ativos" : "Desligados",
+            tone: safeConnection?.import_story_mentions ? "accent" : "soft",
+          },
+          {
+            label: "Revisão",
+            value: safeConnection?.require_mention_approval ? "Obrigatória" : "Livre",
+            tone: safeConnection?.require_mention_approval ? "warm" : "success",
+          },
+        ]}
+        stats={[
+          {
+            label: "Pendentes",
+            value: pendingCount,
+            note: "Menções aguardando revisão antes de entrar no feed.",
+            tone: "warm",
+          },
+          {
+            label: "Aprovadas",
+            value: approvedCount,
+            note: "Conteúdos prontos para publicar quando você quiser.",
+            tone: "soft",
+          },
+          {
+            label: "Publicadas",
+            value: publishedCount,
+            note: "Posts que já viraram prova social no app do cliente.",
+            tone: "accent",
+          },
+          {
+            label: "Fila total",
+            value: safeMentions.length,
+            note: "Itens recentes trazidos da integração oficial da Meta.",
+            tone: "success",
+          },
+        ]}
+        actions={
+          safeConnection ? (
+            <div className="row-actions">
+              <form action={syncInstagramActivityAction}>
+                <button type="submit" className="secondary-button">
+                  Sincronizar agora
+                </button>
+              </form>
+              {canUseAutomaticMetaConnect ? (
+                <Link href="/dashboard/instagram/connect" className="primary-button">
+                  Reconectar Meta
+                </Link>
+              ) : null}
+            </div>
+          ) : canUseAutomaticMetaConnect ? (
+            <Link href="/dashboard/instagram/connect" className="primary-button">
+              Conectar Meta
+            </Link>
+          ) : (
             <p className="muted">
-              Conecte a conta profissional do salão na Meta para puxar posts e marcações do Instagram e da página do Facebook para o app. Quando a mídia vier pronta, o feed publica sozinho e esta área vira seu acompanhamento e fallback.
+              A conexão automática não está disponível no momento. Fale com o suporte do painel.
             </p>
-          </div>
-        </div>
-
-        {searchParams?.message ? (
-          <div style={{ marginTop: 16 }}>
-            <FlashMessage message={searchParams.message} tone={searchParams.tone} />
-          </div>
-        ) : null}
-
-        <div className="instagram-connection-card" style={{ marginTop: 18 }}>
-          <div className="instagram-connection-card__content">
-            <span className="eyebrow">Conexão oficial</span>
+          )
+        }
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Resumo da conexão atual</span>
             <h3>
               {safeConnection
                 ? "Sua conta profissional já está conectada"
-                : "Conecte o Instagram e a página do salão"}
+                : "O fluxo de conexão oficial entra por aqui."}
             </h3>
-            <p className="muted">
-              A conexão acontece no fluxo oficial da Meta e a conta fica salva automaticamente no painel, sem expor etapas técnicas para o usuário.
+            {safeConnection?.facebook_page_name ? (
+              <span className="instagram-info-pill">Página: {safeConnection.facebook_page_name}</span>
+            ) : null}
+            <p>
+              {safeConnection
+                ? `${safeConnection.last_webhook_at ? `Última atividade recebida em ${formatDateTime(safeConnection.last_webhook_at)}.` : "Aguardando as próximas marcações aparecerem na fila."} Se quiser atualizar a autorização do Instagram ou Facebook, use o botão de reconexão acima.`
+                : "Você autoriza a conta em um fluxo seguro da Meta e as novas marcações do Instagram e do Facebook começam a aparecer aqui automaticamente para moderação e publicação."}
             </p>
+          </>
+        }
+      />
 
-            <div className="instagram-connection-card__meta">
-              <span className={getConnectionStatusClass(safeConnection?.connection_status ?? null)}>
-                {safeConnection ? getConnectionStatusLabel(safeConnection.connection_status) : "Não conectada"}
-              </span>
-              {safeConnection ? (
-                <span className="instagram-info-pill">@{safeConnection.instagram_username}</span>
-              ) : (
-                <span className="instagram-info-pill instagram-info-pill--muted">
-                  Nenhuma conta vinculada
-                </span>
-              )}
-              {safeConnection?.facebook_page_name ? (
-                <span className="instagram-info-pill">Página: {safeConnection.facebook_page_name}</span>
-              ) : null}
-              {safeConnection?.last_sync_at ? (
-                <span className="instagram-info-pill">
-                  Validada em {formatDateTime(safeConnection.last_sync_at)}
-                </span>
-              ) : null}
-            </div>
-          </div>
+      {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
 
-          <div className="instagram-connection-card__actions">
-            {safeConnection ? (
-              <div className="row-actions">
-                <form action={syncInstagramActivityAction}>
-                  <button type="submit" className="secondary-button">
-                    Sincronizar agora
-                  </button>
-                </form>
-                {canUseAutomaticMetaConnect ? (
-                  <Link href="/dashboard/instagram/connect" className="primary-button">
-                    Reconectar Meta
-                  </Link>
-                ) : null}
-              </div>
-            ) : canUseAutomaticMetaConnect ? (
-              <Link href="/dashboard/instagram/connect" className="primary-button">
-                Conectar Meta
-              </Link>
-            ) : (
-              <p className="muted">
-                A conexão automática não está disponível no momento. Fale com o suporte do painel.
-              </p>
-            )}
-            <p className="instagram-connection-card__hint">
-              Depois da autorização, posts do salão e marcações de clientes entram automaticamente no feed sempre que a mídia estiver pronta. Se algo atrasar, use a sincronização manual.
-            </p>
-          </div>
-        </div>
+      {safeConnection?.last_error ? (
+        <article className="instagram-alert-card instagram-alert-card--error">
+          <span className="feed-post-meta-card__eyebrow">Último alerta</span>
+          <strong>{safeConnection.last_error}</strong>
+          <p className="muted">Se necessário, reconecte a conta pelo botão acima.</p>
+        </article>
+      ) : null}
 
-        {safeConnection?.last_error ? (
-          <article className="instagram-alert-card instagram-alert-card--error" style={{ marginTop: 18 }}>
-            <span className="feed-post-meta-card__eyebrow">Último alerta</span>
-            <strong>{safeConnection.last_error}</strong>
-            <p className="muted">Se necessário, reconecte a conta pelo botão acima.</p>
-          </article>
-        ) : null}
+      <div className="workspace-subgrid">
+        <article className="workspace-panel">
+          <span className="workspace-panel__eyebrow">Como esse painel funciona</span>
+          <h3>O conteúdo entra da Meta e sai como prova social no app.</h3>
+          <ul className="feed-composer-tip-list">
+            <li>Conecte a conta profissional do salão uma única vez.</li>
+            <li>As menções do Instagram e do Facebook chegam nesta área para revisão com dados reais.</li>
+            <li>Publique no app só o que fortalece marca, desejo e confiança no salão.</li>
+          </ul>
+        </article>
 
-        <div className="stats-grid" style={{ marginTop: 18 }}>
-          <article className="card metric-card metric-card--warm instagram-metric-card">
-            <span className="eyebrow">Pendentes</span>
-            <strong className="stat-value">{pendingCount}</strong>
-            <p className="metric-note">Menções aguardando revisão antes de entrar no feed.</p>
-          </article>
-          <article className="card metric-card metric-card--soft instagram-metric-card">
-            <span className="eyebrow">Aprovadas</span>
-            <strong className="stat-value">{approvedCount}</strong>
-            <p className="metric-note">Conteúdos prontos para publicar quando você quiser.</p>
-          </article>
-          <article className="card metric-card metric-card--accent instagram-metric-card">
-            <span className="eyebrow">Publicadas</span>
-            <strong className="stat-value">{publishedCount}</strong>
-            <p className="metric-note">Posts que já viraram prova social no app do cliente.</p>
-          </article>
-        </div>
-
-        <div className="instagram-guidance-grid" style={{ marginTop: 18 }}>
-          <article className="feed-composer-tip-card instagram-guidance-card">
-            <strong>Como esse painel funciona</strong>
-            <ul className="feed-composer-tip-list">
-              <li>Conecte a conta profissional do salão uma única vez.</li>
-              <li>As menções do Instagram e do Facebook chegam nesta área para você revisar com calma.</li>
-              <li>Publique no app só o que fortalece a marca e a prova social do salão.</li>
-            </ul>
-          </article>
-
-          <article className="feed-composer-tip-card instagram-guidance-card">
-            <strong>{safeConnection ? "Resumo da conexão atual" : "O que acontece depois da conexão"}</strong>
-            <ul className="feed-composer-tip-list">
-              {safeConnection ? (
-                <>
-                  <li>Conta vinculada: @{safeConnection.instagram_username}.</li>
-                  <li>
-                    {safeConnection.last_webhook_at
-                      ? `Última atividade recebida em ${formatDateTime(safeConnection.last_webhook_at)}.`
-                      : "Aguarde as próximas marcações aparecerem na caixa de menções."}
-                  </li>
-                  <li>Se quiser atualizar a autorização do Instagram ou Facebook, use o botão de reconexão acima.</li>
-                </>
-              ) : (
-                <>
-                  <li>Você autoriza a conta em um fluxo seguro e guiado.</li>
-                  <li>As novas marcações do Instagram e da página do Facebook começam a aparecer automaticamente nesta fila.</li>
-                  <li>O restante da moderação continua sendo feito aqui no painel.</li>
-                </>
-              )}
-            </ul>
-          </article>
-        </div>
-      </section>
+        <article className="workspace-panel">
+          <span className="workspace-panel__eyebrow">Ritmo da operação</span>
+          <h3>
+            {latestMention
+              ? `${getMentionAuthorLabel(latestMention)} foi a última movimentação capturada.`
+              : "A fila começa a viver assim que a conexão estiver recebendo mídia."}
+          </h3>
+          <p>
+            {latestMention
+              ? `${getMentionSourceLabel(latestMention)} ${latestMention.mentioned_at ? `em ${formatDateTime(latestMention.mentioned_at)}.` : "sem data disponível."}`
+              : "Quando a mídia chega pronta, o feed do salão pode publicar sozinho; quando não chega, esta área vira sua fila de fallback e curadoria."}
+          </p>
+        </article>
+      </div>
 
       <section className="card content-card">
         <div className="section-heading">
@@ -305,6 +307,21 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
             <p className="muted">
               Revise posts e stories marcando o salão, aprove o que faz sentido e publique no mesmo feed que já aparece no app do cliente.
             </p>
+          </div>
+        </div>
+
+        <div className="workspace-signal-strip" style={{ marginTop: 18 }}>
+          <div className="workspace-signal-pill workspace-hero__stat--warm">
+            <span>Para revisar</span>
+            <strong>{reviewQueueCount}</strong>
+          </div>
+          <div className="workspace-signal-pill workspace-hero__stat--soft">
+            <span>Prontas para publicar</span>
+            <strong>{approvedCount}</strong>
+          </div>
+          <div className="workspace-signal-pill workspace-hero__stat--accent">
+            <span>Já publicadas</span>
+            <strong>{publishedCount}</strong>
           </div>
         </div>
 

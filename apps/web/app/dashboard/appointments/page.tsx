@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { updateAppointmentStatusAction } from "@/app/actions";
 import { ActionCommandCenter } from "@/components/ActionCommandCenter";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import {
@@ -370,15 +371,90 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
       items: appointments.filter((appointment) => appointment.board_status === "cancelled"),
     },
   ] satisfies AppointmentStatusSection[]).filter((section) => !statusFilter || section.key === statusFilter);
+  const agendaFilterSummary = [q || null, statusFilter || null, staffMemberId || null, dateFrom || null, dateTo || null]
+    .filter(Boolean)
+    .length;
 
   return (
-    <div className="page-grid">
+    <div className="page-grid workspace-page appointments-page">
       <SmartScheduleSuggestions
         sectionId="encaixes-inteligentes"
         title="Encaixes inteligentes de hoje"
         description="O painel aponta os melhores intervalos livres entre atendimentos para vender encaixes sem criar conflito na jornada dos profissionais."
         suggestions={smartSchedule.suggestions ?? []}
         targetDayLabel={buildSmartScheduleTargetDayLabel(smartSchedule.target_day)}
+      />
+
+      <DashboardWorkspaceHero
+        eyebrow="Agenda operacional"
+        title="Horários, confirmações e encaixes estratégicos na mesma superfície."
+        description="A agenda do salão agora destaca o que precisa de ação imediata e o que pode virar faturamento sem improviso. Tudo segue vindo da operação real e das RPCs do painel."
+        highlight={{
+          label: "Volume no recorte",
+          value: `${totalCount} agendamento${totalCount === 1 ? "" : "s"}`,
+          note:
+            agendaFilterSummary > 0
+              ? `Recorte filtrado com ${agendaFilterSummary} critério${agendaFilterSummary === 1 ? "" : "s"} ativo${agendaFilterSummary === 1 ? "" : "s"}.`
+              : "Leitura ampla da agenda sem filtros adicionais.",
+        }}
+        signals={[
+          {
+            label: "Pendências",
+            value: boardResponse.overview.pending ?? 0,
+            tone: (boardResponse.overview.pending ?? 0) > 0 ? "warm" : "soft",
+          },
+          {
+            label: "Confirmações abertas",
+            value: awaitingCustomerResponseCount,
+            tone: awaitingCustomerResponseCount > 0 ? "accent" : "success",
+          },
+          {
+            label: "Encaixes do dia",
+            value: smartSchedule.suggestions?.length ?? 0,
+            tone: (smartSchedule.suggestions?.length ?? 0) > 0 ? "success" : "soft",
+          },
+        ]}
+        stats={[
+          {
+            label: "Confirmados",
+            value: boardResponse.overview.confirmed ?? 0,
+            note: "Horários futuros já seguros na agenda.",
+            tone: "soft",
+          },
+          {
+            label: "Aguardando conclusão",
+            value: boardResponse.overview.awaiting_completion ?? 0,
+            note: "Atendimentos que já podem alimentar histórico e comissão.",
+            tone: "accent",
+          },
+          {
+            label: "Atendidos",
+            value: boardResponse.overview.completed ?? 0,
+            note: "Serviços concluídos no recorte atual.",
+            tone: "success",
+          },
+          {
+            label: "Cancelados",
+            value: boardResponse.overview.cancelled ?? 0,
+            note: "Horários perdidos que merecem análise de causa.",
+            tone: (boardResponse.overview.cancelled ?? 0) > 0 ? "danger" : "soft",
+          },
+        ]}
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Oportunidade do dia</span>
+            <h3>
+              {bestSuggestion
+                ? `${bestSuggestion.staff_member_name} tem uma janela vendável agora.`
+                : "Nenhuma janela estratégica evidente no momento."}
+            </h3>
+            <p>
+              {bestSuggestion
+                ? `${bestSuggestion.suggested_service.name} cabe em ${bestSuggestion.gap_minutes} minutos livres e pode adicionar ${formatCurrency(Number(bestSuggestion.suggested_service.price ?? 0))} ao caixa sem estressar a operação.`
+                : "Quando houver gap comercialmente saudável entre atendimentos, esta área passa a sugerir encaixes com serviço e potencial de receita."}
+            </p>
+          </>
+        }
       />
 
       <section className="card content-card">
@@ -556,55 +632,66 @@ export default async function AppointmentsPage({ searchParams }: AppointmentsPag
                               {appointment.service_category ? `${appointment.service_category} • ` : ""}
                               {appointment.service_name} • {appointment.service_duration ?? 0} min
                             </p>
-                            <small className="list-meta">
-                              Profissional: {appointment.staff_member_name ?? "Equipe do salão"}
-                            </small>
-                            <small className="list-meta">{formatDateTime(appointment.date)}</small>
-                            {appointment.status === "cancelled" ? (
-                              <>
+                            <div className="appointment-card__meta">
+                              <small className="list-meta">
+                                Profissional: {appointment.staff_member_name ?? "Equipe do salão"}
+                              </small>
+                              <small className="list-meta">{formatDateTime(appointment.date)}</small>
+                              {appointment.status === "cancelled" ? (
+                                <>
+                                  <small className="list-meta">
+                                    Cancelado por{" "}
+                                    {appointment.cancelled_by === "customer"
+                                      ? "cliente"
+                                      : appointment.cancelled_by === "system"
+                                        ? "sistema por falta de confirmação"
+                                        : "salão"}
+                                    {appointment.cancelled_at
+                                      ? ` em ${formatDateTime(appointment.cancelled_at)}`
+                                      : ""}
+                                  </small>
+                                  {appointment.cancellation_reason ? (
+                                    <p className="muted list-description">
+                                      Motivo: {appointment.cancellation_reason}
+                                    </p>
+                                  ) : null}
+                                </>
+                              ) : null}
+                              {appointment.status === "completed" && appointment.completed_at ? (
                                 <small className="list-meta">
-                                  Cancelado por{" "}
-                                  {appointment.cancelled_by === "customer"
-                                    ? "cliente"
-                                    : appointment.cancelled_by === "system"
-                                      ? "sistema por falta de confirmação"
-                                      : "salão"}
-                                  {appointment.cancelled_at ? ` em ${formatDateTime(appointment.cancelled_at)}` : ""}
+                                  Atendimento concluído em {formatDateTime(appointment.completed_at)}
                                 </small>
-                                {appointment.cancellation_reason ? (
-                                  <p className="muted list-description">
-                                    Motivo: {appointment.cancellation_reason}
-                                  </p>
-                                ) : null}
-                              </>
-                            ) : null}
-                            {appointment.status === "completed" && appointment.completed_at ? (
-                              <small className="list-meta">
-                                Atendimento concluído em {formatDateTime(appointment.completed_at)}
-                              </small>
-                            ) : null}
-                            {appointment.status === "confirmed" &&
-                            appointment.customer_presence_confirmed_at ? (
-                              <small className="list-meta">
-                                Cliente confirmou presença em{" "}
-                                {formatDateTime(appointment.customer_presence_confirmed_at)}.
-                              </small>
-                            ) : null}
-                            {appointment.status === "confirmed" &&
-                            !appointment.customer_presence_confirmed_at &&
-                            appointment.customer_confirmation_requested_at ? (
-                              <small className="list-meta">
-                                Confirmação enviada ao cliente em{" "}
-                                {formatDateTime(appointment.customer_confirmation_requested_at)}.
-                                Aguardando resposta.
-                              </small>
-                            ) : null}
+                              ) : null}
+                              {appointment.status === "confirmed" &&
+                              appointment.customer_presence_confirmed_at ? (
+                                <small className="list-meta">
+                                  Cliente confirmou presença em{" "}
+                                  {formatDateTime(appointment.customer_presence_confirmed_at)}.
+                                </small>
+                              ) : null}
+                              {appointment.status === "confirmed" &&
+                              !appointment.customer_presence_confirmed_at &&
+                              appointment.customer_confirmation_requested_at ? (
+                                <small className="list-meta">
+                                  Confirmação enviada ao cliente em{" "}
+                                  {formatDateTime(appointment.customer_confirmation_requested_at)}.
+                                  Aguardando resposta.
+                                </small>
+                              ) : null}
+                            </div>
                           </div>
 
                           <div className="inline-actions list-row__aside appointment-card__actions">
                             <span className={`badge badge--${appointment.board_status}`}>
                               {formatAppointmentStatus(appointment.board_status)}
                             </span>
+
+                            <Link
+                              href={`/dashboard/customers?q=${encodeURIComponent(appointment.customer_name)}`}
+                              className="secondary-button appointment-card__link"
+                            >
+                              Abrir cliente
+                            </Link>
 
                             {appointment.status === "pending" ? (
                               <form action={updateAppointmentStatusAction} className="appointment-inline-form">

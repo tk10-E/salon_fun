@@ -5,6 +5,7 @@ import {
   saveInventoryProductAction,
   saveStaffCommissionSettingsAction,
 } from "@/app/actions";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
@@ -188,24 +189,82 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
   const staffOptions = ((staffOptionsResult.data ?? []) as StaffOption[]).filter((staffMember) => staffMember.is_active);
 
   return (
-    <div className="page-grid dashboard-home operations-page">
+    <div className="page-grid dashboard-home operations-page workspace-page">
       {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
 
-      <section className="dashboard-panel operations-page__hero">
-        <div className="dashboard-panel__header">
-          <div>
-            <span className="eyebrow">Financeiro e estoque</span>
-            <h2>Operação do salão em tempo real</h2>
-            <p className="muted">
-              Receita, comissão, equipe e estoque no mesmo fluxo operacional, com leitura rápida para tomada de decisão.
-            </p>
-          </div>
-
-          <Link href="/dashboard" className="dashboard-panel__link">
+      <DashboardWorkspaceHero
+        eyebrow="Financeiro e estoque"
+        title="Operação do salão em tempo real"
+        description="Receita, comissão, equipe e estoque no mesmo fluxo operacional, com leitura mais rápida para tomar decisão e agir antes do problema bater na agenda."
+        highlight={{
+          label: "Quem mais rende agora",
+          value: operations.overview.top_staff_name ?? "Sem ranking ainda",
+          note: operations.overview.top_staff_name
+            ? `${formatCurrency(Number(operations.overview.top_staff_revenue ?? 0))} gerados no recorte atual pela pessoa líder de faturamento.`
+            : "Assim que houver atendimentos concluídos com profissional, o ranking aparece aqui.",
+        }}
+        signals={[
+          {
+            label: "Equipe ativa",
+            value: operations.overview.active_staff_members ?? 0,
+            tone: "soft",
+          },
+          {
+            label: "Estoque em alerta",
+            value: operations.overview.low_stock_products ?? 0,
+            tone: (operations.overview.low_stock_products ?? 0) > 0 ? "danger" : "success",
+          },
+          {
+            label: "Itens ativos",
+            value: operations.overview.active_inventory_products ?? 0,
+            tone: "accent",
+          },
+        ]}
+        stats={[
+          {
+            label: "Caixa dos últimos 7 dias",
+            value: formatCurrency(Number(operations.overview.total_revenue ?? 0)),
+            note: "Leitura rápida do caixa gerado pelos atendimentos concluídos mais recentes.",
+            tone: "warm",
+          },
+          {
+            label: "Ticket atual",
+            value: formatCurrency(Number(operations.overview.average_ticket ?? 0)),
+            note: "Quanto cada atendimento concluído está deixando, em média, para o salão.",
+            tone: "soft",
+          },
+          {
+            label: "Comissão prevista",
+            value: formatCurrency(Number(operations.overview.estimated_commissions ?? 0)),
+            note: "Estimativa automática baseada nas regras configuradas por profissional.",
+            tone: "accent",
+          },
+          {
+            label: "Base de estoque",
+            value: operations.overview.active_inventory_products ?? 0,
+            note: "Produtos ativos hoje participando do controle operacional do salão.",
+            tone: "success",
+          },
+        ]}
+        actions={
+          <Link href="/dashboard" className="secondary-button">
             Voltar ao dashboard
           </Link>
-        </div>
-      </section>
+        }
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Leitura operacional</span>
+            <h3>
+              {inventoryProducts.length > 0
+                ? "Caixa, estoque e equipe agora estão no mesmo ritmo."
+                : "O financeiro já está pronto para ganhar controle de estoque."}
+            </h3>
+            <p>
+              Esta área junta rentabilidade, comissionamento e movimentação de produto em uma superfície só, para o salão não depender de leitura espalhada entre várias telas.
+            </p>
+          </>
+        }
+      />
 
       <section className="stats-grid operations-stats-grid">
         <article className="card metric-card metric-card--warm operations-metric-card">

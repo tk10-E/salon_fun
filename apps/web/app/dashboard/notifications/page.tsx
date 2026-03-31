@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { requireOwnerSalon } from "@/lib/auth";
 import { formatDateTime } from "@/lib/formatters";
@@ -128,6 +129,40 @@ function applyNotificationFilters(
   return nextQuery;
 }
 
+function buildNotificationsFilterSummary(filters: {
+  q: string;
+  audienceFilter: string;
+  categoryFilter: NotificationCategory | "";
+  dateFrom: string;
+  dateTo: string;
+}) {
+  const parts: string[] = [];
+
+  if (filters.q) {
+    parts.push(`busca por "${filters.q}"`);
+  }
+
+  if (filters.audienceFilter === "salon_customers") {
+    parts.push("público geral");
+  } else if (filters.audienceFilter === "single_customer") {
+    parts.push("cliente específico");
+  }
+
+  if (filters.categoryFilter) {
+    parts.push(`categoria ${filters.categoryFilter}`);
+  }
+
+  if (filters.dateFrom) {
+    parts.push(`de ${filters.dateFrom}`);
+  }
+
+  if (filters.dateTo) {
+    parts.push(`até ${filters.dateTo}`);
+  }
+
+  return parts.length ? parts.join(" • ") : "sem filtro ativo";
+}
+
 export default async function NotificationsPage({
   searchParams,
 }: NotificationsPageProps) {
@@ -253,43 +288,87 @@ export default async function NotificationsPage({
     const search = params.toString();
     return `/dashboard/notifications/export${search ? `?${search}` : ""}`;
   })();
+  const filterSummary = buildNotificationsFilterSummary({
+    q,
+    audienceFilter,
+    categoryFilter,
+    dateFrom,
+    dateTo,
+  });
 
   return (
-    <div className="page-grid">
-      <section className="stats-grid">
-        <article className="card metric-card metric-card--warm">
-          <span className="eyebrow">Total filtrado</span>
-          <p className="stat-value">{totalCount}</p>
-          <p className="metric-note">Avisos reais enviados pelo salão dentro do filtro atual.</p>
-        </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Página atual</span>
-          <p className="stat-value">{notifications.length}</p>
-          <p className="metric-note">
-            Exibindo de {startItem} até {endItem} de um total de {totalCount}.
-          </p>
-        </article>
-        <article className="card metric-card metric-card--accent">
-          <span className="eyebrow">Público geral</span>
-          <p className="stat-value">{allCustomersCount}</p>
-          <p className="metric-note">Avisos enviados para todos os clientes do salão.</p>
-        </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Cliente específico</span>
-          <p className="stat-value">{singleCustomerCount}</p>
-          <p className="metric-note">Avisos 1 a 1 disparados para um cliente específico.</p>
-        </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Entregues nesta página</span>
-          <p className="stat-value">{deliveredOnPageCount}</p>
-          <p className="metric-note">Últimas notificações cuja entrega push fechou como entregue na auditoria.</p>
-        </article>
-        <article className="card metric-card metric-card--warm">
-          <span className="eyebrow">Com problema</span>
-          <p className="stat-value">{issueOnPageCount}</p>
-          <p className="metric-note">Avisos desta página que falharam ao enfileirar ou entregar o push.</p>
-        </article>
-      </section>
+    <div className="page-grid workspace-page notifications-page">
+      <DashboardWorkspaceHero
+        eyebrow="Central de avisos"
+        title="Histórico de push com leitura clara de entrega, público e ruído."
+        description="A área de notificações ganhou ritmo de operação: você filtra, audita, exporta e entende rápido o que foi enviado para todos os clientes ou para alguém específico."
+        highlight={{
+          label: "Recorte atual",
+          value: `${totalCount} aviso${totalCount === 1 ? "" : "s"}`,
+          note: `Exibindo de ${startItem} até ${endItem}. Estado atual: ${filterSummary}.`,
+        }}
+        signals={[
+          {
+            label: "Entregues",
+            value: deliveredOnPageCount,
+            tone: "success",
+          },
+          {
+            label: "Com problema",
+            value: issueOnPageCount,
+            tone: issueOnPageCount > 0 ? "danger" : "soft",
+          },
+          {
+            label: "Público geral",
+            value: allCustomersCount,
+            tone: "accent",
+          },
+        ]}
+        stats={[
+          {
+            label: "Total filtrado",
+            value: totalCount,
+            note: "Avisos reais enviados pelo salão dentro do filtro ativo.",
+            tone: "warm",
+          },
+          {
+            label: "Página atual",
+            value: notifications.length,
+            note: `Exibindo ${notifications.length} item${notifications.length === 1 ? "" : "s"} neste recorte.`,
+            tone: "soft",
+          },
+          {
+            label: "Todos os clientes",
+            value: allCustomersCount,
+            note: "Disparos feitos para a base inteira do salão.",
+            tone: "accent",
+          },
+          {
+            label: "Cliente específico",
+            value: singleCustomerCount,
+            note: "Avisos 1 a 1 disparados pela operação.",
+            tone: "success",
+          },
+        ]}
+        actions={
+          <Link href={exportHref} className="secondary-button">
+            Exportar CSV
+          </Link>
+        }
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Auditoria viva</span>
+            <h3>
+              {issueOnPageCount > 0
+                ? "Existem envios na página atual que merecem revisão."
+                : "A leitura atual está limpa de falhas visíveis."}
+            </h3>
+            <p>
+              O painel cruza o histórico de avisos com o snapshot real de despacho para mostrar quando algo foi entregue, enfileirado com problema ou merece revisão comercial.
+            </p>
+          </>
+        }
+      />
 
       <section className="card content-card">
         <div className="section-heading">
@@ -301,9 +380,6 @@ export default async function NotificationsPage({
             </p>
           </div>
 
-          <Link href={exportHref} className="secondary-button">
-            Exportar CSV
-          </Link>
         </div>
 
         <form method="get" className="services-toolbar notifications-toolbar" style={{ marginTop: 18 }}>

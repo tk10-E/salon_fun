@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 
 import {
@@ -8,6 +9,7 @@ import {
   saveSalonReferralProgramAction,
   updateSalonOfferAction,
 } from "@/app/actions";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/formatters";
@@ -40,25 +42,54 @@ const commercialRoutes = [
 type CommercialPageIntroProps = {
   currentPath: string;
   description: string;
+  highlight?: {
+    label: string;
+    note: string;
+    value: ReactNode;
+  };
   message?: string;
+  signals?: Array<{
+    label: string;
+    tone?: "warm" | "soft" | "accent" | "success" | "danger" | "neutral";
+    value: ReactNode;
+  }>;
+  stats?: Array<{
+    label: string;
+    note: string;
+    tone?: "warm" | "soft" | "accent" | "success" | "danger" | "neutral";
+    value: ReactNode;
+  }>;
+  aside?: ReactNode;
   title: string;
   tone?: string;
 };
 
-export function CommercialPageIntro({ currentPath, description, message, title, tone }: CommercialPageIntroProps) {
+export function CommercialPageIntro({
+  currentPath,
+  description,
+  message,
+  title,
+  tone,
+  highlight,
+  stats,
+  signals,
+  aside,
+}: CommercialPageIntroProps) {
   return (
     <>
       {message ? <FlashMessage message={message} tone={tone} /> : null}
 
-      <section className="card content-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Painel comercial</span>
-            <h2>{title}</h2>
-            <p className="muted">{description}</p>
-          </div>
-        </div>
+      <DashboardWorkspaceHero
+        eyebrow="Painel comercial"
+        title={title}
+        description={description}
+        highlight={highlight}
+        stats={stats}
+        signals={signals}
+        aside={aside}
+      />
 
+      <section className="card content-card commercial-nav-shell">
         <nav className="commercial-nav" style={{ marginTop: 18 }}>
           {commercialRoutes.map((route) => {
             const isActive = route.href === currentPath;
@@ -294,7 +325,7 @@ export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }
 
                     return (
                       <article key={offer.id} className="list-row service-editor-card">
-                        <div className="service-editor-grid" style={{ gridTemplateColumns: "minmax(220px, 260px) minmax(0, 1fr)" }}>
+                        <div className="service-editor-grid">
                           <aside className="service-preview-panel">
                             <div className="service-preview-placeholder" style={{ minHeight: 160 }}>
                               <span className="eyebrow">{formatOfferKind(offer.kind)}</span>
@@ -1019,7 +1050,7 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)" }}>
+        <div className="commercial-tier-grid">
           <div className="field">
             <label htmlFor="tier-one-name">Nível 1</label>
             <input
@@ -1057,7 +1088,7 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)" }}>
+        <div className="commercial-tier-grid">
           <div className="field">
             <label htmlFor="tier-two-name">Nível 2</label>
             <input
@@ -1095,7 +1126,7 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)" }}>
+        <div className="commercial-tier-grid">
           <div className="field">
             <label htmlFor="vip-tier-name">Nível VIP</label>
             <input

@@ -90,6 +90,10 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
 
   return (
     <div className="app-shell">
+      <a href="#dashboard-main-content" className="skip-link">
+        Pular para o conteúdo
+      </a>
+
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="sidebar-brand">
@@ -145,6 +149,14 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
           </form>
 
           <div className="page-header__actions">
+            <div className="page-header__status" aria-label="Status do painel">
+              <span className="page-header__status-dot" aria-hidden="true" />
+              <div className="page-header__status-copy">
+                <strong>Ao vivo</strong>
+                <span>Dados de produção</span>
+              </div>
+            </div>
+
             <div className="page-header__profile">
               <span className="page-header__avatar" aria-hidden="true">
                 {initials}
@@ -162,7 +174,9 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
           </div>
         </header>
 
-        <main className="dashboard-main">{children}</main>
+        <main id="dashboard-main-content" className="dashboard-main" tabIndex={-1}>
+          {children}
+        </main>
       </div>
     </div>
   );

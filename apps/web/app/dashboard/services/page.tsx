@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import { createServiceAction, updateServiceCatalogAction } from "@/app/actions";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { ConfirmServiceDeleteButton } from "@/components/ConfirmServiceDeleteButton";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
@@ -48,6 +49,16 @@ export default async function ServicesPage({ searchParams }: ServicesPageProps) 
   const services = servicesResult.data;
   const availableCategories = [...new Set((categoriesResult.data ?? []).map((service) => service.category).filter(Boolean))];
   const hasActiveFilters = Boolean(normalizedSearch || normalizedCategory);
+  const servicesCount = services?.length ?? 0;
+  const servicesWithImageCount = (services ?? []).filter((service) => Boolean(service.image_path)).length;
+  const averagePrice =
+    servicesCount === 0
+      ? 0
+      : (services ?? []).reduce((sum, service) => sum + Number(service.price ?? 0), 0) / servicesCount;
+  const averageDuration =
+    servicesCount === 0
+      ? 0
+      : (services ?? []).reduce((sum, service) => sum + Number(service.duration ?? 0), 0) / servicesCount;
 
   const groupedServices = (services ?? []).reduce<Record<string, NonNullable<typeof services>>>((groups, service) => {
     const category = service.category ?? "Geral";
@@ -55,9 +66,79 @@ export default async function ServicesPage({ searchParams }: ServicesPageProps) 
     groups[category].push(service);
     return groups;
   }, {});
+  const largestCategory = Object.entries(groupedServices)
+    .sort((left, right) => right[1].length - left[1].length)[0];
 
   return (
-    <div className="two-column-grid">
+    <div className="page-grid workspace-page services-page">
+      <DashboardWorkspaceHero
+        eyebrow="Catálogo comercial"
+        title="Serviços com cara de vitrine e estrutura para vender melhor."
+        description="Esta área organiza tudo o que o cliente enxerga no app: categorias, fotos, preço, duração e ordem de exibição. O objetivo é transformar catálogo em decisão de compra."
+        highlight={{
+          label: "Categoria líder",
+          value: largestCategory?.[0] ?? "Catálogo em construção",
+          note: largestCategory
+            ? `${largestCategory[1].length} serviço${largestCategory[1].length === 1 ? "" : "s"} concentrados nessa frente do salão.`
+            : "Cadastre os primeiros serviços para começar a montar a vitrine do app do cliente.",
+        }}
+        signals={[
+          {
+            label: "Filtro ativo",
+            value: normalizedCategory || normalizedSearch ? "Sim" : "Não",
+            tone: normalizedCategory || normalizedSearch ? "accent" : "soft",
+          },
+          {
+            label: "Fotos no catálogo",
+            value: `${servicesWithImageCount}/${servicesCount}`,
+            tone: "success",
+          },
+          {
+            label: "Categorias",
+            value: availableCategories.length,
+            tone: "warm",
+          },
+        ]}
+        stats={[
+          {
+            label: "Serviços visíveis",
+            value: servicesCount,
+            note: "Itens retornados pelo filtro atual do catálogo.",
+            tone: "warm",
+          },
+          {
+            label: "Categorias",
+            value: availableCategories.length,
+            note: "Frentes de atendimento estruturadas para o app do cliente.",
+            tone: "soft",
+          },
+          {
+            label: "Preço médio",
+            value: formatCurrency(averagePrice),
+            note: "Referência rápida do ticket do catálogo atual.",
+            tone: "accent",
+          },
+          {
+            label: "Duração média",
+            value: `${Math.round(averageDuration || 0)} min`,
+            note: "Tempo médio dos serviços visíveis neste recorte.",
+            tone: "success",
+          },
+        ]}
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Direção visual do app</span>
+            <h3>{servicesWithImageCount > 0 ? "O catálogo já tem base visual para vender no mobile." : "Vale começar pelas fotos de maior ticket."}</h3>
+            <p>
+              {servicesWithImageCount > 0
+                ? `${servicesWithImageCount} serviço${servicesWithImageCount === 1 ? "" : "s"} já têm imagem pronta. Quanto mais consistente essa vitrine estiver, maior a sensação de app premium para o cliente final.`
+                : "Serviços sem foto ainda funcionam, mas perdem desejo. Priorize imagens dos atendimentos que mais ajudam o salão a fechar agenda."}
+            </p>
+          </>
+        }
+      />
+
+      <div className="two-column-grid">
       <section className="card content-card">
         <div className="section-heading">
           <div>
@@ -353,6 +434,7 @@ export default async function ServicesPage({ searchParams }: ServicesPageProps) 
           </div>
         ) : null}
       </section>
+      </div>
     </div>
   );
 }

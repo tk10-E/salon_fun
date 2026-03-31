@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { requireOwnerSalon } from "@/lib/auth";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/formatters";
@@ -181,6 +182,38 @@ function buildCustomerRelationshipSummary(customer: CustomerDirectoryItem) {
   return "Cliente em construção de hábito com o salão; a próxima experiência ajuda a travar retenção.";
 }
 
+function getSegmentLabel(segment: ReturnType<typeof normalizeSegment>) {
+  switch (segment) {
+    case "vip":
+      return "VIP";
+    case "cashback":
+      return "Cashback";
+    case "returning":
+      return "Recorrentes";
+    case "upcoming":
+      return "Com agenda futura";
+    case "new":
+      return "Novos em 30 dias";
+    default:
+      return "Base completa";
+  }
+}
+
+function getSortLabel(sort: ReturnType<typeof normalizeSort>) {
+  switch (sort) {
+    case "name":
+      return "Nome";
+    case "loyalty":
+      return "Fidelidade";
+    case "spent":
+      return "Maior gasto";
+    case "upcoming":
+      return "Próximo atendimento";
+    default:
+      return "Entrada recente";
+  }
+}
+
 export default async function CustomersPage({ searchParams }: CustomersPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
@@ -306,36 +339,80 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
     ...customerBeautyProfileById.get(customer.id),
     ...latestCompletedHistoryByCustomerId.get(customer.id),
   }));
+  const currentFocusLabel = getSegmentLabel(segment);
+  const currentSortLabel = getSortLabel(sort);
+  const topCustomerBySpend = [...hydratedCustomers].sort(
+    (left, right) => Number(right.total_spent ?? 0) - Number(left.total_spent ?? 0),
+  )[0];
 
   return (
-    <div className="page-grid">
-      <section className="stats-grid">
-        <article className="card metric-card metric-card--warm">
-          <span className="eyebrow">Clientes no filtro</span>
-          <p className="stat-value">{directory.overview.total_customers ?? 0}</p>
-          <p className="metric-note">Base visível para o salão no recorte atual de busca.</p>
-        </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Clientes VIP</span>
-          <p className="stat-value">{directory.overview.vip_customers ?? 0}</p>
-          <p className="metric-note">Clientes com o nível mais alto de fidelidade ativo.</p>
-        </article>
-        <article className="card metric-card metric-card--accent">
-          <span className="eyebrow">Com cashback</span>
-          <p className="stat-value">{directory.overview.cashback_customers ?? 0}</p>
-          <p className="metric-note">Clientes com saldo pronto para usar em novas visitas.</p>
-        </article>
-        <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Com agenda futura</span>
-          <p className="stat-value">{directory.overview.customers_with_upcoming_appointment ?? 0}</p>
-          <p className="metric-note">Clientes já amarrados em retorno próximo com o salão.</p>
-        </article>
-        <article className="card metric-card metric-card--warm">
-          <span className="eyebrow">Recorrentes</span>
-          <p className="stat-value">{directory.overview.returning_customers ?? 0}</p>
-          <p className="metric-note">Clientes com pelo menos duas visitas concluídas.</p>
-        </article>
-      </section>
+    <div className="page-grid workspace-page customers-page">
+      <DashboardWorkspaceHero
+        eyebrow="CRM do salão"
+        title="Clientes, recorrência e valor vitalício em uma leitura só."
+        description="A base de clientes agora aparece como operação viva: quem volta, quem já tem próxima agenda, quem carrega cashback e quem merece ação comercial antes de esfriar."
+        highlight={{
+          label: "Foco do recorte",
+          value: currentFocusLabel,
+          note: hasFilters
+            ? `Ordenação atual em ${currentSortLabel.toLowerCase()} com ${totalCount} cliente${totalCount === 1 ? "" : "s"} visíveis.`
+            : "Sem filtro ativo, olhando a carteira completa do salão.",
+        }}
+        signals={[
+          {
+            label: "Ordenação",
+            value: currentSortLabel,
+            tone: "soft",
+          },
+          {
+            label: "Agenda futura",
+            value: directory.overview.customers_with_upcoming_appointment ?? 0,
+            tone: "accent",
+          },
+          {
+            label: "Recorrentes",
+            value: directory.overview.returning_customers ?? 0,
+            tone: "warm",
+          },
+        ]}
+        stats={[
+          {
+            label: "Clientes no filtro",
+            value: directory.overview.total_customers ?? 0,
+            note: "Base visível para o salão dentro do recorte atual.",
+            tone: "warm",
+          },
+          {
+            label: "Clientes VIP",
+            value: directory.overview.vip_customers ?? 0,
+            note: "Perfis com fidelidade alta e maior expectativa de retenção.",
+            tone: "soft",
+          },
+          {
+            label: "Com cashback",
+            value: directory.overview.cashback_customers ?? 0,
+            note: "Clientes com saldo pronto para virar nova visita.",
+            tone: "accent",
+          },
+          {
+            label: "Agenda futura",
+            value: directory.overview.customers_with_upcoming_appointment ?? 0,
+            note: "Retornos já protegidos na agenda do salão.",
+            tone: "success",
+          },
+        ]}
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Leitura executiva</span>
+            <h3>{topCustomerBySpend ? `${topCustomerBySpend.name} puxa o maior gasto visível.` : "A carteira está pronta para ganhar densidade."}</h3>
+            <p>
+              {topCustomerBySpend
+                ? `${topCustomerBySpend.name} lidera o gasto concluído visível nesta base. Use esse bloco para decidir retenção, resgate de cliente e próximas campanhas.`
+                : "Assim que a base crescer, esta área passa a mostrar quem já tem maior potencial de recompra e relacionamento."}
+            </p>
+          </>
+        }
+      />
 
       <section className="card content-card">
         <div className="section-heading">
@@ -474,6 +551,23 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
                       <span className="customer-detail-item__label">Gasto concluído</span>
                       <strong>{formatCurrency(Number(customer.total_spent ?? 0))}</strong>
                     </div>
+                  </div>
+
+                  <div className="customer-card__actions">
+                    <Link
+                      href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}`}
+                      className="secondary-button"
+                    >
+                      Abrir agenda desse cliente
+                    </Link>
+                    {customer.upcoming_appointments > 0 ? (
+                      <Link
+                        href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}&status=confirmed`}
+                        className="secondary-button"
+                      >
+                        Ver próximos horários
+                      </Link>
+                    ) : null}
                   </div>
 
                   {customer.preferences ||

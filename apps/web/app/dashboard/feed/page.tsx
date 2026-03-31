@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import { createSalonPostAction, deleteSalonPostAction, deleteSalonPostCommentAction } from "@/app/actions";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
@@ -147,9 +148,96 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     };
   });
   const safeStaffMembers = (staffMembers ?? []) as FeedStaffMember[];
+  const beforeAfterCount = posts.filter((post) => post.postType === "before_after").length;
+  const reelCount = posts.filter((post) => post.postType === "reel").length;
+  const totalEngagement = posts.reduce(
+    (sum, post) => sum + post.likesCount + post.commentsCount,
+    0,
+  );
+  const latestPost = posts[0];
 
   return (
-    <div className="two-column-grid">
+    <div className="page-grid workspace-page feed-page">
+      <DashboardWorkspaceHero
+        eyebrow="Vitrine do app"
+        title="O feed do salão agora trabalha como desejo, prova social e agenda."
+        description="Publicações boas não servem só para enfeitar. Elas ajudam o cliente a imaginar resultado, descobrir o profissional certo e converter curiosidade em horário marcado."
+        highlight={{
+          label: "Último destaque publicado",
+          value: latestPost?.title ?? "Nenhuma publicação ainda",
+          note: latestPost
+            ? `${formatDateTime(latestPost.created_at)}${latestPost.service ? ` • ligado a ${latestPost.service.name}` : ""}`
+            : "Assim que o salão publicar a primeira peça, o painel começa a mostrar a linha editorial em tempo real.",
+        }}
+        signals={[
+          {
+            label: "Serviço em vitrine",
+            value: latestPost?.service?.name ?? "Sem vínculo",
+            tone: "soft",
+          },
+          {
+            label: "Profissional em foco",
+            value: latestPost?.staffMember
+              ? `${latestPost.staffMember.name}${latestPost.staffMember.role ? ` • ${latestPost.staffMember.role}` : ""}`
+              : "Sem destaque",
+            tone: "accent",
+          },
+          {
+            label: "Engajamento total",
+            value: totalEngagement,
+            tone: "warm",
+          },
+        ]}
+        stats={[
+          {
+            label: "Publicações",
+            value: posts.length,
+            note: "Peças reais disponíveis no app do cliente.",
+            tone: "warm",
+          },
+          {
+            label: "Antes e depois",
+            value: beforeAfterCount,
+            note: "Transformações com maior poder de conversão visual.",
+            tone: "accent",
+          },
+          {
+            label: "Vídeos curtos",
+            value: reelCount,
+            note: "Conteúdos de movimento e acabamento para descoberta rápida.",
+            tone: "soft",
+          },
+          {
+            label: "Interações",
+            value: totalEngagement,
+            note: "Curtidas e comentários acumulados nas publicações atuais.",
+            tone: "success",
+          },
+        ]}
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Leitura editorial</span>
+            <h3>
+              {latestPost
+                ? `${getFeedPostTypeLabel(latestPost.postType)} em destaque agora.`
+                : "Seu feed começa quando o primeiro resultado entrar no ar."}
+            </h3>
+            <p>
+              {latestPost
+                ? latestPost.postType === "before_after"
+                  ? "Antes e depois continuam sendo a peça mais fácil de vender porque mostram transformação imediata."
+                  : latestPost.postType === "reel"
+                  ? "Vídeos curtos puxam atenção rápida e ajudam a dar sensação de técnica, brilho e movimento."
+                  : latestPost.service
+                  ? `${latestPost.service.name} está virando conteúdo de descoberta para puxar agendamento direto.`
+                  : "A peça mais recente está funcionando como vitrine aspiracional para manter o salão vivo no app."
+                : "Quando o salão publica fotos, vídeos curtos ou antes e depois, o app do cliente ganha a sensação de marca viva e não de catálogo parado."}
+            </p>
+          </>
+        }
+      />
+
+      <div className="two-column-grid">
       <section className="card content-card">
         <div className="section-heading">
           <div>
@@ -403,6 +491,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
           </button>
         </form>
       </section>
+      </div>
     </div>
   );
 }

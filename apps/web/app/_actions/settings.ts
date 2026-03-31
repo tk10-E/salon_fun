@@ -4,7 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
-import { SALON_TIMEZONE_OPTIONS, SLOT_STEP_OPTIONS, WEEKDAY_OPTIONS } from "@/lib/schedule";
+import {
+  normalizeSalonClientAppConfig,
+  serializeSalonClientAppConfig,
+} from "@/lib/clientAppConfig";
+import {
+  SALON_TIMEZONE_OPTIONS,
+  SLOT_STEP_OPTIONS,
+  WEEKDAY_OPTIONS,
+} from "@/lib/schedule";
 import { normalizeSalonBusinessSegment } from "@/lib/salonSegments";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,7 +41,13 @@ export async function regenerateSalonCodeActionImpl() {
   const generated = await supabase.rpc("generate_join_code");
 
   if (generated.error || !generated.data) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Não foi possível gerar um novo código.", "error"));
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Não foi possível gerar um novo código.",
+        "error",
+      ),
+    );
   }
 
   const { error } = await supabase
@@ -42,12 +56,24 @@ export async function regenerateSalonCodeActionImpl() {
     .eq("id", salon.id);
 
   if (error) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Não foi possível atualizar o código.", "error"));
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Não foi possível atualizar o código.",
+        "error",
+      ),
+    );
   }
 
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
-  redirect(buildRedirectNotice(SETTINGS_PATH, "Novo código gerado com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      SETTINGS_PATH,
+      "Novo código gerado com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function updateSalonBrandingActionImpl(formData: FormData) {
@@ -56,21 +82,53 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
 
   const rawName = String(formData.get("name") ?? "").trim();
   const rawTagline = String(formData.get("tagline") ?? "").trim();
-  const rawBrandColor = String(formData.get("brandColor") ?? "").trim().toUpperCase();
+  const rawBrandColor = String(formData.get("brandColor") ?? "")
+    .trim()
+    .toUpperCase();
   const rawWhatsapp = String(formData.get("whatsappPhone") ?? "").trim();
-  const businessSegment = normalizeSalonBusinessSegment(String(formData.get("businessSegment") ?? ""));
+  const businessSegment = normalizeSalonBusinessSegment(
+    String(formData.get("businessSegment") ?? ""),
+  );
+  const currentClientAppConfig = normalizeSalonClientAppConfig(
+    salon.client_app_config,
+  );
+  const clientAppConfigDraft = {
+    visualStyle: String(
+      formData.get("clientAppVisualStyle") ??
+        currentClientAppConfig.visualStyle,
+    ),
+    homeEmphasis: String(
+      formData.get("clientAppHomeEmphasis") ??
+        currentClientAppConfig.homeEmphasis,
+    ),
+    heroHeadline:
+      String(formData.get("clientAppHeroHeadline") ?? "").trim() || null,
+    heroSupportLine:
+      String(formData.get("clientAppHeroSupportLine") ?? "").trim() || null,
+    primaryCtaLabel:
+      String(formData.get("clientAppPrimaryCtaLabel") ?? "").trim() || null,
+  };
+  const clientAppConfig = normalizeSalonClientAppConfig(clientAppConfigDraft);
   const shouldRemoveLogo = formData.get("removeLogo") === "on";
   const logoInput = formData.get("logo");
-  const logoFile = logoInput instanceof File && logoInput.size > 0 ? logoInput : null;
+  const logoFile =
+    logoInput instanceof File && logoInput.size > 0 ? logoInput : null;
 
   if (!rawName) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Informe o nome do salão.", "error"));
+    redirect(
+      buildRedirectNotice(SETTINGS_PATH, "Informe o nome do salão.", "error"),
+    );
   }
 
-  const brandColor = /^#[0-9A-F]{6}$/.test(rawBrandColor) ? rawBrandColor : "#C56B43";
+  const brandColor = /^#[0-9A-F]{6}$/.test(rawBrandColor)
+    ? rawBrandColor
+    : "#C56B43";
   const whatsappDigits = rawWhatsapp.replace(/\D/g, "");
 
-  if (rawWhatsapp && (whatsappDigits.length < 10 || whatsappDigits.length > 15)) {
+  if (
+    rawWhatsapp &&
+    (whatsappDigits.length < 10 || whatsappDigits.length > 15)
+  ) {
     redirect(
       buildRedirectNotice(
         SETTINGS_PATH,
@@ -80,35 +138,63 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     );
   }
 
-  let logoPath = shouldRemoveLogo ? null : salon.logo_path ?? null;
+  let logoPath = shouldRemoveLogo ? null : (salon.logo_path ?? null);
 
   if (shouldRemoveLogo && salon.logo_path && !logoFile) {
-    const { error: removeError } = await supabase.storage.from("salon-assets").remove([salon.logo_path]);
+    const { error: removeError } = await supabase.storage
+      .from("salon-assets")
+      .remove([salon.logo_path]);
 
     if (removeError) {
-      redirect(buildRedirectNotice(SETTINGS_PATH, "Não foi possível remover a logo atual.", "error"));
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Não foi possível remover a logo atual.",
+          "error",
+        ),
+      );
     }
   }
 
   if (logoFile) {
     if (!logoFile.type.startsWith("image/")) {
-      redirect(buildRedirectNotice(SETTINGS_PATH, "Envie uma imagem válida para a logo.", "error"));
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Envie uma imagem válida para a logo.",
+          "error",
+        ),
+      );
     }
 
     if (logoFile.size > 2 * 1024 * 1024) {
-      redirect(buildRedirectNotice(SETTINGS_PATH, "A logo deve ter no máximo 2 MB.", "error"));
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "A logo deve ter no máximo 2 MB.",
+          "error",
+        ),
+      );
     }
 
     const bytes = Buffer.from(await logoFile.arrayBuffer());
     const uploadPath = `${salon.id}/logo`;
 
-    const { error: uploadError } = await supabase.storage.from("salon-assets").upload(uploadPath, bytes, {
-      contentType: logoFile.type,
-      upsert: true,
-    });
+    const { error: uploadError } = await supabase.storage
+      .from("salon-assets")
+      .upload(uploadPath, bytes, {
+        contentType: logoFile.type,
+        upsert: true,
+      });
 
     if (uploadError) {
-      redirect(buildRedirectNotice(SETTINGS_PATH, "Não foi possível enviar a logo do salão.", "error"));
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Não foi possível enviar a logo do salão.",
+          "error",
+        ),
+      );
     }
 
     logoPath = uploadPath;
@@ -121,18 +207,31 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       tagline: rawTagline || null,
       brand_color: brandColor,
       business_segment: businessSegment,
+      client_app_config: serializeSalonClientAppConfig(clientAppConfig),
       whatsapp_phone: whatsappDigits || null,
       logo_path: logoPath,
     })
     .eq("id", salon.id);
 
   if (error) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Não foi possível atualizar a identidade do salão.", "error"));
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Não foi possível atualizar a identidade do salão.",
+        "error",
+      ),
+    );
   }
 
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
-  redirect(buildRedirectNotice(SETTINGS_PATH, "Identidade do salão atualizada com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      SETTINGS_PATH,
+      "Identidade do salão atualizada com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function updateSalonScheduleActionImpl(formData: FormData) {
@@ -143,17 +242,33 @@ export async function updateSalonScheduleActionImpl(formData: FormData) {
   const slotStepMinutes = Number(formData.get("slotStepMinutes"));
 
   if (!SALON_TIMEZONE_OPTIONS.some((option) => option.value === timezone)) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Selecione um fuso horário válido para o salão.", "error"));
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Selecione um fuso horário válido para o salão.",
+        "error",
+      ),
+    );
   }
 
   if (!SLOT_STEP_OPTIONS.some((option) => option.value === slotStepMinutes)) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Escolha um intervalo válido para a agenda online.", "error"));
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Escolha um intervalo válido para a agenda online.",
+        "error",
+      ),
+    );
   }
 
   const businessHours = WEEKDAY_OPTIONS.map((weekday) => {
     const isOpen = formData.get(`isOpen_${weekday.value}`) === "on";
-    const opensAt = String(formData.get(`opensAt_${weekday.value}`) ?? "").trim();
-    const closesAt = String(formData.get(`closesAt_${weekday.value}`) ?? "").trim();
+    const opensAt = String(
+      formData.get(`opensAt_${weekday.value}`) ?? "",
+    ).trim();
+    const closesAt = String(
+      formData.get(`closesAt_${weekday.value}`) ?? "",
+    ).trim();
 
     if (!isOpen) {
       return {
@@ -206,18 +321,38 @@ export async function updateSalonScheduleActionImpl(formData: FormData) {
     .eq("id", salon.id);
 
   if (salonError) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Não foi possível atualizar os dados da agenda.", "error"));
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Não foi possível atualizar os dados da agenda.",
+        "error",
+      ),
+    );
   }
 
-  const { error: businessHoursError } = await supabase.from("salon_business_hours").upsert(businessHours, {
-    onConflict: "salon_id,weekday",
-  });
+  const { error: businessHoursError } = await supabase
+    .from("salon_business_hours")
+    .upsert(businessHours, {
+      onConflict: "salon_id,weekday",
+    });
 
   if (businessHoursError) {
-    redirect(buildRedirectNotice(SETTINGS_PATH, "Não foi possível salvar os horários do salão.", "error"));
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Não foi possível salvar os horários do salão.",
+        "error",
+      ),
+    );
   }
 
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
-  redirect(buildRedirectNotice(SETTINGS_PATH, "Agenda online atualizada com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      SETTINGS_PATH,
+      "Agenda online atualizada com sucesso.",
+      "success",
+    ),
+  );
 }

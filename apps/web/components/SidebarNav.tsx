@@ -185,6 +185,7 @@ export function SidebarNav() {
                     ? "nav-link nav-link--pending"
                     : "nav-link"
               }
+              aria-current={isActive ? "page" : undefined}
               aria-busy={isPending ? "true" : undefined}
               data-pending={isPending ? "true" : "false"}
               onMouseEnter={() => router.prefetch(link.href)}

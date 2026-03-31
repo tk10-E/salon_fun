@@ -149,6 +149,13 @@ describe("settings actions", () => {
       tagline: "Atendimento elegante e direto no app.",
       brand_color: "#B35D77",
       business_segment: "nail_studio",
+      client_app_config: {
+        visualStyle: "auto",
+        homeEmphasis: "auto",
+        heroHeadline: null,
+        heroSupportLine: null,
+        primaryCtaLabel: null,
+      },
       whatsapp_phone: "5511999999999",
       logo_path: "logos/current.png",
     });

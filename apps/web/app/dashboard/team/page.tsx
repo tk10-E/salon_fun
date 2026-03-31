@@ -8,6 +8,7 @@ import {
   updateStaffBusinessHoursAction,
   updateStaffMemberAssignmentsAction,
 } from "@/app/actions";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
@@ -114,9 +115,87 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
   }
 
   const activeStaffMembers = safeStaffMembers.filter((staffMember) => staffMember.is_active);
+  const pausedStaffMembersCount = safeStaffMembers.length - activeStaffMembers.length;
+  const serviceCoverageCount = new Set(
+    safeStaffMembers.flatMap((staffMember) =>
+      (staffMember.staff_service_assignments ?? []).map((assignment) => assignment.service_id),
+    ),
+  ).size;
 
   return (
-    <div className="page-grid">
+    <div className="page-grid workspace-page team-page">
+      <DashboardWorkspaceHero
+        eyebrow="Equipe e escala"
+        title="Profissionais, cobertura de serviços e bloqueios na mesma leitura."
+        description="Essa tela virou a central operacional da equipe: quem está ativo, quais serviços cada profissional atende e como a agenda do app cliente responde a cada ajuste de escala."
+        highlight={{
+          label: "Equipe ativa agora",
+          value: `${activeStaffMembers.length} profissional${activeStaffMembers.length === 1 ? "" : "is"}`,
+          note:
+            pausedStaffMembersCount > 0
+              ? `${pausedStaffMembersCount} em pausa e ${safeBlocks.length} bloqueio${safeBlocks.length === 1 ? "" : "s"} futuro${safeBlocks.length === 1 ? "" : "s"} já mapeado${safeBlocks.length === 1 ? "" : "s"}.`
+              : "Sem profissionais pausados neste momento.",
+        }}
+        signals={[
+          {
+            label: "Serviços cobertos",
+            value: `${serviceCoverageCount}/${safeServices.length}`,
+            tone: "accent",
+          },
+          {
+            label: "Bloqueios futuros",
+            value: safeBlocks.length,
+            tone: "warm",
+          },
+          {
+            label: "Profissionais pausados",
+            value: pausedStaffMembersCount,
+            tone: pausedStaffMembersCount > 0 ? "danger" : "success",
+          },
+        ]}
+        stats={[
+          {
+            label: "Total da equipe",
+            value: safeStaffMembers.length,
+            note: "Profissionais cadastrados para o salão neste painel.",
+            tone: "warm",
+          },
+          {
+            label: "Ativos",
+            value: activeStaffMembers.length,
+            note: "Disponíveis para aparecer na agenda do cliente.",
+            tone: "success",
+          },
+          {
+            label: "Pausados",
+            value: pausedStaffMembersCount,
+            note: "Fora da agenda até nova ativação manual.",
+            tone: pausedStaffMembersCount > 0 ? "danger" : "soft",
+          },
+          {
+            label: "Serviços cobertos",
+            value: serviceCoverageCount,
+            note: "Itens do catálogo já vinculados a pelo menos um profissional.",
+            tone: "soft",
+          },
+        ]}
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Leitura do dono</span>
+            <h3>
+              {serviceCoverageCount === safeServices.length && safeServices.length > 0
+                ? "O catálogo inteiro já tem cobertura operacional."
+                : "Ainda existe espaço para distribuir melhor o catálogo."}
+            </h3>
+            <p>
+              {safeServices.length === 0
+                ? "Cadastre serviços para começar a distribuir a operação entre os profissionais."
+                : `Hoje ${serviceCoverageCount} de ${safeServices.length} serviço${safeServices.length === 1 ? "" : "s"} já têm cobertura explícita. Isso evita buraco na agenda e melhora a confiança do cliente no app.`}
+            </p>
+          </>
+        }
+      />
+
       {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
 
       <div className="two-column-grid">

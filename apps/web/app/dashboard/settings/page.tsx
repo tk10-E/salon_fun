@@ -1,10 +1,32 @@
 import Image from "next/image";
 
-import { regenerateSalonCodeAction, updateSalonBrandingAction, updateSalonScheduleAction } from "@/app/actions";
+import {
+  regenerateSalonCodeAction,
+  updateSalonBrandingAction,
+  updateSalonScheduleAction,
+} from "@/app/actions";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
-import { SALON_TIMEZONE_OPTIONS, SLOT_STEP_OPTIONS, WEEKDAY_OPTIONS, formatBusinessTime } from "@/lib/schedule";
-import { getSalonSegmentPreset, SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
+import {
+  CLIENT_APP_VISUAL_STYLE_OPTIONS,
+  CLIENT_HOME_EMPHASIS_OPTIONS,
+  getClientAppVisualStyleOption,
+  getClientHomeEmphasisOption,
+  normalizeSalonClientAppConfig,
+  resolveClientAppVisualStyle,
+  resolveClientHomeEmphasis,
+} from "@/lib/clientAppConfig";
+import {
+  SALON_TIMEZONE_OPTIONS,
+  SLOT_STEP_OPTIONS,
+  WEEKDAY_OPTIONS,
+  formatBusinessTime,
+} from "@/lib/schedule";
+import {
+  getSalonSegmentPreset,
+  SALON_SEGMENT_OPTIONS,
+} from "@/lib/salonSegments";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/formatters";
 
@@ -15,7 +37,9 @@ type SettingsPageProps = {
   };
 };
 
-export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+export default async function SettingsPage({
+  searchParams,
+}: SettingsPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
   const businessHoursResponse = await supabase
@@ -25,10 +49,28 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     .order("weekday");
   const brandColor = salon.brand_color ?? "#C56B43";
   const segmentPreset = getSalonSegmentPreset(salon.business_segment);
+  const clientAppConfig = normalizeSalonClientAppConfig(
+    salon.client_app_config,
+  );
+  const visualStyleOption = getClientAppVisualStyleOption(
+    clientAppConfig.visualStyle,
+  );
+  const emphasisOption = getClientHomeEmphasisOption(
+    clientAppConfig.homeEmphasis,
+  );
+  const resolvedVisualStyle = resolveClientAppVisualStyle(
+    clientAppConfig.visualStyle,
+    segmentPreset.value,
+  );
+  const resolvedHomeEmphasis = resolveClientHomeEmphasis(
+    clientAppConfig.homeEmphasis,
+    segmentPreset.value,
+  );
   const timezone = salon.timezone ?? "America/Sao_Paulo";
   const slotStepMinutes = salon.slot_step_minutes ?? 30;
   const logoUrl = salon.logo_path
-    ? supabase.storage.from("salon-assets").getPublicUrl(salon.logo_path).data.publicUrl
+    ? supabase.storage.from("salon-assets").getPublicUrl(salon.logo_path).data
+        .publicUrl
     : null;
   const salonName = salon.name?.trim() || "Salão";
   const initials = salonName.slice(0, 2).toUpperCase();
@@ -50,16 +92,99 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       closes_at: weekday.value === 0 ? null : "18:00:00",
     }),
   }));
+  const timezoneLabel =
+    SALON_TIMEZONE_OPTIONS.find((option) => option.value === timezone)?.label ??
+    timezone;
+  const slotStepLabel =
+    SLOT_STEP_OPTIONS.find((option) => option.value === slotStepMinutes)?.label ??
+    `${slotStepMinutes} min`;
+  const openDaysCount = businessHours.filter((entry) => entry.is_open).length;
+  const resolvedVisualStyleLabel =
+    CLIENT_APP_VISUAL_STYLE_OPTIONS.find(
+      (option) => option.value === resolvedVisualStyle,
+    )?.label ?? visualStyleOption.label;
+  const resolvedHomeEmphasisLabel =
+    CLIENT_HOME_EMPHASIS_OPTIONS.find(
+      (option) => option.value === resolvedHomeEmphasis,
+    )?.label ?? emphasisOption.label;
 
   return (
-    <div className="page-grid">
-      {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
+    <div className="page-grid workspace-page settings-page">
+      <DashboardWorkspaceHero
+        eyebrow="Configuração de marca"
+        title="Marca, agenda e modelo do app do cliente em uma área só."
+        description="Essa tela virou a central de identidade do produto: o salão define nome, cor, logo, ritmo da agenda e o tipo de experiência visual que o cliente sente no app, sem sair dos dados reais de produção."
+        highlight={{
+          label: "Modelo ativo do app",
+          value: resolvedVisualStyleLabel,
+          note: `${resolvedHomeEmphasisLabel} como ênfase principal e CTA "${clientAppConfig.primaryCtaLabel || "Agendar agora"}".`,
+        }}
+        signals={[
+          {
+            label: "Segmento",
+            value: segmentPreset.label,
+            tone: "soft",
+          },
+          {
+            label: "Agenda online",
+            value: `${openDaysCount} dias`,
+            tone: "success",
+          },
+          {
+            label: "Intervalo",
+            value: slotStepLabel,
+            tone: "accent",
+          },
+        ]}
+        stats={[
+          {
+            label: "Código do salão",
+            value: "Pronto para uso",
+            note: "Código usado para conectar clientes ao estabelecimento.",
+            tone: "warm",
+          },
+          {
+            label: "Fuso horário",
+            value: timezoneLabel,
+            note: "Base da agenda real exibida para o cliente.",
+            tone: "soft",
+          },
+          {
+            label: "Estilo resolvido",
+            value: resolvedVisualStyleLabel,
+            note: "Visual efetivo considerando segmento e configuração manual.",
+            tone: "accent",
+          },
+          {
+            label: "Criado em",
+            value: formatDate(salon.created_at),
+            note: "Data de entrada dessa operação na plataforma.",
+            tone: "success",
+          },
+        ]}
+        aside={
+          <>
+            <span className="workspace-panel__eyebrow">Direção do produto</span>
+            <h3>{salonName} já pode ter uma experiência de marca mais própria.</h3>
+            <p>
+              O salão não fica preso a um visual genérico: você consegue moldar linguagem, hero, CTA, ritmo da agenda e apresentação da marca preservando a mesma base operacional do sistema.
+            </p>
+          </>
+        }
+      />
+
+      {searchParams?.message ? (
+        <FlashMessage message={searchParams.message} tone={searchParams.tone} />
+      ) : null}
 
       <section className="card content-card">
         <div className="section-heading">
           <div>
             <h2>Identidade do salão</h2>
-            <p className="muted">Esses dados alimentam a experiência do app do cliente com cor, texto, logo e contato.</p>
+            <p className="muted">
+              Esses dados alimentam a experiência do app do cliente com cor,
+              texto, logo e contato.
+            </p>
           </div>
         </div>
 
@@ -73,7 +198,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             >
               <div className="brand-preview-logo">
                 {logoUrl ? (
-                  <Image src={logoUrl} alt={`Logo de ${salonName}`} fill sizes="82px" />
+                  <Image
+                    src={logoUrl}
+                    alt={`Logo de ${salonName}`}
+                    fill
+                    sizes="82px"
+                  />
                 ) : (
                   <span>{initials}</span>
                 )}
@@ -114,23 +244,35 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                   <div className="brand-preview-mobile__brand">
                     <div className="brand-preview-mobile__logo">
                       {logoUrl ? (
-                        <Image src={logoUrl} alt={`Preview de ${salonName}`} fill sizes="44px" />
+                        <Image
+                          src={logoUrl}
+                          alt={`Preview de ${salonName}`}
+                          fill
+                          sizes="44px"
+                        />
                       ) : (
                         <span>{initials}</span>
                       )}
                     </div>
                     <div>
                       <strong>{salonName}</strong>
-                      <span>{salon.tagline || segmentPreset.mobileSupport}</span>
+                      <span>
+                        {salon.tagline || segmentPreset.mobileSupport}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="brand-preview-mobile__headline">{segmentPreset.mobileHeadline}</div>
+                  <div className="brand-preview-mobile__headline">
+                    {segmentPreset.mobileHeadline}
+                  </div>
                 </div>
 
                 <div className="brand-preview-mobile__cards">
                   {segmentPreset.previewCards.map((card) => (
-                    <div key={card.title} className="brand-preview-mobile__card">
+                    <div
+                      key={card.title}
+                      className="brand-preview-mobile__card"
+                    >
                       <span className="eyebrow">{card.eyebrow}</span>
                       <strong>{card.title}</strong>
                       <p>{card.description}</p>
@@ -141,7 +283,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             </div>
           </div>
 
-          <form action={updateSalonBrandingAction} className="form-grid" encType="multipart/form-data">
+          <form
+            action={updateSalonBrandingAction}
+            className="form-grid"
+            encType="multipart/form-data"
+          >
             <div className="field">
               <label htmlFor="name">Nome do salão</label>
               <input id="name" name="name" defaultValue={salon.name} required />
@@ -160,7 +306,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
             <div className="field">
               <label htmlFor="businessSegment">Segmento do salão</label>
-              <select id="businessSegment" name="businessSegment" defaultValue={segmentPreset.value}>
+              <select
+                id="businessSegment"
+                name="businessSegment"
+                defaultValue={segmentPreset.value}
+              >
                 {SALON_SEGMENT_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -168,14 +318,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 ))}
               </select>
               <small className="muted">
-                Esse preset muda a linguagem, os destaques e a sensação do app do cliente sem trocar a estrutura do produto.
+                Esse preset muda a linguagem, os destaques e a sensação do app
+                do cliente sem trocar a estrutura do produto.
               </small>
             </div>
 
             <div className="split-grid">
               <div className="field">
                 <label htmlFor="brandColor">Cor principal</label>
-                <input id="brandColor" name="brandColor" type="color" defaultValue={brandColor} />
+                <input
+                  id="brandColor"
+                  name="brandColor"
+                  type="color"
+                  defaultValue={brandColor}
+                />
               </div>
 
               <div className="field">
@@ -192,8 +348,16 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
             <div className="field">
               <label htmlFor="logo">Logo que aparece no app do cliente</label>
-              <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
-              <small className="muted">PNG, JPG, WEBP ou SVG com até 2 MB. Essa imagem aparece no topo do app do cliente.</small>
+              <input
+                id="logo"
+                name="logo"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              />
+              <small className="muted">
+                PNG, JPG, WEBP ou SVG com até 2 MB. Essa imagem aparece no topo
+                do app do cliente.
+              </small>
             </div>
 
             {logoUrl ? (
@@ -222,11 +386,21 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                       flexShrink: 0,
                     }}
                   >
-                    <Image src={logoUrl} alt={`Logo atual de ${salonName}`} fill sizes="72px" />
+                    <Image
+                      src={logoUrl}
+                      alt={`Logo atual de ${salonName}`}
+                      fill
+                      sizes="72px"
+                    />
                   </div>
                   <div style={{ display: "grid", gap: 6 }}>
-                    <strong style={{ color: "#2F231C" }}>Essa é a imagem que o cliente vê no app.</strong>
-                    <span className="muted">Se quiser trocar, envie outra imagem acima. Se quiser limpar, marque a opção abaixo.</span>
+                    <strong style={{ color: "#2F231C" }}>
+                      Essa é a imagem que o cliente vê no app.
+                    </strong>
+                    <span className="muted">
+                      Se quiser trocar, envie outra imagem acima. Se quiser
+                      limpar, marque a opção abaixo.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -238,7 +412,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                   <input type="checkbox" name="removeLogo" />
                   <span>Remover logo atual</span>
                 </label>
-                <small className="muted">Se marcar essa opção e salvar, o app do cliente volta a mostrar as iniciais do salão.</small>
+                <small className="muted">
+                  Se marcar essa opção e salvar, o app do cliente volta a
+                  mostrar as iniciais do salão.
+                </small>
               </div>
             ) : null}
 
@@ -250,10 +427,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 border: "1px solid #E3D5C7",
               }}
             >
-              <strong style={{ display: "block", color: "#2F231C", marginBottom: 6 }}>Onde essa logo aparece</strong>
+              <strong
+                style={{ display: "block", color: "#2F231C", marginBottom: 6 }}
+              >
+                Onde essa logo aparece
+              </strong>
               <p className="muted" style={{ margin: 0 }}>
-                A logo fica no destaque principal do app do cliente, junto do nome do salão, da cor da marca e do botão de
-                contato.
+                A logo fica no destaque principal do app do cliente, junto do
+                nome do salão, da cor da marca e do botão de contato.
               </p>
             </div>
 
@@ -267,7 +448,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 gap: 10,
               }}
             >
-              <strong style={{ display: "block", color: "#2F231C" }}>Preset ativo: {segmentPreset.label}</strong>
+              <strong style={{ display: "block", color: "#2F231C" }}>
+                Preset ativo: {segmentPreset.label}
+              </strong>
               <p className="muted" style={{ margin: 0 }}>
                 {segmentPreset.shortDescription}
               </p>
@@ -291,6 +474,183 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </div>
             </div>
 
+            <div className="client-model-card">
+              <div className="client-model-card__preview">
+                <div className="client-model-card__eyebrow">
+                  Modelo do app do cliente
+                </div>
+                <h3>
+                  {clientAppConfig.heroHeadline ||
+                    visualStyleOption.previewTitle}
+                </h3>
+                <p>
+                  {clientAppConfig.heroSupportLine ||
+                    visualStyleOption.previewSupport}
+                </p>
+
+                <div className="client-model-card__chips">
+                  <span>{visualStyleOption.label}</span>
+                  <span>{emphasisOption.label}</span>
+                  <span>
+                    Foco em{" "}
+                    {resolvedHomeEmphasis === "services"
+                      ? "serviços"
+                      : resolvedHomeEmphasis === "portfolio"
+                        ? "galeria"
+                        : resolvedHomeEmphasis === "schedule"
+                          ? "agenda"
+                          : "benefícios"}
+                  </span>
+                </div>
+
+                <div className="client-model-card__phone">
+                  <div
+                    className={`client-model-card__phone-hero client-model-card__phone-hero--${resolvedVisualStyle}`}
+                    style={{
+                      background: `linear-gradient(145deg, ${brandColor}, color-mix(in srgb, ${brandColor} 18%, #2F231C))`,
+                    }}
+                  >
+                    <strong>{salonName}</strong>
+                    <span>
+                      {clientAppConfig.heroSupportLine ||
+                        salon.tagline ||
+                        segmentPreset.mobileSupport}
+                    </span>
+                    <b>{clientAppConfig.primaryCtaLabel || "Agendar agora"}</b>
+                  </div>
+                  <div className="client-model-card__phone-grid">
+                    <span>Hero editorial</span>
+                    <span>Atalhos do segmento</span>
+                    <span>Próximo agendamento</span>
+                    <span>Galeria real</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="client-model-card__meta">
+                <div>
+                  <span className="eyebrow">Estilo resolvido</span>
+                  <p>
+                    {CLIENT_APP_VISUAL_STYLE_OPTIONS.find(
+                      (option) => option.value === resolvedVisualStyle,
+                    )?.label ?? visualStyleOption.label}
+                  </p>
+                </div>
+                <div>
+                  <span className="eyebrow">Ênfase resolvida</span>
+                  <p>
+                    {CLIENT_HOME_EMPHASIS_OPTIONS.find(
+                      (option) => option.value === resolvedHomeEmphasis,
+                    )?.label ?? emphasisOption.label}
+                  </p>
+                </div>
+                <div>
+                  <span className="eyebrow">CTA principal</span>
+                  <p>{clientAppConfig.primaryCtaLabel || "Agendar agora"}</p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 18,
+                background: "#FBF7F2",
+                border: "1px solid #E3D5C7",
+                display: "grid",
+                gap: 14,
+              }}
+            >
+              <div>
+                <strong style={{ display: "block", color: "#2F231C" }}>
+                  Modelo do app do cliente
+                </strong>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Esse bloco deixa o salão escolher qual leitura visual o
+                  cliente vai sentir no app, sem trocar a base do produto nem
+                  perder os dados reais de agenda, galeria, carteira e
+                  recorrência.
+                </p>
+              </div>
+
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppVisualStyle">Estilo visual</label>
+                  <select
+                    id="clientAppVisualStyle"
+                    name="clientAppVisualStyle"
+                    defaultValue={clientAppConfig.visualStyle}
+                  >
+                    {CLIENT_APP_VISUAL_STYLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">
+                    {visualStyleOption.description}
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppHomeEmphasis">Ênfase da home</label>
+                  <select
+                    id="clientAppHomeEmphasis"
+                    name="clientAppHomeEmphasis"
+                    defaultValue={clientAppConfig.homeEmphasis}
+                  >
+                    {CLIENT_HOME_EMPHASIS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">{emphasisOption.description}</small>
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="clientAppHeroHeadline">
+                  Headline principal da home
+                </label>
+                <input
+                  id="clientAppHeroHeadline"
+                  name="clientAppHeroHeadline"
+                  defaultValue={clientAppConfig.heroHeadline ?? ""}
+                  placeholder="Ex.: Seu próximo cuidado favorito começa aqui."
+                />
+                <small className="muted">
+                  Se deixar vazio, o app usa a headline automática do segmento e
+                  do estilo visual.
+                </small>
+              </div>
+
+              <div className="field">
+                <label htmlFor="clientAppHeroSupportLine">
+                  Texto de apoio da home
+                </label>
+                <textarea
+                  id="clientAppHeroSupportLine"
+                  name="clientAppHeroSupportLine"
+                  defaultValue={clientAppConfig.heroSupportLine ?? ""}
+                  rows={3}
+                  placeholder="Ex.: Agenda real, vitrine e atendimento no mesmo fluxo."
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="clientAppPrimaryCtaLabel">
+                  Texto do botão principal
+                </label>
+                <input
+                  id="clientAppPrimaryCtaLabel"
+                  name="clientAppPrimaryCtaLabel"
+                  defaultValue={clientAppConfig.primaryCtaLabel ?? ""}
+                  placeholder="Ex.: Agendar agora"
+                />
+              </div>
+            </div>
+
             <div className="inline-actions">
               <button type="submit" className="primary-button">
                 Salvar identidade
@@ -304,7 +664,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         <div className="section-heading">
           <div>
             <h2>Agenda online</h2>
-            <p className="muted">Defina o intervalo da agenda e em quais horários o cliente pode reservar pelo app.</p>
+            <p className="muted">
+              Defina o intervalo da agenda e em quais horários o cliente pode
+              reservar pelo app.
+            </p>
           </div>
         </div>
 
@@ -314,19 +677,28 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               <span className="eyebrow">Como o cliente vê</span>
               <h3>Disponibilidade alinhada com sua operação</h3>
               <p>
-                O app passa a mostrar somente horários dentro do seu atendimento. Nada de agenda fora do horário,
-                conflito ou encaixe manual no susto.
+                O app passa a mostrar somente horários dentro do seu
+                atendimento. Nada de agenda fora do horário, conflito ou encaixe
+                manual no susto.
               </p>
             </div>
 
             <div className="schedule-preview-meta">
               <div>
                 <span className="eyebrow">Fuso horário</span>
-                <p>{SALON_TIMEZONE_OPTIONS.find((option) => option.value === timezone)?.label ?? timezone}</p>
+                <p>
+                  {SALON_TIMEZONE_OPTIONS.find(
+                    (option) => option.value === timezone,
+                  )?.label ?? timezone}
+                </p>
               </div>
               <div>
                 <span className="eyebrow">Intervalo entre horários</span>
-                <p>{SLOT_STEP_OPTIONS.find((option) => option.value === slotStepMinutes)?.label ?? `${slotStepMinutes} min`}</p>
+                <p>
+                  {SLOT_STEP_OPTIONS.find(
+                    (option) => option.value === slotStepMinutes,
+                  )?.label ?? `${slotStepMinutes} min`}
+                </p>
               </div>
             </div>
           </div>
@@ -346,7 +718,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
               <div className="field">
                 <label htmlFor="slotStepMinutes">Intervalo da agenda</label>
-                <select id="slotStepMinutes" name="slotStepMinutes" defaultValue={String(slotStepMinutes)}>
+                <select
+                  id="slotStepMinutes"
+                  name="slotStepMinutes"
+                  defaultValue={String(slotStepMinutes)}
+                >
                   {SLOT_STEP_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -362,7 +738,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                   <div className="schedule-day-row__title">
                     <strong>{day.label}</strong>
                     <label className="toggle-pill">
-                      <input type="checkbox" name={`isOpen_${day.value}`} defaultChecked={day.is_open} />
+                      <input
+                        type="checkbox"
+                        name={`isOpen_${day.value}`}
+                        defaultChecked={day.is_open}
+                      />
                       <span>{day.is_open ? "Aberto" : "Fechado"}</span>
                     </label>
                   </div>
@@ -405,7 +785,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         <div className="section-heading">
           <div>
             <h2>Código para clientes</h2>
-            <p className="muted">Compartilhe esse código para que seus clientes entrem no app certo.</p>
+            <p className="muted">
+              Compartilhe esse código para que seus clientes entrem no app
+              certo.
+            </p>
           </div>
         </div>
 
@@ -413,7 +796,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <article className="list-row code-card">
             <div className="list-row__content">
               <h3>{salon.name}</h3>
-              <small className="list-meta">Criado em {formatDate(salon.created_at)}</small>
+              <small className="list-meta">
+                Criado em {formatDate(salon.created_at)}
+              </small>
             </div>
 
             <div className="code-card__aside">

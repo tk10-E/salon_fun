@@ -62,13 +62,8 @@ export function NotificationsList({
       <input type="hidden" name="returnPathPrevious" value={returnPathPrevious} />
       <input type="hidden" name="pageItemCount" value={String(items.length)} />
 
-      <div
-        className="inline-actions"
-        style={{ marginBottom: 16, justifyContent: "space-between", alignItems: "center" }}
-      >
-        <label
-          style={{ display: "inline-flex", alignItems: "center", gap: 10, fontWeight: 700, cursor: "pointer" }}
-        >
+      <div className="notification-log-toolbar">
+        <label className="notification-log-toolbar__toggle">
           <input
             type="checkbox"
             checked={allSelected}
@@ -77,7 +72,7 @@ export function NotificationsList({
           Marcar todos desta página
         </label>
 
-        <div className="inline-actions" style={{ alignItems: "center" }}>
+        <div className="notification-log-toolbar__actions">
           <span className="services-toolbar__count">
             {selectedIds.length} {selectedIds.length === 1 ? "aviso selecionado" : "avisos selecionados"}
           </span>
@@ -87,22 +82,37 @@ export function NotificationsList({
         </div>
       </div>
 
-      <div className="row-list">
+      <div className="row-list notification-log-list">
         {items.map((item) => {
           const { notification, category, customerName, dispatchSnapshot } = item;
           const isSelected = selectedIds.includes(notification.id);
+          const createdAtLabel = new Intl.DateTimeFormat("pt-BR", {
+            dateStyle: "short",
+            timeStyle: "short",
+            timeZone: "America/Sao_Paulo",
+          }).format(new Date(notification.created_at));
+          const dispatchLabel = dispatchSnapshot
+            ? `${formatDispatchStatus(dispatchSnapshot.status)}${
+                dispatchSnapshot.sent_count != null || dispatchSnapshot.failed_count != null
+                  ? ` • enviados ${dispatchSnapshot.sent_count ?? 0} • falhas ${dispatchSnapshot.failed_count ?? 0}`
+                  : ""
+              }${
+                dispatchSnapshot.response_status != null
+                  ? ` • resposta ${dispatchSnapshot.response_status}`
+                  : ""
+              }`
+            : "Ainda sem snapshot de despacho para esse aviso.";
+          const destinationLabel =
+            notification.audience === "single_customer"
+              ? customerName ?? "Cliente específico"
+              : "Clientes do app deste salão";
 
           return (
-            <article key={notification.id} className="list-row">
-              <div className="list-row__content">
-                <div
-                  className="inline-actions"
-                  style={{ marginBottom: 8, justifyContent: "space-between", alignItems: "flex-start" }}
-                >
-                  <div className="inline-actions" style={{ alignItems: "center" }}>
-                    <label
-                      style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 700, cursor: "pointer" }}
-                    >
+            <article key={notification.id} className="list-row notification-log-card">
+              <div className="list-row__content notification-log-card__content">
+                <div className="notification-log-card__header">
+                  <div className="notification-log-card__selection">
+                    <label className="notification-log-card__checkbox">
                       <input
                         type="checkbox"
                         name="notificationIds"
@@ -112,57 +122,75 @@ export function NotificationsList({
                       />
                       Selecionar
                     </label>
-                    <span className={badgeClassForCategory(category)}>{formatCategoryLabel(category)}</span>
-                    <span className="badge badge--soft">{formatAudienceLabel(notification.audience)}</span>
-                    <span className={badgeClassForDispatchStatus(dispatchSnapshot?.status)}>
-                      {formatDispatchStatus(dispatchSnapshot?.status)}
-                    </span>
+                    <div className="notification-log-card__badges">
+                      <span className={badgeClassForCategory(category)}>{formatCategoryLabel(category)}</span>
+                      <span className="badge badge--soft">{formatAudienceLabel(notification.audience)}</span>
+                      <span className={badgeClassForDispatchStatus(dispatchSnapshot?.status)}>
+                        {formatDispatchStatus(dispatchSnapshot?.status)}
+                      </span>
+                    </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    name="singleDeleteId"
-                    value={notification.id}
-                    className="danger-button"
-                  >
-                    Excluir aviso
-                  </button>
+                  <div className="notification-log-card__header-actions">
+                    <small className="notification-log-card__timestamp">
+                      Enviado em {createdAtLabel}
+                    </small>
+                    <button
+                      type="submit"
+                      name="singleDeleteId"
+                      value={notification.id}
+                      className="danger-button"
+                    >
+                      Excluir aviso
+                    </button>
+                  </div>
                 </div>
-                <h3>{notification.title}</h3>
-                <p className="muted list-description">{notification.body}</p>
-                <small className="list-meta">
-                  Tipo interno: {formatNotificationType(notification.notification_type)}
-                </small>
-                <small className="list-meta">
-                  Enviado em {new Intl.DateTimeFormat("pt-BR", {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                    timeZone: "America/Sao_Paulo",
-                  }).format(new Date(notification.created_at))}
-                </small>
-                {dispatchSnapshot ? (
-                  <small className="list-meta">
-                    Auditoria push: {formatDispatchStatus(dispatchSnapshot.status)}
-                    {dispatchSnapshot.sent_count != null || dispatchSnapshot.failed_count != null
-                      ? ` • enviados ${dispatchSnapshot.sent_count ?? 0} • falhas ${dispatchSnapshot.failed_count ?? 0}`
-                      : ""}
-                    {dispatchSnapshot.response_status != null
-                      ? ` • resposta ${dispatchSnapshot.response_status}`
-                      : ""}
-                  </small>
-                ) : (
-                  <small className="list-meta">
-                    Auditoria push: ainda sem snapshot de despacho para esse aviso.
-                  </small>
-                )}
-                {dispatchSnapshot?.error_detail ? (
-                  <small className="list-meta">Último erro: {dispatchSnapshot.error_detail}</small>
-                ) : null}
-                {notification.audience === "single_customer" ? (
-                  <small className="list-meta">Destino: {customerName ?? "Cliente específico"}</small>
-                ) : (
-                  <small className="list-meta">Destino: clientes do app deste salão</small>
-                )}
+
+                <div className="notification-log-card__body">
+                  <div className="notification-log-card__copy">
+                    <h3>{notification.title}</h3>
+                    <p className="notification-log-card__description">{notification.body}</p>
+                  </div>
+
+                  <div className="notification-log-card__meta-grid">
+                    <div className="notification-log-card__meta-item">
+                      <span className="notification-log-card__meta-label">Tipo interno</span>
+                      <strong>{formatNotificationType(notification.notification_type)}</strong>
+                      <p>Classificação operacional usada para organizar o histórico do salão.</p>
+                    </div>
+
+                    <div className="notification-log-card__meta-item">
+                      <span className="notification-log-card__meta-label">Auditoria push</span>
+                      <strong>{formatDispatchStatus(dispatchSnapshot?.status)}</strong>
+                      <p>{dispatchLabel}</p>
+                    </div>
+
+                    <div className="notification-log-card__meta-item">
+                      <span className="notification-log-card__meta-label">Destino</span>
+                      <strong>{destinationLabel}</strong>
+                      <p>
+                        {notification.audience === "single_customer"
+                          ? "Aviso enviado para uma pessoa específica da base."
+                          : "Disparo voltado para toda a base ativa do app do cliente."}
+                      </p>
+                    </div>
+
+                    <div
+                      className={`notification-log-card__meta-item${
+                        dispatchSnapshot?.error_detail ? " notification-log-card__meta-item--danger" : ""
+                      }`}
+                    >
+                      <span className="notification-log-card__meta-label">Último retorno</span>
+                      <strong>
+                        {dispatchSnapshot?.error_detail ? "Falha registrada" : "Fluxo sem erro crítico"}
+                      </strong>
+                      <p>
+                        {dispatchSnapshot?.error_detail ??
+                          "Nenhum erro detalhado foi registrado no snapshot mais recente desse aviso."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </article>
           );
