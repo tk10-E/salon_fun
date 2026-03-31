@@ -415,6 +415,113 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           offers: data?.offers ?? const <SalonOfferItem>[],
           onBookService: (service) => _openBooking(service, data),
           onWhatsApp: _openWhatsApp,
+          onOpenProfessionals: () {
+            unawaited(_openProfessionals(data));
+          },
+          onOpenProducts: () {
+            unawaited(_openProducts(data));
+          },
+          onOpenServiceDetails: (service) => _openServiceDetail(service, data),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openProfessionals([HomeData? data]) async {
+    final branding = SalonBranding.fromName(
+      _profile.salonName,
+      overrideHexColor: _profile.salonBrandColor,
+      businessSegment: _profile.salonBusinessSegment,
+      clientAppConfig: _profile.salonClientAppConfig,
+    );
+    final brandConfig = SalonBrandConfig.fromProfile(
+      _profile,
+      services: data?.services ?? const <ServiceItem>[],
+      posts: data?.posts ?? const <SalonPost>[],
+      offers: data?.offers ?? const <SalonOfferItem>[],
+    );
+    final professionals = brandConfig.buildProfessionalHighlights(
+      posts: data?.posts ?? const <SalonPost>[],
+      appointments: data?.appointments ?? const <AppointmentItem>[],
+    );
+
+    await Navigator.of(context).push(
+      SalonPageRoute<void>(
+        builder: (_) => PremiumProfessionalsScreen(
+          salonName: _profile.salonName,
+          branding: branding,
+          logoUrl: _profile.salonLogoUrl,
+          heroImageUrl: brandConfig.heroImageUrl,
+          heroTabletImageUrl: brandConfig.heroImageTabletUrl,
+          professionals: professionals,
+          onBook: data?.services.firstOrNull == null
+              ? null
+              : (_) => _openBooking(data!.services.first, data),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openProducts([HomeData? data]) async {
+    final branding = SalonBranding.fromName(
+      _profile.salonName,
+      overrideHexColor: _profile.salonBrandColor,
+      businessSegment: _profile.salonBusinessSegment,
+      clientAppConfig: _profile.salonClientAppConfig,
+    );
+    final brandConfig = SalonBrandConfig.fromProfile(
+      _profile,
+      services: data?.services ?? const <ServiceItem>[],
+      posts: data?.posts ?? const <SalonPost>[],
+      offers: data?.offers ?? const <SalonOfferItem>[],
+    );
+
+    await Navigator.of(context).push(
+      SalonPageRoute<void>(
+        builder: (_) => PremiumProductsScreen(
+          salonName: _profile.salonName,
+          branding: branding,
+          heroImageUrl:
+              brandConfig.profileCoverImageUrl ?? brandConfig.heroImageUrl,
+          heroTabletImageUrl:
+              brandConfig.profileCoverImageTabletUrl ??
+              brandConfig.heroImageTabletUrl,
+          products: brandConfig.products,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openServiceDetail(ServiceItem service, [HomeData? data]) async {
+    final branding = SalonBranding.fromName(
+      _profile.salonName,
+      overrideHexColor: _profile.salonBrandColor,
+      businessSegment: _profile.salonBusinessSegment,
+      clientAppConfig: _profile.salonClientAppConfig,
+    );
+    final brandConfig = SalonBrandConfig.fromProfile(
+      _profile,
+      services: data?.services ?? const <ServiceItem>[],
+      posts: data?.posts ?? const <SalonPost>[],
+      offers: data?.offers ?? const <SalonOfferItem>[],
+    );
+    final professionals = brandConfig.buildProfessionalHighlights(
+      posts: data?.posts ?? const <SalonPost>[],
+      appointments: data?.appointments ?? const <AppointmentItem>[],
+    );
+    final relatedPosts = (data?.posts ?? const <SalonPost>[])
+        .where((post) => post.linkedService?.id == service.id)
+        .toList();
+
+    await Navigator.of(context).push(
+      SalonPageRoute<void>(
+        builder: (_) => PremiumServiceDetailScreen(
+          profile: _profile,
+          branding: branding,
+          service: service,
+          professionals: professionals,
+          relatedPosts: relatedPosts,
+          onBook: () => _openBooking(service, data),
         ),
       ),
     );

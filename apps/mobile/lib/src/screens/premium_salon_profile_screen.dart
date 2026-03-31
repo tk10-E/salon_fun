@@ -7,12 +7,15 @@ import '../models/app_models.dart';
 import '../theme/design_tokens.dart';
 import '../theme/salon_brand_config.dart';
 import '../theme/salon_branding.dart';
-import '../theme/tenant_theme.dart';
+import '../widgets/app_backdrop.dart';
 import '../widgets/premium_banner.dart';
 import '../widgets/premium_gallery_card.dart';
+import '../widgets/premium_product_card.dart';
 import '../widgets/premium_professional_card.dart';
 import '../widgets/premium_section_header.dart';
 import '../widgets/premium_service_chip.dart';
+import '../widgets/premium_surface_card.dart';
+import '../widgets/salon_brand_mark.dart';
 
 class PremiumSalonProfileScreen extends StatelessWidget {
   const PremiumSalonProfileScreen({
@@ -24,6 +27,9 @@ class PremiumSalonProfileScreen extends StatelessWidget {
     required this.offers,
     required this.onBookService,
     required this.onWhatsApp,
+    this.onOpenProfessionals,
+    this.onOpenProducts,
+    this.onOpenServiceDetails,
   });
 
   final CustomerProfile profile;
@@ -33,6 +39,9 @@ class PremiumSalonProfileScreen extends StatelessWidget {
   final List<SalonOfferItem> offers;
   final Future<void> Function(ServiceItem service) onBookService;
   final VoidCallback onWhatsApp;
+  final VoidCallback? onOpenProfessionals;
+  final VoidCallback? onOpenProducts;
+  final Future<void> Function(ServiceItem service)? onOpenServiceDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -43,178 +52,258 @@ class PremiumSalonProfileScreen extends StatelessWidget {
       offers: offers,
     );
     final professionals = brandConfig.buildProfessionalHighlights(posts: posts);
+    final leadService = services.isEmpty ? null : services.first;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Perfil do salao')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        children: [
-          PremiumBanner(
-            eyebrow: profile.salonName,
-            title: brandConfig.slogan,
-            subtitle:
-                'Marca, servicos e canais de contato organizados com leitura de franquia premium.',
-            imageUrl: brandConfig.profileCoverImageUrl,
-            tabletImageUrl: brandConfig.profileCoverImageTabletUrl,
-            imageAlignment: brandConfig.profileCoverImageAlignment,
-            imageScale: brandConfig.profileCoverImageScale,
-            primaryActionLabel: brandConfig.primaryCtaLabel,
-            onPrimaryAction: services.firstOrNull == null
-                ? onWhatsApp
-                : () {
-                    unawaited(onBookService(services.first));
-                  },
-            secondaryActionLabel: 'WhatsApp',
-            onSecondaryAction: onWhatsApp,
-          ),
-          const SizedBox(height: PremiumSpacing.xl),
-          PremiumSectionHeader(
-            title: 'Sobre a marca',
-            subtitle:
-                'Identidade forte, instituicao clara e informacao util para conversao.',
-          ),
-          const SizedBox(height: PremiumSpacing.md),
-          _InfoPanel(
-            title: profile.salonName,
-            body: profile.salonTagline?.trim().isNotEmpty == true
-                ? profile.salonTagline!
-                : brandConfig.slogan,
-            details: [
-              if (brandConfig.addressLabel != null) brandConfig.addressLabel!,
-              if (brandConfig.ratingValue != null)
-                '${brandConfig.ratingValue!.toStringAsFixed(1)} estrelas${brandConfig.ratingCount == null ? '' : ' • ${brandConfig.ratingCount} avaliacoes'}',
-            ],
-          ),
-          if (brandConfig.businessHours.isNotEmpty) ...[
+      body: AppBackdrop(
+        branding: branding,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          children: [
+            PremiumBanner(
+              eyebrow: profile.salonName,
+              title: brandConfig.slogan,
+              subtitle:
+                  'Marca, servicos e canais de contato organizados com leitura premium e consistencia white-label.',
+              imageUrl: brandConfig.profileCoverImageUrl,
+              tabletImageUrl: brandConfig.profileCoverImageTabletUrl,
+              imageAlignment: brandConfig.profileCoverImageAlignment,
+              imageScale: brandConfig.profileCoverImageScale,
+              primaryActionLabel: brandConfig.primaryCtaLabel,
+              onPrimaryAction: leadService == null
+                  ? onWhatsApp
+                  : () => unawaited(onBookService(leadService)),
+              secondaryActionLabel: 'WhatsApp',
+              onSecondaryAction: onWhatsApp,
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SalonBrandMark(
+                    salonName: profile.salonName,
+                    logoUrl: profile.salonLogoUrl,
+                    branding: branding,
+                    size: 56,
+                    borderRadius: 18,
+                  ),
+                  const SizedBox(width: PremiumSpacing.sm),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(
+                      profile.salonName,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: PremiumSpacing.xl),
-            PremiumSectionHeader(
-              title: 'Funcionamento',
-              subtitle: 'Horarios prontos para consulta dentro do app.',
+            const PremiumSectionHeader(
+              eyebrow: 'Institucional',
+              title: 'Sobre a marca',
+              subtitle:
+                  'Identidade forte, instituicao clara e informacao util para conversao.',
             ),
             const SizedBox(height: PremiumSpacing.md),
             _InfoPanel(
-              title: 'Agenda da semana',
-              body:
-                  'O salao pode ajustar janelas por tenant sem mudar a base do app.',
-              details: brandConfig.businessHours
-                  .map((hour) => '${hour.dayLabel} • ${hour.hoursLabel}')
-                  .toList(),
+              title: profile.salonName,
+              body: profile.salonTagline?.trim().isNotEmpty == true
+                  ? profile.salonTagline!
+                  : brandConfig.slogan,
+              details: [
+                if (brandConfig.addressLabel != null) brandConfig.addressLabel!,
+                if (brandConfig.ratingValue != null)
+                  '${brandConfig.ratingValue!.toStringAsFixed(1)} estrelas${brandConfig.ratingCount == null ? '' : ' | ${brandConfig.ratingCount} avaliacoes'}',
+              ],
             ),
-          ],
-          const SizedBox(height: PremiumSpacing.xl),
-          PremiumSectionHeader(
-            title: 'Servicos principais',
-            subtitle: 'Categorias priorizadas para a identidade do negocio.',
-          ),
-          const SizedBox(height: PremiumSpacing.md),
-          Wrap(
-            spacing: PremiumSpacing.sm,
-            runSpacing: PremiumSpacing.sm,
-            children: services
-                .take(6)
-                .map(
-                  (service) => PremiumServiceChip(
-                    label: service.name,
-                    icon: brandConfig.iconForService(service),
-                    onTap: () {
-                      unawaited(onBookService(service));
-                    },
-                  ),
-                )
-                .toList(),
-          ),
-          if (professionals.isNotEmpty) ...[
-            const SizedBox(height: PremiumSpacing.xl),
-            PremiumSectionHeader(
-              title: 'Profissionais',
-              subtitle: 'Time em evidencia para fortalecer confianca e desejo.',
-            ),
-            const SizedBox(height: PremiumSpacing.md),
-            SizedBox(
-              height: 238,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: professionals.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: PremiumSpacing.md),
-                itemBuilder: (context, index) {
-                  final professional = professionals[index];
-                  return SizedBox(
-                    width: 260,
-                    child: PremiumProfessionalCard(
-                      name: professional.name,
-                      specialty: professional.specialty,
-                      availabilityLabel: professional.availabilityLabel,
-                      onBook: services.firstOrNull == null
-                          ? null
-                          : () {
-                              unawaited(onBookService(services.first));
-                            },
-                    ),
-                  );
-                },
+            if (brandConfig.businessHours.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              const PremiumSectionHeader(
+                eyebrow: 'Operacao',
+                title: 'Funcionamento',
+                subtitle: 'Horarios prontos para consulta dentro do app.',
               ),
-            ),
-          ],
-          if (posts.isNotEmpty) ...[
-            const SizedBox(height: PremiumSpacing.xl),
-            PremiumSectionHeader(
-              title: 'Vitrine visual',
-              subtitle: 'Trabalhos recentes usados como prova visual da marca.',
-            ),
-            const SizedBox(height: PremiumSpacing.md),
-            SizedBox(
-              height: 178,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: posts.take(4).length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: PremiumSpacing.md),
-                itemBuilder: (context, index) {
-                  final post = posts[index];
-                  return SizedBox(
-                    width: 160,
-                    child: PremiumGalleryCard(
-                      title: post.title,
-                      subtitle: post.staffMemberName,
-                      imageUrl: post.coverImageUrl,
-                    ),
-                  );
-                },
+              const SizedBox(height: PremiumSpacing.md),
+              _InfoPanel(
+                title: 'Agenda da semana',
+                body:
+                    'O salao pode ajustar janelas por tenant sem mudar a base do app.',
+                details: brandConfig.businessHours
+                    .map((hour) => '${hour.dayLabel} | ${hour.hoursLabel}')
+                    .toList(),
               ),
-            ),
-          ],
-          const SizedBox(height: PremiumSpacing.xl),
-          PremiumSectionHeader(
-            title: 'Canais da marca',
-            subtitle:
-                'WhatsApp, mapa e Instagram quando configurados no tenant.',
-          ),
-          const SizedBox(height: PremiumSpacing.md),
-          Wrap(
-            spacing: PremiumSpacing.sm,
-            runSpacing: PremiumSpacing.sm,
-            children: [
-              FilledButton.icon(
-                onPressed: onWhatsApp,
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
-                label: const Text('WhatsApp'),
-              ),
-              if (brandConfig.instagramUrl != null)
-                OutlinedButton.icon(
-                  onPressed: () => _launchUrl(brandConfig.instagramUrl!),
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: const Text('Instagram'),
-                ),
-              if (brandConfig.mapUrl != null)
-                OutlinedButton.icon(
-                  onPressed: () => _launchUrl(brandConfig.mapUrl!),
-                  icon: const Icon(Icons.map_outlined),
-                  label: const Text('Mapa'),
-                ),
             ],
-          ),
-        ],
+            if (services.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              const PremiumSectionHeader(
+                eyebrow: 'Servicos',
+                title: 'Curadoria principal',
+                subtitle:
+                    'Categorias priorizadas para a identidade do negocio.',
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              Wrap(
+                spacing: PremiumSpacing.sm,
+                runSpacing: PremiumSpacing.sm,
+                children: services
+                    .take(6)
+                    .map(
+                      (service) => PremiumServiceChip(
+                        label: service.name,
+                        icon: brandConfig.iconForService(service),
+                        onTap: onOpenServiceDetails == null
+                            ? () => unawaited(onBookService(service))
+                            : () => unawaited(onOpenServiceDetails!(service)),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+            if (professionals.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              PremiumSectionHeader(
+                eyebrow: 'Equipe',
+                title: 'Profissionais em evidencia',
+                subtitle:
+                    'Time em destaque para fortalecer confianca, prova social e desejo.',
+                actionLabel: onOpenProfessionals == null ? null : 'Ver time',
+                onAction: onOpenProfessionals,
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              SizedBox(
+                height: 352,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: professionals.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: PremiumSpacing.md),
+                  itemBuilder: (context, index) {
+                    final professional = professionals[index];
+                    return SizedBox(
+                      width: 272,
+                      child: PremiumProfessionalCard(
+                        name: professional.name,
+                        specialty: professional.specialty,
+                        availabilityLabel: professional.availabilityLabel,
+                        ratingLabel: professional.ratingLabel,
+                        imageUrl: professional.imageUrl,
+                        ctaLabel: leadService == null
+                            ? 'Voltar para agenda'
+                            : 'Agendar agora',
+                        onBook: leadService == null
+                            ? () => Navigator.of(context).maybePop()
+                            : () => unawaited(onBookService(leadService)),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            if (posts.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              const PremiumSectionHeader(
+                eyebrow: 'Vitrine',
+                title: 'Trabalhos recentes',
+                subtitle:
+                    'Prova visual da marca para inspirar a proxima reserva.',
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              SizedBox(
+                height: 206,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: posts.take(4).length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: PremiumSpacing.md),
+                  itemBuilder: (context, index) {
+                    final post = posts[index];
+                    return SizedBox(
+                      width: 170,
+                      child: PremiumGalleryCard(
+                        title: post.title,
+                        eyebrow: post.staffMemberName,
+                        subtitle: post.caption,
+                        imageUrl: post.coverImageUrl,
+                        badge: post.isBeforeAfter ? 'Antes e depois' : null,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            if (brandConfig.products.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              PremiumSectionHeader(
+                eyebrow: 'Retail',
+                title: 'Produtos e combos',
+                subtitle:
+                    'A vitrine comercial do salao tambem pode viver aqui com o mesmo acabamento premium.',
+                actionLabel: onOpenProducts == null ? null : 'Ver vitrine',
+                onAction: onOpenProducts,
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              SizedBox(
+                height: 340,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: brandConfig.products.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: PremiumSpacing.md),
+                  itemBuilder: (context, index) {
+                    final product = brandConfig.products[index];
+                    return SizedBox(
+                      width: 220,
+                      child: PremiumProductCard(
+                        title: product.name,
+                        subtitle: product.subtitle,
+                        priceLabel: product.priceLabel,
+                        imageUrl: product.imageUrl,
+                        badge: product.badge,
+                        onTap: onOpenProducts,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: PremiumSpacing.xl),
+            const PremiumSectionHeader(
+              eyebrow: 'Contato',
+              title: 'Canais da marca',
+              subtitle:
+                  'WhatsApp, mapa e Instagram quando configurados no tenant.',
+            ),
+            const SizedBox(height: PremiumSpacing.md),
+            PremiumSurfaceCard(
+              child: Wrap(
+                spacing: PremiumSpacing.sm,
+                runSpacing: PremiumSpacing.sm,
+                children: [
+                  FilledButton.icon(
+                    onPressed: onWhatsApp,
+                    icon: const Icon(Icons.chat_bubble_outline_rounded),
+                    label: const Text('WhatsApp'),
+                  ),
+                  if (brandConfig.instagramUrl != null)
+                    OutlinedButton.icon(
+                      onPressed: () => _launchUrl(brandConfig.instagramUrl!),
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Instagram'),
+                    ),
+                  if (brandConfig.mapUrl != null)
+                    OutlinedButton.icon(
+                      onPressed: () => _launchUrl(brandConfig.mapUrl!),
+                      icon: const Icon(Icons.map_outlined),
+                      label: const Text('Mapa'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -242,14 +331,7 @@ class _InfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(PremiumSpacing.lg),
-      decoration: BoxDecoration(
-        color: context.premiumTheme.surfacePrimary,
-        borderRadius: BorderRadius.circular(PremiumRadius.card),
-        border: Border.all(color: context.premiumTheme.strokeSoft),
-        boxShadow: context.premiumTheme.softShadow,
-      ),
+    return PremiumSurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -274,8 +356,4 @@ class _InfoPanel extends StatelessWidget {
       ),
     );
   }
-}
-
-extension<T> on List<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

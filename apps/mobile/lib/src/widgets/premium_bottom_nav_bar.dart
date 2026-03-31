@@ -77,22 +77,24 @@ class _NavItem extends StatelessWidget {
         duration: PremiumMotion.normal,
         padding: const EdgeInsets.symmetric(vertical: PremiumSpacing.sm),
         decoration: BoxDecoration(
-          color: selected ? theme.surfaceAccent : Colors.transparent,
+          gradient: selected ? theme.buttonGradient : null,
+          color: selected ? null : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
+          boxShadow: selected ? theme.softShadow : null,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               item.icon,
-              color: selected ? theme.textPrimary : theme.textMuted,
+              color: selected ? theme.onAccent : theme.textMuted,
               size: selected ? 23 : 21,
             ),
             const SizedBox(height: 6),
             Text(
               item.label,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: selected ? theme.textPrimary : theme.textMuted,
+                color: selected ? theme.onAccent : theme.textMuted,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
               ),
             ),

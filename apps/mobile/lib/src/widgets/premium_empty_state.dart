@@ -42,12 +42,23 @@ class PremiumEmptyState extends StatelessWidget {
           ),
           if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
             const SizedBox(height: PremiumSpacing.md),
-            Text(
-              eyebrow!,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(color: theme.textMuted),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: PremiumSpacing.sm,
+                vertical: PremiumSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                color: theme.surfacePrimary,
+                borderRadius: BorderRadius.circular(PremiumRadius.pill),
+                border: Border.all(color: theme.strokeSoft),
+              ),
+              child: Text(
+                eyebrow!,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: theme.textMuted),
+              ),
             ),
           ],
           const SizedBox(height: PremiumSpacing.sm),

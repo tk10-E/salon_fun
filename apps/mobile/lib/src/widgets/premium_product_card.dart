@@ -13,6 +13,7 @@ class PremiumProductCard extends StatelessWidget {
     this.badge,
     this.imageUrl,
     this.onTap,
+    this.actionLabel = 'Ver vitrine',
   });
 
   final String title;
@@ -21,6 +22,7 @@ class PremiumProductCard extends StatelessWidget {
   final String? badge;
   final String? imageUrl;
   final VoidCallback? onTap;
+  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +106,15 @@ class PremiumProductCard extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
+          if (onTap != null) ...[
+            const SizedBox(height: PremiumSpacing.md),
+            TextButton.icon(
+              onPressed: onTap,
+              iconAlignment: IconAlignment.end,
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: Text(actionLabel),
+            ),
+          ],
         ],
       ),
     );

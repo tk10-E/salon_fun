@@ -48,12 +48,31 @@ class _PremiumLoadingStateState extends State<PremiumLoadingState>
           children: [
             if (widget.showBanner)
               _SkeletonBox(
-                height: 220,
+                height: 248,
                 color: Color.lerp(base, highlight, 0.5)!,
+                radius: PremiumRadius.cardLarge,
               ),
             const SizedBox(height: PremiumSpacing.lg),
             for (var index = 0; index < widget.lines; index++) ...[
-              _SkeletonBox(height: 108, color: index.isEven ? base : highlight),
+              Row(
+                children: [
+                  Expanded(
+                    flex: index.isEven ? 7 : 5,
+                    child: _SkeletonBox(
+                      height: index.isEven ? 124 : 96,
+                      color: index.isEven ? base : highlight,
+                    ),
+                  ),
+                  const SizedBox(width: PremiumSpacing.md),
+                  Expanded(
+                    flex: index.isEven ? 5 : 7,
+                    child: _SkeletonBox(
+                      height: index.isEven ? 124 : 96,
+                      color: index.isEven ? highlight : base,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: PremiumSpacing.md),
             ],
           ],
@@ -64,10 +83,15 @@ class _PremiumLoadingStateState extends State<PremiumLoadingState>
 }
 
 class _SkeletonBox extends StatelessWidget {
-  const _SkeletonBox({required this.height, required this.color});
+  const _SkeletonBox({
+    required this.height,
+    required this.color,
+    this.radius = PremiumRadius.card,
+  });
 
   final double height;
   final Color color;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +101,7 @@ class _SkeletonBox extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(PremiumRadius.card),
+        borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: theme.strokeSoft),
       ),
     );

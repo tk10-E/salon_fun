@@ -28,6 +28,9 @@ class HomeServicesTab extends StatelessWidget {
     required this.favoriteServiceIds,
     required this.busyFavoriteServiceIds,
     required this.onToggleFavoriteService,
+    this.onOpenProfessionals,
+    this.onOpenProducts,
+    this.onOpenServiceDetails,
   });
 
   final CustomerProfile profile;
@@ -58,6 +61,9 @@ class HomeServicesTab extends StatelessWidget {
   final Set<String> favoriteServiceIds;
   final Set<String> busyFavoriteServiceIds;
   final Future<void> Function(ServiceItem service) onToggleFavoriteService;
+  final VoidCallback? onOpenProfessionals;
+  final VoidCallback? onOpenProducts;
+  final Future<void> Function(ServiceItem service)? onOpenServiceDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +88,9 @@ class HomeServicesTab extends StatelessWidget {
       favoriteServiceIds: favoriteServiceIds,
       busyFavoriteServiceIds: busyFavoriteServiceIds,
       onToggleFavoriteService: onToggleFavoriteService,
+      onOpenServiceDetails: onOpenServiceDetails,
+      onOpenProfessionals: onOpenProfessionals,
+      onOpenProducts: onOpenProducts,
     );
   }
 }

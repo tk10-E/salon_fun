@@ -14,6 +14,7 @@ import '../navigation/salon_page_route.dart';
 import '../repositories/salon_repository.dart';
 import '../services/push_notification_service.dart';
 import '../services/push_token_sync_service.dart';
+import '../theme/salon_brand_config.dart';
 import '../theme/salon_branding.dart';
 import '../theme/salon_experience_preset.dart';
 import '../widgets/app_backdrop.dart';
@@ -35,7 +36,10 @@ import 'book_appointment_screen.dart';
 import 'premium_booking_screen.dart';
 import 'premium_client_profile_screen.dart';
 import 'premium_notifications_screen.dart';
+import 'premium_products_screen.dart';
+import 'premium_professionals_screen.dart';
 import 'premium_salon_profile_screen.dart';
+import 'premium_service_detail_screen.dart';
 
 part 'home_screen_actions.dart';
 part 'home_screen_data.dart';
@@ -469,6 +473,14 @@ class _HomeScreenState extends _HomeScreenStateBase
                             favoriteServiceIds: data.favoriteServiceIds,
                             busyFavoriteServiceIds: _busyFavoriteServiceIds,
                             onToggleFavoriteService: _toggleFavoriteService,
+                            onOpenServiceDetails: (service) =>
+                                _openServiceDetail(service, data),
+                            onOpenProfessionals: () {
+                              unawaited(_openProfessionals(data));
+                            },
+                            onOpenProducts: () {
+                              unawaited(_openProducts(data));
+                            },
                           ),
                         if (isLoading)
                           SalonHomeSkeleton(

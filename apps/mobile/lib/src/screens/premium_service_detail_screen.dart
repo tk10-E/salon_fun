@@ -6,9 +6,13 @@ import '../theme/design_tokens.dart';
 import '../theme/salon_brand_config.dart';
 import '../theme/salon_branding.dart';
 import '../theme/tenant_theme.dart';
+import '../widgets/app_backdrop.dart';
 import '../widgets/premium_banner.dart';
+import '../widgets/premium_gallery_card.dart';
 import '../widgets/premium_professional_card.dart';
 import '../widgets/premium_section_header.dart';
+import '../widgets/premium_surface_card.dart';
+import '../widgets/salon_brand_mark.dart';
 
 class PremiumServiceDetailScreen extends StatelessWidget {
   const PremiumServiceDetailScreen({
@@ -16,7 +20,7 @@ class PremiumServiceDetailScreen extends StatelessWidget {
     required this.profile,
     required this.branding,
     required this.service,
-    this.professionals = const <StaffMemberItem>[],
+    this.professionals = const <ProfessionalHighlight>[],
     this.relatedPosts = const <SalonPost>[],
     this.onBook,
   });
@@ -24,7 +28,7 @@ class PremiumServiceDetailScreen extends StatelessWidget {
   final CustomerProfile profile;
   final SalonBranding branding;
   final ServiceItem service;
-  final List<StaffMemberItem> professionals;
+  final List<ProfessionalHighlight> professionals;
   final List<SalonPost> relatedPosts;
   final VoidCallback? onBook;
 
@@ -39,86 +43,161 @@ class PremiumServiceDetailScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Detalhe do servico')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        children: [
-          PremiumBanner(
-            eyebrow: profile.salonName,
-            title: service.name,
-            subtitle: service.description?.trim().isNotEmpty == true
-                ? service.description!
-                : 'Servico com leitura premium, clareza comercial e CTA direto para agenda.',
-            imageUrl: service.imageUrl,
-            primaryActionLabel: 'Agendar',
-            onPrimaryAction: onBook,
-            badges: [
-              _Badge(label: '${service.duration} min'),
-              _Badge(label: currency.format(service.price)),
-            ],
-          ),
-          const SizedBox(height: PremiumSpacing.xl),
-          PremiumSectionHeader(
-            title: 'O que esperar',
-            subtitle:
-                'Descricao, tempo e contexto do atendimento em uma leitura curta.',
-          ),
-          const SizedBox(height: PremiumSpacing.md),
-          _DetailBlock(
-            title: 'Descricao',
-            body: service.description?.trim().isNotEmpty == true
-                ? service.description!
-                : 'Experiencia desenhada para manter alto valor percebido sem perder objetividade.',
-            bullets: [
-              'Duracao estimada de ${service.duration} minutos',
-              'Valor base de ${currency.format(service.price)}',
-              if (service.category?.trim().isNotEmpty == true)
-                'Categoria ${service.category}',
-            ],
-          ),
-          if (professionals.isNotEmpty) ...[
-            const SizedBox(height: PremiumSpacing.xl),
-            PremiumSectionHeader(
-              title: 'Profissionais disponiveis',
-              subtitle:
-                  'Quem atende este servico dentro da agenda premium do app.',
-            ),
-            const SizedBox(height: PremiumSpacing.md),
-            ...professionals.map(
-              (professional) => Padding(
-                padding: const EdgeInsets.only(bottom: PremiumSpacing.md),
-                child: PremiumProfessionalCard(
-                  name: professional.name,
-                  specialty: professional.role?.trim().isNotEmpty == true
-                      ? professional.role!
-                      : 'Especialista do salao',
-                  availabilityLabel: professional.availableSlotsCount > 0
-                      ? '${professional.availableSlotsCount} horarios livres'
-                      : 'Agenda sob consulta',
-                  onBook: onBook,
-                ),
+      body: AppBackdrop(
+        branding: branding,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          children: [
+            PremiumBanner(
+              eyebrow: profile.salonName,
+              title: service.name,
+              subtitle: service.description?.trim().isNotEmpty == true
+                  ? service.description!
+                  : 'Experiencia premium com clareza comercial, desejo visual e CTA direto para agenda.',
+              imageUrl: service.imageUrl ?? brandConfig.heroImageUrl,
+              primaryActionLabel: 'Agendar',
+              onPrimaryAction: onBook,
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SalonBrandMark(
+                    salonName: profile.salonName,
+                    logoUrl: profile.salonLogoUrl,
+                    branding: branding,
+                    size: 54,
+                    borderRadius: 18,
+                  ),
+                  const SizedBox(width: PremiumSpacing.sm),
+                  Text(
+                    profile.salonName,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-          if (relatedPosts.isNotEmpty) ...[
-            const SizedBox(height: PremiumSpacing.xl),
-            PremiumSectionHeader(
-              title: 'Resultados e avaliacoes visuais',
-              subtitle:
-                  'Use a galeria como prova visual da qualidade entregue.',
-            ),
-            const SizedBox(height: PremiumSpacing.md),
-            _DetailBlock(
-              title: relatedPosts.first.title,
-              body: relatedPosts.first.caption ?? brandConfig.slogan,
-              bullets: [
-                if (relatedPosts.first.staffMemberName != null)
-                  'Assinado por ${relatedPosts.first.staffMemberName}',
-                '${relatedPosts.first.likeCount} curtidas',
-                '${relatedPosts.first.commentCount} comentarios',
+              badges: [
+                _Badge(label: '${service.duration} min'),
+                _Badge(label: currency.format(service.price)),
               ],
             ),
+            const SizedBox(height: PremiumSpacing.xl),
+            const PremiumSectionHeader(
+              eyebrow: 'Experiencia',
+              title: 'O que esperar',
+              subtitle:
+                  'Descricao, tempo, valor e leitura do servico em uma narrativa curta.',
+            ),
+            const SizedBox(height: PremiumSpacing.md),
+            PremiumSurfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    service.description?.trim().isNotEmpty == true
+                        ? service.description!
+                        : 'Atendimento pensado para manter alto valor percebido sem perder clareza e velocidade de decisao.',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: PremiumSpacing.md),
+                  Wrap(
+                    spacing: PremiumSpacing.sm,
+                    runSpacing: PremiumSpacing.sm,
+                    children: [
+                      _InfoMetric(
+                        icon: Icons.sell_rounded,
+                        label: 'Valor',
+                        value: currency.format(service.price),
+                      ),
+                      _InfoMetric(
+                        icon: Icons.schedule_rounded,
+                        label: 'Duracao',
+                        value: '${service.duration} min',
+                      ),
+                      if (service.category?.trim().isNotEmpty == true)
+                        _InfoMetric(
+                          icon: brandConfig.iconForService(service),
+                          label: 'Categoria',
+                          value: service.category!,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (professionals.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              const PremiumSectionHeader(
+                eyebrow: 'Especialistas',
+                title: 'Quem atende este servico',
+                subtitle:
+                    'Profissionais relacionados para reforcar confianca e assinatura tecnica.',
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              SizedBox(
+                height: 352,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: professionals.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: PremiumSpacing.md),
+                  itemBuilder: (context, index) {
+                    final professional = professionals[index];
+                    return SizedBox(
+                      width: 272,
+                      child: PremiumProfessionalCard(
+                        name: professional.name,
+                        specialty: professional.specialty,
+                        availabilityLabel: professional.availabilityLabel,
+                        ratingLabel: professional.ratingLabel,
+                        imageUrl: professional.imageUrl,
+                        ctaLabel: 'Agendar agora',
+                        onBook: onBook,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            if (relatedPosts.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              const PremiumSectionHeader(
+                eyebrow: 'Prova visual',
+                title: 'Resultados relacionados',
+                subtitle:
+                    'O servico conversa com a vitrine para elevar desejo, contexto e conversao.',
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              SizedBox(
+                height: 214,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: relatedPosts.take(4).length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: PremiumSpacing.md),
+                  itemBuilder: (context, index) {
+                    final post = relatedPosts[index];
+                    return SizedBox(
+                      width: 180,
+                      child: PremiumGalleryCard(
+                        title: post.title,
+                        eyebrow: post.staffMemberName,
+                        subtitle: post.caption,
+                        imageUrl: post.coverImageUrl,
+                        badge: post.isBeforeAfter
+                            ? 'Antes e depois'
+                            : post.linkedService != null
+                            ? 'Ligado ao servico'
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -131,56 +210,56 @@ class PremiumServiceDetailScreen extends StatelessWidget {
   }
 }
 
-class _DetailBlock extends StatelessWidget {
-  const _DetailBlock({
-    required this.title,
-    required this.body,
-    required this.bullets,
+class _InfoMetric extends StatelessWidget {
+  const _InfoMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
   });
 
-  final String title;
-  final String body;
-  final List<String> bullets;
+  final IconData icon;
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.premiumTheme;
+
     return Container(
-      padding: const EdgeInsets.all(PremiumSpacing.lg),
-      decoration: BoxDecoration(
-        color: context.premiumTheme.surfacePrimary,
-        borderRadius: BorderRadius.circular(PremiumRadius.card),
-        border: Border.all(color: context.premiumTheme.strokeSoft),
+      padding: const EdgeInsets.symmetric(
+        horizontal: PremiumSpacing.md,
+        vertical: PremiumSpacing.sm,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      decoration: BoxDecoration(
+        color: theme.surfaceSecondary,
+        borderRadius: BorderRadius.circular(PremiumRadius.card),
+        border: Border.all(color: theme.strokeSoft),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: PremiumSpacing.sm),
-          Text(body),
-          if (bullets.isNotEmpty) ...[
-            const SizedBox(height: PremiumSpacing.md),
-            ...bullets.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: PremiumSpacing.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 7),
-                      child: Icon(Icons.circle, size: 6),
-                    ),
-                    const SizedBox(width: PremiumSpacing.sm),
-                    Expanded(child: Text(item)),
-                  ],
+          Icon(icon, size: 18, color: theme.textPrimary),
+          const SizedBox(width: PremiumSpacing.sm),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: theme.textMuted,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: PremiumSpacing.xs),
+              Text(
+                value,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: theme.textPrimary),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -205,9 +284,10 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(
-          context,
-        ).textTheme.labelSmall?.copyWith(color: Colors.white),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

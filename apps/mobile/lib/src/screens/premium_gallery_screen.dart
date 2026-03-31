@@ -6,11 +6,13 @@ import '../models/app_models.dart';
 import '../theme/design_tokens.dart';
 import '../theme/salon_brand_config.dart';
 import '../theme/salon_branding.dart';
+import '../widgets/app_backdrop.dart';
 import '../widgets/premium_banner.dart';
 import '../widgets/premium_empty_state.dart';
 import '../widgets/premium_gallery_card.dart';
 import '../widgets/premium_section_header.dart';
 import '../widgets/premium_service_chip.dart';
+import '../widgets/salon_brand_mark.dart';
 import '../widgets/salon_feed_post_card.dart';
 
 enum _PremiumGalleryFilter { all, beforeAfter, reels, linked }
@@ -77,154 +79,199 @@ class _PremiumGalleryScreenState extends State<PremiumGalleryScreen> {
         })
         .toList(growable: false);
 
-    return RefreshIndicator(
-      onRefresh: widget.onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-        children: [
-          PremiumBanner(
-            eyebrow: widget.profile.salonName,
-            title: galleryTitle,
-            subtitle:
-                'Resultados reais e referências para decidir sem excesso de informação.',
-            imageUrl:
-                brandConfig.galleryCoverImageUrl ?? featuredPost?.coverImageUrl,
-            tabletImageUrl:
-                brandConfig.galleryCoverImageTabletUrl ??
-                brandConfig.galleryCoverImageUrl ??
-                featuredPost?.coverImageUrl,
-            imageAlignment: brandConfig.galleryCoverImageAlignment,
-            imageScale: brandConfig.galleryCoverImageScale,
-            primaryActionLabel: 'Agendar a partir do feed',
-            onPrimaryAction: widget.posts.firstOrNull?.linkedService == null
-                ? widget.onWhatsApp
-                : () {
-                    unawaited(
-                      widget.onBookService(widget.posts.first.linkedService!),
-                    );
-                  },
-            badges: [
-              _GalleryBadge(label: '${widget.posts.length} publicacoes'),
-              _GalleryBadge(
-                label:
-                    '${widget.posts.where((post) => post.isBeforeAfter).length} antes e depois',
-              ),
-            ],
-          ),
-          const SizedBox(height: PremiumSpacing.xl),
-          if (widget.posts.isEmpty)
-            PremiumEmptyState(
-              eyebrow: 'Vitrine da marca',
-              title: galleryEmptyTitle,
-              message: galleryEmptyMessage,
-              actionLabel: 'Falar com o salão',
-              onAction: widget.onWhatsApp,
-              icon: Icons.photo_library_outlined,
-            )
-          else ...[
-            PremiumSectionHeader(
-              title: 'Coleções em destaque',
+    return AppBackdrop(
+      branding: widget.branding,
+      child: RefreshIndicator(
+        onRefresh: widget.onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+          children: [
+            PremiumBanner(
+              eyebrow: widget.profile.salonName,
+              title: galleryTitle,
               subtitle:
-                  'Filtros premium para navegar o conteúdo com mais rapidez.',
-            ),
-            const SizedBox(height: PremiumSpacing.md),
-            Wrap(
-              spacing: PremiumSpacing.sm,
-              runSpacing: PremiumSpacing.sm,
-              children: [
-                _FilterChip(
-                  label: 'Tudo',
-                  selected: _filter == _PremiumGalleryFilter.all,
-                  onTap: () =>
-                      setState(() => _filter = _PremiumGalleryFilter.all),
-                ),
-                _FilterChip(
-                  label: 'Reel',
-                  selected: _filter == _PremiumGalleryFilter.reels,
-                  onTap: () =>
-                      setState(() => _filter = _PremiumGalleryFilter.reels),
-                ),
-                _FilterChip(
-                  label: 'Antes e depois',
-                  selected: _filter == _PremiumGalleryFilter.beforeAfter,
-                  onTap: () => setState(
-                    () => _filter = _PremiumGalleryFilter.beforeAfter,
+                  'Resultados reais e referências para decidir sem excesso de informação.',
+              imageUrl:
+                  brandConfig.galleryCoverImageUrl ??
+                  featuredPost?.coverImageUrl,
+              tabletImageUrl:
+                  brandConfig.galleryCoverImageTabletUrl ??
+                  brandConfig.galleryCoverImageUrl ??
+                  featuredPost?.coverImageUrl,
+              imageAlignment: brandConfig.galleryCoverImageAlignment,
+              imageScale: brandConfig.galleryCoverImageScale,
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SalonBrandMark(
+                    salonName: widget.profile.salonName,
+                    branding: widget.branding,
+                    logoUrl: widget.profile.salonLogoUrl,
+                    size: 56,
                   ),
-                ),
-                _FilterChip(
-                  label: 'Reserva',
-                  selected: _filter == _PremiumGalleryFilter.linked,
-                  onTap: () =>
-                      setState(() => _filter = _PremiumGalleryFilter.linked),
+                  const SizedBox(width: PremiumSpacing.sm),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 188),
+                    child: Text(
+                      'Feed editorial para inspirar e acelerar a agenda.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.84),
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              primaryActionLabel: 'Agendar a partir do feed',
+              onPrimaryAction: widget.posts.firstOrNull?.linkedService == null
+                  ? widget.onWhatsApp
+                  : () {
+                      unawaited(
+                        widget.onBookService(widget.posts.first.linkedService!),
+                      );
+                    },
+              badges: [
+                _GalleryBadge(label: '${widget.posts.length} publicações'),
+                _GalleryBadge(
+                  label:
+                      '${widget.posts.where((post) => post.isBeforeAfter).length} antes e depois',
                 ),
               ],
+              footer: Wrap(
+                spacing: PremiumSpacing.sm,
+                runSpacing: PremiumSpacing.sm,
+                children: [
+                  _GalleryBadge(
+                    label:
+                        '${widget.posts.where((post) => post.linkedService != null).length} posts com CTA',
+                  ),
+                  _GalleryBadge(
+                    label:
+                        '${widget.posts.where((post) => post.isReel).length} vídeos curtos',
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: PremiumSpacing.xl),
-            if (visiblePosts.length >= 2) ...[
+            if (widget.posts.isEmpty)
+              PremiumEmptyState(
+                eyebrow: 'Vitrine da marca',
+                title: galleryEmptyTitle,
+                message: galleryEmptyMessage,
+                actionLabel: 'Falar com o salão',
+                onAction: widget.onWhatsApp,
+                icon: Icons.photo_library_outlined,
+              )
+            else ...[
               PremiumSectionHeader(
-                title: 'Selecao visual',
-                subtitle: 'Um recorte rapido das imagens com maior impacto.',
+                eyebrow: 'Curadoria',
+                title: 'Coleções em destaque',
+                subtitle:
+                    'Filtros premium para navegar o conteúdo com mais rapidez.',
               ),
               const SizedBox(height: PremiumSpacing.md),
-              SizedBox(
-                height: 176,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: PremiumGalleryCard(
-                        title: visiblePosts[0].title,
-                        subtitle: visiblePosts[0].staffMemberName,
-                        imageUrl: visiblePosts[0].coverImageUrl,
-                        badge: visiblePosts[0].isBeforeAfter
-                            ? 'Antes e depois'
-                            : null,
-                      ),
+              Wrap(
+                spacing: PremiumSpacing.sm,
+                runSpacing: PremiumSpacing.sm,
+                children: [
+                  _FilterChip(
+                    label: 'Tudo',
+                    selected: _filter == _PremiumGalleryFilter.all,
+                    onTap: () =>
+                        setState(() => _filter = _PremiumGalleryFilter.all),
+                  ),
+                  _FilterChip(
+                    label: 'Reel',
+                    selected: _filter == _PremiumGalleryFilter.reels,
+                    onTap: () =>
+                        setState(() => _filter = _PremiumGalleryFilter.reels),
+                  ),
+                  _FilterChip(
+                    label: 'Antes e depois',
+                    selected: _filter == _PremiumGalleryFilter.beforeAfter,
+                    onTap: () => setState(
+                      () => _filter = _PremiumGalleryFilter.beforeAfter,
                     ),
-                    const SizedBox(width: PremiumSpacing.md),
-                    Expanded(
-                      child: PremiumGalleryCard(
-                        title: visiblePosts[1].title,
-                        subtitle: visiblePosts[1].staffMemberName,
-                        imageUrl: visiblePosts[1].coverImageUrl,
-                        badge: visiblePosts[1].isReel ? 'Video' : null,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  _FilterChip(
+                    label: 'Reserva',
+                    selected: _filter == _PremiumGalleryFilter.linked,
+                    onTap: () =>
+                        setState(() => _filter = _PremiumGalleryFilter.linked),
+                  ),
+                ],
               ),
               const SizedBox(height: PremiumSpacing.xl),
-            ],
-            PremiumSectionHeader(
-              title: 'Feed do salao',
-              subtitle:
-                  'Interacao, prova social e CTA de agenda no mesmo fluxo.',
-            ),
-            const SizedBox(height: PremiumSpacing.md),
-            ...visiblePosts.map(
-              (post) => Padding(
-                padding: const EdgeInsets.only(bottom: PremiumSpacing.md),
-                child: SalonFeedPostCard(
-                  post: post,
-                  branding: widget.branding,
-                  interactionBusy: widget.busyPostIds.contains(post.id),
-                  onToggleLike: () => widget.onToggleLike(post),
-                  onOpenComments: () => widget.onOpenComments(post),
-                  onContactSalon: widget.onWhatsApp,
-                  onOpenVideo:
-                      post.videoUrl == null || widget.onOpenVideo == null
-                      ? null
-                      : () => widget.onOpenVideo!(post),
-                  onBookService: post.linkedService == null
-                      ? null
-                      : () {
-                          unawaited(widget.onBookService(post.linkedService!));
-                        },
+              if (visiblePosts.length >= 2) ...[
+                PremiumSectionHeader(
+                  eyebrow: 'Destaque',
+                  title: 'Seleção visual',
+                  subtitle: 'Um recorte rápido das imagens com maior impacto.',
+                ),
+                const SizedBox(height: PremiumSpacing.md),
+                SizedBox(
+                  height: 176,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: PremiumGalleryCard(
+                          title: visiblePosts[0].title,
+                          subtitle: visiblePosts[0].staffMemberName,
+                          imageUrl: visiblePosts[0].coverImageUrl,
+                          badge: visiblePosts[0].isBeforeAfter
+                              ? 'Antes e depois'
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: PremiumSpacing.md),
+                      Expanded(
+                        child: PremiumGalleryCard(
+                          title: visiblePosts[1].title,
+                          subtitle: visiblePosts[1].staffMemberName,
+                          imageUrl: visiblePosts[1].coverImageUrl,
+                          badge: visiblePosts[1].isReel ? 'Vídeo' : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: PremiumSpacing.xl),
+              ],
+              PremiumSectionHeader(
+                eyebrow: 'Conversão',
+                title: 'Feed do salão',
+                subtitle:
+                    'Interação, prova social e CTA de agenda no mesmo fluxo.',
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              ...visiblePosts.map(
+                (post) => Padding(
+                  padding: const EdgeInsets.only(bottom: PremiumSpacing.md),
+                  child: SalonFeedPostCard(
+                    post: post,
+                    branding: widget.branding,
+                    interactionBusy: widget.busyPostIds.contains(post.id),
+                    onToggleLike: () => widget.onToggleLike(post),
+                    onOpenComments: () => widget.onOpenComments(post),
+                    onContactSalon: widget.onWhatsApp,
+                    onOpenVideo:
+                        post.videoUrl == null || widget.onOpenVideo == null
+                        ? null
+                        : () => widget.onOpenVideo!(post),
+                    onBookService: post.linkedService == null
+                        ? null
+                        : () {
+                            unawaited(
+                              widget.onBookService(post.linkedService!),
+                            );
+                          },
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

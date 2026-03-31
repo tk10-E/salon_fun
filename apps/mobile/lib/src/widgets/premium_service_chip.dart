@@ -28,7 +28,7 @@ class PremiumServiceChip extends StatelessWidget {
         duration: PremiumMotion.normal,
         padding: const EdgeInsets.symmetric(
           horizontal: PremiumSpacing.md,
-          vertical: PremiumSpacing.sm,
+          vertical: PremiumSpacing.md,
         ),
         decoration: BoxDecoration(
           color: selected ? theme.surfaceAccent : theme.surfacePrimary,
@@ -42,17 +42,24 @@ class PremiumServiceChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: theme.isDark
+                gradient: selected ? theme.buttonGradient : null,
+                color: selected
+                    ? null
+                    : theme.isDark
                     ? Colors.white.withValues(alpha: 0.06)
                     : Colors.white.withValues(alpha: 0.72),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: theme.textPrimary, size: 20),
+              child: Icon(
+                icon,
+                color: selected ? theme.onAccent : theme.textPrimary,
+                size: 20,
+              ),
             ),
-            const SizedBox(height: PremiumSpacing.xs),
+            const SizedBox(height: PremiumSpacing.sm),
             Text(
               label,
               textAlign: TextAlign.center,
@@ -63,6 +70,17 @@ class PremiumServiceChip extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (selected) ...[
+              const SizedBox(height: PremiumSpacing.xs),
+              Container(
+                width: 18,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: theme.accent.withValues(alpha: 0.82),
+                  borderRadius: BorderRadius.circular(PremiumRadius.pill),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -11,7 +11,8 @@ import '../theme/salon_branding.dart';
 import '../theme/service_category_visual.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cinematic_reveal.dart';
-import '../widgets/empty_state.dart';
+import '../widgets/premium_banner.dart';
+import '../widgets/premium_empty_state.dart';
 import '../widgets/salon_brand_mark.dart';
 import '../widgets/soft_card.dart';
 
@@ -591,216 +592,105 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
               children: [
                 CinematicReveal(
                   delay: const Duration(milliseconds: 20),
-                  child: SoftCard(
-                    padding: EdgeInsets.zero,
-                    gradient: LinearGradient(
-                      colors: [
-                        Color.lerp(
-                          branding.deep,
-                          const Color(0xFF120F17),
-                          0.12,
-                        )!,
-                        branding.deep,
-                        Color.lerp(branding.primary, branding.deep, 0.18)!,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderColor: branding.primary.withValues(alpha: 0.28),
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          top: -44,
-                          right: -18,
-                          child: Container(
-                            width: 164,
-                            height: 164,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.08),
-                            ),
+                  child: PremiumBanner(
+                    eyebrow: widget.profile.salonName,
+                    title: widget.service.name,
+                    subtitle:
+                        widget.service.description?.trim().isNotEmpty == true
+                        ? widget.service.description!
+                        : serviceVisual.fallbackDescription,
+                    imageUrl: widget.service.imageUrl,
+                    secondaryActionLabel: _canOpenWhatsApp
+                        ? 'Falar no WhatsApp'
+                        : null,
+                    onSecondaryAction: _canOpenWhatsApp
+                        ? _openWhatsAppForBooking
+                        : null,
+                    leading: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 264),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SalonBrandMark(
+                            salonName: widget.profile.salonName,
+                            logoUrl: widget.profile.salonLogoUrl,
+                            branding: branding,
+                            size: 54,
+                            borderRadius: 18,
                           ),
-                        ),
-                        Positioned(
-                          left: -36,
-                          bottom: -64,
-                          child: Container(
-                            width: 148,
-                            height: 148,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: branding.primary.withValues(alpha: 0.14),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (widget.service.imageUrl?.trim().isNotEmpty ==
-                                  true) ...[
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(24),
-                                  child: AspectRatio(
-                                    aspectRatio: 16 / 7,
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        Image.network(
-                                          widget.service.imageUrl!,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, _, _) => Container(
-                                            color: branding.surface,
-                                          ),
-                                        ),
-                                        DecoratedBox(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                Colors.black.withValues(
-                                                  alpha: 0.0,
-                                                ),
-                                                Colors.black.withValues(
-                                                  alpha: 0.34,
-                                                ),
-                                              ],
-                                              begin: Alignment.topCenter,
-                                              end: Alignment.bottomCenter,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                              ],
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  _BookingRibbon(
-                                    label: 'Reserva',
-                                    icon: Icons.auto_awesome_rounded,
-                                  ),
-                                  _BookingRibbon(
-                                    label:
-                                        widget.service.category
-                                                ?.trim()
-                                                .isNotEmpty ==
-                                            true
-                                        ? widget.service.category!
-                                        : 'Agenda aberta',
-                                    icon: serviceVisual.icon,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SalonBrandMark(
-                                    salonName: widget.profile.salonName,
-                                    logoUrl: widget.profile.salonLogoUrl,
-                                    branding: branding,
-                                    size: 50,
-                                    borderRadius: 18,
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          widget.profile.salonName,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          widget.profile.salonTagline
-                                                      ?.trim()
-                                                      .isNotEmpty ==
-                                                  true
-                                              ? widget.profile.salonTagline!
-                                              : 'Horários reais e confirmação sem ruído.',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium
-                                              ?.copyWith(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.78,
-                                                ),
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              Text(
-                                widget.service.name,
-                                style: Theme.of(context).textTheme.headlineSmall
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w900,
-                                      height: 1.02,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                widget.service.description?.trim().isNotEmpty ==
-                                        true
-                                    ? widget.service.description!
-                                    : serviceVisual.fallbackDescription,
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.84,
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.profile.salonName,
+                                  style: Theme.of(context).textTheme.labelLarge
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
                                       ),
-                                      height: 1.45,
-                                    ),
-                              ),
-                              const SizedBox(height: 14),
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  _HeroInfoChip(
-                                    icon: Icons.schedule_rounded,
-                                    label: '${widget.service.duration} min',
-                                    branding: branding,
-                                    dark: true,
-                                  ),
-                                  _HeroInfoChip(
-                                    icon: Icons.sell_rounded,
-                                    label: currency.format(
-                                      widget.service.price,
-                                    ),
-                                    branding: branding,
-                                    dark: true,
-                                  ),
-                                  if (widget.activeOffers.isNotEmpty)
-                                    _HeroInfoChip(
-                                      icon: Icons.local_fire_department_rounded,
-                                      label:
-                                          '${widget.activeOffers.length} beneficio${widget.activeOffers.length == 1 ? '' : 's'} ativo${widget.activeOffers.length == 1 ? '' : 's'}',
-                                      branding: branding,
-                                      dark: true,
-                                    ),
-                                ],
-                              ),
-                            ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.profile.salonTagline
+                                              ?.trim()
+                                              .isNotEmpty ==
+                                          true
+                                      ? widget.profile.salonTagline!
+                                      : 'Horarios reais e confirmacao sem ruido.',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.78,
+                                        ),
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
+                        ],
+                      ),
+                    ),
+                    badges: [
+                      _BookingRibbon(
+                        label: 'Reserva',
+                        icon: Icons.auto_awesome_rounded,
+                      ),
+                      _BookingRibbon(
+                        label:
+                            widget.service.category?.trim().isNotEmpty == true
+                            ? widget.service.category!
+                            : 'Agenda aberta',
+                        icon: serviceVisual.icon,
+                      ),
+                    ],
+                    footer: Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _HeroInfoChip(
+                          icon: Icons.schedule_rounded,
+                          label: '${widget.service.duration} min',
+                          branding: branding,
+                          dark: true,
                         ),
+                        _HeroInfoChip(
+                          icon: Icons.sell_rounded,
+                          label: currency.format(widget.service.price),
+                          branding: branding,
+                          dark: true,
+                        ),
+                        if (widget.activeOffers.isNotEmpty)
+                          _HeroInfoChip(
+                            icon: Icons.local_fire_department_rounded,
+                            label:
+                                '${widget.activeOffers.length} beneficio${widget.activeOffers.length == 1 ? '' : 's'} ativo${widget.activeOffers.length == 1 ? '' : 's'}',
+                            branding: branding,
+                            dark: true,
+                          ),
                       ],
                     ),
                   ),
@@ -1039,7 +929,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                     ),
                   )
                 else if (snapshot.hasError)
-                  EmptyState(
+                  PremiumEmptyState(
                     icon: Icons.calendar_month_rounded,
                     eyebrow: 'Agenda indisponível',
                     title: 'Não foi possível buscar os horários agora',
@@ -1053,14 +943,14 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                     },
                   )
                 else if (availability != null && !availability.isOpen)
-                  const EmptyState(
+                  const PremiumEmptyState(
                     eyebrow: 'Salão fechado',
                     title: 'Não há atendimento nesta data',
                     message:
                         'Escolha outro dia para ver os horários disponíveis.',
                   )
                 else if (availableSlots.isEmpty)
-                  EmptyState(
+                  PremiumEmptyState(
                     eyebrow: selectedStaff == null
                         ? 'Agenda cheia'
                         : !selectedStaff.isOpen

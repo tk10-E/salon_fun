@@ -13,6 +13,7 @@ class PremiumProfessionalCard extends StatelessWidget {
     this.ratingLabel,
     this.imageUrl,
     this.onBook,
+    this.ctaLabel = 'Agendar com este profissional',
   });
 
   final String name;
@@ -21,6 +22,7 @@ class PremiumProfessionalCard extends StatelessWidget {
   final String? ratingLabel;
   final String? imageUrl;
   final VoidCallback? onBook;
+  final String ctaLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -37,69 +39,87 @@ class PremiumProfessionalCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  gradient: theme.bannerGradient,
-                  borderRadius: BorderRadius.circular(20),
+          Container(
+            height: 164,
+            decoration: BoxDecoration(
+              gradient: theme.bannerGradient,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (imageUrl?.trim().isNotEmpty == true)
+                  Image.network(
+                    imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withValues(alpha: 0.06),
+                        Colors.black.withValues(alpha: 0.46),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: imageUrl?.trim().isNotEmpty == true
-                    ? Image.network(
-                        imageUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Center(
-                          child: Text(
-                            initials,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  color: theme.textPrimary,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Text(
-                          initials,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                color: theme.textPrimary,
-                                fontWeight: FontWeight.w900,
-                              ),
-                        ),
+                Positioned(
+                  top: PremiumSpacing.md,
+                  left: PremiumSpacing.md,
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.16),
                       ),
-              ),
-              const SizedBox(width: PremiumSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      initials,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: PremiumSpacing.xs),
-                    Text(
-                      specialty,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: theme.textSecondary,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                Positioned(
+                  left: PremiumSpacing.md,
+                  right: PremiumSpacing.md,
+                  bottom: PremiumSpacing.md,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: PremiumSpacing.xs),
+                      Text(
+                        specialty,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.84),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: PremiumSpacing.md),
           Wrap(
@@ -114,10 +134,7 @@ class PremiumProfessionalCard extends StatelessWidget {
             const SizedBox(height: PremiumSpacing.md),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
-                onPressed: onBook,
-                child: const Text('Agendar com este profissional'),
-              ),
+              child: FilledButton(onPressed: onBook, child: Text(ctaLabel)),
             ),
           ],
         ],

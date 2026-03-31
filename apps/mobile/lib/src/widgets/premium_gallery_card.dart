@@ -11,6 +11,8 @@ class PremiumGalleryCard extends StatelessWidget {
     this.subtitle,
     this.badge,
     this.onTap,
+    this.aspectRatio = 0.9,
+    this.eyebrow,
   });
 
   final String title;
@@ -18,6 +20,8 @@ class PremiumGalleryCard extends StatelessWidget {
   final String? subtitle;
   final String? badge;
   final VoidCallback? onTap;
+  final double aspectRatio;
+  final String? eyebrow;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +41,7 @@ class PremiumGalleryCard extends StatelessWidget {
           child: Stack(
             children: [
               AspectRatio(
-                aspectRatio: 1,
+                aspectRatio: aspectRatio,
                 child: Image.network(
                   imageUrl,
                   fit: BoxFit.cover,
@@ -96,6 +100,18 @@ class PremiumGalleryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
+                      Text(
+                        eyebrow!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.84),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: PremiumSpacing.xs),
+                    ],
                     Text(
                       title,
                       maxLines: 2,
@@ -113,6 +129,29 @@ class PremiumGalleryCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.white.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                    if (onTap != null) ...[
+                      const SizedBox(height: PremiumSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PremiumSpacing.sm,
+                          vertical: PremiumSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(
+                            PremiumRadius.pill,
+                          ),
+                        ),
+                        child: Text(
+                          'Abrir',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ),
                     ],
