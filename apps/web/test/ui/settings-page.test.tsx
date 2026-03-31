@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createElement, type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +20,11 @@ const {
 
 vi.mock("next/image", () => ({
   default: () => null,
+}));
+
+vi.mock("next/link", () => ({
+  default: (props: { children?: ReactNode; href: string; className?: string }) =>
+    createElement("a", { href: props.href, className: props.className }, props.children),
 }));
 
 vi.mock("@/app/actions", () => ({
@@ -78,17 +84,75 @@ describe("settings page UI", () => {
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
-        if (table !== "salon_business_hours") {
-          throw new Error(`Unexpected table ${table}`);
+        if (table === "salon_business_hours") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                order: businessHoursOrder,
+              })),
+            })),
+          };
         }
 
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              order: businessHoursOrder,
+        if (table === "services") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 18, error: null }),
             })),
-          })),
-        };
+          };
+        }
+
+        if (table === "salon_posts") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 6, error: null }),
+            })),
+          };
+        }
+
+        if (table === "salon_offers") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn().mockResolvedValue({ count: 3, error: null }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                gte: vi.fn().mockResolvedValue({ count: 14, error: null }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "customer_push_tokens") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  count: 11,
+                  error: null,
+                  gte: vi.fn().mockResolvedValue({ count: 8, error: null }),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "instagram_connections") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
       }),
       storage: {
         from: vi.fn(() => ({
@@ -106,6 +170,21 @@ describe("settings page UI", () => {
     render(ui);
 
     expect(screen.getByText("Configurações salvas.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "O que já está pronto para vender, operar e distribuir",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Push e comunicação")).toBeInTheDocument();
+    expect(screen.getByText("Instagram e menções")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("link", { name: "Abrir vitrine pública" })
+        .every((link) => link.getAttribute("href") === "/s/ABCD1234"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("link", { name: "Push e avisos" }),
+    ).toHaveAttribute("href", "/dashboard/notifications");
     expect(
       screen.getByRole("heading", { name: "Identidade do salão" }),
     ).toBeInTheDocument();
@@ -153,10 +232,7 @@ describe("settings page UI", () => {
     expect(
       screen.getByRole("heading", { name: "Código para clientes" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("ABCD1234")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Abrir vitrine pública" }),
-    ).toHaveAttribute("href", "/s/ABCD1234");
+    expect(screen.getAllByText("ABCD1234").length).toBeGreaterThan(1);
     expect(
       screen.getByRole("button", { name: "Gerar novo código" }),
     ).toBeInTheDocument();

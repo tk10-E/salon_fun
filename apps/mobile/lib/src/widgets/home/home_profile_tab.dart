@@ -15,18 +15,34 @@ class HomeProfileTab extends StatelessWidget {
     required this.profile,
     required this.branding,
     required this.data,
+    required this.unreadNotificationsCount,
+    required this.clientExperienceCount,
+    required this.professionalHighlightsCount,
+    required this.productHighlightsCount,
     required this.onRefresh,
     required this.onOpenProfile,
     required this.onOpenWallet,
+    required this.onOpenNotifications,
+    required this.onOpenSalonProfile,
+    required this.onOpenProfessionals,
+    required this.onOpenProducts,
     required this.onWhatsApp,
   });
 
   final CustomerProfile profile;
   final SalonBranding branding;
   final HomeData data;
+  final int unreadNotificationsCount;
+  final int clientExperienceCount;
+  final int professionalHighlightsCount;
+  final int productHighlightsCount;
   final Future<void> Function() onRefresh;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenWallet;
+  final VoidCallback onOpenNotifications;
+  final VoidCallback onOpenSalonProfile;
+  final VoidCallback onOpenProfessionals;
+  final VoidCallback onOpenProducts;
   final VoidCallback onWhatsApp;
 
   @override
@@ -44,6 +60,36 @@ class HomeProfileTab extends StatelessWidget {
         .where((service) => data.favoriteServiceIds.contains(service.id))
         .toList();
     final bodyTheme = Theme.of(context).textTheme;
+    final loyaltySummary = data.loyaltySummary;
+    final referralSummary = data.referralSummary;
+    final currencyFormatter = NumberFormat.currency(
+      locale: 'pt_BR',
+      symbol: 'R\$',
+    );
+    final walletSummary = loyaltySummary?.hasVisibleContent == true
+        ? '${loyaltySummary!.pointsBalance} pts • ${currencyFormatter.format(loyaltySummary.cashbackBalance)}'
+        : referralSummary?.hasVisibleContent == true
+        ? '${referralSummary!.qualifiedCount} indicacoes qualificadas'
+        : 'Fidelidade, cashback e indicacao no mesmo lugar.';
+    final showcaseSignals = [
+      if (data.services.isNotEmpty) '${data.services.length} serviços',
+      if (data.posts.isNotEmpty) '${data.posts.length} posts',
+      if (data.offers.isNotEmpty) '${data.offers.length} campanhas',
+    ];
+    final showcaseSummary = showcaseSignals.isEmpty
+        ? 'Catálogo, benefícios e conteúdo do salão no mesmo app.'
+        : showcaseSignals.join(' • ');
+    final notificationSummary = unreadNotificationsCount > 0
+        ? '$unreadNotificationsCount alerta${unreadNotificationsCount == 1 ? '' : 's'} novo${unreadNotificationsCount == 1 ? '' : 's'} para você.'
+        : data.notifications.isNotEmpty
+        ? '${data.notifications.length} aviso${data.notifications.length == 1 ? '' : 's'} no seu histórico.'
+        : 'Sua central de avisos fica pronta para push, confirmações e novidades.';
+    final productsSummary = productHighlightsCount > 0
+        ? '$productHighlightsCount produto${productHighlightsCount == 1 ? '' : 's'} em destaque no app.'
+        : 'Coleção do salão pronta para aparecer quando a curadoria for ativada.';
+    final professionalsSummary = professionalHighlightsCount > 0
+        ? '$professionalHighlightsCount profissional${professionalHighlightsCount == 1 ? '' : 's'} com presença no app.'
+        : 'A equipe ganha destaque aqui conforme o salão reforça especialidades e portfólio.';
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -167,6 +213,106 @@ class HomeProfileTab extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          CinematicReveal(
+            delay: const Duration(milliseconds: 90),
+            child: _ProfileSectionHeader(
+              title: 'Tudo o que seu app libera',
+              subtitle:
+                  '$clientExperienceCount frentes ativas entre agenda, vitrine, fidelidade e comunicação.',
+              branding: branding,
+            ),
+          ),
+          const SizedBox(height: 16),
+          CinematicReveal(
+            delay: const Duration(milliseconds: 130),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 620;
+                final cardWidth = isCompact
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth - 12) / 2;
+
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: cardWidth,
+                      child: _ProfileFeatureCard(
+                        branding: branding,
+                        eyebrow: 'Benefícios',
+                        title: 'Carteira e fidelidade',
+                        subtitle: walletSummary,
+                        badge: loyaltySummary?.isVip == true
+                            ? 'VIP'
+                            : referralSummary?.availableRewardsCount != null &&
+                                  referralSummary!.availableRewardsCount > 0
+                            ? 'Recompensas'
+                            : 'Ativa',
+                        icon: Icons.account_balance_wallet_outlined,
+                        onTap: onOpenWallet,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _ProfileFeatureCard(
+                        branding: branding,
+                        eyebrow: 'Comunicação',
+                        title: 'Alertas e avisos',
+                        subtitle: notificationSummary,
+                        badge: unreadNotificationsCount > 0
+                            ? '$unreadNotificationsCount novos'
+                            : 'Em dia',
+                        icon: Icons.notifications_active_outlined,
+                        onTap: onOpenNotifications,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _ProfileFeatureCard(
+                        branding: branding,
+                        eyebrow: 'Marca',
+                        title: 'Vitrine do salão',
+                        subtitle: showcaseSummary,
+                        badge: data.posts.isNotEmpty ? 'Ao vivo' : 'Catálogo',
+                        icon: Icons.storefront_outlined,
+                        onTap: onOpenSalonProfile,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _ProfileFeatureCard(
+                        branding: branding,
+                        eyebrow: 'Equipe',
+                        title: 'Profissionais em destaque',
+                        subtitle: professionalsSummary,
+                        badge: professionalHighlightsCount > 0
+                            ? 'Equipe'
+                            : 'Curadoria',
+                        icon: Icons.groups_2_outlined,
+                        onTap: onOpenProfessionals,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _ProfileFeatureCard(
+                        branding: branding,
+                        eyebrow: 'Coleção',
+                        title: 'Produtos da marca',
+                        subtitle: productsSummary,
+                        badge: productHighlightsCount > 0
+                            ? 'Shop'
+                            : 'Seleção',
+                        icon: Icons.shopping_bag_outlined,
+                        onTap: onOpenProducts,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 22),
@@ -301,18 +447,154 @@ class _ProfileMetricChip extends StatelessWidget {
 }
 
 class _ProfileSectionHeader extends StatelessWidget {
-  const _ProfileSectionHeader({required this.title, required this.branding});
+  const _ProfileSectionHeader({
+    required this.title,
+    required this.branding,
+    this.subtitle,
+  });
 
   final String title;
   final SalonBranding branding;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-        color: branding.shellForeground,
-        fontWeight: FontWeight.w900,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: branding.shellForeground,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        if (subtitle?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: 6),
+          Text(
+            subtitle!,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.shellMutedForeground,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ProfileFeatureCard extends StatelessWidget {
+  const _ProfileFeatureCard({
+    required this.branding,
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+    required this.badge,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final SalonBranding branding;
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+  final String badge;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return PressFeedback(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(28),
+          child: SoftCard(
+            backgroundColor: branding.shellCardBackground,
+            borderColor: branding.shellCardBorder,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: branding.shellIconSurface,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, color: branding.shellForeground),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            eyebrow,
+                            style: textTheme.labelMedium?.copyWith(
+                              color: branding.shellMutedForeground,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            title,
+                            style: textTheme.titleMedium?.copyWith(
+                              color: branding.shellForeground,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: branding.shellIconSurface,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: branding.shellCardBorder),
+                      ),
+                      child: Text(
+                        badge,
+                        style: textTheme.labelMedium?.copyWith(
+                          color: branding.shellForeground,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  subtitle,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: branding.shellMutedForeground,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Abrir',
+                  style: textTheme.labelLarge?.copyWith(
+                    color: branding.shellForeground,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

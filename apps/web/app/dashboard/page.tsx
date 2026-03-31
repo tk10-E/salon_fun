@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { ActionCommandCenter } from "@/components/ActionCommandCenter";
+import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
 import { formatCurrency } from "@/lib/formatters";
@@ -252,6 +254,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const [
     { count: customersCount },
     { count: pendingCount },
+    { count: servicesCount },
+    { count: offersCount },
+    { count: postsCount },
+    { count: notificationsCount },
+    { count: instagramConnectionCount },
+    { count: instagramMentionsCount },
     upcomingAppointmentsResult,
     completedAppointmentsResult,
     pendingRevenueAppointmentsResult,
@@ -267,6 +275,22 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       .select("*", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("status", "pending"),
+    supabase.from("services").select("*", { count: "exact", head: true }).eq("salon_id", salon.id),
+    supabase.from("salon_offers").select("*", { count: "exact", head: true }).eq("salon_id", salon.id),
+    supabase.from("salon_posts").select("*", { count: "exact", head: true }).eq("salon_id", salon.id),
+    supabase
+      .from("salon_customer_notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .gte("created_at", recentWindowStart),
+    supabase
+      .from("instagram_connections")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id),
+    supabase
+      .from("instagram_mentions")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id),
     supabase
       .from("appointments")
       .select("id, date, status, customer_id, customers(name), services(category, name, price), staff_members(name)")
@@ -401,6 +425,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     (accumulator, service) => accumulator + Number(service.completed_appointments ?? 0),
     0,
   );
+  const serviceCatalogCount = servicesCount ?? 0;
+  const commercialOfferCount = offersCount ?? 0;
+  const feedPostsCount = postsCount ?? 0;
+  const recentNotificationCount = notificationsCount ?? 0;
+  const instagramIsConnected = (instagramConnectionCount ?? 0) > 0;
+  const instagramMentionsTotal = instagramMentionsCount ?? 0;
+  const clientAppSurfaceCount =
+    serviceCatalogCount + commercialOfferCount + feedPostsCount;
   const maxServiceVolume = Math.max(
     ...topServices.map((service) => Number(service.completed_appointments ?? 0)),
     1,
@@ -410,10 +442,363 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const nextTopCustomerWithoutReturn = dashboardIntelligence.top_customers.find(
     (customer) => customer.upcoming_appointments === 0,
   );
+  const topStaffName = operations.overview.top_staff_name?.trim() || null;
+  const heroHighlightValue = automationLive
+    ? `${growthAutomation.overview.smart_rebook_due_customers ?? 0} rebooks e ${
+        growthAutomation.overview.due_now_customers ?? 0
+      } winbacks prontos`
+    : `${todayPendingCount} pendentes e ${lowStockProducts.length} alertas operacionais`;
+  const heroHighlightNote = nextTopCustomerWithoutReturn
+    ? `${nextTopCustomerWithoutReturn.name} ja gerou ${formatCurrency(
+        Number(nextTopCustomerWithoutReturn.total_spent ?? 0),
+      )} e ainda esta sem proxima agenda.`
+    : highValueOpportunities[0]
+      ? `${highValueOpportunities[0].headline} com ${highValueOpportunities[0].staff_member_name} as ${formatTime(
+          highValueOpportunities[0].suggested_start,
+          timeZone,
+        )}.`
+      : "A abertura da home agora junta agenda, retencao e operacao em uma mesma leitura.";
+  const dashboardSignals = [
+    {
+      label: "Receita prevista hoje",
+      value: formatCurrency(todayForecastRevenue),
+      note: todayAppointments.length
+        ? `${todayAppointments.length} horarios ja desenhados para hoje.`
+        : "Sem horarios no radar do dia neste momento.",
+      tone: "accent" as const,
+    },
+    {
+      label: "Retencao em jogo",
+      value: `${growthAutomation.overview.due_now_customers ?? 0} clientes`,
+      note: automationLive
+        ? `${growthAutomation.overview.smart_rebook_due_customers ?? 0} rebooks prontos e ${
+            growthAutomation.overview.winbacks_sent_last_30d ?? 0
+          } winbacks enviados nos ultimos 30 dias.`
+        : "Ative as automacoes para reacender recorrencia sem depender so do caixa de hoje.",
+      tone: automationLive ? ("soft" as const) : ("warm" as const),
+    },
+    {
+      label: "Equipe em cena",
+      value: String(Math.max(activeStaffToday, Number(operations.overview.active_staff_members ?? 0))),
+      note: topStaffName
+        ? `${topStaffName} lidera a semana com ${formatCurrency(
+            Number(operations.overview.top_staff_revenue ?? 0),
+          )}.`
+        : "Conforme os atendimentos fecharem, o ranking da equipe ganha mais nitidez.",
+      tone: topStaffName ? ("success" as const) : ("soft" as const),
+    },
+    {
+      label: "Operacao sensivel",
+      value: lowStockProducts.length ? `${lowStockProducts.length} alertas` : "Tudo abastecido",
+      note: lowStockProducts[0]
+        ? `${lowStockProducts[0].name} ja entrou no radar do estoque.`
+        : `${Number(operations.overview.active_inventory_products ?? 0)} produtos ativos monitorados sem ruptura imediata.`,
+      tone: lowStockProducts.length ? ("warm" as const) : ("success" as const),
+    },
+  ];
+  const commandCards = [
+    {
+      eyebrow: "Agenda",
+      highlight: `${todayPendingCount} pendentes`,
+      title: "Virar o dia com menos atrito",
+      description: "Confirme horarios, encaixes e fluxo do time antes do pico de atendimento.",
+      ctaLabel: "Abrir agenda",
+      href: "/dashboard/appointments",
+      support: highValueOpportunities[0]
+        ? `Proximo encaixe: ${formatTime(
+            highValueOpportunities[0].suggested_start,
+            timeZone,
+          )} com ${highValueOpportunities[0].staff_member_name}.`
+        : "Sem encaixe premium aberto agora.",
+      tone: "accent" as const,
+    },
+    {
+      eyebrow: "Retencao",
+      highlight: `${growthAutomation.overview.due_now_customers ?? 0} clientes`,
+      title: "Reativar quem ja conhece a marca",
+      description: "Leve os clientes certos de volta com winback e smart rebook em vez de depender so do caixa de hoje.",
+      ctaLabel: "Ativar retencao",
+      href: "/dashboard/benefits/automations",
+      support: automationLive ? "Motor de automacao ativo." : "Automacao pronta para ser ligada.",
+      tone: "soft" as const,
+    },
+    {
+      eyebrow: "Operacao",
+      highlight: lowStockProducts.length ? `${lowStockProducts.length} alertas` : "Fluxo estavel",
+      title: "Blindar equipe, caixa e estoque",
+      description: "Comissoes, produtos e gargalos aparecem em um mesmo quadro para evitar surpresas no meio do dia.",
+      ctaLabel: "Abrir operacoes",
+      href: "/dashboard/operations",
+      support: `${formatCurrency(Number(operations.overview.total_revenue ?? 0))} nos ultimos 7 dias.`,
+      tone: "warm" as const,
+    },
+    {
+      eyebrow: "Beneficios",
+      highlight: topServices[0] ? topServices[0].name : "Fidelidade",
+      title: "Deixar a marca mais desejada",
+      description: "Promocoes, clube e fidelidade ajudam a aumentar retorno, ticket e valor percebido.",
+      ctaLabel: "Abrir beneficios",
+      href: "/dashboard/benefits",
+      support: topServices[0]
+        ? `${topServices[0].completed_appointments} atendimentos no servico mais forte.`
+        : "Crie a proxima alavanca comercial do salao.",
+      tone: "accent" as const,
+    },
+  ];
+  const capabilityCards = [
+    {
+      href: "/dashboard/appointments",
+      eyebrow: "Operacao ao vivo",
+      title: "Agenda e execucao",
+      value: `${todayAppointments.length} no dia`,
+      note: `${pendingCount ?? 0} pendentes e ${formatCurrency(pendingRevenue)} ainda em aberto.`,
+      tone: "accent" as const,
+    },
+    {
+      href: "/dashboard/customers",
+      eyebrow: "Relacionamento",
+      title: "CRM e recorrencia",
+      value: `${customersCount ?? 0} clientes`,
+      note: `${growthAutomation.overview.due_now_customers ?? 0} prontos para rebook ou winback agora.`,
+      tone: "soft" as const,
+    },
+    {
+      href: "/dashboard/services",
+      eyebrow: "Catalogo comercial",
+      title: "Servicos e equipe",
+      value: `${serviceCatalogCount} servicos`,
+      note: `${Math.max(activeStaffToday, Number(operations.overview.active_staff_members ?? 0))} profissionais sustentando a entrega.`,
+      tone: "success" as const,
+    },
+    {
+      href: "/dashboard/benefits",
+      eyebrow: "Comercial",
+      title: "Beneficios e fidelidade",
+      value: `${commercialOfferCount} campanhas`,
+      note: automationLive
+        ? "Motor de retencao ligado para transformar base em retorno."
+        : "Promocoes e programas prontos para empurrar ticket e frequencia.",
+      tone: "warm" as const,
+    },
+    {
+      href: "/dashboard/feed",
+      eyebrow: "Conteudo",
+      title: "Feed e vitrine",
+      value: `${feedPostsCount} posts`,
+      note: topServices[0]
+        ? `${topServices[0].name} segue puxando o desejo da marca.`
+        : "Publique provas reais para alimentar desejo e agendamento.",
+      tone: "accent" as const,
+    },
+    {
+      href: "/dashboard/notifications",
+      eyebrow: "Comunicacao",
+      title: "Notificacoes e push",
+      value: `${recentNotificationCount} disparos`,
+      note: "Historico recente da comunicacao do salao com cliente final.",
+      tone: recentNotificationCount > 0 ? ("soft" as const) : ("warm" as const),
+    },
+    {
+      href: "/dashboard/instagram",
+      eyebrow: "Social commerce",
+      title: "Instagram e mencoes",
+      value: instagramIsConnected ? `${instagramMentionsTotal} mencoes` : "Nao conectado",
+      note: instagramIsConnected
+        ? "A conexao Meta ja pode alimentar resposta, prova social e repertorio comercial."
+        : "Conecte a conta para puxar mencoes e transformar conversa em conteudo.",
+      tone: instagramIsConnected ? ("success" as const) : ("soft" as const),
+    },
+    {
+      href: "/dashboard/settings",
+      eyebrow: "Experiencia do cliente",
+      title: "Marca e app do cliente",
+      value: `${clientAppSurfaceCount} ativos`,
+      note: `${serviceCatalogCount} servicos, ${commercialOfferCount} ofertas e ${feedPostsCount} posts ja abastecem o app.`,
+      tone: "soft" as const,
+    },
+  ];
 
   return (
     <div className="page-grid dashboard-home">
       {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
+
+      <DashboardWorkspaceHero
+        className="dashboard-command-hero"
+        eyebrow="Centro de comando"
+        title={`${salon.name} abre o dia com leitura executiva, nao com ruido.`}
+        description="A home agora funciona como uma cabina premium para o dono: agenda, receita, retencao e operacao aparecem em uma narrativa unica, pronta para decisao."
+        highlight={{
+          label: automationLive ? "Motor comercial ativo" : "Pulso operacional do dia",
+          value: heroHighlightValue,
+          note: heroHighlightNote,
+        }}
+        signals={[
+          {
+            label: "Hoje",
+            value: `${todayAppointments.length} atendimentos`,
+            tone: todayAppointments.length ? "accent" : "soft",
+          },
+          {
+            label: "Equipe ativa",
+            value: `${Math.max(activeStaffToday, Number(operations.overview.active_staff_members ?? 0))} profissionais`,
+            tone: "soft",
+          },
+          {
+            label: "Estoque",
+            value: lowStockProducts.length ? `${lowStockProducts.length} alertas` : "Abastecido",
+            tone: lowStockProducts.length ? "warm" : "success",
+          },
+          {
+            label: "Automacao",
+            value: automationLive ? "Ligada" : "Pausada",
+            tone: automationLive ? "accent" : "soft",
+          },
+        ]}
+        stats={[
+          {
+            label: "Receita do mes",
+            value: formatCurrency(monthRevenue),
+            note: "Leitura acumulada dos atendimentos concluidos no mes atual.",
+            tone: "accent",
+          },
+          {
+            label: "Receita em aberto",
+            value: formatCurrency(pendingRevenue),
+            note: `${pendingCount ?? 0} agendamentos aguardando virar caixa.`,
+            tone: "warm",
+          },
+          {
+            label: "Clientes ativos",
+            value: `${customersCount ?? 0}`,
+            note: `${weekServedCustomerIds.size} atendidos nos ultimos 7 dias.`,
+            tone: "soft",
+          },
+          {
+            label: "Destaque da semana",
+            value: topStaffName ? `Equipe ${topStaffName}` : "Operacao distribuida",
+            note: topStaffName
+              ? `${formatCurrency(Number(operations.overview.top_staff_revenue ?? 0))} gerados por quem mais rendeu.`
+              : "Sem lider isolado no momento; a operacao segue equilibrada.",
+            tone: "success",
+          },
+        ]}
+        actions={
+          <>
+            <Link href="/dashboard/appointments" className="primary-button">
+              Abrir agenda
+            </Link>
+            <Link href="/dashboard/operations" className="secondary-button">
+              Operacoes
+            </Link>
+            <Link href="/dashboard/benefits/automations" className="secondary-button">
+              Retencao
+            </Link>
+          </>
+        }
+        aside={
+          <div className="dashboard-command-hero__aside">
+            <span className="workspace-panel__eyebrow">Onde agir primeiro</span>
+            <h3>Uma leitura curta para os proximos movimentos.</h3>
+
+            <div className="dashboard-command-hero__checklist">
+              <div className="dashboard-command-hero__check">
+                <strong>Agenda</strong>
+                <span>
+                  {highValueOpportunities[0]
+                    ? `${highValueOpportunities[0].suggested_service.name} as ${formatTime(
+                        highValueOpportunities[0].suggested_start,
+                        timeZone,
+                      )}.`
+                    : "Sem encaixe premium critico no radar agora."}
+                </span>
+              </div>
+              <div className="dashboard-command-hero__check">
+                <strong>Retencao</strong>
+                <span>
+                  {nextTopCustomerWithoutReturn
+                    ? `${nextTopCustomerWithoutReturn.name} segue sem proxima agenda.`
+                    : "Clientes de maior valor seguem com recorrencia saudavel."}
+                </span>
+              </div>
+              <div className="dashboard-command-hero__check">
+                <strong>Operacao</strong>
+                <span>
+                  {lowStockProducts[0]
+                    ? `${lowStockProducts[0].name} merece reposicao antes do proximo pico.`
+                    : "Estoque e equipe sem gargalo imediato."}
+                </span>
+              </div>
+            </div>
+
+            <div className="dashboard-command-hero__spotlight">
+              <span>Proximo foco premium</span>
+              <strong>
+                {topServices[0]?.name ?? topStaffName ?? "Ajustar a vitrine comercial do salao"}
+              </strong>
+              <p>
+                {topServices[0]
+                  ? `${topServices[0].completed_appointments} atendimentos e ${formatCurrency(
+                      Number(topServices[0].total_revenue ?? 0),
+                    )} gerados pelo servico mais forte.`
+                  : "Use beneficios e feed para reforcar desejo, retorno e valor percebido."}
+              </p>
+            </div>
+          </div>
+        }
+      />
+
+      <section className="dashboard-signal-strip dashboard-signal-strip--immersive">
+        {dashboardSignals.map((signal) => (
+          <article
+            key={signal.label}
+            className={`dashboard-signal-card dashboard-signal-card--${signal.tone}`}
+          >
+            <span>{signal.label}</span>
+            <strong>{signal.value}</strong>
+            <small>{signal.note}</small>
+          </article>
+        ))}
+      </section>
+
+      <ActionCommandCenter
+        className="dashboard-command-center"
+        title="Quatro movimentos para o sistema parecer rapido, caro e bem operado."
+        description="Em vez de espalhar atalhos sem contexto, a home agora puxa as proximas jogadas com mais clareza comercial e operacional."
+        cards={commandCards}
+      />
+
+      <section className="dashboard-capability-map">
+        <div className="section-heading dashboard-capability-map__heading">
+          <div>
+            <span className="eyebrow">Sistema pago em uma leitura</span>
+            <h2>Tudo o que o sistema ja opera em producao</h2>
+            <p className="muted">
+              Cada modulo abaixo leva para uma frente real do produto e mostra sinal vivo do que ja esta acontecendo no salao.
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-capability-grid">
+          {capabilityCards.map((card) => (
+            <article
+              key={card.href}
+              className={`dashboard-panel dashboard-capability-card dashboard-capability-card--${card.tone}`}
+            >
+              <div className="dashboard-capability-card__topline">
+                <span className="workspace-panel__eyebrow">{card.eyebrow}</span>
+                <strong>{card.value}</strong>
+              </div>
+              <div className="dashboard-capability-card__body">
+                <h3>{card.title}</h3>
+                <p>{card.note}</p>
+              </div>
+              <Link href={card.href} className="dashboard-capability-card__link">
+                Abrir modulo
+              </Link>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="dashboard-summary-grid">
         <article className="dashboard-highlight-card dashboard-highlight-card--lilac">

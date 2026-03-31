@@ -16,16 +16,25 @@ type ActionCommandCenterProps = {
   description: string;
   framed?: boolean;
   title: string;
+  className?: string;
 };
 
 export function ActionCommandCenter({
   cards,
+  className,
   description,
   framed = true,
   title,
 }: ActionCommandCenterProps) {
   return (
-    <section className={framed ? "card content-card" : "command-center command-center--embedded"}>
+    <section
+      className={[
+        framed ? "card content-card" : "command-center command-center--embedded",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className="section-heading">
         <div>
           <h2>{title}</h2>

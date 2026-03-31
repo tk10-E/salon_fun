@@ -150,6 +150,19 @@ function normalizeText(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+function toNumber(value: number | string | null | undefined) {
+  return Number(value ?? 0);
+}
+
+function toTimestamp(value?: string | null) {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function firstRelation<T extends { name?: string | null }>(
   value: T | T[] | null,
 ): T | null {
@@ -212,6 +225,63 @@ function getSortLabel(sort: ReturnType<typeof normalizeSort>) {
     default:
       return "Entrada recente";
   }
+}
+
+function compareCustomersByAttention(
+  left: CustomerDirectoryItem,
+  right: CustomerDirectoryItem,
+) {
+  const vipDifference =
+    Number(right.current_tier?.is_vip ?? false) -
+    Number(left.current_tier?.is_vip ?? false);
+  if (vipDifference !== 0) {
+    return vipDifference;
+  }
+
+  const spentDifference = toNumber(right.total_spent) - toNumber(left.total_spent);
+  if (spentDifference !== 0) {
+    return spentDifference;
+  }
+
+  const cashbackDifference =
+    toNumber(right.cashback_balance) - toNumber(left.cashback_balance);
+  if (cashbackDifference !== 0) {
+    return cashbackDifference;
+  }
+
+  const visitsDifference = right.completed_visits - left.completed_visits;
+  if (visitsDifference !== 0) {
+    return visitsDifference;
+  }
+
+  return (
+    toTimestamp(right.last_visit_at ?? right.created_at) -
+    toTimestamp(left.last_visit_at ?? left.created_at)
+  );
+}
+
+function buildCustomerMomentumLabel(customer: CustomerDirectoryItem) {
+  if (customer.upcoming_appointments > 0) {
+    return `${customer.upcoming_appointments} agenda${
+      customer.upcoming_appointments === 1 ? "" : "s"
+    } futura${customer.upcoming_appointments === 1 ? "" : "s"}`;
+  }
+
+  if (customer.current_tier?.is_vip) {
+    return `VIP ${customer.current_tier.label}`;
+  }
+
+  if (toNumber(customer.cashback_balance) > 0) {
+    return `${formatCurrency(toNumber(customer.cashback_balance))} em cashback`;
+  }
+
+  if (customer.completed_visits > 0) {
+    return `${customer.completed_visits} visita${
+      customer.completed_visits === 1 ? "" : "s"
+    } concluída${customer.completed_visits === 1 ? "" : "s"}`;
+  }
+
+  return `Entrou em ${formatDate(customer.created_at)}`;
 }
 
 export default async function CustomersPage({ searchParams }: CustomersPageProps) {
@@ -344,6 +414,51 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
   const topCustomerBySpend = [...hydratedCustomers].sort(
     (left, right) => Number(right.total_spent ?? 0) - Number(left.total_spent ?? 0),
   )[0];
+  const customersWithoutUpcoming = hydratedCustomers.filter(
+    (customer) => customer.upcoming_appointments === 0,
+  );
+  const customersWithUpcoming = hydratedCustomers.filter(
+    (customer) => customer.upcoming_appointments > 0,
+  );
+  const reactivationCandidates = [...customersWithoutUpcoming]
+    .filter(
+      (customer) =>
+        customer.completed_visits > 0 ||
+        toNumber(customer.total_spent) > 0 ||
+        toNumber(customer.cashback_balance) > 0 ||
+        customer.current_tier?.is_vip,
+    )
+    .sort(compareCustomersByAttention)
+    .slice(0, 3);
+  const cashbackRecoveryCandidates = [...customersWithoutUpcoming]
+    .filter((customer) => toNumber(customer.cashback_balance) > 0)
+    .sort(
+      (left, right) =>
+        toNumber(right.cashback_balance) - toNumber(left.cashback_balance) ||
+        compareCustomersByAttention(left, right),
+    )
+    .slice(0, 3);
+  const protectedRecurringCustomers = [...customersWithUpcoming]
+    .sort(compareCustomersByAttention)
+    .slice(0, 3);
+  const firstReturnCandidates = [...customersWithoutUpcoming]
+    .filter((customer) => customer.completed_visits <= 1)
+    .sort((left, right) => toTimestamp(right.created_at) - toTimestamp(left.created_at))
+    .slice(0, 3);
+  const visibleRevenueAtRisk = customersWithoutUpcoming.reduce(
+    (total, customer) => total + toNumber(customer.total_spent),
+    0,
+  );
+  const visibleCashbackBalance = customersWithoutUpcoming.reduce(
+    (total, customer) => total + toNumber(customer.cashback_balance),
+    0,
+  );
+  const vipWithoutUpcomingCount = customersWithoutUpcoming.filter(
+    (customer) => customer.current_tier?.is_vip,
+  ).length;
+  const freshRelationshipCount = customersWithoutUpcoming.filter(
+    (customer) => customer.completed_visits <= 1,
+  ).length;
 
   return (
     <div className="page-grid workspace-page customers-page">
@@ -413,6 +528,230 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
           </>
         }
       />
+
+      <section className="customers-command-deck" aria-label="Cockpit de retenção">
+        <article className="card insight-card customer-command-card customer-command-card--priority">
+          <div className="customer-command-card__topline">
+            <span className="workspace-panel__eyebrow">Prioridade comercial</span>
+            <span className="customer-command-card__metric">
+              {reactivationCandidates.length}
+            </span>
+          </div>
+          <div className="customer-command-card__header">
+            <div>
+              <h2>Clientes para reativar hoje</h2>
+              <p>
+                {reactivationCandidates.length > 0
+                  ? `Existe ${formatCurrency(visibleRevenueAtRisk)} em histórico concluído visível sem próxima agenda.`
+                  : "A base filtrada não mostra clientes quentes sem próximo horário neste momento."}
+              </p>
+            </div>
+          </div>
+          <div className="customer-command-card__chips">
+            <span className="badge badge--soft">
+              {customersWithoutUpcoming.length} sem agenda futura
+            </span>
+            <span className="badge badge--pending">
+              {vipWithoutUpcomingCount} VIP precisando de retorno
+            </span>
+          </div>
+          <div className="customer-command-card__list">
+            {reactivationCandidates.length > 0 ? (
+              reactivationCandidates.map((customer) => (
+                <Link
+                  key={customer.id}
+                  href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}`}
+                  className="customer-command-card__customer"
+                >
+                  <strong>{customer.name}</strong>
+                  <span>{buildCustomerMomentumLabel(customer)}</span>
+                  <small>
+                    {customer.last_visit_at
+                      ? `Última visita em ${formatDateTime(customer.last_visit_at)}`
+                      : "Ainda sem atendimento concluído no histórico."}
+                  </small>
+                </Link>
+              ))
+            ) : (
+              <p className="customer-command-card__empty">
+                Quando aparecer alguém importante sem retorno protegido, esta área sobe os nomes automaticamente.
+              </p>
+            )}
+          </div>
+          <div className="insight-card__footer">
+            <Link href={buildHref(searchParams, { segment: "returning", page: 1 })} className="secondary-button">
+              Abrir recorrentes
+            </Link>
+          </div>
+        </article>
+
+        <article className="card insight-card customer-command-card customer-command-card--cashback">
+          <div className="customer-command-card__topline">
+            <span className="workspace-panel__eyebrow">Saldo pronto para virar agenda</span>
+            <span className="customer-command-card__metric">
+              {formatCurrency(visibleCashbackBalance)}
+            </span>
+          </div>
+          <div className="customer-command-card__header">
+            <div>
+              <h2>Cashback esperando ação</h2>
+              <p>
+                Clientes com saldo e sem próxima agenda costumam responder bem a rebook, resgate ou combo de retorno.
+              </p>
+            </div>
+          </div>
+          <div className="customer-command-card__chips">
+            <span className="badge badge--accent">
+              {cashbackRecoveryCandidates.length} nome{cashbackRecoveryCandidates.length === 1 ? "" : "s"} no topo
+            </span>
+            <span className="badge badge--soft">
+              {formatCurrency(
+                cashbackRecoveryCandidates.reduce(
+                  (total, customer) => total + toNumber(customer.cashback_balance),
+                  0,
+                ),
+              )}{" "}
+              nos maiores saldos
+            </span>
+          </div>
+          <div className="customer-command-card__list">
+            {cashbackRecoveryCandidates.length > 0 ? (
+              cashbackRecoveryCandidates.map((customer) => (
+                <Link
+                  key={customer.id}
+                  href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}`}
+                  className="customer-command-card__customer"
+                >
+                  <strong>{customer.name}</strong>
+                  <span>{formatCurrency(toNumber(customer.cashback_balance))} em cashback</span>
+                  <small>
+                    {customer.next_appointment_at
+                      ? `Próximo horário em ${formatDateTime(customer.next_appointment_at)}`
+                      : "Sem retorno protegido na agenda."}
+                  </small>
+                </Link>
+              ))
+            ) : (
+              <p className="customer-command-card__empty">
+                Nenhum saldo parado apareceu neste recorte. Bom sinal para uso do benefício ou para filtros mais específicos.
+              </p>
+            )}
+          </div>
+          <div className="insight-card__footer">
+            <Link href={buildHref(searchParams, { segment: "cashback", page: 1 })} className="secondary-button">
+              Ver clientes com cashback
+            </Link>
+          </div>
+        </article>
+
+        <article className="card insight-card customer-command-card customer-command-card--retention">
+          <div className="customer-command-card__topline">
+            <span className="workspace-panel__eyebrow">Retenção já protegida</span>
+            <span className="customer-command-card__metric">
+              {customersWithUpcoming.length}
+            </span>
+          </div>
+          <div className="customer-command-card__header">
+            <div>
+              <h2>Clientes com próxima visita encaminhada</h2>
+              <p>
+                Este bloco mostra quem já está com o próximo passo travado na agenda e ajuda a enxergar recorrência protegida.
+              </p>
+            </div>
+          </div>
+          <div className="customer-command-card__chips">
+            <span className="badge badge--confirmed">
+              {protectedRecurringCustomers.filter((customer) => customer.current_tier?.is_vip)
+                .length}{" "}
+              VIP com retorno protegido
+            </span>
+            <span className="badge badge--soft">
+              {directory.overview.customers_with_upcoming_appointment ?? 0} na carteira com agenda futura
+            </span>
+          </div>
+          <div className="customer-command-card__list">
+            {protectedRecurringCustomers.length > 0 ? (
+              protectedRecurringCustomers.map((customer) => (
+                <Link
+                  key={customer.id}
+                  href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}&status=confirmed`}
+                  className="customer-command-card__customer"
+                >
+                  <strong>{customer.name}</strong>
+                  <span>{buildCustomerMomentumLabel(customer)}</span>
+                  <small>
+                    {customer.next_appointment_at
+                      ? `Próximo horário em ${formatDateTime(customer.next_appointment_at)}`
+                      : "Agenda futura identificada neste filtro."}
+                  </small>
+                </Link>
+              ))
+            ) : (
+              <p className="customer-command-card__empty">
+                Ainda não há clientes com recorrência protegida nesta leitura. Esse é o bloco que cresce quando o rebook começa a funcionar.
+              </p>
+            )}
+          </div>
+          <div className="insight-card__footer">
+            <Link href={buildHref(searchParams, { segment: "upcoming", page: 1 })} className="secondary-button">
+              Abrir agenda futura
+            </Link>
+          </div>
+        </article>
+
+        <article className="card insight-card customer-command-card customer-command-card--warmup">
+          <div className="customer-command-card__topline">
+            <span className="workspace-panel__eyebrow">Construção de hábito</span>
+            <span className="customer-command-card__metric">
+              {freshRelationshipCount}
+            </span>
+          </div>
+          <div className="customer-command-card__header">
+            <div>
+              <h2>Novos clientes pedindo segundo passo</h2>
+              <p>
+                Quem ainda não travou a rotina precisa de acompanhamento cedo. Aqui ficam os nomes mais recentes sem próxima agenda.
+              </p>
+            </div>
+          </div>
+          <div className="customer-command-card__chips">
+            <span className="badge badge--warm">
+              {firstReturnCandidates.length} prioridade{firstReturnCandidates.length === 1 ? "" : "s"} recente{firstReturnCandidates.length === 1 ? "" : "s"}
+            </span>
+            <span className="badge badge--soft">
+              {directory.overview.total_customers ?? 0} clientes visíveis no recorte
+            </span>
+          </div>
+          <div className="customer-command-card__list">
+            {firstReturnCandidates.length > 0 ? (
+              firstReturnCandidates.map((customer) => (
+                <Link
+                  key={customer.id}
+                  href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}`}
+                  className="customer-command-card__customer"
+                >
+                  <strong>{customer.name}</strong>
+                  <span>{buildCustomerMomentumLabel(customer)}</span>
+                  <small>
+                    {customer.created_at
+                      ? `Entrou em ${formatDateTime(customer.created_at)}`
+                      : "Cliente recente sem histórico suficiente."}
+                  </small>
+                </Link>
+              ))
+            ) : (
+              <p className="customer-command-card__empty">
+                Quando novos clientes aparecerem sem segunda visita encaminhada, eles entram aqui para o salão agir cedo.
+              </p>
+            )}
+          </div>
+          <div className="insight-card__footer">
+            <Link href={buildHref(searchParams, { segment: "new", page: 1 })} className="secondary-button">
+              Ver novos clientes
+            </Link>
+          </div>
+        </article>
+      </section>
 
       <section className="card content-card">
         <div className="section-heading">

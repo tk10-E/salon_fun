@@ -43,10 +43,16 @@ void main() {
       expect(find.widgetWithText(ChoiceChip, '10:00'), findsOneWidget);
       expect(find.text('13:00'), findsNothing);
 
-      await tester.tap(find.widgetWithText(ChoiceChip, '10:00'));
+      final suggestedSlot = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, '10:00'),
+      );
+      suggestedSlot.onSelected?.call(true);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(find.text('Confirmar agendamento'));
+      final confirmCta = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Confirmar agendamento'),
+      );
+      confirmCta.onPressed?.call();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 

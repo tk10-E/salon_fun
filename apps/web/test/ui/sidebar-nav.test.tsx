@@ -57,6 +57,10 @@ describe("SidebarNav", () => {
   it("marca o link clicado como pendente imediatamente", () => {
     render(<SidebarNav />);
 
+    expect(screen.getByRole("link", { name: /feed/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /notificações/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ajustes/i })).toBeInTheDocument();
+
     const servicesLink = screen.getByRole("link", { name: /serviços/i });
     fireEvent.click(servicesLink);
 

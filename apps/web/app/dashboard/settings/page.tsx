@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import {
   regenerateSalonCodeAction,
@@ -56,11 +57,58 @@ export default async function SettingsPage({
 }: SettingsPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
-  const businessHoursResponse = await supabase
-    .from("salon_business_hours")
-    .select("weekday, is_open, opens_at, closes_at")
-    .eq("salon_id", salon.id)
-    .order("weekday");
+  const readinessWindowStart = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const [
+    businessHoursResponse,
+    servicesCountResult,
+    postsCountResult,
+    offersCountResult,
+    notificationsCountResult,
+    pushTokensCountResult,
+    recentPushTokensResult,
+    instagramConnectionCountResult,
+  ] = await Promise.all([
+    supabase
+      .from("salon_business_hours")
+      .select("weekday, is_open, opens_at, closes_at")
+      .eq("salon_id", salon.id)
+      .order("weekday"),
+    supabase
+      .from("services")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id),
+    supabase
+      .from("salon_posts")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id),
+    supabase
+      .from("salon_offers")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("is_active", true),
+    supabase
+      .from("salon_customer_notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .gte("created_at", readinessWindowStart),
+    supabase
+      .from("customer_push_tokens")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("is_active", true),
+    supabase
+      .from("customer_push_tokens")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("is_active", true)
+      .gte("last_seen_at", readinessWindowStart),
+    supabase
+      .from("instagram_connections")
+      .select("*", { count: "exact", head: true })
+      .eq("salon_id", salon.id),
+  ]);
   const brandColor = salon.brand_color ?? "#C56B43";
   const segmentPreset = getSalonSegmentPreset(salon.business_segment);
   const clientAppConfig = normalizeSalonClientAppConfig(
@@ -165,6 +213,121 @@ export default async function SettingsPage({
   const heroImageSpec = CLIENT_APP_IMAGE_VARIANT_SPECS.hero;
   const galleryImageSpec = CLIENT_APP_IMAGE_VARIANT_SPECS.galleryCover;
   const profileCoverSpec = CLIENT_APP_IMAGE_VARIANT_SPECS.profileCover;
+  const servicesCount = servicesCountResult.count ?? 0;
+  const postsCount = postsCountResult.count ?? 0;
+  const activeOffersCount = offersCountResult.count ?? 0;
+  const recentNotificationsCount = notificationsCountResult.count ?? 0;
+  const activePushTokensCount = pushTokensCountResult.count ?? 0;
+  const recentPushTokensCount = recentPushTokensResult.count ?? 0;
+  const instagramConnectionCount = instagramConnectionCountResult.count ?? 0;
+  const publicSalonPath = `/s/${salon.join_code}`;
+  const hasTagline = Boolean(salon.tagline?.trim());
+  const hasWhatsApp = Boolean(salon.whatsapp_phone?.trim());
+  const hasHeroImage = Boolean(previewHeroImageUrl);
+  const hasGalleryCoverImage = Boolean(
+    clientAppConfig.galleryCoverImageVariantUrl ??
+      clientAppConfig.galleryCoverImageUrl,
+  );
+  const hasProfileCoverImage = Boolean(
+    clientAppConfig.profileCoverImageVariantUrl ??
+      clientAppConfig.profileCoverImageUrl,
+  );
+  const brandCoverageCount = [
+    Boolean(logoUrl),
+    hasTagline,
+    hasWhatsApp,
+    hasHeroImage,
+    hasGalleryCoverImage,
+    hasProfileCoverImage,
+  ].filter(Boolean).length;
+  const missingBrandSignals = [
+    logoUrl ? null : "logo",
+    hasTagline ? null : "tagline",
+    hasWhatsApp ? null : "WhatsApp",
+    hasHeroImage ? null : "hero",
+    hasGalleryCoverImage ? null : "capa da galeria",
+    hasProfileCoverImage ? null : "capa do perfil",
+  ].filter((value): value is string => Boolean(value));
+  const brandCoverageNote = missingBrandSignals.length
+    ? `Ativos ${brandCoverageCount}/6. Próximos pontos: ${missingBrandSignals
+        .slice(0, 2)
+        .join(" e ")}${missingBrandSignals.length > 2 ? "..." : ""}.`
+    : "Logo, contato, textos e capas principais já deixam a marca pronta para vender no app.";
+  const readinessCards = [
+    {
+      href: "/dashboard/services",
+      eyebrow: "Catálogo",
+      title: "Vitrine e catálogo",
+      value: `${servicesCount} serviços`,
+      note: `${postsCount} posts e ${activeOffersCount} ofertas ativas já abastecem o app do cliente.`,
+      tone: servicesCount > 0 ? ("accent" as const) : ("warm" as const),
+    },
+    {
+      href: "/dashboard/feed",
+      eyebrow: "Conteúdo",
+      title: "Feed e prova social",
+      value: `${postsCount} posts`,
+      note:
+        postsCount > 0
+          ? "Publicações reais ajudam a transformar desejo em agenda."
+          : "O feed está pronto para começar a vender resultado com prova social real.",
+      tone: postsCount > 0 ? ("success" as const) : ("soft" as const),
+    },
+    {
+      href: "/dashboard/notifications",
+      eyebrow: "Alcance",
+      title: "Push e comunicação",
+      value: `${activePushTokensCount} dispositivos`,
+      note:
+        activePushTokensCount > 0
+          ? `${recentPushTokensCount} ativos nos últimos 30 dias e ${recentNotificationsCount} avisos recentes no histórico.`
+          : "Sem dispositivos ativos ainda. O app já está pronto para captar instalações e reativação.",
+      tone: activePushTokensCount > 0 ? ("success" as const) : ("warm" as const),
+    },
+    {
+      href: "/dashboard/instagram",
+      eyebrow: "Social commerce",
+      title: "Instagram e menções",
+      value: instagramConnectionCount > 0 ? "Meta conectada" : "Conectar Meta",
+      note:
+        instagramConnectionCount > 0
+          ? "A conta já pode puxar menções, revisão e conteúdo para o app do cliente."
+          : "Conecte Instagram/Facebook para liberar menções reais e mais repertório comercial.",
+      tone: instagramConnectionCount > 0 ? ("accent" as const) : ("soft" as const),
+    },
+    {
+      href: "/dashboard/settings#brand-identity",
+      eyebrow: "Marca",
+      title: "Identidade pronta",
+      value: `${brandCoverageCount}/6 ativos`,
+      note: brandCoverageNote,
+      tone: brandCoverageCount >= 4 ? ("soft" as const) : ("warm" as const),
+    },
+    {
+      href: "/dashboard/settings#brand-identity",
+      eyebrow: "Modelo do app",
+      title: "Experiência do cliente",
+      value: `${selectedHomeModules.length} módulos`,
+      note: `${resolvedExperienceModelLabel}, ${resolvedVisualStyleLabel.toLowerCase()} e ${(themeModeOption?.label ?? "tema automático").toLowerCase()}.`,
+      tone: "soft" as const,
+    },
+    {
+      href: "/dashboard/settings#agenda-online",
+      eyebrow: "Agenda",
+      title: "Reserva online",
+      value: `${openDaysCount} dias`,
+      note: `${slotStepLabel} entre horários e fuso ${timezoneLabel}.`,
+      tone: "success" as const,
+    },
+    {
+      href: publicSalonPath,
+      eyebrow: "Go live",
+      title: "Vitrine pública",
+      value: salon.join_code,
+      note: "Esse link cai direto no salão certo e já funciona como porta de entrada para o app.",
+      tone: "accent" as const,
+    },
+  ];
 
   return (
     <div className="page-grid workspace-page settings-page">
@@ -226,6 +389,19 @@ export default async function SettingsPage({
             tone: "success",
           },
         ]}
+        actions={
+          <>
+            <Link href={publicSalonPath} className="primary-button">
+              Abrir vitrine pública
+            </Link>
+            <Link href="/dashboard/notifications" className="secondary-button">
+              Push e avisos
+            </Link>
+            <Link href="/dashboard/instagram" className="secondary-button">
+              Instagram
+            </Link>
+          </>
+        }
         aside={
           <>
             <span className="workspace-panel__eyebrow">Direção do produto</span>
@@ -245,7 +421,42 @@ export default async function SettingsPage({
         <FlashMessage message={searchParams.message} tone={searchParams.tone} />
       ) : null}
 
-      <section className="card content-card">
+      <section className="dashboard-capability-map">
+        <div className="section-heading dashboard-capability-map__heading">
+          <div>
+            <span className="eyebrow">Prontidão real do produto</span>
+            <h2>O que já está pronto para vender, operar e distribuir</h2>
+            <p className="muted">
+              Em vez de olhar só para layout, esta leitura mostra o que do app
+              já tem conteúdo, alcance, agenda e marca funcionando com dados do
+              próprio salão.
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-capability-grid">
+          {readinessCards.map((card) => (
+            <article
+              key={`${card.href}-${card.title}`}
+              className={`dashboard-panel dashboard-capability-card dashboard-capability-card--${card.tone}`}
+            >
+              <div className="dashboard-capability-card__topline">
+                <span className="workspace-panel__eyebrow">{card.eyebrow}</span>
+                <strong>{card.value}</strong>
+              </div>
+              <div className="dashboard-capability-card__body">
+                <h3>{card.title}</h3>
+                <p>{card.note}</p>
+              </div>
+              <Link href={card.href} className="dashboard-capability-card__link">
+                Abrir frente
+              </Link>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="brand-identity" className="card content-card">
         <div className="section-heading">
           <div>
             <h2>Identidade do salão</h2>
@@ -1203,7 +1414,7 @@ export default async function SettingsPage({
         </div>
       </section>
 
-      <section className="card content-card">
+      <section id="agenda-online" className="card content-card">
         <div className="section-heading">
           <div>
             <h2>Agenda online</h2>
@@ -1324,7 +1535,7 @@ export default async function SettingsPage({
         </div>
       </section>
 
-      <section className="card content-card">
+      <section id="client-code" className="card content-card">
         <div className="section-heading">
           <div>
             <h2>Código para clientes</h2>

@@ -168,6 +168,9 @@ export default async function NotificationsPage({
 }: NotificationsPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  const recentWindowStart = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1000,
+  ).toISOString();
 
   const q = firstParam(searchParams?.q).trim();
   const audienceFilter = firstParam(searchParams?.audience).trim();
@@ -191,7 +194,16 @@ export default async function NotificationsPage({
   const baseSelect =
     "id, audience, notification_type, title, body, created_at, customer_id, customers(name)";
 
-  const [listResult, totalResult, allCustomersResult, singleCustomerResult] = await Promise.all([
+  const [
+    listResult,
+    totalResult,
+    allCustomersResult,
+    singleCustomerResult,
+    recentNotificationsResult,
+    activePushTokensResult,
+    recentPushTokensResult,
+    automationSettingsResult,
+  ] = await Promise.all([
     applyNotificationFilters(
       supabase
         .from("salon_customer_notifications")
@@ -230,6 +242,27 @@ export default async function NotificationsPage({
         audienceFilter: "",
       },
     ),
+    supabase
+      .from("salon_customer_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .gte("created_at", recentWindowStart),
+    supabase
+      .from("customer_push_tokens")
+      .select("id", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("is_active", true),
+    supabase
+      .from("customer_push_tokens")
+      .select("id", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("is_active", true)
+      .gte("last_seen_at", recentWindowStart),
+    supabase
+      .from("salon_growth_automation_settings")
+      .select("is_active, smart_rebook_is_active, updated_at")
+      .eq("salon_id", salon.id)
+      .maybeSingle(),
   ]);
 
   const notifications = (listResult.data ?? []) as NotificationRow[];
@@ -245,10 +278,20 @@ export default async function NotificationsPage({
   const totalCount = totalResult.count ?? 0;
   const allCustomersCount = allCustomersResult.count ?? 0;
   const singleCustomerCount = singleCustomerResult.count ?? 0;
+  const recentNotificationsCount = recentNotificationsResult.count ?? 0;
+  const activePushTokensCount = activePushTokensResult.count ?? 0;
+  const recentPushTokensCount = recentPushTokensResult.count ?? 0;
   const deliveredOnPageCount = dispatchSnapshots.filter((snapshot) => snapshot.status === "delivered").length;
   const issueOnPageCount = dispatchSnapshots.filter(
     (snapshot) => snapshot.status === "delivery_failed" || snapshot.status === "enqueue_failed",
   ).length;
+  const automationSettings = automationSettingsResult.data ?? {
+    is_active: false,
+    smart_rebook_is_active: false,
+    updated_at: null,
+  };
+  const automationActive =
+    automationSettings.is_active || automationSettings.smart_rebook_is_active;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const previousPagePath = safePage > 1 ? buildHref(searchParams, { page: safePage - 1 }) : "";
@@ -295,6 +338,48 @@ export default async function NotificationsPage({
     dateFrom,
     dateTo,
   });
+  const deliveryReadinessCards = [
+    {
+      href: "/dashboard/settings",
+      eyebrow: "Entrega",
+      title: "Dispositivos ativos",
+      value: `${activePushTokensCount} aptos`,
+      note:
+        activePushTokensCount > 0
+          ? "Clientes com token ativo para receber push agora."
+          : "Nenhum dispositivo ativo ainda. O app precisa ganhar instalações para escalar o alcance.",
+      tone: activePushTokensCount > 0 ? ("success" as const) : ("warm" as const),
+    },
+    {
+      href: "/dashboard/settings",
+      eyebrow: "Pulso recente",
+      title: "Base aquecida",
+      value: `${recentPushTokensCount} vistos`,
+      note:
+        recentPushTokensCount > 0
+          ? "Dispositivos que abriram o app nos últimos 30 dias."
+          : "Quando a base voltar a abrir o app, esse indicador começa a subir.",
+      tone: recentPushTokensCount > 0 ? ("accent" as const) : ("soft" as const),
+    },
+    {
+      href: "/dashboard/benefits/automations",
+      eyebrow: "Retenção",
+      title: "Automação comercial",
+      value: automationActive ? "Ligada" : "Pausada",
+      note: automationActive
+        ? "Winback e smart rebook já podem alimentar a central de avisos."
+        : "Ative as automações para gerar comunicação previsível sem depender só do disparo manual.",
+      tone: automationActive ? ("success" as const) : ("warm" as const),
+    },
+    {
+      href: `/s/${salon.join_code}`,
+      eyebrow: "Go live",
+      title: "Canal público",
+      value: salon.join_code,
+      note: `${recentNotificationsCount} avisos entraram no histórico nos últimos 30 dias para sustentar a experiência do cliente.`,
+      tone: "accent" as const,
+    },
+  ];
 
   return (
     <div className="page-grid workspace-page notifications-page">
@@ -323,6 +408,11 @@ export default async function NotificationsPage({
             value: allCustomersCount,
             tone: "accent",
           },
+          {
+            label: "Devices ativos",
+            value: activePushTokensCount,
+            tone: activePushTokensCount > 0 ? "success" : "soft",
+          },
         ]}
         stats={[
           {
@@ -349,11 +439,25 @@ export default async function NotificationsPage({
             note: "Avisos 1 a 1 disparados pela operação.",
             tone: "success",
           },
+          {
+            label: "Base aquecida",
+            value: recentPushTokensCount,
+            note: "Dispositivos ativos que abriram o app nos últimos 30 dias.",
+            tone: recentPushTokensCount > 0 ? "accent" : "soft",
+          },
         ]}
         actions={
-          <Link href={exportHref} className="secondary-button">
-            Exportar CSV
-          </Link>
+          <>
+            <Link href={exportHref} className="secondary-button">
+              Exportar CSV
+            </Link>
+            <Link href="/dashboard/benefits/automations" className="secondary-button">
+              Retenção automática
+            </Link>
+            <Link href="/dashboard/settings" className="secondary-button">
+              Ajustar app
+            </Link>
+          </>
         }
         aside={
           <>
@@ -369,6 +473,40 @@ export default async function NotificationsPage({
           </>
         }
       />
+
+      <section className="dashboard-capability-map">
+        <div className="section-heading dashboard-capability-map__heading">
+          <div>
+            <span className="eyebrow">Entrega real do app</span>
+            <h2>O que já sustenta alcance e recorrência</h2>
+            <p className="muted">
+              Esta leitura junta capacidade de entrega, base ativa e automação
+              comercial para o dono saber se o push está pronto para escalar.
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-capability-grid">
+          {deliveryReadinessCards.map((card) => (
+            <article
+              key={card.href}
+              className={`dashboard-panel dashboard-capability-card dashboard-capability-card--${card.tone}`}
+            >
+              <div className="dashboard-capability-card__topline">
+                <span className="workspace-panel__eyebrow">{card.eyebrow}</span>
+                <strong>{card.value}</strong>
+              </div>
+              <div className="dashboard-capability-card__body">
+                <h3>{card.title}</h3>
+                <p>{card.note}</p>
+              </div>
+              <Link href={card.href} className="dashboard-capability-card__link">
+                Abrir frente
+              </Link>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="card content-card">
         <div className="section-heading">

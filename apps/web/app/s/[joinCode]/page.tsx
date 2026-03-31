@@ -86,6 +86,60 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
   const pageStyle = {
     "--salon-accent": preview.brandColor,
   } as CSSProperties;
+  const signatureCards = [
+    {
+      label: "Codigo de entrada",
+      value: preview.joinCode,
+      note: "A cliente cai direto na experiencia certa sem passar por ruido.",
+    },
+    {
+      label: preview.ratingValue != null ? "Confianca percebida" : "Camadas no app",
+      value:
+        preview.ratingValue != null
+          ? `${preview.ratingValue.toFixed(1)} estrelas`
+          : `${preview.moduleLabels.length} modulos`,
+      note:
+        preview.ratingCount != null
+          ? `${preview.ratingCount} avaliacoes reforcam prova social.`
+          : `${preview.moduleLabels.slice(0, 2).join(" e ")} ajudam a vender a jornada logo de cara.`,
+    },
+    {
+      label: activeOffers.length > 0 ? "Campanhas no ar" : "Vitrine viva",
+      value:
+        activeOffers.length > 0
+          ? `${activeOffers.length} ofertas`
+          : `${recentPosts.length} destaques`,
+      note:
+        activeOffers.length > 0
+          ? "Campanhas e clube aparecem nessa vitrine sem perder a elegancia."
+          : "A landing responde ao que o salao publica, promove e prioriza.",
+    },
+  ];
+  const brandJourney = [
+    {
+      step: "01",
+      title: "Marca primeiro",
+      description:
+        preview.tagline ??
+        preview.welcomeMessage ??
+        "A cliente entende atmosfera, posicionamento e promessa antes de reservar.",
+    },
+    {
+      step: "02",
+      title: "Entrada sem friccao",
+      description: `Compartilhe o codigo ${preview.joinCode} e leve a cliente direto ao app correto.`,
+    },
+    {
+      step: "03",
+      title: "Reserva com contexto",
+      description:
+        preview.moduleLabels.length > 0
+          ? `${preview.moduleLabels.slice(0, 3).join(", ")} e mais camadas aparecem dentro do app com a mesma identidade.`
+          : "Agenda, beneficios e identidade da marca aparecem em uma sequencia mais premium.",
+    },
+  ];
+  const leadService = featuredServices[0] ?? null;
+  const leadOffer = activeOffers[0] ?? null;
 
   return (
     <main className="public-salon-page" style={pageStyle}>
@@ -161,6 +215,16 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
                 <span key={label}>{label}</span>
               ))}
             </div>
+
+            <div className="public-salon-presence-grid">
+              {signatureCards.map((card) => (
+                <article key={card.label} className="public-salon-presence-card">
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                  <p>{card.note}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -224,6 +288,21 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
                 </a>
               ) : null}
             </div>
+
+            <div className="public-salon-preview-story">
+              <span>Assinatura da experiencia</span>
+              <strong>
+                {leadService || leadOffer
+                  ? "Uma entrada pensada para converter melhor"
+                  : "A marca chega mais forte no celular"}
+              </strong>
+              <p>
+                {leadOffer?.highlightText ??
+                  leadOffer?.description ??
+                  leadService?.description ??
+                  "A vitrine publica, o codigo do salao e a experiencia no app passam a contar a mesma historia."}
+              </p>
+            </div>
           </div>
         </aside>
       </section>
@@ -239,6 +318,49 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
             para o cliente descobrir o salão certo e entrar no app com mais
             confiança.
           </p>
+        </div>
+
+        <div className="public-salon-experience-grid">
+          <article className="public-salon-story-card">
+            <span className="public-salon-section-eyebrow">Como isso chega no celular</span>
+            <h3>Uma landing que ja antecipa o app, e nao uma pagina solta.</h3>
+            <p>
+              A marca ganha uma entrada mais forte: prova visual, argumentos
+              comerciais e o caminho para abrir o app certo ficam alinhados em
+              uma mesma narrativa.
+            </p>
+
+            <div className="public-salon-story-modules">
+              {preview.moduleLabels.slice(0, 6).map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+
+            <div className="public-salon-story-spotlight">
+              <strong>{leadService ? "Servico protagonista da vitrine" : "Experiencia premium do salao"}</strong>
+              <p>
+                {leadService?.description ??
+                  leadOffer?.description ??
+                  "A cliente sente mais clareza sobre o que reservar e por que voltar."}
+              </p>
+            </div>
+          </article>
+
+          <article className="public-salon-story-card public-salon-story-card--journey">
+            <span className="public-salon-section-eyebrow">Jornada em 3 movimentos</span>
+            <h3>Descobrir, entrar e reservar com menos atrito.</h3>
+            <div className="public-salon-story-step-list">
+              {brandJourney.map((item) => (
+                <div key={item.step} className="public-salon-story-step">
+                  <strong>{item.step}</strong>
+                  <div>
+                    <h4>{item.title}</h4>
+                    <p>{item.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
         </div>
 
         <div className="public-salon-proof-grid">

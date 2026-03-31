@@ -11,17 +11,41 @@ type NavItem = {
   icon: string;
 };
 
-const primaryLinks: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", description: "Visao geral", icon: "home" },
-  { href: "/dashboard/appointments", label: "Agenda", description: "Agendamentos", icon: "calendar" },
-  { href: "/dashboard/customers", label: "Clientes", description: "CRM do salao", icon: "users" },
-  { href: "/dashboard/services", label: "Serviços", description: "Catalogo", icon: "sparkles" },
-  { href: "/dashboard/team", label: "Profissionais", description: "Equipe", icon: "team" },
-  { href: "/dashboard/operations", label: "Financeiro", description: "Caixa e estoque", icon: "chart" },
-  { href: "/dashboard/benefits", label: "Relatórios", description: "Retencao", icon: "bolt" },
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+const navSections: NavSection[] = [
+  {
+    label: "Operacao",
+    items: [
+      { href: "/dashboard", label: "Dashboard", description: "Visao geral", icon: "home" },
+      { href: "/dashboard/appointments", label: "Agenda", description: "Agendamentos", icon: "calendar" },
+      { href: "/dashboard/customers", label: "Clientes", description: "CRM do salao", icon: "users" },
+      { href: "/dashboard/services", label: "Serviços", description: "Catalogo e vitrine", icon: "sparkles" },
+      { href: "/dashboard/team", label: "Profissionais", description: "Equipe e escala", icon: "team" },
+      { href: "/dashboard/operations", label: "Operações", description: "Caixa e estoque", icon: "chart" },
+    ],
+  },
+  {
+    label: "Crescimento",
+    items: [
+      { href: "/dashboard/benefits", label: "Benefícios", description: "Promocoes e fidelidade", icon: "bolt" },
+      { href: "/dashboard/feed", label: "Feed", description: "Conteudo e comentarios", icon: "gallery" },
+      { href: "/dashboard/notifications", label: "Notificações", description: "Push e historico", icon: "bell" },
+      { href: "/dashboard/instagram", label: "Instagram", description: "Conexao e mencoes", icon: "instagram" },
+    ],
+  },
+  {
+    label: "Marca e App",
+    items: [
+      { href: "/dashboard/settings", label: "Ajustes", description: "App do cliente", icon: "gear" },
+    ],
+  },
 ];
 
-const links = [...primaryLinks];
+const links = navSections.flatMap((section) => section.items);
 
 function NavIcon({ name }: { name: string }) {
   switch (name) {
@@ -75,6 +99,42 @@ function NavIcon({ name }: { name: string }) {
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M12.76 3.5a.75.75 0 0 1 .67 1.1L10.96 9h4.79a.75.75 0 0 1 .56 1.25l-6.5 7.25a.75.75 0 0 1-1.26-.77L10.73 12H6.25a.75.75 0 0 1-.62-1.17l6.5-7a.75.75 0 0 1 .63-.33Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "gallery":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M6 4.25h12A1.75 1.75 0 0 1 19.75 6v12A1.75 1.75 0 0 1 18 19.75H6A1.75 1.75 0 0 1 4.25 18V6A1.75 1.75 0 0 1 6 4.25Zm0 1.5a.25.25 0 0 0-.25.25v8.2l3.12-3.12a1.75 1.75 0 0 1 2.47 0l1.3 1.3l2.3-2.3a1.75 1.75 0 0 1 2.47 0l.84.84V6a.25.25 0 0 0-.25-.25H6Zm12 11.86v-4.57l-1.9-1.9a.25.25 0 0 0-.35 0l-2.83 2.83l-2.36-2.36a.25.25 0 0 0-.35 0l-4.46 4.46V18c0 .14.11.25.25.25h12a.25.25 0 0 0 .25-.25ZM15.5 8a1.5 1.5 0 1 1 0 3a1.5 1.5 0 0 1 0-3Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "bell":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 3.75a4.75 4.75 0 0 1 4.75 4.75v2.47c0 .67.19 1.33.55 1.9l.93 1.47a2 2 0 0 1-1.69 3.07H7.46a2 2 0 0 1-1.69-3.07l.93-1.47c.36-.57.55-1.23.55-1.9V8.5A4.75 4.75 0 0 1 12 3.75Zm0 1.5A3.25 3.25 0 0 0 8.75 8.5v2.47c0 .95-.27 1.88-.78 2.67l-.93 1.47a.5.5 0 0 0 .42.77h9.08a.5.5 0 0 0 .42-.77l-.93-1.47a4.96 4.96 0 0 1-.78-2.67V8.5A3.25 3.25 0 0 0 12 5.25Zm-1.72 13.5a.75.75 0 0 1 1.44 0a.75.75 0 0 0 1.44 0a.75.75 0 1 1 1.44 0a2.25 2.25 0 0 1-4.32 0Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "instagram":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M8 4.25h8A3.75 3.75 0 0 1 19.75 8v8A3.75 3.75 0 0 1 16 19.75H8A3.75 3.75 0 0 1 4.25 16V8A3.75 3.75 0 0 1 8 4.25Zm0 1.5A2.25 2.25 0 0 0 5.75 8v8A2.25 2.25 0 0 0 8 18.25h8A2.25 2.25 0 0 0 18.25 16V8A2.25 2.25 0 0 0 16 5.75H8Zm4 2.5A3.75 3.75 0 1 1 8.25 12A3.75 3.75 0 0 1 12 8.25Zm0 1.5A2.25 2.25 0 1 0 14.25 12A2.25 2.25 0 0 0 12 9.75Zm4.13-2.13a.88.88 0 1 1 0 1.76a.88.88 0 0 1 0-1.76Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "gear":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 7.25A4.75 4.75 0 1 1 7.25 12A4.75 4.75 0 0 1 12 7.25Zm0 1.5A3.25 3.25 0 1 0 15.25 12A3.25 3.25 0 0 0 12 8.75Zm0-5a.75.75 0 0 1 .75.75v1.02a6.88 6.88 0 0 1 1.77.73l.72-.72a.75.75 0 1 1 1.06 1.06l-.72.72c.3.56.54 1.15.73 1.77h1.02a.75.75 0 0 1 0 1.5h-1.02a6.88 6.88 0 0 1-.73 1.77l.72.72a.75.75 0 1 1-1.06 1.06l-.72-.72a6.88 6.88 0 0 1-1.77.73v1.02a.75.75 0 0 1-1.5 0v-1.02a6.88 6.88 0 0 1-1.77-.73l-.72.72a.75.75 0 1 1-1.06-1.06l.72-.72a6.88 6.88 0 0 1-.73-1.77H4.5a.75.75 0 0 1 0-1.5h1.02c.19-.62.43-1.21.73-1.77l-.72-.72a.75.75 0 0 1 1.06-1.06l.72.72a6.88 6.88 0 0 1 1.77-.73V4.5A.75.75 0 0 1 12 3.75Z"
             fill="currentColor"
           />
         </svg>
@@ -166,49 +226,53 @@ export function SidebarNav() {
         className={pendingHref ? "sidebar-progress sidebar-progress--active" : "sidebar-progress"}
         aria-hidden="true"
       />
-      <div className="sidebar-section">
-        {primaryLinks.map((link) => {
-          const isActive =
-            link.href === "/dashboard"
-              ? pathname === link.href
-              : pathname === link.href || pathname.startsWith(`${link.href}/`);
-          const isPending = pendingHref === link.href;
+      {navSections.map((section) => (
+        <div key={section.label} className="sidebar-section">
+          <span className="sidebar-section__label">{section.label}</span>
 
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={
-                isActive
-                  ? "nav-link nav-link--active"
-                  : isPending
-                    ? "nav-link nav-link--pending"
-                    : "nav-link"
-              }
-              aria-current={isActive ? "page" : undefined}
-              aria-busy={isPending ? "true" : undefined}
-              data-pending={isPending ? "true" : "false"}
-              onMouseEnter={() => router.prefetch(link.href)}
-              onTouchStart={() => router.prefetch(link.href)}
-              onFocus={() => router.prefetch(link.href)}
-              onClick={(event) => handleLinkClick(event, link.href, isActive)}
-            >
-              <span className="nav-link__content">
-                <span className="nav-link__icon" aria-hidden="true">
-                  <NavIcon name={link.icon} />
+          {section.items.map((link) => {
+            const isActive =
+              link.href === "/dashboard"
+                ? pathname === link.href
+                : pathname === link.href || pathname.startsWith(`${link.href}/`);
+            const isPending = pendingHref === link.href;
+
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={
+                  isActive
+                    ? "nav-link nav-link--active"
+                    : isPending
+                      ? "nav-link nav-link--pending"
+                      : "nav-link"
+                }
+                aria-current={isActive ? "page" : undefined}
+                aria-busy={isPending ? "true" : undefined}
+                data-pending={isPending ? "true" : "false"}
+                onMouseEnter={() => router.prefetch(link.href)}
+                onTouchStart={() => router.prefetch(link.href)}
+                onFocus={() => router.prefetch(link.href)}
+                onClick={(event) => handleLinkClick(event, link.href, isActive)}
+              >
+                <span className="nav-link__content">
+                  <span className="nav-link__icon" aria-hidden="true">
+                    <NavIcon name={link.icon} />
+                  </span>
+
+                  <span className="nav-link__text">
+                    <strong>{link.label}</strong>
+                    <small>{link.description}</small>
+                  </span>
                 </span>
 
-                <span className="nav-link__text">
-                  <strong>{link.label}</strong>
-                  <small>{link.description}</small>
-                </span>
-              </span>
-
-              <span className="nav-link__pulse" aria-hidden="true" />
-            </Link>
-          );
-        })}
-      </div>
+                <span className="nav-link__pulse" aria-hidden="true" />
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }

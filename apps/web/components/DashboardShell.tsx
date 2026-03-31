@@ -121,6 +121,14 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
             <span className="eyebrow">Código do salão</span>
             <strong>{salonCode}</strong>
             <p className="muted">Compartilhe esse código com novos clientes para liberar o app.</p>
+            <div className="sidebar-code-card__actions">
+              <Link href={`/s/${salonCode}`} className="sidebar-code-card__link">
+                Ver vitrine pública
+              </Link>
+              <Link href="/dashboard/settings" className="sidebar-code-card__link sidebar-code-card__link--ghost">
+                Ajustar app do cliente
+              </Link>
+            </div>
           </div>
 
           <form action={signOutAction} className="sidebar-signout">
@@ -142,8 +150,8 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
             </span>
             <input
               type="search"
-              name="search"
-              placeholder="Pesquisar..."
+              name="q"
+              placeholder="Buscar cliente, serviço, profissional ou campanha"
               aria-label="Pesquisar no painel"
             />
           </form>

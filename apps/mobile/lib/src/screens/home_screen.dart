@@ -331,8 +331,28 @@ class _HomeScreenState extends _HomeScreenStateBase
         final isLoading =
             snapshot.connectionState == ConnectionState.waiting && data == null;
         final hasError = snapshot.hasError && data == null;
+        final brandConfig = SalonBrandConfig.fromProfile(
+          _profile,
+          services: data?.services ?? const <ServiceItem>[],
+          posts: data?.posts ?? const <SalonPost>[],
+          offers: data?.offers ?? const <SalonOfferItem>[],
+        );
+        final professionalHighlightsCount = brandConfig
+            .buildProfessionalHighlights(
+              posts: data?.posts ?? const <SalonPost>[],
+              appointments: data?.appointments ?? const <AppointmentItem>[],
+            )
+            .length;
         final notificationCount =
             data?.notifications.where((item) => !item.isRead).length ?? 0;
+        final clientExperienceCount = {
+          ...brandConfig.visibleModules.map((module) => module.name),
+          if (data?.notifications.isNotEmpty ?? false) 'notifications',
+          if (data?.posts.isNotEmpty ?? false) 'feed',
+          if (data?.offers.isNotEmpty ?? false) 'offers',
+          if (data?.loyaltySummary?.hasVisibleContent == true) 'loyalty',
+          if (data?.referralSummary?.hasVisibleContent == true) 'referrals',
+        }.length;
         final liveSignalLabel = data == null
             ? 'Conectando'
             : data.posts.isNotEmpty
@@ -421,6 +441,52 @@ class _HomeScreenState extends _HomeScreenStateBase
                       ),
                     ),
                   ),
+                  if (_tabController.index == 0)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 12),
+                      child: CinematicReveal(
+                        delay: const Duration(milliseconds: 52),
+                        beginOffset: const Offset(0, 14),
+                        child: _HomeCommandDeck(
+                          branding: branding,
+                          salonName: _profile.salonName,
+                          heroSubtitle: data == null
+                              ? (_profile.salonTagline ??
+                                  'Sua experiência premium com o salão começa aqui.')
+                              : _buildHeroSubtitle(data),
+                          leadMomentLabel: data?.nextAvailableAt != null
+                              ? _formatNextAvailable(data!.nextAvailableAt)
+                              : data?.vacancyAlerts.isNotEmpty == true
+                              ? '${data!.vacancyAlerts.length} vagas liberadas'
+                              : data?.offers.isNotEmpty == true
+                              ? '${data!.offers.length} experiências ativas'
+                              : 'Exploração premium liberada',
+                          attendanceLabel: data == null
+                              ? 'Sincronizando sua agenda'
+                              : _todayAttendanceLabel(data.appointments),
+                          spotlightLabel: data == null
+                              ? 'Conectando novidades do salão'
+                              : data.posts.isNotEmpty
+                              ? '${data.posts.length} destaques da marca'
+                              : notificationCount > 0
+                              ? '$notificationCount alertas novos'
+                              : data.offers.isNotEmpty
+                              ? '${data.offers.length} ofertas em cena'
+                              : 'Tudo pronto para explorar',
+                          onOpenAgenda: () => _animateToTab(1),
+                          onOpenGallery: () => _animateToTab(2),
+                          onOpenNotifications: data == null
+                              ? null
+                              : () {
+                                  unawaited(
+                                    _openNotificationsCenter(
+                                      data.notifications,
+                                    ),
+                                  );
+                                },
+                        ),
+                      ),
+                    ),
                   Expanded(
                     child: TabBarView(
                       controller: _tabController,
@@ -566,12 +632,31 @@ class _HomeScreenState extends _HomeScreenStateBase
                             profile: _profile,
                             branding: branding,
                             data: data!,
+                            unreadNotificationsCount: notificationCount,
+                            clientExperienceCount: clientExperienceCount,
+                            professionalHighlightsCount:
+                                professionalHighlightsCount,
+                            productHighlightsCount: brandConfig.products.length,
                             onRefresh: _refreshData,
                             onOpenProfile: () {
                               unawaited(_openProfile(data));
                             },
                             onOpenWallet: () {
                               unawaited(_openBenefitsWallet(data));
+                            },
+                            onOpenNotifications: () {
+                              unawaited(
+                                _openNotificationsCenter(data.notifications),
+                              );
+                            },
+                            onOpenSalonProfile: () {
+                              unawaited(_openSalonProfile(data));
+                            },
+                            onOpenProfessionals: () {
+                              unawaited(_openProfessionals(data));
+                            },
+                            onOpenProducts: () {
+                              unawaited(_openProducts(data));
                             },
                             onWhatsApp: _openWhatsApp,
                           ),
@@ -852,6 +937,317 @@ class _HomeShellHeader extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _HomeCommandDeck extends StatelessWidget {
+  const _HomeCommandDeck({
+    required this.branding,
+    required this.salonName,
+    required this.heroSubtitle,
+    required this.leadMomentLabel,
+    required this.attendanceLabel,
+    required this.spotlightLabel,
+    required this.onOpenAgenda,
+    required this.onOpenGallery,
+    this.onOpenNotifications,
+  });
+
+  final SalonBranding branding;
+  final String salonName;
+  final String heroSubtitle;
+  final String leadMomentLabel;
+  final String attendanceLabel;
+  final String spotlightLabel;
+  final VoidCallback onOpenAgenda;
+  final VoidCallback onOpenGallery;
+  final VoidCallback? onOpenNotifications;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final metrics = [
+      (
+        label: 'Próximo passo',
+        value: leadMomentLabel,
+        note: 'O melhor momento do salão aparece aqui primeiro.',
+        icon: Icons.auto_awesome_rounded,
+      ),
+      (
+        label: 'Seu ritmo',
+        value: attendanceLabel,
+        note: 'Uma leitura curta da sua agenda atual.',
+        icon: Icons.schedule_rounded,
+      ),
+      (
+        label: 'Sinais da marca',
+        value: spotlightLabel,
+        note: 'Novidades, alertas e vitrine no mesmo radar.',
+        icon: Icons.bolt_rounded,
+      ),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            branding.shellNavigationBackground,
+            Color.lerp(branding.primary, Colors.white, 0.82)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: branding.shellNavigationBorder),
+        boxShadow: [
+          BoxShadow(
+            color: branding.deep.withValues(alpha: 0.14),
+            blurRadius: 28,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -52,
+            right: -30,
+            child: IgnorePointer(
+              child: Container(
+                width: 170,
+                height: 170,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      branding.primary.withValues(alpha: 0.22),
+                      branding.primary.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -34,
+            left: -10,
+            child: IgnorePointer(
+              child: Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.18),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 700;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Seu salão abriu em modo vitrine premium',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: branding.shellForeground,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '$salonName com contexto, ritmo e próxima ação na palma da mão.',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: branding.shellForeground,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      heroSubtitle,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: branding.shellMutedForeground,
+                        height: 1.55,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: onOpenAgenda,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: branding.primary,
+                            foregroundColor: branding.onPrimary,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                          ),
+                          icon: const Icon(Icons.calendar_month_rounded),
+                          label: const Text('Ver seus horários'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: onOpenGallery,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: branding.shellForeground,
+                            side: BorderSide(color: branding.shellNavigationBorder),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                          ),
+                          icon: const Icon(Icons.auto_awesome_mosaic_rounded),
+                          label: const Text('Explorar vitrine'),
+                        ),
+                        if (onOpenNotifications != null)
+                          OutlinedButton.icon(
+                            onPressed: onOpenNotifications,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: branding.shellForeground,
+                              side: BorderSide(
+                                color: branding.shellNavigationBorder,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 14,
+                              ),
+                            ),
+                            icon: const Icon(Icons.notifications_active_rounded),
+                            label: const Text('Abrir alertas'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    if (isCompact)
+                      Column(
+                        children: [
+                          for (var index = 0; index < metrics.length; index++) ...[
+                            _HomeCommandMetricCard(
+                              branding: branding,
+                              label: metrics[index].label,
+                              value: metrics[index].value,
+                              note: metrics[index].note,
+                              icon: metrics[index].icon,
+                            ),
+                            if (index != metrics.length - 1)
+                              const SizedBox(height: 10),
+                          ],
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          for (var index = 0; index < metrics.length; index++) ...[
+                            Expanded(
+                              child: _HomeCommandMetricCard(
+                                branding: branding,
+                                label: metrics[index].label,
+                                value: metrics[index].value,
+                                note: metrics[index].note,
+                                icon: metrics[index].icon,
+                              ),
+                            ),
+                            if (index != metrics.length - 1)
+                              const SizedBox(width: 10),
+                          ],
+                        ],
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeCommandMetricCard extends StatelessWidget {
+  const _HomeCommandMetricCard({
+    required this.branding,
+    required this.label,
+    required this.value,
+    required this.note,
+    required this.icon,
+  });
+
+  final SalonBranding branding;
+  final String label;
+  final String value;
+  final String note;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: branding.usesDarkShell ? 0.08 : 0.76),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: branding.shellNavigationBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: branding.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: branding.shellForeground, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: branding.shellForeground,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            value,
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: branding.shellForeground,
+              fontWeight: FontWeight.w900,
+              height: 1.05,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            note,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: branding.shellMutedForeground,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

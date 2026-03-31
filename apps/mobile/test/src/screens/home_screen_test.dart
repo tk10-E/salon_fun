@@ -78,6 +78,14 @@ void main() {
       expect(find.text('Sua jornada com o salão em um olhar'), findsOneWidget);
       expect(find.text('Hidratação premium'), findsOneWidget);
       expect(find.text('Confirmar presença'), findsOneWidget);
+
+      await tester.tap(find.text('Perfil'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Tudo o que seu app libera'), findsOneWidget);
+      expect(find.text('Vitrine do salão'), findsOneWidget);
+      expect(find.text('Alertas e avisos'), findsOneWidget);
     });
 
     testWidgets(
@@ -152,11 +160,7 @@ void main() {
       expect(find.text('Não foi possível carregar o salão'), findsOneWidget);
       expect(find.text('Tentar novamente'), findsOneWidget);
 
-      final retryButton = find.byWidgetPredicate(
-        (widget) => widget is FilledButton,
-      );
-      final retryButtonWidget = tester.widget<FilledButton>(retryButton);
-      retryButtonWidget.onPressed?.call();
+      await tester.tap(find.text('Tentar novamente'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -198,11 +202,7 @@ void main() {
         );
         expect(find.text('Tentar novamente'), findsOneWidget);
 
-        final retryButton = find.byWidgetPredicate(
-          (widget) => widget is FilledButton,
-        );
-        final retryButtonWidget = tester.widget<FilledButton>(retryButton);
-        retryButtonWidget.onPressed?.call();
+        await tester.tap(find.text('Tentar novamente'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 

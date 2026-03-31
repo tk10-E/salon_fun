@@ -55,6 +55,48 @@ describe("dashboard page UI", () => {
           };
         }
 
+        if (table === "salon_offers") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 4, error: null }),
+            })),
+          };
+        }
+
+        if (table === "salon_posts") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 9, error: null }),
+            })),
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                gte: vi.fn().mockResolvedValue({ count: 18, error: null }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "instagram_connections") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
+            })),
+          };
+        }
+
+        if (table === "instagram_mentions") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 6, error: null }),
+            })),
+          };
+        }
+
         if (table === "customers") {
           return {
             select: vi.fn(() => ({
@@ -383,6 +425,8 @@ describe("dashboard page UI", () => {
     render(ui);
 
     expect(screen.getByText("Resumo atualizado.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tudo o que o sistema ja opera em producao" })).toBeInTheDocument();
+    expect(screen.getByText("Instagram e mencoes")).toBeInTheDocument();
     expect(screen.getByText("Agendamentos Hoje")).toBeInTheDocument();
     expect(screen.getByText("Clientes Atendidos")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Agenda do Dia" })).toBeInTheDocument();
