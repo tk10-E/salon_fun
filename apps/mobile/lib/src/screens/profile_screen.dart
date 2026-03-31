@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_models.dart';
+import '../navigation/salon_page_route.dart';
 import '../repositories/salon_repository.dart';
 import '../theme/salon_branding.dart';
 import '../widgets/app_backdrop.dart';
+import '../widgets/cinematic_reveal.dart';
 import '../widgets/soft_card.dart';
 import 'benefits_wallet_screen.dart';
 
@@ -72,6 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       widget.profile.salonName,
       overrideHexColor: widget.profile.salonBrandColor,
       businessSegment: widget.profile.salonBusinessSegment,
+      clientAppConfig: widget.profile.salonClientAppConfig,
     );
     _loyaltySummary = widget.initialLoyaltySummary;
     _referralSummary = widget.initialReferralSummary;
@@ -126,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     if ((loyaltySummary?.visitsToNextTier ?? 0) == 1) {
-      return 'Falta 1 visita para subir de nível e puxar mais vantagem no app.';
+      return 'Falta 1 visita para subir de nível.';
     }
 
     if ((loyaltySummary?.visitsToNextTier ?? 0) > 1) {
@@ -146,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return 'Você já tem $cashbackLabel de cashback acumulado para ajudar no próximo retorno.';
     }
 
-    return 'Sua conta já junta agenda, benefícios, retorno e contato direto com o salão.';
+    return 'Agenda, carteira e contato no mesmo app.';
   }
 
   String get _benefitFocusTitle {
@@ -158,7 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     if ((loyaltySummary?.visitsToNextTier ?? 0) == 1) {
-      return 'Sua próxima visita já pode destravar mais vantagem';
+      return 'Sua próxima visita pode liberar mais vantagem';
     }
 
     if ((loyaltySummary?.cashbackBalance ?? 0) > 0) {
@@ -170,7 +173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return 'Sua rede já está ajudando a puxar a próxima recompensa';
     }
 
-    return 'Seu perfil já trabalha retenção e relacionamento';
+    return 'Seu perfil já organiza seu retorno';
   }
 
   String get _benefitFocusMessage {
@@ -178,11 +181,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final referralSummary = _referralSummary;
 
     if ((referralSummary?.availableRewardsCount ?? 0) > 0) {
-      return 'Abra a carteira para ver a recompensa liberada e alinhe com o salão quando quiser usar esse benefício.';
+      return 'Abra a carteira para ver a recompensa liberada.';
     }
 
     if ((loyaltySummary?.visitsToNextTier ?? 0) == 1) {
-      return 'Você está a uma visita de subir de nível. Manter sua frequência agora tende a render desconto progressivo, cashback e um posicionamento melhor no ranking.';
+      return 'Você está a uma visita de subir de nível.';
     }
 
     if ((loyaltySummary?.cashbackBalance ?? 0) > 0) {
@@ -190,15 +193,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         locale: 'pt_BR',
         symbol: 'R\$',
       ).format(loyaltySummary!.cashbackBalance);
-      return 'Você já acumulou $cashbackLabel. Vale acompanhar a carteira antes do próximo agendamento para usar esse saldo com inteligência.';
+      return 'Você já acumulou $cashbackLabel. Vale usar esse saldo no próximo retorno.';
     }
 
     if ((referralSummary?.nextRewardRemaining ?? 0) > 0 &&
         (referralSummary?.qualifiedCount ?? 0) > 0) {
-      return 'Seu código já está funcionando. Se continuar compartilhando com quem realmente vai ao salão, a próxima recompensa fica mais perto.';
+      return 'Seu código já está funcionando. A próxima recompensa está mais perto.';
     }
 
-    return 'Seu perfil reúne agenda, carteira e contato para você decidir a próxima visita com menos atrito.';
+    return 'Seu perfil reúne agenda, carteira e contato.';
   }
 
   List<AppointmentItem> get _recentAppointments {
@@ -409,7 +412,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _openBenefitsWallet() async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      SalonPageRoute<void>(
         builder: (_) => BenefitsWalletScreen(
           repository: widget.repository,
           profile: _profile,
@@ -466,148 +469,279 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _favoriteServices.length + _favoriteStaffMembers.length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Minha conta')),
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Minha conta'),
+            Text(
+              'Relacionamento, histórico e carteira',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _branding.mutedText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
       body: AppBackdrop(
         branding: _branding,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           children: [
-            SoftCard(
-              padding: const EdgeInsets.all(22),
-              borderColor: _branding.outline.withValues(alpha: 0.72),
-              gradient: LinearGradient(
-                colors: [
-                  _branding.primary.withValues(alpha: 0.18),
-                  Colors.white.withValues(alpha: 0.98),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 58,
-                        height: 58,
+            CinematicReveal(
+              delay: const Duration(milliseconds: 20),
+              child: SoftCard(
+                padding: EdgeInsets.zero,
+                borderColor: _branding.primary.withValues(alpha: 0.28),
+                gradient: LinearGradient(
+                  colors: [
+                    Color.lerp(_branding.deep, const Color(0xFF120F17), 0.12)!,
+                    _branding.deep,
+                    Color.lerp(_branding.primary, _branding.deep, 0.2)!,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: -44,
+                      right: -18,
+                      child: Container(
+                        width: 160,
+                        height: 160,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.88),
-                          borderRadius: BorderRadius.circular(18),
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.08),
                         ),
-                        child: _profile.salonLogoUrl == null
-                            ? Icon(
-                                Icons.storefront_rounded,
-                                color: _branding.deep,
-                                size: 30,
-                              )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: Image.network(
-                                  _profile.salonLogoUrl!,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _profile.name,
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
+                    ),
+                    Positioned(
+                      left: -40,
+                      bottom: -60,
+                      child: Container(
+                        width: 148,
+                        height: 148,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _branding.primary.withValues(alpha: 0.14),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              const _ProfileHeroPill(
+                                label: 'Seu perfil dentro do salão',
+                                icon: Icons.auto_awesome_rounded,
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _profile.salonName,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: _branding.deep,
-                                fontWeight: FontWeight.w700,
+                              _ProfileHeroPill(
+                                label: _loyaltySummary?.isVip == true
+                                    ? 'Cliente VIP'
+                                    : 'Conta ativa',
+                                icon: _loyaltySummary?.isVip == true
+                                    ? Icons.workspace_premium_rounded
+                                    : Icons.verified_user_rounded,
                               ),
-                            ),
-                            if (_profile.salonTagline?.trim().isNotEmpty ==
-                                true) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                _profile.salonTagline!,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: _branding.mutedText,
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.14),
+                                  ),
+                                ),
+                                child: _profile.salonLogoUrl == null
+                                    ? const Icon(
+                                        Icons.storefront_rounded,
+                                        color: Colors.white,
+                                        size: 26,
+                                      )
+                                    : ClipRRect(
+                                        borderRadius: BorderRadius.circular(18),
+                                        child: Image.network(
+                                          _profile.salonLogoUrl!,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _profile.name,
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _profile.salonName,
+                                      style: theme.textTheme.bodyLarge
+                                          ?.copyWith(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.9,
+                                            ),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    if (_profile.salonTagline
+                                            ?.trim()
+                                            .isNotEmpty ==
+                                        true) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _profile.salonTagline!,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.72,
+                                              ),
+                                            ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 6),
-                            Text(
-                              _accountMomentumSummary,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: _branding.mutedText,
-                                fontWeight: FontWeight.w600,
-                                height: 1.4,
-                              ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            _accountMomentumSummary,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.82),
+                              fontWeight: FontWeight.w600,
+                              height: 1.4,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 14),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              _AccountChip(
+                                icon: Icons.verified_user_rounded,
+                                label: tierLabel == null
+                                    ? 'Cliente do salão'
+                                    : 'Nível $tierLabel',
+                                branding: _branding,
+                                dark: true,
+                              ),
+                              _AccountChip(
+                                icon: Icons.local_fire_department_rounded,
+                                label: _loyaltySummary?.isVip == true
+                                    ? 'Cliente VIP'
+                                    : '${_loyaltySummary?.completedVisits ?? 0} visitas concluídas',
+                                branding: _branding,
+                                dark: true,
+                              ),
+                              if (referralCode != null &&
+                                  referralCode.isNotEmpty)
+                                _AccountChip(
+                                  icon: Icons.card_giftcard_rounded,
+                                  label: 'Código $referralCode',
+                                  branding: _branding,
+                                  dark: true,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _PreviewMetricBox(
+                                  label: 'Visitas',
+                                  value:
+                                      '${_loyaltySummary?.completedVisits ?? 0}',
+                                  branding: _branding,
+                                  dark: true,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _PreviewMetricBox(
+                                  label: 'Cashback',
+                                  value: cashbackLabel,
+                                  branding: _branding,
+                                  dark: true,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _PreviewMetricBox(
+                                  label: 'Favoritos',
+                                  value: '$favoritesCount',
+                                  branding: _branding,
+                                  dark: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _isSigningOut ? null : _signOut,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.26),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 16,
+                                ),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.08,
+                                ),
+                              ),
+                              icon: _isSigningOut
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.logout_rounded),
+                              label: const Text('Sair da conta'),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _AccountChip(
-                        icon: Icons.verified_user_rounded,
-                        label: tierLabel == null
-                            ? 'Cliente do salão'
-                            : 'Nível $tierLabel',
-                        branding: _branding,
-                      ),
-                      _AccountChip(
-                        icon: Icons.local_fire_department_rounded,
-                        label: _loyaltySummary?.isVip == true
-                            ? 'Cliente VIP'
-                            : '${_loyaltySummary?.completedVisits ?? 0} visitas concluídas',
-                        branding: _branding,
-                      ),
-                      if (referralCode != null && referralCode.isNotEmpty)
-                        _AccountChip(
-                          icon: Icons.card_giftcard_rounded,
-                          label: 'Código $referralCode',
-                          branding: _branding,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PreviewMetricBox(
-                          label: 'Visitas',
-                          value: '${_loyaltySummary?.completedVisits ?? 0}',
-                          branding: _branding,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _PreviewMetricBox(
-                          label: 'Cashback',
-                          value: cashbackLabel,
-                          branding: _branding,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _PreviewMetricBox(
-                          label: 'Favoritos',
-                          value: '$favoritesCount',
-                          branding: _branding,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            CinematicReveal(
+              delay: const Duration(milliseconds: 90),
+              child: _ProfileMomentumStrip(
+                branding: _branding,
+                loyaltySummary: _loyaltySummary,
+                referralSummary: _referralSummary,
+                favoritesCount: favoritesCount,
+                recentAppointmentsCount: _recentAppointments.length,
               ),
             ),
             const SizedBox(height: 18),
@@ -748,14 +882,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Perfil de beleza',
+                    'Ficha do cliente',
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Seu prontuário reúne preferências, cuidados e o que já funcionou bem.',
+                    'Preferências, cuidados e histórico útil do seu atendimento.',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 16),
@@ -771,7 +905,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     if (_profile.preferences?.trim().isNotEmpty == true) ...[
                       _ProfileBeautyNoteCard(
                         icon: Icons.tune_rounded,
-                        label: 'Preferências de resultado',
+                        label: 'Preferências',
                         value: _profile.preferences!,
                         branding: _branding,
                       ),
@@ -790,7 +924,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     if (_profile.beautyProducts?.trim().isNotEmpty == true) ...[
                       _ProfileBeautyNoteCard(
                         icon: Icons.spa_outlined,
-                        label: 'Produtos usados ou preferidos',
+                        label: 'Produtos e rotina',
                         value: _profile.beautyProducts!,
                         branding: _branding,
                       ),
@@ -798,7 +932,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                     if (_beautyHistoryAppointments.isNotEmpty) ...[
                       Text(
-                        'Cortes e atendimentos anteriores',
+                        'Atendimentos anteriores',
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w900,
                         ),
@@ -832,7 +966,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Histórico recente',
+                          'Últimos atendimentos',
                           style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w900,
                           ),
@@ -848,7 +982,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Serviços, datas, valores e profissional ficam registrados aqui para você repetir com mais confiança.',
+                    'Serviços, datas e profissional guardados para você consultar rápido.',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 16),
@@ -897,7 +1031,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Relacionamento e benefícios',
+                          'Carteira e benefícios',
                           style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w900,
                           ),
@@ -913,7 +1047,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Sua carteira junta fidelidade, cashback, desconto progressivo e indicação para puxar retorno com mais inteligência.',
+                    'Tudo o que você acumulou com o salão em uma leitura simples.',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 18),
@@ -974,7 +1108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Salve serviços e profissionais para reduzir atrito e voltar mais rápido ao que você já gosta.',
+                    'Salve serviços e profissionais para voltar mais rápido ao que já gosta.',
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 16),
@@ -1066,24 +1200,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onPressed: widget.onWhatsApp,
                       icon: const Icon(Icons.chat_bubble_outline_rounded),
                       label: const Text('Falar com o salão'),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _isSigningOut ? null : _signOut,
-                      icon: _isSigningOut
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.logout_rounded),
-                      label: const Text('Sair da conta'),
                     ),
                   ),
                 ],
@@ -1393,30 +1509,38 @@ class _AccountChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.branding,
+    this.dark = false,
   });
 
   final IconData icon;
   final String label;
   final SalonBranding branding;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.86),
+        color: dark
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.white.withValues(alpha: 0.68),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.7)),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.14)
+              : branding.outline.withValues(alpha: 0.54),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: branding.deep),
+          Icon(icon, size: 18, color: dark ? Colors.white : branding.deep),
           const SizedBox(width: 8),
           Text(
             label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: branding.deep,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: dark ? Colors.white : branding.deep,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1529,11 +1653,13 @@ class _PreviewMetricBox extends StatelessWidget {
     required this.label,
     required this.value,
     required this.branding,
+    this.dark = false,
   });
 
   final String label;
   final String value;
   final SalonBranding branding;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -1542,17 +1668,43 @@ class _PreviewMetricBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F2EB),
+        gradient: LinearGradient(
+          colors: [
+            dark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.92),
+            dark
+                ? branding.primary.withValues(alpha: 0.14)
+                : branding.primary.withValues(alpha: 0.06),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.68)),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.14)
+              : branding.outline.withValues(alpha: 0.68),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: 24,
+            height: 3,
+            decoration: BoxDecoration(
+              color: branding.primary.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
             label,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: branding.mutedText,
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.74)
+                  : branding.mutedText,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1561,7 +1713,201 @@ class _PreviewMetricBox extends StatelessWidget {
             value,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w900,
+              color: dark ? Colors.white : branding.deep,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileHeroPill extends StatelessWidget {
+  const _ProfileHeroPill({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileMomentumStrip extends StatelessWidget {
+  const _ProfileMomentumStrip({
+    required this.branding,
+    required this.loyaltySummary,
+    required this.referralSummary,
+    required this.favoritesCount,
+    required this.recentAppointmentsCount,
+  });
+
+  final SalonBranding branding;
+  final CustomerLoyaltySummary? loyaltySummary;
+  final ReferralSummary? referralSummary;
+  final int favoritesCount;
+  final int recentAppointmentsCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final nextTierVisits = loyaltySummary?.visitsToNextTier;
+
+    return SoftCard(
+      padding: const EdgeInsets.all(18),
+      gradient: LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.98),
+          branding.surface.withValues(alpha: 0.94),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: branding.outline.withValues(alpha: 0.72),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Seu momento dentro do app',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: branding.deep,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Perfil, carteira e histórico agora conversam como uma experiência única do salão, não como telas soltas.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.mutedText,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _ProfileStageCard(
+                eyebrow: 'Próxima vantagem',
+                title: nextTierVisits == null
+                    ? 'Nível em construção'
+                    : nextTierVisits == 0
+                    ? 'Seu nível já está ativo'
+                    : 'Faltam $nextTierVisits visita${nextTierVisits == 1 ? '' : 's'}',
+                description:
+                    'A próxima ida ao salão pode subir seu patamar no app.',
+                icon: Icons.stacked_line_chart_rounded,
+                accent: Color.lerp(branding.primary, Colors.white, 0.14)!,
+              ),
+              _ProfileStageCard(
+                eyebrow: 'Favoritos',
+                title: favoritesCount == 0
+                    ? 'Sua curadoria começa agora'
+                    : '$favoritesCount item${favoritesCount == 1 ? '' : 's'} salvo${favoritesCount == 1 ? '' : 's'}',
+                description:
+                    'Serviços e profissionais ficam a um toque para o próximo retorno.',
+                icon: Icons.favorite_rounded,
+                accent: Color.lerp(branding.deep, branding.primary, 0.4)!,
+              ),
+              _ProfileStageCard(
+                eyebrow: 'Memória do salão',
+                title: recentAppointmentsCount == 0
+                    ? 'Histórico ainda nascendo'
+                    : '$recentAppointmentsCount atendimento${recentAppointmentsCount == 1 ? '' : 's'} recente${recentAppointmentsCount == 1 ? '' : 's'}',
+                description:
+                    'Seu histórico já ajuda a repetir o que deu certo com menos atrito.',
+                icon: Icons.history_rounded,
+                accent: Color.lerp(branding.primary, Colors.white, 0.28)!,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileStageCard extends StatelessWidget {
+  const _ProfileStageCard({
+    required this.eyebrow,
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.accent,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 238,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, accent.withValues(alpha: 0.14)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accent.withValues(alpha: 0.26)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  eyebrow,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF7A5E4E),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Icon(icon, size: 18, color: const Color(0xFF2F231C)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: const Color(0xFF2F231C),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF6C5547),
+              height: 1.35,
             ),
           ),
         ],

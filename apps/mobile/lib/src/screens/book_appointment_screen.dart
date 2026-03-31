@@ -10,6 +10,7 @@ import '../repositories/salon_repository.dart';
 import '../theme/salon_branding.dart';
 import '../theme/service_category_visual.dart';
 import '../widgets/app_backdrop.dart';
+import '../widgets/cinematic_reveal.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/salon_brand_mark.dart';
 import '../widgets/soft_card.dart';
@@ -516,6 +517,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       widget.profile.salonName,
       overrideHexColor: widget.profile.salonBrandColor,
       businessSegment: widget.profile.salonBusinessSegment,
+      clientAppConfig: widget.profile.salonClientAppConfig,
     );
     final serviceVisual = resolveServiceCategoryVisual(
       category: widget.service.category,
@@ -524,10 +526,22 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'Agendar com ${widget.profile.salonName}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Agendar com ${widget.profile.salonName}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              'Agenda ao vivo',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: branding.mutedText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
       body: AppBackdrop(
@@ -573,130 +587,222 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
             }
 
             return ListView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               children: [
-                SoftCard(
-                  padding: const EdgeInsets.all(22),
-                  gradient: LinearGradient(
-                    colors: [branding.surface, branding.soft],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderColor: branding.outline,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (widget.service.imageUrl?.trim().isNotEmpty ==
-                          true) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(22),
-                          child: AspectRatio(
-                            aspectRatio: 16 / 8,
-                            child: Image.network(
-                              widget.service.imageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
-                                  Container(color: branding.surface),
+                CinematicReveal(
+                  delay: const Duration(milliseconds: 20),
+                  child: SoftCard(
+                    padding: EdgeInsets.zero,
+                    gradient: LinearGradient(
+                      colors: [
+                        Color.lerp(
+                          branding.deep,
+                          const Color(0xFF120F17),
+                          0.12,
+                        )!,
+                        branding.deep,
+                        Color.lerp(branding.primary, branding.deep, 0.18)!,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderColor: branding.primary.withValues(alpha: 0.28),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          top: -44,
+                          right: -18,
+                          child: Container(
+                            width: 164,
+                            height: 164,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.08),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 18),
-                      ],
-                      Row(
-                        children: [
-                          SalonBrandMark(
-                            salonName: widget.profile.salonName,
-                            logoUrl: widget.profile.salonLogoUrl,
-                            branding: branding,
-                            size: 54,
-                            borderRadius: 18,
+                        Positioned(
+                          left: -36,
+                          bottom: -64,
+                          child: Container(
+                            width: 148,
+                            height: 148,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: branding.primary.withValues(alpha: 0.14),
+                            ),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.profile.salonName,
-                                  style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (widget.service.imageUrl?.trim().isNotEmpty ==
+                                  true) ...[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: AspectRatio(
+                                    aspectRatio: 16 / 7,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Image.network(
+                                          widget.service.imageUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, _, _) => Container(
+                                            color: branding.surface,
+                                          ),
+                                        ),
+                                        DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                Colors.black.withValues(
+                                                  alpha: 0.0,
+                                                ),
+                                                Colors.black.withValues(
+                                                  alpha: 0.34,
+                                                ),
+                                              ],
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  widget.profile.salonTagline
-                                              ?.trim()
-                                              .isNotEmpty ==
-                                          true
-                                      ? widget.profile.salonTagline!
-                                      : 'Reserva alinhada com a agenda real do profissional.',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: const Color(0xFF5F4334),
-                                      ),
-                                ),
+                                const SizedBox(height: 14),
                               ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        widget.service.name,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      if (widget.service.category?.trim().isNotEmpty ==
-                          true) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.service.category!,
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: branding.deep.withValues(alpha: 0.74),
-                                fontWeight: FontWeight.w800,
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: [
+                                  _BookingRibbon(
+                                    label: 'Reserva',
+                                    icon: Icons.auto_awesome_rounded,
+                                  ),
+                                  _BookingRibbon(
+                                    label:
+                                        widget.service.category
+                                                ?.trim()
+                                                .isNotEmpty ==
+                                            true
+                                        ? widget.service.category!
+                                        : 'Agenda aberta',
+                                    icon: serviceVisual.icon,
+                                  ),
+                                ],
                               ),
+                              const SizedBox(height: 16),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SalonBrandMark(
+                                    salonName: widget.profile.salonName,
+                                    logoUrl: widget.profile.salonLogoUrl,
+                                    branding: branding,
+                                    size: 50,
+                                    borderRadius: 18,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          widget.profile.salonName,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          widget.profile.salonTagline
+                                                      ?.trim()
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? widget.profile.salonTagline!
+                                              : 'Horários reais e confirmação sem ruído.',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.78,
+                                                ),
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 18),
+                              Text(
+                                widget.service.name,
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      height: 1.02,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                widget.service.description?.trim().isNotEmpty ==
+                                        true
+                                    ? widget.service.description!
+                                    : serviceVisual.fallbackDescription,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.84,
+                                      ),
+                                      height: 1.45,
+                                    ),
+                              ),
+                              const SizedBox(height: 14),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: [
+                                  _HeroInfoChip(
+                                    icon: Icons.schedule_rounded,
+                                    label: '${widget.service.duration} min',
+                                    branding: branding,
+                                    dark: true,
+                                  ),
+                                  _HeroInfoChip(
+                                    icon: Icons.sell_rounded,
+                                    label: currency.format(
+                                      widget.service.price,
+                                    ),
+                                    branding: branding,
+                                    dark: true,
+                                  ),
+                                  if (widget.activeOffers.isNotEmpty)
+                                    _HeroInfoChip(
+                                      icon: Icons.local_fire_department_rounded,
+                                      label:
+                                          '${widget.activeOffers.length} beneficio${widget.activeOffers.length == 1 ? '' : 's'} ativo${widget.activeOffers.length == 1 ? '' : 's'}',
+                                      branding: branding,
+                                      dark: true,
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
-                      const SizedBox(height: 10),
-                      Text(
-                        '${widget.service.duration} min • ${currency.format(widget.service.price)}',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: branding.deep,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        widget.service.description?.trim().isNotEmpty == true
-                            ? widget.service.description!
-                            : serviceVisual.fallbackDescription,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: branding.deep.withValues(alpha: 0.86),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          if (widget.service.category?.trim().isNotEmpty ==
-                              true)
-                            _HeroInfoChip(
-                              icon: serviceVisual.icon,
-                              label: widget.service.category!,
-                              branding: branding,
-                            ),
-                          _HeroInfoChip(
-                            icon: Icons.schedule_rounded,
-                            label: '${widget.service.duration} min',
-                            branding: branding,
-                          ),
-                          _HeroInfoChip(
-                            icon: Icons.sell_rounded,
-                            label: currency.format(widget.service.price),
-                            branding: branding,
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -712,7 +818,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Encaixe sugerido pelo salão',
+                                'Encaixe sugerido',
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
                               const SizedBox(height: 6),
@@ -728,12 +834,25 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   ),
                   const SizedBox(height: 18),
                 ],
+                if (availability != null) ...[
+                  _BookingRunwayCard(
+                    branding: branding,
+                    selectedDay: _selectedDay,
+                    selectedSlot: _selectedSlot,
+                    selectedStaffName: selectedStaff?.name,
+                    availableSlotCount: availableSlots.length,
+                    staffMemberCount: availability.staffMembers.length,
+                    activeOfferCount: widget.activeOffers.length,
+                    benefitMessage: benefitMessage,
+                  ),
+                  const SizedBox(height: 18),
+                ],
                 SoftCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Escolha a data',
+                        'Data',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
@@ -765,20 +884,20 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Profissional',
+                          'Equipe',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           selectedStaff == null
-                              ? 'Mostrando horários de qualquer profissional disponível.'
-                              : 'Filtrando a agenda de ${selectedStaff.name} com base nos horários e pausas desse profissional.',
+                              ? 'Mostrando a agenda de qualquer profissional disponível.'
+                              : 'Agenda filtrada para ${selectedStaff.name}.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         if (_favoriteStaffMemberIds.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Text(
-                            'Seus profissionais salvos aparecem primeiro para você decidir mais rápido.',
+                            'Seus profissionais salvos aparecem primeiro.',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: const Color(0xFF8E441F),
@@ -794,7 +913,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                             _StaffSelectionCard(
                               title: 'Qualquer profissional',
                               subtitle:
-                                  'Mostra todos os horários validados pela agenda do salão.',
+                                  'Mostra todos os horários válidos do dia.',
                               statusLabel:
                                   '${availableSlots.length} ${availableSlots.length == 1 ? 'horário visível' : 'horários visíveis'}',
                               selected: selectedStaff == null,
@@ -853,7 +972,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Esses períodos já foram retirados da agenda exibida abaixo.',
+                          'Esses períodos já foram retirados da agenda abaixo.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 14),
@@ -925,7 +1044,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                     eyebrow: 'Agenda indisponível',
                     title: 'Não foi possível buscar os horários agora',
                     message:
-                        'Atualize a data ou tente novamente em alguns instantes para carregar a agenda do salão.',
+                        'Tente novamente em instantes para recarregar a agenda.',
                     actionLabel: 'Tentar novamente',
                     onAction: () {
                       setState(() {
@@ -953,7 +1072,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         ? 'Nenhum horário livre nesta data'
                         : _selectedStaffEmptyTitle(selectedStaff),
                     message: selectedStaff == null
-                        ? 'O salão atende nesse dia, mas os horários já foram ocupados. Escolha outra data.'
+                        ? 'O salão atende nesse dia, mas os horários já foram ocupados.'
                         : _selectedStaffEmptyMessage(selectedStaff),
                   )
                 else
@@ -962,14 +1081,14 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Horários disponíveis',
+                          'Horários livres',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           selectedStaff == null
-                              ? 'Escolha o horário que fizer mais sentido para você e confirme a reserva no app.'
-                              : 'Selecione um horário livre com ${selectedStaff.name} para confirmar sem trocar de profissional.',
+                              ? 'Escolha um horário e confirme a reserva no app.'
+                              : 'Selecione um horário livre com ${selectedStaff.name}.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 18),
@@ -994,90 +1113,104 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                 if (selectedSlot != null && availability != null) ...[
                   const SizedBox(height: 18),
                   SoftCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Resumo antes de confirmar',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Seu horário entra no histórico do app assim que a reserva for confirmada e já deixa a próxima visita mais fácil de repetir.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            _SummaryPill(
-                              icon: Icons.event_rounded,
-                              label: 'Data',
-                              value: dateFormat.format(selectedSlot),
-                              branding: branding,
-                            ),
-                            _SummaryPill(
-                              icon: Icons.schedule_rounded,
-                              label: 'Horário',
-                              value: timeFormat.format(selectedSlot),
-                              branding: branding,
-                            ),
-                            _SummaryPill(
-                              icon: Icons.person_rounded,
-                              label: 'Profissional',
-                              value: _selectedStaffLabel(availability),
-                              branding: branding,
+                    padding: EdgeInsets.zero,
+                    gradient: LinearGradient(
+                      colors: [
+                        Color.lerp(
+                          branding.deep,
+                          const Color(0xFF120F17),
+                          0.12,
+                        )!,
+                        branding.deep,
+                        Color.lerp(branding.primary, branding.deep, 0.18)!,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderColor: branding.primary.withValues(alpha: 0.28),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: const [
+                              _BookingRibbon(
+                                label: 'Resumo da reserva',
+                                icon: Icons.event_available_rounded,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            'Seu horário vai para o histórico do app assim que for confirmado.',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.82),
+                                  height: 1.45,
+                                ),
+                          ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              _SummaryPill(
+                                icon: Icons.event_rounded,
+                                label: 'Data',
+                                value: dateFormat.format(selectedSlot),
+                                branding: branding,
+                                dark: true,
+                              ),
+                              _SummaryPill(
+                                icon: Icons.schedule_rounded,
+                                label: 'Horário',
+                                value: timeFormat.format(selectedSlot),
+                                branding: branding,
+                                dark: true,
+                              ),
+                              _SummaryPill(
+                                icon: Icons.person_rounded,
+                                label: 'Profissional',
+                                value: _selectedStaffLabel(availability),
+                                branding: branding,
+                                dark: true,
+                              ),
+                            ],
+                          ),
+                          if (benefitMessage != null) ...[
+                            const SizedBox(height: 16),
+                            _BookingSupportRow(
+                              icon: Icons.loyalty_rounded,
+                              message: benefitMessage,
+                              dark: true,
                             ),
                           ],
-                        ),
-                        if (benefitMessage != null) ...[
-                          const SizedBox(height: 16),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.loyalty_rounded,
-                                size: 18,
-                                color: branding.deep,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  benefitMessage,
-                                  style: Theme.of(context).textTheme.bodyMedium,
+                          if (_canOpenWhatsApp) ...[
+                            const SizedBox(height: 14),
+                            const _BookingSupportRow(
+                              icon: Icons.chat_bubble_outline_rounded,
+                              message:
+                                  'Se precisar alinhar algo antes da visita, fale com o salão no WhatsApp.',
+                              dark: true,
+                            ),
+                            const SizedBox(height: 14),
+                            OutlinedButton.icon(
+                              onPressed: _openWhatsAppForBooking,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.28),
                                 ),
                               ),
-                            ],
-                          ),
+                              icon: const Icon(Icons.open_in_new_rounded),
+                              label: const Text('Falar com o salão'),
+                            ),
+                          ],
                         ],
-                        if (_canOpenWhatsApp) ...[
-                          const SizedBox(height: 14),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline_rounded,
-                                size: 18,
-                                color: branding.deep,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Se quiser alinhar algo antes da visita, fale com o salão pelo WhatsApp.',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          OutlinedButton.icon(
-                            onPressed: _openWhatsAppForBooking,
-                            icon: const Icon(Icons.open_in_new_rounded),
-                            label: const Text('Falar com o salão'),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                 ],
@@ -1108,32 +1241,45 @@ class _SummaryPill extends StatelessWidget {
     required this.label,
     required this.value,
     required this.branding,
+    this.dark = false,
   });
 
   final IconData icon;
   final String label;
   final String value;
   final SalonBranding branding;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor = dark
+        ? Colors.white.withValues(alpha: 0.12)
+        : branding.primary.withValues(alpha: 0.08);
+    final borderColor = dark
+        ? Colors.white.withValues(alpha: 0.14)
+        : branding.outline.withValues(alpha: 0.62);
+    final foregroundColor = dark ? Colors.white : branding.deep;
+    final secondaryColor = dark
+        ? Colors.white.withValues(alpha: 0.74)
+        : branding.deep.withValues(alpha: 0.92);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: branding.primary.withValues(alpha: 0.08),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: branding.deep),
+          Icon(icon, size: 18, color: foregroundColor),
           const SizedBox(height: 10),
           Text(
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: branding.deep,
+              color: foregroundColor,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1141,7 +1287,7 @@ class _SummaryPill extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: branding.deep.withValues(alpha: 0.92),
+              color: secondaryColor,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1156,35 +1302,281 @@ class _HeroInfoChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.branding,
+    this.dark = false,
   });
 
   final IconData icon;
   final String label;
   final SalonBranding branding;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
+        color: dark
+            ? Colors.white.withValues(alpha: 0.12)
+            : branding.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.14)
+              : branding.outline.withValues(alpha: 0.5),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: branding.deep),
+          Icon(icon, size: 16, color: dark ? Colors.white : branding.deep),
           const SizedBox(width: 8),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: branding.deep,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: dark ? Colors.white : branding.deep,
               fontWeight: FontWeight.w700,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BookingRibbon extends StatelessWidget {
+  const _BookingRibbon({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BookingRunwayCard extends StatelessWidget {
+  const _BookingRunwayCard({
+    required this.branding,
+    required this.selectedDay,
+    required this.selectedSlot,
+    required this.selectedStaffName,
+    required this.availableSlotCount,
+    required this.staffMemberCount,
+    required this.activeOfferCount,
+    required this.benefitMessage,
+  });
+
+  final SalonBranding branding;
+  final DateTime selectedDay;
+  final DateTime? selectedSlot;
+  final String? selectedStaffName;
+  final int availableSlotCount;
+  final int staffMemberCount;
+  final int activeOfferCount;
+  final String? benefitMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFormat = DateFormat('dd/MM');
+
+    return SoftCard(
+      padding: const EdgeInsets.all(18),
+      gradient: LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.98),
+          branding.surface.withValues(alpha: 0.94),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: branding.outline.withValues(alpha: 0.72),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sua reserva em 3 passos',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: branding.deep,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Data, equipe e benefícios em uma leitura curta para você decidir rápido.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.mutedText,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _BookingStageCard(
+                eyebrow: 'Dia em foco',
+                title: dateFormat.format(selectedDay),
+                description: selectedSlot == null
+                    ? '$availableSlotCount horários encontrados'
+                    : 'Seu encaixe já está quase fechado',
+                accent: Color.lerp(branding.primary, Colors.white, 0.12)!,
+                icon: Icons.calendar_today_rounded,
+              ),
+              _BookingStageCard(
+                eyebrow: 'Equipe',
+                title: selectedStaffName ?? 'Escolha livre',
+                description:
+                    '$staffMemberCount profissional${staffMemberCount == 1 ? '' : 'is'} disponível${staffMemberCount == 1 ? '' : 's'} hoje',
+                accent: Color.lerp(branding.deep, branding.primary, 0.38)!,
+                icon: Icons.person_outline_rounded,
+              ),
+              _BookingStageCard(
+                eyebrow: benefitMessage != null ? 'Benefício' : 'Campanhas',
+                title: benefitMessage != null
+                    ? 'Sua carteira entra aqui'
+                    : activeOfferCount > 0
+                    ? '$activeOfferCount vantagem${activeOfferCount == 1 ? '' : 'ens'} no ar'
+                    : 'Reserva limpa',
+                description: benefitMessage != null
+                    ? 'Depois da visita, seus benefícios aparecem no app.'
+                    : (activeOfferCount > 0
+                          ? 'O salão tem campanhas ativas para apoiar seu retorno.'
+                          : 'Escolha, confirme e acompanhe tudo no app.'),
+                accent: Color.lerp(branding.primary, Colors.white, 0.26)!,
+                icon: benefitMessage != null
+                    ? Icons.card_giftcard_rounded
+                    : Icons.auto_awesome_rounded,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BookingStageCard extends StatelessWidget {
+  const _BookingStageCard({
+    required this.eyebrow,
+    required this.title,
+    required this.description,
+    required this.accent,
+    required this.icon,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String description;
+  final Color accent;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 238,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, accent.withValues(alpha: 0.14)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  eyebrow,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF7A5E4E),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Icon(icon, size: 18, color: const Color(0xFF2F231C)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: const Color(0xFF2F231C),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF6C5547),
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BookingSupportRow extends StatelessWidget {
+  const _BookingSupportRow({
+    required this.icon,
+    required this.message,
+    this.dark = false,
+  });
+
+  final IconData icon;
+  final String message;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = dark ? Colors.white : const Color(0xFF2F231C);
+    final secondary = dark
+        ? Colors.white.withValues(alpha: 0.82)
+        : const Color(0xFF5F4334);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: foreground),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            message,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: secondary),
+          ),
+        ),
+      ],
     );
   }
 }

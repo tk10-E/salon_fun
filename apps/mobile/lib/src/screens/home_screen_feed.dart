@@ -76,6 +76,7 @@ mixin _HomeScreenFeedMixin on _HomeScreenStateBase {
           _profile.salonName,
           overrideHexColor: _profile.salonBrandColor,
           businessSegment: _profile.salonBusinessSegment,
+          clientAppConfig: _profile.salonClientAppConfig,
         ),
         onSubmitComment: (body) =>
             widget.repository.addPostComment(postId: post.id, body: body),

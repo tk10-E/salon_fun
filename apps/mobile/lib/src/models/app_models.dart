@@ -1,3 +1,5 @@
+import 'salon_client_app_config.dart';
+
 class CustomerProfile {
   const CustomerProfile({
     required this.id,
@@ -13,6 +15,7 @@ class CustomerProfile {
     this.salonBusinessSegment,
     this.salonWhatsappPhone,
     this.salonLogoUrl,
+    this.salonClientAppConfig,
   });
 
   final String id;
@@ -28,6 +31,7 @@ class CustomerProfile {
   final String? salonBusinessSegment;
   final String? salonWhatsappPhone;
   final String? salonLogoUrl;
+  final SalonClientAppConfig? salonClientAppConfig;
 
   CustomerProfile copyWith({
     String? id,
@@ -47,6 +51,7 @@ class CustomerProfile {
     String? salonBusinessSegment,
     String? salonWhatsappPhone,
     String? salonLogoUrl,
+    SalonClientAppConfig? salonClientAppConfig,
   }) {
     return CustomerProfile(
       id: id ?? this.id,
@@ -64,6 +69,7 @@ class CustomerProfile {
       salonBusinessSegment: salonBusinessSegment ?? this.salonBusinessSegment,
       salonWhatsappPhone: salonWhatsappPhone ?? this.salonWhatsappPhone,
       salonLogoUrl: salonLogoUrl ?? this.salonLogoUrl,
+      salonClientAppConfig: salonClientAppConfig ?? this.salonClientAppConfig,
     );
   }
 
@@ -92,6 +98,9 @@ class CustomerProfile {
       salonBusinessSegment: _readNullableString(salonMap['business_segment']),
       salonWhatsappPhone: _readNullableString(salonMap['whatsapp_phone']),
       salonLogoUrl: salonLogoUrl,
+      salonClientAppConfig: SalonClientAppConfig.fromDynamic(
+        salonMap['client_app_config'],
+      ),
     );
   }
 }
@@ -105,6 +114,7 @@ class SalonJoinPreview {
     this.businessSegment,
     this.whatsappPhone,
     this.logoUrl,
+    this.clientAppConfig,
   });
 
   final String salonId;
@@ -114,6 +124,7 @@ class SalonJoinPreview {
   final String? businessSegment;
   final String? whatsappPhone;
   final String? logoUrl;
+  final SalonClientAppConfig? clientAppConfig;
 
   factory SalonJoinPreview.fromMap(
     Map<String, dynamic> map, {
@@ -127,6 +138,9 @@ class SalonJoinPreview {
       businessSegment: _readNullableString(map['business_segment']),
       whatsappPhone: _readNullableString(map['whatsapp_phone']),
       logoUrl: salonLogoUrl,
+      clientAppConfig: SalonClientAppConfig.fromDynamic(
+        map['client_app_config'],
+      ),
     );
   }
 }

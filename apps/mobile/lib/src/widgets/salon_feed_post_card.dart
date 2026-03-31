@@ -674,30 +674,35 @@ class _FeedImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          return child;
-        }
+    final backgroundColor = Color.lerp(branding.surface, Colors.white, 0.22)!;
 
-        return Container(
-          color: branding.surface,
-          alignment: Alignment.center,
-          child: CircularProgressIndicator(
-            color: branding.primary,
-            strokeWidth: 2.4,
+    return ColoredBox(
+      color: backgroundColor,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Image.network(
+          imageUrl,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              return child;
+            }
+
+            return Center(
+              child: CircularProgressIndicator(
+                color: branding.primary,
+                strokeWidth: 2.4,
+              ),
+            );
+          },
+          errorBuilder: (_, _, _) => Center(
+            child: Icon(
+              Icons.image_not_supported_rounded,
+              size: 36,
+              color: branding.deep,
+            ),
           ),
-        );
-      },
-      errorBuilder: (_, _, _) => Container(
-        color: branding.surface,
-        alignment: Alignment.center,
-        child: Icon(
-          Icons.image_not_supported_rounded,
-          size: 36,
-          color: branding.deep,
         ),
       ),
     );

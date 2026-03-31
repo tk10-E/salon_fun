@@ -77,8 +77,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
 
   Future<void> _openBooking(ServiceItem service, [HomeData? data]) async {
     final result = await Navigator.of(context).push<BookAppointmentResult>(
-      MaterialPageRoute(
-        builder: (_) => BookAppointmentScreen(
+      SalonPageRoute(
+        builder: (_) => PremiumBookingScreen(
           repository: widget.repository,
           service: service,
           profile: _profile,
@@ -104,8 +104,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
     HomeData? data,
   ]) async {
     final result = await Navigator.of(context).push<BookAppointmentResult>(
-      MaterialPageRoute(
-        builder: (_) => BookAppointmentScreen(
+      SalonPageRoute(
+        builder: (_) => PremiumBookingScreen(
           repository: widget.repository,
           service: service,
           profile: _profile,
@@ -151,8 +151,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           );
 
     final result = await Navigator.of(context).push<BookAppointmentResult>(
-      MaterialPageRoute(
-        builder: (_) => BookAppointmentScreen(
+      SalonPageRoute(
+        builder: (_) => PremiumBookingScreen(
           repository: widget.repository,
           service: service,
           profile: _profile,
@@ -358,7 +358,7 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
 
   Future<void> _openBenefitsWallet([HomeData? data]) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      SalonPageRoute<void>(
         builder: (_) => BenefitsWalletScreen(
           repository: widget.repository,
           profile: _profile,
@@ -371,8 +371,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
 
   Future<void> _openProfile([HomeData? data]) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProfileScreen(
+      SalonPageRoute<void>(
+        builder: (_) => PremiumClientProfileScreen(
           repository: widget.repository,
           profile: _profile,
           userEmail: widget.repository.currentUser?.email,
@@ -392,6 +392,29 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
             setState(() => _profile = updatedProfile);
             widget.onActiveProfileChanged?.call(updatedProfile);
           },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSalonProfile([HomeData? data]) async {
+    final branding = SalonBranding.fromName(
+      _profile.salonName,
+      overrideHexColor: _profile.salonBrandColor,
+      businessSegment: _profile.salonBusinessSegment,
+      clientAppConfig: _profile.salonClientAppConfig,
+    );
+
+    await Navigator.of(context).push(
+      SalonPageRoute<void>(
+        builder: (_) => PremiumSalonProfileScreen(
+          profile: _profile,
+          branding: branding,
+          services: data?.services ?? const <ServiceItem>[],
+          posts: data?.posts ?? const <SalonPost>[],
+          offers: data?.offers ?? const <SalonOfferItem>[],
+          onBookService: (service) => _openBooking(service, data),
+          onWhatsApp: _openWhatsApp,
         ),
       ),
     );
@@ -421,16 +444,12 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
       _profile.salonName,
       overrideHexColor: _profile.salonBrandColor,
       businessSegment: _profile.salonBusinessSegment,
+      clientAppConfig: _profile.salonClientAppConfig,
     );
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: const Color(0xFFFFFBF7),
-      builder: (context) => FractionallySizedBox(
-        heightFactor: 0.82,
-        child: NotificationCenterSheet(
+    await Navigator.of(context).push(
+      SalonPageRoute<void>(
+        builder: (_) => PremiumNotificationsScreen(
           branding: branding,
           notifications: notifications,
           onArchiveNotifications: widget.repository.archiveNotifications,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -55,12 +56,12 @@ class NotificationTapPayload {
     return NotificationTapPayload(
       type: message.data['type']?.toString() ?? 'update',
       title:
-          message.notification?.title ??
           message.data['title']?.toString() ??
+          message.notification?.title ??
           'Novidade no salão',
       body:
-          message.notification?.body ??
           message.data['body']?.toString() ??
+          message.notification?.body ??
           'Confira a atualização mais recente no app.',
       receivedAt: DateTime.now(),
       data: Map<String, dynamic>.from(message.data),
@@ -121,6 +122,10 @@ class PushNotificationService {
   StreamSubscription<RemoteMessage>? _foregroundMessagesSubscription;
   StreamSubscription<RemoteMessage>? _openedAppMessagesSubscription;
   final Map<String, DateTime> _recentNotificationKeys = <String, DateTime>{};
+  final Map<String, AndroidBitmap<Object>> _largeIconCache =
+      <String, AndroidBitmap<Object>>{};
+  final Map<String, Future<AndroidBitmap<Object>?>> _largeIconRequests =
+      <String, Future<AndroidBitmap<Object>?>>{};
   Future<void>? _initializationFuture;
   bool _isInitialized = false;
   bool _firebaseAvailable = false;
@@ -251,8 +256,9 @@ class PushNotificationService {
     }
 
     final notificationType = notificationPayload.type;
-    final title = notificationPayload.title;
-    final body = notificationPayload.body;
+    final title = _buildDisplayTitle(notificationPayload);
+    final body = _buildDisplayBody(notificationPayload);
+    final largeIcon = await _resolveLargeIcon(notificationPayload);
     final channel = notificationType == 'vacancy_alert'
         ? _vacancyChannel
         : _updatesChannel;
@@ -278,6 +284,7 @@ class PushNotificationService {
           autoCancel: true,
           ticker: title,
           icon: _androidNotificationIcon,
+          largeIcon: largeIcon,
           styleInformation: BigTextStyleInformation(body),
         ),
       ),
@@ -379,5 +386,127 @@ class PushNotificationService {
     _recentNotificationKeys.removeWhere(
       (_, shownAt) => shownAt.isBefore(threshold),
     );
+  }
+
+  Future<AndroidBitmap<Object>?> _resolveLargeIcon(
+    NotificationTapPayload notificationPayload,
+  ) async {
+    final salonLogoUrl = _readSalonLogoUrl(notificationPayload);
+    if (salonLogoUrl == null) {
+      return null;
+    }
+
+    final cached = _largeIconCache[salonLogoUrl];
+    if (cached != null) {
+      return cached;
+    }
+
+    final inFlight = _largeIconRequests[salonLogoUrl];
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _downloadLargeIcon(salonLogoUrl);
+    _largeIconRequests[salonLogoUrl] = future;
+
+    try {
+      final bitmap = await future;
+      if (bitmap != null) {
+        _largeIconCache[salonLogoUrl] = bitmap;
+        _trimLargeIconCache();
+      }
+      return bitmap;
+    } finally {
+      _largeIconRequests.remove(salonLogoUrl);
+    }
+  }
+
+  String? _readSalonLogoUrl(NotificationTapPayload notificationPayload) {
+    final raw = notificationPayload.data['salonLogoUrl']?.toString().trim();
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !(uri.isScheme('https') || uri.isScheme('http'))) {
+      return null;
+    }
+
+    return raw;
+  }
+
+  String? _readSalonName(NotificationTapPayload notificationPayload) {
+    final raw = notificationPayload.data['salonName']?.toString().trim();
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+
+    return raw;
+  }
+
+  String _buildDisplayTitle(NotificationTapPayload notificationPayload) {
+    return _readSalonName(notificationPayload) ?? notificationPayload.title;
+  }
+
+  String _buildDisplayBody(NotificationTapPayload notificationPayload) {
+    final salonName = _readSalonName(notificationPayload);
+    final semanticTitle = notificationPayload.title.trim();
+    final semanticBody = notificationPayload.body.trim();
+
+    if (salonName == null) {
+      if (semanticBody.isNotEmpty) {
+        return semanticBody;
+      }
+
+      return semanticTitle;
+    }
+
+    if (semanticTitle.isEmpty) {
+      return semanticBody;
+    }
+
+    if (semanticBody.isEmpty || semanticBody == semanticTitle) {
+      return semanticTitle;
+    }
+
+    return '$semanticTitle\n$semanticBody';
+  }
+
+  Future<AndroidBitmap<Object>?> _downloadLargeIcon(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return null;
+    }
+
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+
+    try {
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+
+      final bytes = await consolidateHttpClientResponseBytes(response);
+      if (bytes.isEmpty) {
+        return null;
+      }
+
+      return ByteArrayAndroidBitmap.fromBase64String(base64Encode(bytes))
+          as AndroidBitmap<Object>;
+    } catch (error, stackTrace) {
+      debugPrint('Notification logo load failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  void _trimLargeIconCache() {
+    const maxEntries = 18;
+    while (_largeIconCache.length > maxEntries) {
+      _largeIconCache.remove(_largeIconCache.keys.first);
+    }
   }
 }

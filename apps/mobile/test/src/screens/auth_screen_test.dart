@@ -19,14 +19,9 @@ void main() {
     ) async {
       await _pumpAuthScreen(tester, repository: _FakeAuthRepository());
 
-      expect(find.text('Entre e continue para o seu salão.'), findsOneWidget);
-      expect(
-        find.text(
-          'Seu login leva ao próximo passo: conectar o código do salão e liberar agenda, benefícios e contato.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Tudo do seu salão em um só lugar.'), findsOneWidget);
+      expect(find.text('Entre e siga para seu salão.'), findsOneWidget);
+      expect(find.text('No próximo passo, você conecta o salão.'), findsOneWidget);
+      expect(find.text('Seu salão, no seu ritmo.'), findsOneWidget);
       expect(find.text('Contato que resolve rápido'), findsOneWidget);
     });
 
@@ -40,10 +35,10 @@ void main() {
       );
 
       final authPanelTop = tester.getTopLeft(
-        find.text('Entre e continue para o seu salão.'),
+        find.text('Entre e siga para seu salão.'),
       );
       final showcaseTop = tester.getTopLeft(
-        find.text('Tudo do seu salão em um só lugar.'),
+        find.text('Seu salão, no seu ritmo.'),
       );
 
       expect(authPanelTop.dy, lessThan(showcaseTop.dy));
@@ -65,17 +60,15 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.text('Crie sua conta e continue para o seu salão.'),
+          find.text('Crie sua conta e siga para seu salão.'),
           findsOneWidget,
         );
         expect(
-          find.text('Sua conta começa simples e cresce com o salão.'),
+          find.text('Uma conta para entrar em qualquer salão.'),
           findsOneWidget,
         );
         expect(
-          find.text(
-            'Você cria o acesso agora e informa o código do salão depois para liberar a experiência certa.',
-          ),
+          find.text('Crie o acesso agora. O código do salão vem depois.'),
           findsOneWidget,
         );
 
@@ -94,12 +87,10 @@ void main() {
         expect(repository.signUpRequests.single.email, 'talita@email.com');
         expect(repository.signUpRequests.single.password, 'segredo123');
         expect(
-          find.text(
-            'Conta criada com sucesso. Agora entre e continue para conectar o código do seu salão.',
-          ),
+          find.text('Conta criada com sucesso. Agora entre no app.'),
           findsOneWidget,
         );
-        expect(find.text('Entre e continue para o seu salão.'), findsOneWidget);
+        expect(find.text('Entre e siga para seu salão.'), findsOneWidget);
       },
     );
   });

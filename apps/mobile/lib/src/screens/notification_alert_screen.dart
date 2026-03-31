@@ -5,7 +5,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/salon_repository.dart';
 import '../services/push_notification_service.dart';
 import '../theme/service_category_visual.dart';
+import '../widgets/app_backdrop.dart';
 import '../widgets/cancel_appointment_sheet.dart';
+import '../widgets/cinematic_reveal.dart';
+import '../widgets/soft_card.dart';
 
 class NotificationAlertScreen extends StatefulWidget {
   const NotificationAlertScreen({
@@ -245,247 +248,373 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
     final postPublishedAt = _postPublishedAt;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F0E8),
-      appBar: AppBar(title: const Text('Aviso do salão')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    tone.deep,
-                    tone.primary,
-                    Color.lerp(tone.primary, Colors.white, 0.08)!,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(32),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x1A27170F),
-                    blurRadius: 26,
-                    offset: Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Icon(tone.icon, color: Colors.white, size: 30),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    tone.label,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.92),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    notification.title,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      height: 1.05,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    notification.body,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.94),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'Recebida em ${DateFormat('dd/MM • HH:mm').format(notification.receivedAt)}',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      if (appointmentAt != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            'Horário: ${DateFormat('dd/MM • HH:mm').format(appointmentAt)}',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: const Color(0xFFE3D5C7)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Resumo do aviso',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF2F231C),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _descriptionFor(notification.type),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF765E4E),
-                      height: 1.55,
-                    ),
-                  ),
-                  if (_nextStepFor(notification) case final nextStep?) ...[
-                    const SizedBox(height: 18),
-                    _NextStepCard(message: nextStep),
-                  ],
-                  if (_isFeedPostNotification) ...[
-                    const SizedBox(height: 18),
-                    _FeedPostPreviewCard(
-                      title: _postTitle ?? notification.title,
-                      caption: _postCaption ?? notification.body,
-                      imageUrl: _postImageUrl,
-                      videoUrl: _postVideoUrl,
-                      postType: _postType,
-                      serviceName: _postServiceName,
-                      staffMemberName: _postStaffMemberName,
-                      publishedAt: postPublishedAt,
-                    ),
-                  ],
-                  if (_staffMemberName != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Profissional: $_staffMemberName',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF5F4B3E),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                  if (_requiresAttendanceConfirmation) ...[
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8F1E8),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(color: const Color(0xFFE7D6C4)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Confirme agora para manter seu horário',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: const Color(0xFF2F231C),
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Se você não puder comparecer, cancele por aqui para liberar a agenda do salão a tempo.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: const Color(0xFF765E4E),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed:
-                                  _isConfirmingPresence ||
-                                      _isCancellingAppointment
-                                  ? null
-                                  : _confirmPresence,
-                              icon: const Icon(Icons.verified_user_rounded),
-                              label: Text(
-                                _isConfirmingPresence
-                                    ? 'Confirmando presença...'
-                                    : 'Confirmar presença',
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  _isConfirmingPresence ||
-                                      _isCancellingAppointment
-                                  ? null
-                                  : _cancelAppointment,
-                              icon: const Icon(Icons.event_busy_rounded),
-                              label: Text(
-                                _isCancellingAppointment
-                                    ? 'Cancelando horário...'
-                                    : 'Cancelar horário',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (_resolution != null) ...[
-                    const SizedBox(height: 20),
-                    _ResolutionCard(resolution: _resolution!),
-                  ],
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.check_circle_outline_rounded),
-                    label: const Text('Entendi'),
-                  ),
-                ],
+            const Text('Aviso do salão'),
+            Text(
+              'Alerta em destaque',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: tone.deep.withValues(alpha: 0.72),
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
+      ),
+      body: AppBackdrop(
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            children: [
+              CinematicReveal(
+                delay: const Duration(milliseconds: 20),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        tone.deep,
+                        tone.primary,
+                        Color.lerp(tone.primary, Colors.white, 0.08)!,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x1A27170F),
+                        blurRadius: 26,
+                        offset: Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Icon(
+                              tone.icon,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tone.label,
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  notification.title,
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                        height: 1.05,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        notification.body,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.94),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Recebida em ${DateFormat('dd/MM • HH:mm').format(notification.receivedAt)}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (appointmentAt != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'Horário: ${DateFormat('dd/MM • HH:mm').format(appointmentAt)}',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              CinematicReveal(
+                delay: const Duration(milliseconds: 90),
+                child: _AlertContextStrip(
+                  tone: tone,
+                  notificationType: notification.type,
+                ),
+              ),
+              const SizedBox(height: 18),
+              CinematicReveal(
+                delay: const Duration(milliseconds: 140),
+                child: SoftCard(
+                  padding: const EdgeInsets.all(20),
+                  borderColor: const Color(0xFFE3D5C7),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Resumo do aviso',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: const Color(0xFF2F231C),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _descriptionFor(notification.type),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFF765E4E),
+                          height: 1.55,
+                        ),
+                      ),
+                      if (_nextStepFor(notification) case final nextStep?) ...[
+                        const SizedBox(height: 18),
+                        _NextStepCard(message: nextStep),
+                      ],
+                      if (_isFeedPostNotification) ...[
+                        const SizedBox(height: 18),
+                        _FeedPostPreviewCard(
+                          title: _postTitle ?? notification.title,
+                          caption: _postCaption ?? notification.body,
+                          imageUrl: _postImageUrl,
+                          videoUrl: _postVideoUrl,
+                          postType: _postType,
+                          serviceName: _postServiceName,
+                          staffMemberName: _postStaffMemberName,
+                          publishedAt: postPublishedAt,
+                        ),
+                      ],
+                      if (_staffMemberName != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Profissional: $_staffMemberName',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: const Color(0xFF5F4B3E),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                      if (_requiresAttendanceConfirmation) ...[
+                        const SizedBox(height: 20),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8F1E8),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFE7D6C4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Confirme agora para manter seu horário',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: const Color(0xFF2F231C),
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Se você não puder comparecer, cancele por aqui para liberar a agenda do salão a tempo.',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: const Color(0xFF765E4E),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed:
+                                      _isConfirmingPresence ||
+                                          _isCancellingAppointment
+                                      ? null
+                                      : _confirmPresence,
+                                  icon: const Icon(Icons.verified_user_rounded),
+                                  label: Text(
+                                    _isConfirmingPresence
+                                        ? 'Confirmando presença...'
+                                        : 'Confirmar presença',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed:
+                                      _isConfirmingPresence ||
+                                          _isCancellingAppointment
+                                      ? null
+                                      : _cancelAppointment,
+                                  icon: const Icon(Icons.event_busy_rounded),
+                                  label: Text(
+                                    _isCancellingAppointment
+                                        ? 'Cancelando horário...'
+                                        : 'Cancelar horário',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (_resolution != null) ...[
+                        const SizedBox(height: 20),
+                        _ResolutionCard(resolution: _resolution!),
+                      ],
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.check_circle_outline_rounded),
+                        label: const Text('Entendi'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AlertContextStrip extends StatelessWidget {
+  const _AlertContextStrip({
+    required this.tone,
+    required this.notificationType,
+  });
+
+  final _NotificationTone tone;
+  final String notificationType;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = switch (notificationType) {
+      'appointment_confirmation_required' => 'Esse aviso pede ação rápida',
+      'feed_post_published' => 'Esse aviso mostra uma referência',
+      'vacancy_alert' => 'Esse encaixe pode sumir rápido',
+      _ => 'Esse alerta muda seu próximo passo',
+    };
+    final message = switch (notificationType) {
+      'appointment_confirmation_required' =>
+        'Confirmação, cancelamento e próximos passos aparecem na mesma tela.',
+      'feed_post_published' =>
+        'A publicação já vira referência antes mesmo de você abrir o feed.',
+      'vacancy_alert' =>
+        'O valor desse alerta está em chegar cedo e agir antes de todo mundo.',
+      _ =>
+        'Aqui você vê rápido o que esse aviso muda no seu uso do app.',
+    };
+
+    return SoftCard(
+      padding: const EdgeInsets.all(18),
+      gradient: LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.98),
+          tone.primary.withValues(alpha: 0.08),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: tone.primary.withValues(alpha: 0.18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: tone.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(tone.icon, color: tone.deep, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: const Color(0xFF2F231C),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF765E4E),
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -521,10 +650,10 @@ class _ResolutionCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: colors.background,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: colors.border),
       ),
       child: Row(
@@ -568,16 +697,29 @@ class _NextStepCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFF8F1E8),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE7D6C4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.bolt_rounded, color: Color(0xFF8D5B28)),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE7D6C4)),
+            ),
+            child: const Icon(
+              Icons.bolt_rounded,
+              size: 18,
+              color: Color(0xFF8D5B28),
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -681,48 +823,48 @@ String _descriptionFor(String type) {
   switch (type) {
     case 'promotion_published':
     case 'promotion_updated':
-      return 'O salão publicou ou atualizou uma promoção. Abra o app para ver os detalhes e decidir se vale aproveitar.';
+      return 'O salão publicou ou atualizou uma promoção.';
     case 'winback_offer':
-      return 'O salão ativou uma oferta de retorno para facilitar sua próxima visita.';
+      return 'O salão ativou uma oferta de retorno.';
     case 'smart_rebook_prompt':
-      return 'O app percebeu que já é um bom momento para reservar o próximo horário.';
+      return 'Já é um bom momento para reservar o próximo horário.';
     case 'membership_published':
     case 'membership_updated':
-      return 'Um plano mensal foi publicado ou atualizado. Abra o app para ver valores e benefícios.';
+      return 'Um plano mensal foi publicado ou atualizado.';
     case 'loyalty_program_updated':
-      return 'O salão atualizou a fidelidade com pontos, cashback ou novos níveis.';
+      return 'O salão atualizou a fidelidade.';
     case 'loyalty_tier_unlocked':
     case 'loyalty_vip_unlocked':
-      return 'Seu histórico no salão liberou um novo nível de fidelidade. Abra o app para ver seus benefícios.';
+      return 'Seu histórico liberou um novo nível de fidelidade.';
     case 'referral_program_updated':
-      return 'O salão atualizou o programa de indicação. Confira as regras no app.';
+      return 'O salão atualizou o programa de indicação.';
     case 'service_published':
     case 'service_updated':
-      return 'O catálogo do salão mudou. Veja serviços, preços ou duração atualizados.';
+      return 'O catálogo do salão mudou.';
     case 'feed_post_published':
-      return 'O salão publicou um novo resultado no feed. Veja o preview abaixo antes de abrir o app.';
+      return 'O salão publicou um novo resultado no feed.';
     case 'appointment_confirmed':
-      return 'Seu horário foi confirmado pelo salão. Agora você já pode se programar para comparecer no atendimento.';
+      return 'Seu horário foi confirmado pelo salão.';
     case 'appointment_reminder_1h':
-      return 'Falta uma hora para o seu atendimento. Organize-se para chegar com calma.';
+      return 'Falta uma hora para o seu atendimento.';
     case 'appointment_confirmation_required':
-      return 'O salão pediu sua confirmação de presença. Você pode confirmar ou cancelar agora.';
+      return 'O salão pediu sua confirmação de presença.';
     case 'appointment_auto_cancelled_unconfirmed':
-      return 'Como a presença não foi confirmada a tempo, o horário foi liberado.';
+      return 'A presença não foi confirmada a tempo e o horário foi liberado.';
     case 'appointment_staff_reassigned':
-      return 'O salão trocou o profissional do seu horário. O atendimento continua reservado.';
+      return 'O salão trocou o profissional do seu horário.';
     case 'appointment_cancelled':
-      return 'O salão cancelou o horário. Abra o app para verificar os detalhes e escolher um novo atendimento se necessário.';
+      return 'O salão cancelou o horário.';
     case 'appointment_completed':
       return 'Seu atendimento foi marcado como concluído pelo salão.';
     case 'vacancy_alert':
-      return 'Um horário foi liberado no salão. Se ainda estiver disponível, você pode aproveitar essa vaga no app.';
+      return 'Um horário foi liberado no salão.';
     case 'referral_qualified':
-      return 'Uma indicação sua concluiu a primeira visita e seu progresso foi atualizado.';
+      return 'Uma indicação sua concluiu a primeira visita.';
     case 'referral_reward_unlocked':
-      return 'Sua recompensa por indicação já foi liberada no sistema.';
+      return 'Sua recompensa por indicação já foi liberada.';
     default:
-      return 'O salão enviou uma atualização importante. Abra o app sempre que quiser revisar esse aviso.';
+      return 'O salão enviou uma atualização importante.';
   }
 }
 
@@ -735,33 +877,33 @@ String? _nextStepFor(NotificationTapPayload notification) {
 
   switch (type) {
     case 'feed_post_published':
-      return 'Use essa referência para decidir com mais segurança e abra o feed para reservar ou conversar com o salão.';
+      return 'Use essa referência para decidir e abra o feed se quiser ver mais.';
     case 'vacancy_alert':
-      return 'Se esse horário fizer sentido para você, vale tentar reservar logo antes que outro cliente pegue o encaixe.';
+      return 'Se esse horário fizer sentido, vale reservar logo.';
     case 'winback_offer':
       return 'Se a oferta combinar com você, aproveite para voltar ao salão.';
     case 'smart_rebook_prompt':
-      return 'Seu momento de voltar chegou. Reservar agora ajuda a manter a rotina.';
+      return 'Seu momento de voltar chegou.';
     case 'appointment_confirmation_required':
       final target = serviceName == null || serviceName.isEmpty
           ? 'o seu horário'
           : serviceName;
       if (staffMemberName != null && staffMemberName.isNotEmpty) {
-        return 'Confirme agora para manter $target com $staffMemberName e evitar que a agenda seja liberada.';
+        return 'Confirme agora para manter $target com $staffMemberName.';
       }
-      return 'Confirme agora para manter $target reservado e evitar que a agenda seja liberada.';
+      return 'Confirme agora para manter $target reservado.';
     case 'appointment_confirmed':
-      return 'Seu horário está confirmado. Agora é só se organizar ou alinhar detalhes com o salão.';
+      return 'Seu horário está confirmado.';
     case 'appointment_reminder_1h':
-      return 'Saia com antecedência ou avise o salão se precisar ajustar algo.';
+      return 'Saia com antecedência ou avise o salão.';
     case 'appointment_staff_reassigned':
-      return 'Confira o profissional responsável e siga com o horário se a troca continuar boa para você.';
+      return 'Confira o profissional responsável e siga com o horário.';
     case 'appointment_auto_cancelled_unconfirmed':
-      return 'Abra a agenda assim que puder para tentar recuperar outro encaixe antes que os melhores horários sumam.';
+      return 'Abra a agenda assim que puder para tentar recuperar outro encaixe.';
     case 'appointment_cancelled':
-      return 'Se ainda quiser manter a visita, procure um novo horário no app enquanto a agenda estiver aberta.';
+      return 'Se ainda quiser manter a visita, procure um novo horário no app.';
     case 'appointment_completed':
-      return 'Depois da visita, vale abrir a carteira para conferir pontos, cashback ou desconto.';
+      return 'Depois da visita, vale abrir a carteira.';
     case 'loyalty_program_updated':
     case 'loyalty_tier_unlocked':
     case 'loyalty_vip_unlocked':
@@ -774,13 +916,13 @@ String? _nextStepFor(NotificationTapPayload notification) {
       return 'Se a campanha combinar com o que você costuma fazer, vale aproveitar enquanto ela está ativa.';
     case 'service_published':
     case 'service_updated':
-      return 'Veja se esse serviço combina com sua rotina e já pense se faz sentido encaixar no próximo retorno.';
+      return 'Veja se esse serviço combina com sua rotina.';
     case 'referral_program_updated':
       return 'Se você gosta do salão, esse é um bom momento para compartilhar seu código.';
     case 'referral_qualified':
-      return 'Sua meta andou. Vale acompanhar quantas indicações faltam para liberar a próxima recompensa.';
+      return 'Sua meta andou. Veja quantas indicações faltam.';
     case 'referral_reward_unlocked':
-      return 'Guarde essa recompensa para usar na próxima visita e não deixar benefício parado.';
+      return 'Guarde essa recompensa para usar na próxima visita.';
     default:
       return null;
   }
@@ -822,10 +964,10 @@ class _FeedPostPreviewCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFF8F1E8),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE7D6C4)),
       ),
       child: Column(
@@ -886,11 +1028,16 @@ class _FeedPostPreviewCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (serviceName != null ||
-              staffMemberName != null ||
-              publishedAt != null ||
-              postType != null)
-            const SizedBox(height: 12),
+          const SizedBox(height: 12),
+          Text(
+            'Preview do feed',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: const Color(0xFF8D6B59),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
             title,
             style: theme.textTheme.titleSmall?.copyWith(
@@ -906,12 +1053,35 @@ class _FeedPostPreviewCard extends StatelessWidget {
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Abra a aba Feed do salão para ver a publicação completa, curtir, comentar ou usar esse resultado para decidir seu próximo agendamento.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF8D6B59),
-              fontWeight: FontWeight.w700,
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.76),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE7D6C4)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.touch_app_rounded,
+                  size: 16,
+                  color: Color(0xFF8D6B59),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Abra a aba Feed do salão para ver a publicação completa, curtir, comentar ou usar esse resultado para decidir seu próximo agendamento.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF8D6B59),
+                      fontWeight: FontWeight.w700,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -929,9 +1099,9 @@ class _FeedMetaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: const Color(0xFFE5D2BF)),
       ),

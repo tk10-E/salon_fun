@@ -1,18 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models/app_models.dart';
+import 'navigation/salon_page_route.dart';
 import 'repositories/salon_repository.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/join_salon_screen.dart';
 import 'screens/notification_alert_screen.dart';
+import 'services/app_link_service.dart';
 import 'services/push_notification_service.dart';
+import 'theme/salon_brand_config.dart';
 import 'theme/salon_branding.dart';
 import 'theme/salon_experience_preset.dart';
+import 'theme/tenant_theme.dart';
 import 'widgets/branded_loading_view.dart';
+import 'widgets/launch_experience_overlay.dart';
 
 class SalonClientApp extends StatefulWidget {
   const SalonClientApp({super.key});
@@ -23,18 +29,24 @@ class SalonClientApp extends StatefulWidget {
 
 class _SalonClientAppState extends State<SalonClientApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<SalonAppLink>? _appLinkSubscription;
   StreamSubscription<NotificationTapPayload>? _notificationTapSubscription;
   String? _lastOpenedNotificationKey;
   CustomerProfile? _activeProfile;
+  String? _pendingJoinCode;
 
   @override
   void initState() {
     super.initState();
+    _appLinkSubscription = AppLinkService.instance.linkStream.listen(
+      _handleIncomingAppLink,
+    );
     _notificationTapSubscription = PushNotificationService
         .instance
         .onNotificationTap
         .listen(_openNotificationAlert);
 
+    unawaited(_consumeInitialAppLink());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final initialTap = PushNotificationService.instance.consumeInitialTap();
       if (initialTap != null) {
@@ -45,8 +57,37 @@ class _SalonClientAppState extends State<SalonClientApp> {
 
   @override
   void dispose() {
+    unawaited(_appLinkSubscription?.cancel());
     unawaited(_notificationTapSubscription?.cancel());
     super.dispose();
+  }
+
+  Future<void> _consumeInitialAppLink() async {
+    final initialLink = await AppLinkService.instance.getInitialLink();
+    if (initialLink == null || !mounted) {
+      return;
+    }
+
+    _handleIncomingAppLink(initialLink);
+  }
+
+  void _handleIncomingAppLink(SalonAppLink link) {
+    final joinCode = link.joinCode;
+    if (joinCode == null ||
+        _activeProfile != null ||
+        _pendingJoinCode == joinCode) {
+      return;
+    }
+
+    setState(() => _pendingJoinCode = joinCode);
+  }
+
+  void _handleJoinCodeConsumed(String joinCode) {
+    if (_pendingJoinCode != joinCode) {
+      return;
+    }
+
+    setState(() => _pendingJoinCode = null);
   }
 
   void _openNotificationAlert(NotificationTapPayload payload) {
@@ -61,7 +102,7 @@ class _SalonClientAppState extends State<SalonClientApp> {
     }
 
     navigator.push(
-      MaterialPageRoute<void>(
+      SalonPageRoute<void>(
         builder: (_) => NotificationAlertScreen(notification: payload),
       ),
     );
@@ -75,171 +116,20 @@ class _SalonClientAppState extends State<SalonClientApp> {
     setState(() => _activeProfile = profile);
   }
 
-  ThemeData _buildTheme(SalonBranding branding) {
-    final colorScheme =
-        ColorScheme.fromSeed(
-          seedColor: branding.primary,
-          brightness: Brightness.light,
-        ).copyWith(
-          primary: branding.primary,
-          secondary: branding.primary,
-          surface: Colors.white,
-          onSurface: branding.deep,
-        );
-
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: Color.lerp(branding.surface, Colors.white, 0.35),
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: branding.deep,
-        contentTextStyle: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      ),
-      appBarTheme: AppBarTheme(
-        backgroundColor: Color.lerp(branding.surface, Colors.white, 0.34),
-        foregroundColor: branding.deep,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: TextStyle(
-          color: branding.deep,
-          fontSize: 24,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      cardTheme: CardThemeData(
-        color: Colors.white,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: branding.outline.withValues(alpha: 0.72)),
-        ),
-      ),
-      tabBarTheme: TabBarThemeData(
-        dividerColor: Colors.transparent,
-        indicatorColor: branding.primary,
-        labelColor: branding.deep,
-        unselectedLabelColor: branding.mutedText,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: branding.primary,
-          foregroundColor: branding.onPrimary,
-          disabledBackgroundColor: branding.outline.withValues(alpha: 0.88),
-          textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-          minimumSize: const Size.fromHeight(54),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: branding.deep,
-          side: BorderSide(color: branding.outline.withValues(alpha: 0.9)),
-          minimumSize: const Size.fromHeight(50),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
-      chipTheme: ThemeData.light(useMaterial3: true).chipTheme.copyWith(
-        backgroundColor: Colors.white,
-        selectedColor: branding.chipBackground,
-        side: BorderSide(color: branding.outline.withValues(alpha: 0.84)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        labelStyle: TextStyle(
-          color: branding.deep,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.92),
-        labelStyle: TextStyle(color: branding.mutedText),
-        floatingLabelStyle: TextStyle(
-          color: branding.primary,
-          fontWeight: FontWeight.w700,
-        ),
-        hintStyle: TextStyle(color: branding.mutedText.withValues(alpha: 0.62)),
-        prefixIconColor: branding.mutedText.withValues(alpha: 0.82),
-        suffixIconColor: branding.mutedText.withValues(alpha: 0.82),
-        errorStyle: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
-        errorMaxLines: 2,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 16,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: branding.outline.withValues(alpha: 0.8),
-          ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: branding.outline.withValues(alpha: 0.8),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(color: branding.primary, width: 1.5),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: Color(0xFFD5655A), width: 1.2),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: Color(0xFFC94D43), width: 1.6),
-        ),
-      ),
-      textTheme: ThemeData.light(useMaterial3: true).textTheme.copyWith(
-        headlineMedium: TextStyle(
-          color: branding.deep,
-          fontSize: 34,
-          height: 1.02,
-          fontWeight: FontWeight.w800,
-        ),
-        headlineSmall: TextStyle(
-          color: branding.deep,
-          fontSize: 28,
-          height: 1.05,
-          fontWeight: FontWeight.w800,
-        ),
-        titleLarge: TextStyle(
-          color: branding.deep,
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-        ),
-        titleMedium: TextStyle(
-          color: branding.deep,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
-        bodyLarge: TextStyle(
-          color: branding.mutedText,
-          fontSize: 16,
-          height: 1.5,
-        ),
-        bodyMedium: TextStyle(
-          color: branding.mutedText,
-          fontSize: 14,
-          height: 1.45,
-        ),
-        labelLarge: TextStyle(
-          color: branding.deep,
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.4,
-        ),
+  ThemeData _buildTheme(SalonBranding branding, SalonBrandConfig brandConfig) {
+    return PremiumTenantTheme.buildTheme(
+      branding: branding,
+      brand: brandConfig,
+    ).copyWith(
+      splashFactory: InkSparkle.splashFactory,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _SalonPageTransitionsBuilder(),
+          TargetPlatform.iOS: _SalonPageTransitionsBuilder(),
+          TargetPlatform.macOS: _SalonPageTransitionsBuilder(),
+          TargetPlatform.windows: _SalonPageTransitionsBuilder(),
+          TargetPlatform.linux: _SalonPageTransitionsBuilder(),
+        },
       ),
     );
   }
@@ -252,14 +142,94 @@ class _SalonClientAppState extends State<SalonClientApp> {
             _activeProfile!.salonName,
             overrideHexColor: _activeProfile!.salonBrandColor,
             businessSegment: _activeProfile!.salonBusinessSegment,
+            clientAppConfig: _activeProfile!.salonClientAppConfig,
           );
+    final activeBrandConfig = _activeProfile == null
+        ? SalonBrandConfig.fromProfile(
+            const CustomerProfile(
+              id: 'preview',
+              name: 'Cliente',
+              salonId: 'preview-salon',
+              salonName: 'Salon Fun',
+              salonTagline: 'Experiencia premium para saloes autorais.',
+              salonBrandColor: '#C56B43',
+            ),
+          )
+        : SalonBrandConfig.fromProfile(_activeProfile!);
 
     return MaterialApp(
       title: _activeProfile?.salonName ?? 'Salon Fun',
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
-      theme: _buildTheme(activeBranding),
-      home: _SessionGate(onActiveProfileChanged: _handleActiveProfileChanged),
+      theme: _buildTheme(activeBranding, activeBrandConfig),
+      themeAnimationCurve: Curves.easeOutCubic,
+      themeAnimationDuration: const Duration(milliseconds: 220),
+      builder: (context, child) {
+        final isDarkShell = activeBrandConfig.isDarkShell;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value:
+              (isDarkShell
+                      ? SystemUiOverlayStyle.light
+                      : SystemUiOverlayStyle.dark)
+                  .copyWith(
+                    statusBarColor: Colors.transparent,
+                    systemNavigationBarColor: isDarkShell
+                        ? const Color(0xFF18110E)
+                        : const Color(0xFFFDF7F1),
+                    systemNavigationBarIconBrightness: isDarkShell
+                        ? Brightness.light
+                        : Brightness.dark,
+                  ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+      home: LaunchExperienceOverlay(
+        branding: activeBranding,
+        logoUrl: _activeProfile?.salonLogoUrl,
+        salonName: _activeProfile?.salonName ?? 'Salon Fun',
+        child: _SessionGate(
+          onActiveProfileChanged: _handleActiveProfileChanged,
+          pendingJoinCode: _pendingJoinCode,
+          onJoinCodeConsumed: _handleJoinCodeConsumed,
+        ),
+      ),
+    );
+  }
+}
+
+class _SalonPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _SalonPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (route.fullscreenDialog) {
+      return child;
+    }
+
+    final curve = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutQuart,
+      reverseCurve: Curves.easeInCubic,
+    );
+
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.82, end: 1).animate(curve),
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.04, 0.028),
+          end: Offset.zero,
+        ).animate(curve),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.985, end: 1).animate(curve),
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -279,13 +249,21 @@ bool _sameBrandingProfile(CustomerProfile? left, CustomerProfile? right) {
       normalizeSalonBusinessSegment(left.salonBusinessSegment) ==
           normalizeSalonBusinessSegment(right.salonBusinessSegment) &&
       left.salonLogoUrl == right.salonLogoUrl &&
-      left.salonTagline == right.salonTagline;
+      left.salonTagline == right.salonTagline &&
+      left.salonClientAppConfig?.rawConfig.toString() ==
+          right.salonClientAppConfig?.rawConfig.toString();
 }
 
 class _SessionGate extends StatefulWidget {
-  const _SessionGate({required this.onActiveProfileChanged});
+  const _SessionGate({
+    required this.onActiveProfileChanged,
+    required this.pendingJoinCode,
+    required this.onJoinCodeConsumed,
+  });
 
   final ValueChanged<CustomerProfile?> onActiveProfileChanged;
+  final String? pendingJoinCode;
+  final ValueChanged<String> onJoinCodeConsumed;
 
   @override
   State<_SessionGate> createState() => _SessionGateState();
@@ -336,6 +314,8 @@ class _SessionGateState extends State<_SessionGate> {
         return _CustomerGate(
           repository: _repository,
           onActiveProfileChanged: _reportActiveProfile,
+          pendingJoinCode: widget.pendingJoinCode,
+          onJoinCodeConsumed: widget.onJoinCodeConsumed,
         );
       },
     );
@@ -346,10 +326,14 @@ class _CustomerGate extends StatefulWidget {
   const _CustomerGate({
     required this.repository,
     required this.onActiveProfileChanged,
+    required this.pendingJoinCode,
+    required this.onJoinCodeConsumed,
   });
 
   final SalonRepository repository;
   final ValueChanged<CustomerProfile?> onActiveProfileChanged;
+  final String? pendingJoinCode;
+  final ValueChanged<String> onJoinCodeConsumed;
 
   @override
   State<_CustomerGate> createState() => _CustomerGateState();
@@ -392,6 +376,8 @@ class _CustomerGateState extends State<_CustomerGate> {
           return JoinSalonScreen(
             repository: widget.repository,
             onJoined: _refreshProfile,
+            initialJoinCode: widget.pendingJoinCode,
+            onInitialJoinCodeConsumed: widget.onJoinCodeConsumed,
           );
         }
 

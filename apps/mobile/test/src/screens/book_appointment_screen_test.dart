@@ -20,7 +20,7 @@ void main() {
         entryMessage: 'O salão separou um encaixe especial para você.',
       );
 
-      expect(find.text('Encaixe sugerido pelo salão'), findsOneWidget);
+      expect(find.text('Encaixe sugerido'), findsOneWidget);
       expect(
         find.text('O salão separou um encaixe especial para você.'),
         findsOneWidget,
@@ -117,7 +117,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        expect(find.text('Horários disponíveis'), findsOneWidget);
+        expect(find.text('Horários livres'), findsOneWidget);
         expect(find.text('10:00'), findsOneWidget);
         expect(availabilityCallCount, 2);
       },
@@ -191,10 +191,10 @@ void main() {
         loyaltySummary: _loyaltySummary(),
       );
 
-      expect(find.text('Resumo antes de confirmar'), findsOneWidget);
+      expect(find.text('Resumo da reserva'), findsOneWidget);
       expect(
         find.text(
-          'Seu horário entra no histórico do app assim que a reserva for confirmada e já deixa a próxima visita mais fácil de repetir.',
+          'Seu horário vai para o histórico do app assim que for confirmado.',
         ),
         findsOneWidget,
       );
@@ -206,7 +206,7 @@ void main() {
       );
       expect(
         find.text(
-          'Se quiser alinhar algo antes da visita, fale com o salão pelo WhatsApp.',
+          'Se precisar alinhar algo antes da visita, fale com o salão no WhatsApp.',
         ),
         findsOneWidget,
       );
@@ -227,9 +227,7 @@ void main() {
       await _pumpBookingScreen(tester, repository: repository);
 
       expect(
-        find.text(
-          'Seus profissionais salvos aparecem primeiro para você decidir mais rápido.',
-        ),
+        find.text('Seus profissionais salvos aparecem primeiro.'),
         findsOneWidget,
       );
       expect(

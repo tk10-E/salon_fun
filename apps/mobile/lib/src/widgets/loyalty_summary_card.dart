@@ -77,8 +77,8 @@ class LoyaltySummaryCard extends StatelessWidget {
                     Text(
                       summary.isVip
                           ? hasVipRewardService
-                              ? 'Você já está no nível mais alto e liberou $vipRewardServiceName.'
-                              : 'Você já está no nível mais alto do salão.'
+                                ? 'Você já está no nível mais alto e liberou $vipRewardServiceName.'
+                                : 'Você já está no nível mais alto do salão.'
                           : currentTier == null
                           ? 'A cada visita concluída você sobe de nível.'
                           : 'Seu nível atual é ${currentTier.label}.',
@@ -145,8 +145,8 @@ class LoyaltySummaryCard extends StatelessWidget {
                 Text(
                   summary.isVip
                       ? hasVipRewardService
-                          ? 'Seu desconto progressivo atual é de $currentDiscountLabel% e o salão também libera $vipRewardServiceName como benefício do nível máximo.'
-                          : 'Seu desconto progressivo atual é de $currentDiscountLabel% e o cashback segue acumulando a cada visita.'
+                            ? 'Seu desconto progressivo atual é de $currentDiscountLabel% e o salão também libera $vipRewardServiceName como benefício do nível máximo.'
+                            : 'Seu desconto progressivo atual é de $currentDiscountLabel% e o cashback segue acumulando a cada visita.'
                       : currentTier != null && currentTier.discountPercent > 0
                       ? 'Seu desconto progressivo atual é de $currentDiscountLabel% no próximo atendimento.'
                       : 'Cada visita concluída soma $pointsPerVisit pontos e gera $cashbackPercent% de cashback.',
@@ -205,8 +205,8 @@ class LoyaltySummaryCard extends StatelessWidget {
                   child: Text(
                     nextTier == null
                         ? hasVipRewardService
-                            ? 'Você já desbloqueou o nível máximo do programa. Continue acumulando pontos e cashback nas próximas visitas enquanto mantém $vipRewardServiceName como benefício especial do salão.'
-                            : 'Você já desbloqueou o nível máximo do programa. Continue acumulando pontos e cashback nas próximas visitas.'
+                              ? 'Você já desbloqueou o nível máximo do programa. Continue acumulando pontos e cashback nas próximas visitas enquanto mantém $vipRewardServiceName como benefício especial do salão.'
+                              : 'Você já desbloqueou o nível máximo do programa. Continue acumulando pontos e cashback nas próximas visitas.'
                         : nextTier.isVip && hasVipRewardService
                         ? 'Faltam ${summary.visitsToNextTier} visita${summary.visitsToNextTier == 1 ? '' : 's'} para chegar em ${nextTier.label}, manter ${_percentLabel(nextTier.discountPercent)}% de desconto e liberar $vipRewardServiceName no app.'
                         : 'Faltam ${summary.visitsToNextTier} visita${summary.visitsToNextTier == 1 ? '' : 's'} para chegar em ${nextTier.label} e liberar ${_percentLabel(nextTier.discountPercent)}% de desconto.',
@@ -357,14 +357,15 @@ class _BadgeChip extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: foreground.withValues(alpha: 0.12)),
       ),
       child: Text(
         label,
-        style: theme.textTheme.labelLarge?.copyWith(
+        style: theme.textTheme.labelMedium?.copyWith(
           color: foreground,
           fontWeight: FontWeight.w800,
         ),

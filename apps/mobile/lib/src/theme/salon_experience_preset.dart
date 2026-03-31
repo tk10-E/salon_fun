@@ -123,16 +123,16 @@ class SalonExperiencePreset {
   String nextAvailableSubtitle(String nextAvailableLabel) {
     switch (value) {
       case 'nail_studio':
-        return 'Sua próxima manutenção pode sair em $nextAvailableLabel com reserva direto pelo app.';
+        return 'Sua próxima manutenção pode sair em $nextAvailableLabel.';
       case 'barbershop':
-        return 'Seu próximo corte pode sair em $nextAvailableLabel com confirmação rápida pelo app.';
+        return 'Seu próximo corte pode sair em $nextAvailableLabel.';
       case 'brows_lashes':
-        return 'Seu próximo retoque pode sair em $nextAvailableLabel sem perder o timing ideal.';
+        return 'Seu próximo retoque pode sair em $nextAvailableLabel.';
       case 'aesthetics_clinic':
-        return 'Seu próximo protocolo pode sair em $nextAvailableLabel com continuidade organizada no app.';
+        return 'Seu próximo protocolo pode sair em $nextAvailableLabel.';
       case 'beauty_salon':
       default:
-        return 'Seu próximo horário pode sair em $nextAvailableLabel com reserva direto pelo app.';
+        return 'Seu próximo horário pode sair em $nextAvailableLabel.';
     }
   }
 
@@ -141,13 +141,13 @@ class SalonExperiencePreset {
 
     switch (value) {
       case 'nail_studio':
-        return '$joinedHighlights disponíveis para manutenção e agendamento no app.';
+        return '$joinedHighlights disponíveis no app.';
       case 'barbershop':
-        return '$joinedHighlights disponíveis para manter o visual em dia pelo app.';
+        return '$joinedHighlights disponíveis no app.';
       case 'brows_lashes':
-        return '$joinedHighlights disponíveis para você reservar com mais segurança no app.';
+        return '$joinedHighlights disponíveis no app.';
       case 'aesthetics_clinic':
-        return '$joinedHighlights disponíveis para cuidar do seu protocolo com mais clareza.';
+        return '$joinedHighlights disponíveis no app.';
       case 'beauty_salon':
       default:
         return '$joinedHighlights disponíveis para agendamento no app.';
@@ -159,33 +159,33 @@ class SalonExperiencePreset {
       case 'nail_studio':
         return [
           'Agenda, referências e identidade de $salonLabel no app.',
-          'Carteira com manutenção, fidelidade e vantagens quando o studio ativar.',
-          'Contato rápido para pedir a referência certa e voltar no timing ideal.',
+          'Carteira com manutenção e vantagens quando o studio ativar.',
+          'Contato rápido para alinhar referência e retorno.',
         ];
       case 'barbershop':
         return [
           'Agenda, profissionais e identidade de $salonLabel no app.',
-          'Recorrência, benefícios e avisos pensados para manter corte e barba em dia.',
-          'Contato direto para alinhar estilo, horário e retorno sem fricção.',
+          'Rotina, vantagens e avisos para manter corte e barba em dia.',
+          'Contato direto para alinhar estilo e horário.',
         ];
       case 'brows_lashes':
         return [
           'Agenda, retoques e identidade de $salonLabel no app.',
-          'Carteira com benefícios, retorno ideal e avisos para não perder a manutenção.',
-          'Contato rápido para alinhar preferências, cuidados e próximos passos.',
+          'Carteira com retorno e vantagens no timing certo.',
+          'Contato rápido para alinhar preferências e cuidados.',
         ];
       case 'aesthetics_clinic':
         return [
           'Agenda, protocolos e identidade de $salonLabel no app.',
-          'Carteira com benefícios, acompanhamento e retorno organizado para o próximo cuidado.',
-          'Contato direto para combinar detalhes, dúvidas e evolução do tratamento.',
+          'Carteira com acompanhamento e retorno organizado.',
+          'Contato direto para alinhar dúvidas e próximos passos.',
         ];
       case 'beauty_salon':
       default:
         return [
           'Agenda, serviços e identidade de $salonLabel no app.',
-          'Carteira com fidelidade, cashback, descontos e indicações quando esse salão ativar.',
-          'Contato rápido e avisos que ajudam você a decidir, reservar e voltar.',
+          'Carteira com fidelidade e ofertas quando o salão ativar.',
+          'Contato rápido para decidir, reservar e voltar.',
         ];
     }
   }
@@ -226,29 +226,19 @@ class SalonExperiencePreset {
         'Mesmo quando a publicação ainda não estiver ligada a um serviço, ela já funciona como referência para você conversar com o salão e montar o visual ideal.',
     feedSupportLine:
         'Peça a referência, marque o serviço ou converse com o salão sem sair do app.',
-    membershipSubtitle:
-        'Planos, pacotes e horários do salão organizados para você decidir e reservar mais rápido.',
-    offerSubtitle:
-        'Promoções, benefícios e horários do salão organizados para você decidir e reservar mais rápido.',
-    postsSubtitle:
-        'Veja resultados reais do salão e agende seu próximo cuidado sem sair do app.',
-    benefitsSubtitle:
-        'Agende, acumule cashback e acompanhe suas vantagens direto pelo app.',
-    noServicesSubtitle:
-        'Agenda, contato e cuidados do salão organizados para você resolver tudo no app.',
-    joinUnknownTagline:
-        'Ative a experiência do seu salão com logo, agenda e benefícios personalizados.',
-    joinKnownTagline:
-        'Tudo o que o cliente vê aqui passa a refletir a marca deste salão.',
+    membershipSubtitle: 'Planos e horários do salão em uma leitura rápida.',
+    offerSubtitle: 'Ofertas e horários prontos para reservar.',
+    postsSubtitle: 'Resultados reais para escolher seu próximo cuidado.',
+    benefitsSubtitle: 'Sua carteira e seus retornos no mesmo app.',
+    noServicesSubtitle: 'Agenda e contato do salão no mesmo lugar.',
+    joinUnknownTagline: 'Logo, agenda e identidade do salão no app.',
+    joinKnownTagline: 'Essa é a marca que o cliente vai ver no app.',
     joinPendingTitle: 'Conecte sua conta ao salão certo.',
-    joinPendingDescription:
-        'Digite o código para liberar horários, benefícios e a identidade do seu salão no app.',
-    joinConnectedDescription:
-        'Ao confirmar, o app passa a mostrar agenda, benefícios e avisos da marca certa.',
+    joinPendingDescription: 'Digite o código para liberar agenda e marca.',
+    joinConnectedDescription: 'Ao confirmar, o app assume a marca certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com agenda liberada, identidade certa e benefícios prontos para aparecer.',
-    joinSuccessMessage:
-        'Agora seu app está conectado a {salon}. Agenda, benefícios e contato já aparecem daqui para frente.',
+        'Você vai entrar em {salon} com agenda e marca certas.',
+    joinSuccessMessage: 'Tudo pronto. {salon} já está no seu app.',
     highlightCollectionLabel: 'Serviços do salão',
     highlightCollectionNote: 'Preço visível e escolha sem atrito',
     highlightPortfolioLabel: 'Vitrine do salão',
@@ -296,29 +286,19 @@ class SalonExperiencePreset {
         'Mesmo quando o post ainda não estiver ligado a um serviço, ele já funciona como referência para você alinhar estilo e acabamento com o studio.',
     feedSupportLine:
         'Peça a referência, combine a manutenção e reserve sem sair do app.',
-    membershipSubtitle:
-        'Manutenção, combos e horários do studio organizados para você decidir e reservar mais rápido.',
-    offerSubtitle:
-        'Combos, benefícios e horários do studio organizados para você voltar no timing certo.',
-    postsSubtitle:
-        'Veja referências reais do studio e escolha sua próxima manutenção sem sair do app.',
-    benefitsSubtitle:
-        'Agende, acompanhe vantagens e organize sua próxima manutenção direto pelo app.',
-    noServicesSubtitle:
-        'Agenda, contato e manutenção do studio organizados para você resolver tudo no app.',
-    joinUnknownTagline:
-        'Ative a experiência do seu studio com referências, agenda e benefícios personalizados.',
-    joinKnownTagline:
-        'Tudo o que o cliente vê aqui passa a refletir o estilo, as referências e a agenda deste studio.',
+    membershipSubtitle: 'Combos e horários do studio em uma leitura rápida.',
+    offerSubtitle: 'Ofertas e manutenção organizadas no app.',
+    postsSubtitle: 'Referências reais para escolher sua próxima visita.',
+    benefitsSubtitle: 'Sua carteira e sua manutenção no mesmo app.',
+    noServicesSubtitle: 'Agenda e contato do studio no mesmo lugar.',
+    joinUnknownTagline: 'Referências, agenda e identidade do studio no app.',
+    joinKnownTagline: 'Esse é o estilo que o cliente vai ver no app.',
     joinPendingTitle: 'Conecte sua conta ao nail studio certo.',
-    joinPendingDescription:
-        'Digite o código para liberar referências, agenda, benefícios e a identidade do studio no app.',
-    joinConnectedDescription:
-        'Ao confirmar, o app passa a mostrar referências, agenda, benefícios e avisos da marca certa.',
+    joinPendingDescription: 'Digite o código para liberar agenda e referências.',
+    joinConnectedDescription: 'Ao confirmar, o app assume o studio certo.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com referências certas, agenda liberada e manutenção pronta para aparecer.',
-    joinSuccessMessage:
-        'Agora seu app está conectado a {salon}. Referências, agenda e benefícios já aparecem daqui para frente.',
+        'Você vai entrar em {salon} com agenda e referências certas.',
+    joinSuccessMessage: 'Tudo pronto. {salon} já está no seu app.',
     highlightCollectionLabel: 'Serviços do studio',
     highlightCollectionNote:
         'Combinações, manutenção e escolha com menos atrito',
@@ -367,29 +347,19 @@ class SalonExperiencePreset {
         'Mesmo quando a publicação ainda não estiver ligada a um serviço, ela já funciona como referência para você alinhar corte, barba e acabamento com a barbearia.',
     feedSupportLine:
         'Peça a referência, combine o estilo e reserve sem sair do app.',
-    membershipSubtitle:
-        'Combos, recorrência e horários da barbearia organizados para você voltar na hora certa.',
-    offerSubtitle:
-        'Benefícios, horários e contato da barbearia organizados para você decidir sem enrolação.',
-    postsSubtitle:
-        'Veja estilos reais da barbearia e marque seu próximo corte sem sair do app.',
-    benefitsSubtitle:
-        'Agende, acompanhe vantagens e mantenha sua rotina em dia direto pelo app.',
-    noServicesSubtitle:
-        'Agenda, contato e recorrência da barbearia organizados para você resolver tudo no app.',
-    joinUnknownTagline:
-        'Ative a experiência da sua barbearia com agenda, portfólio e benefícios personalizados.',
-    joinKnownTagline:
-        'Tudo o que o cliente vê aqui passa a refletir o estilo, os profissionais e a agenda desta barbearia.',
+    membershipSubtitle: 'Combos e horários da barbearia em uma leitura rápida.',
+    offerSubtitle: 'Ofertas, horários e contato sem enrolação.',
+    postsSubtitle: 'Estilos reais para escolher seu próximo corte.',
+    benefitsSubtitle: 'Sua rotina e sua carteira no mesmo app.',
+    noServicesSubtitle: 'Agenda e contato da barbearia no mesmo lugar.',
+    joinUnknownTagline: 'Agenda, estilo e identidade da barbearia no app.',
+    joinKnownTagline: 'Esse é o estilo que o cliente vai ver no app.',
     joinPendingTitle: 'Conecte sua conta à barbearia certa.',
-    joinPendingDescription:
-        'Digite o código para liberar cortes, agenda, benefícios e a identidade da barbearia no app.',
-    joinConnectedDescription:
-        'Ao confirmar, o app passa a mostrar portfólio, agenda, profissionais e avisos da marca certa.',
+    joinPendingDescription: 'Digite o código para liberar agenda e portfólio.',
+    joinConnectedDescription: 'Ao confirmar, o app assume a barbearia certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com estilo certo, agenda liberada e recorrência pronta para aparecer.',
-    joinSuccessMessage:
-        'Agora seu app está conectado a {salon}. Agenda, portfólio e contato já aparecem daqui para frente.',
+        'Você vai entrar em {salon} com agenda e estilo certos.',
+    joinSuccessMessage: 'Tudo pronto. {salon} já está no seu app.',
     highlightCollectionLabel: 'Assinaturas da barbearia',
     highlightCollectionNote: 'Estilo visível e escolha mais objetiva',
     highlightPortfolioLabel: 'Portfólio da barbearia',
@@ -437,29 +407,19 @@ class SalonExperiencePreset {
         'Mesmo quando a publicação ainda não estiver ligada a um serviço, ela já funciona como referência para você alinhar o resultado ideal com o studio.',
     feedSupportLine:
         'Peça a referência, tire dúvidas e reserve sem sair do app.',
-    membershipSubtitle:
-        'Retoques, vantagens e horários do studio organizados para você voltar no momento ideal.',
-    offerSubtitle:
-        'Benefícios, horários e cuidados do studio organizados para você decidir com mais confiança.',
-    postsSubtitle:
-        'Veja resultados reais do studio e agende seu próximo retoque sem sair do app.',
-    benefitsSubtitle:
-        'Agende, acompanhe vantagens e cuide do próximo retoque direto pelo app.',
-    noServicesSubtitle:
-        'Agenda, contato e retornos do studio organizados para você resolver tudo no app.',
-    joinUnknownTagline:
-        'Ative a experiência do seu studio com agenda, benefícios e resultados personalizados.',
-    joinKnownTagline:
-        'Tudo o que o cliente vê aqui passa a refletir os resultados, a agenda e o cuidado deste studio.',
+    membershipSubtitle: 'Retoques e horários do studio em uma leitura rápida.',
+    offerSubtitle: 'Vantagens e horários para decidir com mais calma.',
+    postsSubtitle: 'Resultados reais para escolher seu próximo retoque.',
+    benefitsSubtitle: 'Seu retorno e sua carteira no mesmo app.',
+    noServicesSubtitle: 'Agenda e contato do studio no mesmo lugar.',
+    joinUnknownTagline: 'Agenda, resultados e identidade do studio no app.',
+    joinKnownTagline: 'Esse é o cuidado que o cliente vai ver no app.',
     joinPendingTitle: 'Conecte sua conta ao studio certo.',
-    joinPendingDescription:
-        'Digite o código para liberar retoques, agenda, benefícios e a identidade do studio no app.',
-    joinConnectedDescription:
-        'Ao confirmar, o app passa a mostrar resultados, agenda, benefícios e avisos da marca certa.',
+    joinPendingDescription: 'Digite o código para liberar agenda e resultados.',
+    joinConnectedDescription: 'Ao confirmar, o app assume o studio certo.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com os resultados certos, agenda liberada e retorno pronto para aparecer.',
-    joinSuccessMessage:
-        'Agora seu app está conectado a {salon}. Agenda, resultados e contato já aparecem daqui para frente.',
+        'Você vai entrar em {salon} com agenda e resultados certos.',
+    joinSuccessMessage: 'Tudo pronto. {salon} já está no seu app.',
     highlightCollectionLabel: 'Cuidados do studio',
     highlightCollectionNote: 'Precisão, confiança e escolha com menos atrito',
     highlightPortfolioLabel: 'Vitrine do studio',
@@ -506,29 +466,19 @@ class SalonExperiencePreset {
     feedConversionDescriptionWithoutLinked:
         'Mesmo quando a publicação ainda não estiver ligada a um serviço, ela já funciona como contexto para você alinhar protocolo e objetivo com a clínica.',
     feedSupportLine: 'Tire dúvidas, peça orientação e reserve sem sair do app.',
-    membershipSubtitle:
-        'Protocolos, continuidade e horários da clínica organizados para você seguir o cuidado com clareza.',
-    offerSubtitle:
-        'Benefícios, horários e acompanhamento da clínica organizados para você decidir com mais segurança.',
-    postsSubtitle:
-        'Veja resultados reais da clínica e organize seu próximo protocolo sem sair do app.',
-    benefitsSubtitle:
-        'Agende, acompanhe vantagens e cuide da continuidade do seu protocolo direto pelo app.',
-    noServicesSubtitle:
-        'Agenda, contato e continuidade da clínica organizados para você resolver tudo no app.',
-    joinUnknownTagline:
-        'Ative a experiência da sua clínica com agenda, benefícios e resultados personalizados.',
-    joinKnownTagline:
-        'Tudo o que o cliente vê aqui passa a refletir os protocolos, a agenda e o acompanhamento desta clínica.',
+    membershipSubtitle: 'Protocolos e horários da clínica em uma leitura rápida.',
+    offerSubtitle: 'Vantagens e horários para seguir seu cuidado.',
+    postsSubtitle: 'Resultados reais para escolher seu próximo protocolo.',
+    benefitsSubtitle: 'Sua carteira e seu acompanhamento no mesmo app.',
+    noServicesSubtitle: 'Agenda e contato da clínica no mesmo lugar.',
+    joinUnknownTagline: 'Protocolos, agenda e identidade da clínica no app.',
+    joinKnownTagline: 'Esse é o cuidado que o cliente vai ver no app.',
     joinPendingTitle: 'Conecte sua conta à clínica certa.',
-    joinPendingDescription:
-        'Digite o código para liberar protocolos, agenda, benefícios e a identidade da clínica no app.',
-    joinConnectedDescription:
-        'Ao confirmar, o app passa a mostrar resultados, agenda, benefícios e avisos da marca certa.',
+    joinPendingDescription: 'Digite o código para liberar agenda e protocolos.',
+    joinConnectedDescription: 'Ao confirmar, o app assume a clínica certa.',
     joinVerificationMessage:
-        'O cliente vai entrar em {salon} com o protocolo certo, agenda liberada e continuidade pronta para aparecer.',
-    joinSuccessMessage:
-        'Agora seu app está conectado a {salon}. Agenda, resultados e acompanhamento já aparecem daqui para frente.',
+        'Você vai entrar em {salon} com agenda e protocolos certos.',
+    joinSuccessMessage: 'Tudo pronto. {salon} já está no seu app.',
     highlightCollectionLabel: 'Protocolos da clínica',
     highlightCollectionNote: 'Clareza de valor e escolha mais segura',
     highlightPortfolioLabel: 'Resultados da clínica',

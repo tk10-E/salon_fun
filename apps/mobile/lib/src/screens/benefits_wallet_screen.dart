@@ -8,6 +8,7 @@ import '../models/app_models.dart';
 import '../repositories/salon_repository.dart';
 import '../theme/salon_branding.dart';
 import '../widgets/app_backdrop.dart';
+import '../widgets/cinematic_reveal.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/loyalty_summary_card.dart';
 import '../widgets/referral_program_card.dart';
@@ -45,6 +46,7 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
       widget.profile.salonName,
       overrideHexColor: widget.profile.salonBrandColor,
       businessSegment: widget.profile.salonBusinessSegment,
+      clientAppConfig: widget.profile.salonClientAppConfig,
     );
     _loyaltySummary = widget.initialLoyaltySummary;
     _referralSummary = widget.initialReferralSummary;
@@ -130,7 +132,21 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Minha carteira')),
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Minha carteira'),
+            Text(
+              'Saldo e carteira',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _branding.mutedText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
       body: AppBackdrop(
         branding: _branding,
         child: FutureBuilder<List<LoyaltyTransactionItem>>(
@@ -146,53 +162,73 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
               onRefresh: _refresh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                 children: [
-                  _WalletHero(
-                    profile: widget.profile,
-                    branding: _branding,
-                    loyaltySummary: _loyaltySummary,
-                    referralSummary: _referralSummary,
-                    isRefreshing: _isRefreshingSummaries,
+                  CinematicReveal(
+                    delay: const Duration(milliseconds: 20),
+                    child: _WalletHero(
+                      profile: widget.profile,
+                      branding: _branding,
+                      loyaltySummary: _loyaltySummary,
+                      referralSummary: _referralSummary,
+                      isRefreshing: _isRefreshingSummaries,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   if (_loyaltySummary?.hasVisibleContent == true) ...[
-                    LoyaltySummaryCard(
-                      summary: _loyaltySummary!,
-                      branding: _branding,
+                    CinematicReveal(
+                      delay: const Duration(milliseconds: 90),
+                      child: LoyaltySummaryCard(
+                        summary: _loyaltySummary!,
+                        branding: _branding,
+                      ),
                     ),
                     const SizedBox(height: 20),
                   ] else
-                    _WalletEmptyCard(
-                      branding: _branding,
-                      title: 'Seu clube de fidelidade ainda está vazio',
-                      message:
-                          'Assim que visitas concluídas começarem a gerar pontos e cashback, o saldo vai aparecer aqui.',
+                    CinematicReveal(
+                      delay: const Duration(milliseconds: 90),
+                      child: _WalletEmptyCard(
+                        branding: _branding,
+                        title: 'Seu clube de fidelidade ainda está vazio',
+                        message:
+                            'Assim que visitas concluídas começarem a gerar pontos e cashback, o saldo vai aparecer aqui.',
+                      ),
                     ),
                   if (_referralSummary?.hasVisibleContent == true) ...[
-                    ReferralProgramCard(
-                      summary: _referralSummary!,
-                      branding: _branding,
-                      onCopyCode: () {
-                        unawaited(
-                          _copyReferralCode(_referralSummary!.referralCode),
-                        );
-                      },
+                    CinematicReveal(
+                      delay: const Duration(milliseconds: 150),
+                      child: ReferralProgramCard(
+                        summary: _referralSummary!,
+                        branding: _branding,
+                        onCopyCode: () {
+                          unawaited(
+                            _copyReferralCode(_referralSummary!.referralCode),
+                          );
+                        },
+                      ),
                     ),
                     const SizedBox(height: 20),
                   ],
-                  Text(
-                    'Extrato recente',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: _branding.deep,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Veja quando pontos, cashback e visitas foram lançados na sua carteira.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: _branding.mutedText,
+                  CinematicReveal(
+                    delay: const Duration(milliseconds: 190),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Movimentos recentes',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: _branding.deep,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Veja quando pontos, cashback e visitas entraram na sua carteira.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: _branding.mutedText,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -229,6 +265,15 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
                           )
                           .toList(),
                     ),
+                  const SizedBox(height: 18),
+                  CinematicReveal(
+                    delay: const Duration(milliseconds: 260),
+                    child: _WalletMomentumStrip(
+                      branding: _branding,
+                      loyaltySummary: _loyaltySummary,
+                      referralSummary: _referralSummary,
+                    ),
+                  ),
                 ],
               ),
             );
@@ -285,149 +330,201 @@ class _WalletHero extends StatelessWidget {
         : 'Pontos, indicações e visitas começam a aparecer aqui conforme sua relação com o salão evolui.';
 
     return SoftCard(
-      padding: const EdgeInsets.all(22),
-      borderColor: branding.outline.withValues(alpha: 0.76),
+      padding: EdgeInsets.zero,
+      borderColor: branding.primary.withValues(alpha: 0.28),
       gradient: LinearGradient(
         colors: [
-          branding.primary.withValues(alpha: 0.18),
-          Colors.white.withValues(alpha: 0.98),
+          Color.lerp(branding.deep, const Color(0xFF130F18), 0.12)!,
+          branding.deep,
+          Color.lerp(branding.primary, branding.deep, 0.22)!,
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.86),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(
-                  Icons.account_balance_wallet_rounded,
-                  color: branding.deep,
-                  size: 28,
-                ),
+          Positioned(
+            top: -46,
+            right: -18,
+            child: Container(
+              width: 170,
+              height: 170,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.08),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ),
+          Positioned(
+            left: -42,
+            bottom: -60,
+            child: Container(
+              width: 154,
+              height: 154,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: branding.primary.withValues(alpha: 0.14),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      'Carteira de benefícios',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
+                    const _WalletHeroRibbon(
+                      label: 'Carteira conectada ao salão',
+                      icon: Icons.auto_awesome_rounded,
+                    ),
+                    const Spacer(),
+                    if (isRefreshing)
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white.withValues(alpha: 0.82),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.14),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_rounded,
+                        color: Colors.white,
+                        size: 26,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Pontos, cashback e vantagens que você já acumulou em ${profile.salonName}.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: branding.deep,
-                        fontWeight: FontWeight.w700,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Carteira de benefícios',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Pontos, cashback e vantagens que você já acumulou em ${profile.salonName}.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.82),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-              if (isRefreshing)
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: branding.deep,
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    _HeroChip(
+                      label: loyaltySummary?.isVip == true
+                          ? 'Cliente VIP'
+                          : rankLabel,
+                      branding: branding,
+                      icon: loyaltySummary?.isVip == true
+                          ? Icons.workspace_premium_rounded
+                          : Icons.leaderboard_rounded,
+                      dark: true,
+                    ),
+                    _HeroChip(
+                      label: 'Cashback $cashbackLabel',
+                      branding: branding,
+                      icon: Icons.savings_rounded,
+                      dark: true,
+                    ),
+                    if (referralCode != null && referralCode.isNotEmpty)
+                      _HeroChip(
+                        label: 'Código $referralCode',
+                        branding: branding,
+                        icon: Icons.card_giftcard_rounded,
+                        dark: true,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _HeroMetricTile(
+                        label: 'Pontos',
+                        value: '${loyaltySummary?.pointsBalance ?? 0}',
+                        branding: branding,
+                        dark: true,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HeroMetricTile(
+                        label: 'Visitas',
+                        value: '${loyaltySummary?.completedVisits ?? 0}',
+                        branding: branding,
+                        dark: true,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HeroMetricTile(
+                        label: 'Prêmios',
+                        value: '${referralSummary?.availableRewardsCount ?? 0}',
+                        branding: branding,
+                        dark: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _HeroChip(
-                label: loyaltySummary?.isVip == true
-                    ? 'Cliente VIP'
-                    : rankLabel,
-                branding: branding,
-                icon: loyaltySummary?.isVip == true
-                    ? Icons.workspace_premium_rounded
-                    : Icons.leaderboard_rounded,
-              ),
-              _HeroChip(
-                label: 'Cashback $cashbackLabel',
-                branding: branding,
-                icon: Icons.savings_rounded,
-              ),
-              if (referralCode != null && referralCode.isNotEmpty)
-                _HeroChip(
-                  label: 'Código $referralCode',
-                  branding: branding,
-                  icon: Icons.card_giftcard_rounded,
-                ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _HeroMetricTile(
-                  label: 'Pontos',
-                  value: '${loyaltySummary?.pointsBalance ?? 0}',
-                  branding: branding,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _HeroMetricTile(
-                  label: 'Visitas',
-                  value: '${loyaltySummary?.completedVisits ?? 0}',
-                  branding: branding,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _HeroMetricTile(
-                  label: 'Prêmios',
-                  value: '${referralSummary?.availableRewardsCount ?? 0}',
-                  branding: branding,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: branding.outline.withValues(alpha: 0.62),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  focusTitle,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: branding.deep,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  focusMessage,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: branding.mutedText,
-                    height: 1.45,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        focusTitle,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        focusMessage,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.82),
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -444,32 +541,167 @@ class _HeroChip extends StatelessWidget {
     required this.label,
     required this.branding,
     required this.icon,
+    this.dark = false,
   });
 
   final String label;
   final SalonBranding branding;
   final IconData icon;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.88),
+        color: dark
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.white.withValues(alpha: 0.68),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.68)),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.14)
+              : branding.outline.withValues(alpha: 0.54),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: branding.deep),
+          Icon(icon, size: 18, color: dark ? Colors.white : branding.deep),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: dark ? Colors.white : branding.deep,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalletHeroRibbon extends StatelessWidget {
+  const _WalletHeroRibbon({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
           const SizedBox(width: 8),
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: branding.deep,
+              color: Colors.white,
               fontWeight: FontWeight.w800,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalletMomentumStrip extends StatelessWidget {
+  const _WalletMomentumStrip({
+    required this.branding,
+    required this.loyaltySummary,
+    required this.referralSummary,
+  });
+
+  final SalonBranding branding;
+  final CustomerLoyaltySummary? loyaltySummary;
+  final ReferralSummary? referralSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    final nextTierVisits = loyaltySummary?.visitsToNextTier;
+    final rewardsReady = referralSummary?.availableRewardsCount ?? 0;
+    final pendingReferrals = referralSummary?.pendingCount ?? 0;
+
+    return SoftCard(
+      padding: const EdgeInsets.all(18),
+      gradient: LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.98),
+          branding.surface.withValues(alpha: 0.94),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: branding.outline.withValues(alpha: 0.72),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Status da sua relação com o salão',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: branding.deep,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'A carteira agora mostra com mais clareza o que está amadurecendo, o que já pode ser usado e o que ainda pode crescer.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: branding.mutedText,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _WalletStageCard(
+                eyebrow: 'Próximo nível',
+                title: nextTierVisits == null
+                    ? 'Ranking em formação'
+                    : nextTierVisits == 0
+                    ? 'Nível atual estabilizado'
+                    : 'Faltam $nextTierVisits visita${nextTierVisits == 1 ? '' : 's'}',
+                description: loyaltySummary?.nextTier != null
+                    ? 'Seu próximo salto é ${loyaltySummary!.nextTier!.label}.'
+                    : 'Continue usando o app para fortalecer sua recorrência.',
+                icon: Icons.stacked_line_chart_rounded,
+                accent: Color.lerp(branding.primary, Colors.white, 0.14)!,
+              ),
+              _WalletStageCard(
+                eyebrow: 'Recompensas',
+                title: rewardsReady > 0
+                    ? '$rewardsReady pront${rewardsReady == 1 ? 'a' : 'as'} para uso'
+                    : 'A carteira está acumulando valor',
+                description: rewardsReady > 0
+                    ? 'Vale abrir o app antes da próxima reserva para usar isso bem.'
+                    : 'Pontos e cashback continuam construindo seu próximo retorno.',
+                icon: Icons.card_giftcard_rounded,
+                accent: Color.lerp(branding.deep, branding.primary, 0.4)!,
+              ),
+              _WalletStageCard(
+                eyebrow: 'Indicações',
+                title: pendingReferrals > 0
+                    ? '$pendingReferrals indicação${pendingReferrals == 1 ? '' : 'ões'} em progresso'
+                    : 'Canal de indicação pronto',
+                description: pendingReferrals > 0
+                    ? 'Sua rede já está trabalhando a favor da próxima recompensa.'
+                    : 'Compartilhe seu código quando quiser ativar esse motor.',
+                icon: Icons.groups_rounded,
+                accent: Color.lerp(branding.primary, Colors.white, 0.28)!,
+              ),
+            ],
           ),
         ],
       ),
@@ -674,28 +906,56 @@ class _HeroMetricTile extends StatelessWidget {
     required this.label,
     required this.value,
     required this.branding,
+    this.dark = false,
   });
 
   final String label;
   final String value;
   final SalonBranding branding;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.84),
+        gradient: LinearGradient(
+          colors: [
+            dark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.9),
+            dark
+                ? branding.primary.withValues(alpha: 0.14)
+                : branding.primary.withValues(alpha: 0.06),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.62)),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.14)
+              : branding.outline.withValues(alpha: 0.62),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: 24,
+            height: 3,
+            decoration: BoxDecoration(
+              color: branding.primary.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: branding.mutedText,
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.74)
+                  : branding.mutedText,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -703,8 +963,76 @@ class _HeroMetricTile extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: branding.deep,
+              color: dark ? Colors.white : branding.deep,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WalletStageCard extends StatelessWidget {
+  const _WalletStageCard({
+    required this.eyebrow,
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.accent,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 238,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, accent.withValues(alpha: 0.14)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accent.withValues(alpha: 0.26)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  eyebrow,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF7A5E4E),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Icon(icon, size: 18, color: const Color(0xFF2F231C)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: const Color(0xFF2F231C),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF6C5547),
+              height: 1.35,
             ),
           ),
         ],

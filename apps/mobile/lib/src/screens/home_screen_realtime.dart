@@ -1,6 +1,36 @@
 part of 'home_screen.dart';
 
 mixin _HomeScreenRealtimeMixin on _HomeScreenStateBase {
+  String? _realtimeNotificationSalonName([Map<String, dynamic>? payloadMap]) {
+    final payloadName = payloadMap?['salonName']?.toString().trim();
+    if (payloadName != null && payloadName.isNotEmpty) {
+      return payloadName;
+    }
+
+    final profileName = _profile.salonName.trim();
+    if (profileName.isNotEmpty) {
+      return profileName;
+    }
+
+    return null;
+  }
+
+  String? _realtimeNotificationSalonLogoUrl([
+    Map<String, dynamic>? payloadMap,
+  ]) {
+    final payloadLogo = payloadMap?['salonLogoUrl']?.toString().trim();
+    if (payloadLogo != null && payloadLogo.isNotEmpty) {
+      return payloadLogo;
+    }
+
+    final profileLogo = _profile.salonLogoUrl?.trim();
+    if (profileLogo != null && profileLogo.isNotEmpty) {
+      return profileLogo;
+    }
+
+    return null;
+  }
+
   void _subscribeToVacancyAlerts() {
     final channel =
         widget.repository.client
@@ -208,6 +238,8 @@ mixin _HomeScreenRealtimeMixin on _HomeScreenStateBase {
     final payloadMap = payloadValue is Map
         ? Map<String, dynamic>.from(payloadValue)
         : <String, dynamic>{};
+    final salonName = _realtimeNotificationSalonName(payloadMap);
+    final salonLogoUrl = _realtimeNotificationSalonLogoUrl(payloadMap);
 
     if (audience == 'single_customer' &&
         customerId != null &&
@@ -234,6 +266,8 @@ mixin _HomeScreenRealtimeMixin on _HomeScreenStateBase {
               'Confira a atualização mais recente no app do salão.',
           'type': newRecord['notification_type']?.toString() ?? 'update',
           'salonId': _profile.salonId,
+          'salonName': ?salonName,
+          'salonLogoUrl': ?salonLogoUrl,
         },
       ),
     );
@@ -242,6 +276,9 @@ mixin _HomeScreenRealtimeMixin on _HomeScreenStateBase {
   Future<void> _showRealtimeVacancyNotification(
     Map<String, dynamic> newRecord,
   ) async {
+    final salonName = _realtimeNotificationSalonName();
+    final salonLogoUrl = _realtimeNotificationSalonLogoUrl();
+
     await PushNotificationService.instance.showLocalNotificationPayload(
       NotificationTapPayload(
         type: 'vacancy_alert',
@@ -258,6 +295,8 @@ mixin _HomeScreenRealtimeMixin on _HomeScreenStateBase {
           'body':
               newRecord['body']?.toString() ??
               'Um horário ficou disponível no salão.',
+          'salonName': ?salonName,
+          'salonLogoUrl': ?salonLogoUrl,
           'type': 'vacancy_alert',
           'startsAt': newRecord['starts_at']?.toString() ?? '',
           'salonId': _profile.salonId,

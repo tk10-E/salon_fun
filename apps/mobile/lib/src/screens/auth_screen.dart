@@ -211,8 +211,8 @@ class _AuthScreenState extends State<AuthScreen> {
         _mode = _AuthMode.signIn;
         _feedback = _AuthFeedback(
           message: result.requiresEmailConfirmation
-              ? 'Conta criada. Confirme o e-mail ${result.email} e depois entre para conectar o código do seu salão.'
-              : 'Conta criada com sucesso. Agora entre e continue para conectar o código do seu salão.',
+              ? 'Conta criada. Confirme o e-mail ${result.email} e depois entre no app.'
+              : 'Conta criada com sucesso. Agora entre no app.',
           tone: _AuthFeedbackTone.success,
         );
       });
@@ -460,10 +460,41 @@ class _AuthScreenState extends State<AuthScreen> {
         : null;
 
     return SoftCard(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      gradient: LinearGradient(
+        colors: [Colors.white.withValues(alpha: 0.98), const Color(0xFFFFF8F1)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderColor: const Color(0xFFE2D3C4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _AuthSignalPill(
+                label: _mode == _AuthMode.signIn
+                    ? 'Entrada segura'
+                    : 'Nova conta',
+                icon: _mode == _AuthMode.signIn
+                    ? Icons.shield_outlined
+                    : Icons.auto_awesome_rounded,
+              ),
+              _AuthSignalPill(
+                label: _biometricState.hasSavedCredentials
+                    ? 'Biometria liberada'
+                    : 'Código do salão',
+                icon: _biometricState.hasSavedCredentials
+                    ? (_biometricState.kind == QuickBiometricKind.face
+                          ? Icons.face_retouching_natural_rounded
+                          : Icons.fingerprint_rounded)
+                    : Icons.link_rounded,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           _AuthModeSwitcher(
             child: Column(
               key: ValueKey('auth-panel-header-${_mode.name}-$compact'),
@@ -480,42 +511,42 @@ class _AuthScreenState extends State<AuthScreen> {
                         : 'Criar acesso',
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 _EntranceMotion(
                   delay: const Duration(milliseconds: 40),
                   child: Row(
                     children: [
                       Container(
-                        width: 54,
-                        height: 54,
+                        width: 46,
+                        height: 46,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [Color(0xFFFFF4EA), Color(0xFFF2D0B8)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(18),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: const Color(0xFFDAB79E)),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(11),
+                          padding: const EdgeInsets.all(9),
                           child: Image.asset('assets/branding/app_splash.png'),
                         ),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Acesso do cliente',
+                              'Área do cliente',
                               style: theme.textTheme.labelLarge,
                             ),
                             const SizedBox(height: 2),
                             Text(
                               _mode == _AuthMode.signIn
-                                  ? 'Entre para agendar mais rápido, usar benefícios e falar com o salão.'
-                                  : 'Crie sua conta para guardar agenda, benefícios e contato no mesmo app.',
+                                  ? 'Entre para abrir sua agenda.'
+                                  : 'Crie sua conta para entrar no app.',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: const Color(0xFF6B4B3A),
                                 fontWeight: FontWeight.w600,
@@ -527,37 +558,32 @@ class _AuthScreenState extends State<AuthScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 _EntranceMotion(
                   delay: const Duration(milliseconds: 80),
                   child: Text(
                     _mode == _AuthMode.signIn
-                        ? 'Entre e continue para o seu salão.'
-                        : 'Crie sua conta e continue para o seu salão.',
+                        ? 'Entre e siga para seu salão.'
+                        : 'Crie sua conta e siga para seu salão.',
                     style: theme.textTheme.headlineSmall?.copyWith(
-                      fontSize: compact ? 28 : 30,
+                      fontSize: compact ? 26 : 28,
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 _EntranceMotion(
                   delay: const Duration(milliseconds: 120),
                   child: Text(
                     _mode == _AuthMode.signIn
-                        ? 'Seu login leva ao próximo passo: conectar o código do salão e liberar agenda, benefícios e contato.'
-                        : 'Você cria o acesso agora e conecta o código do salão no passo seguinte.',
+                        ? 'No próximo passo, você conecta o salão.'
+                        : 'Crie o acesso agora. O código do salão vem depois.',
                     style: theme.textTheme.bodyLarge,
                   ),
-                ),
-                const SizedBox(height: 14),
-                _EntranceMotion(
-                  delay: const Duration(milliseconds: 160),
-                  child: _AuthSignalRow(mode: _mode),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           _EntranceMotion(
             delay: const Duration(milliseconds: 120),
             child: _ModeSelector(
@@ -632,8 +658,7 @@ class _AuthScreenState extends State<AuthScreen> {
               delay: Duration(milliseconds: 0),
               child: _AuthFormHeader(
                 title: 'Seus dados de acesso',
-                message:
-                    'Use o e-mail da sua conta para liberar sua rotina com o salão.',
+                message: 'Use o e-mail da sua conta.',
               ),
             ),
             const SizedBox(height: 16),
@@ -781,15 +806,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 14),
-            const _EntranceMotion(
-              delay: Duration(milliseconds: 270),
-              child: _AuthNextStepNotice(
-                title: 'Próximo passo',
-                message:
-                    'Depois do login, basta informar o código do salão para liberar agenda, benefícios e contato.',
-              ),
-            ),
           ],
         ),
       ),
@@ -813,8 +829,7 @@ class _AuthScreenState extends State<AuthScreen> {
               delay: Duration(milliseconds: 0),
               child: _AuthFormHeader(
                 title: 'Seu acesso começa aqui',
-                message:
-                    'Crie a conta primeiro. Depois, você conecta o salão no próximo passo.',
+                message: 'Crie a conta. Depois, conecte o salão.',
               ),
             ),
             const SizedBox(height: 16),
@@ -903,7 +918,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             _EntranceMotion(
               delay: const Duration(milliseconds: 210),
               child: SizedBox(
@@ -922,19 +937,10 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             const _EntranceMotion(
               delay: Duration(milliseconds: 250),
               child: _AuthStepChecklist(),
-            ),
-            const SizedBox(height: 14),
-            const _EntranceMotion(
-              delay: Duration(milliseconds: 290),
-              child: _AuthNextStepNotice(
-                title: 'Depois do cadastro',
-                message:
-                    'Entre e continue para informar o código do salão e liberar a experiência completa.',
-              ),
             ),
           ],
         ),
@@ -953,25 +959,23 @@ class _AuthShowcase extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final title = switch (mode) {
-      _AuthMode.signIn => 'Tudo do seu salão em um só lugar.',
-      _AuthMode.signUp => 'Sua conta começa simples e cresce com o salão.',
+      _AuthMode.signIn => 'Seu salão, no seu ritmo.',
+      _AuthMode.signUp => 'Uma conta para entrar em qualquer salão.',
     };
     final message = switch (mode) {
-      _AuthMode.signIn =>
-        'Depois de entrar, você acompanha agenda, benefícios e contato com o salão sem depender de conversa solta.',
-      _AuthMode.signUp =>
-        'Você cria o acesso agora e informa o código do salão depois para liberar a experiência certa.',
+      _AuthMode.signIn => 'Agenda, carteira e contato no mesmo app.',
+      _AuthMode.signUp => 'Crie sua conta e escolha o salão depois.',
     };
     final highlights = switch (mode) {
       _AuthMode.signIn => const [
-        'Agenda, histórico e rebook no mesmo lugar.',
-        'Benefícios ativos e promoções sempre visíveis.',
-        'Contato rápido para alinhar atendimento e retorno.',
+        'Agenda e histórico no mesmo lugar.',
+        'Carteira e ofertas sempre visíveis.',
+        'Contato rápido com o salão.',
       ],
       _AuthMode.signUp => const [
-        'Seu e-mail vira a chave da sua conta.',
-        'O código do salão libera a experiência certa.',
-        'Agenda, benefícios e contato ficam no mesmo app.',
+        'Seu e-mail vira a chave da conta.',
+        'O código escolhe o salão certo.',
+        'Agenda e carteira ficam no mesmo app.',
       ],
     };
 
@@ -987,6 +991,23 @@ class _AuthShowcase extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _AuthShowcaseRibbon(
+                  label: mode == _AuthMode.signIn
+                      ? 'Conta do cliente'
+                      : 'Nova conta',
+                  icon: Icons.auto_awesome_rounded,
+                ),
+                const _AuthShowcaseRibbon(
+                  label: 'Agenda e carteira',
+                  icon: Icons.grid_view_rounded,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
             _AuthModeSwitcher(
               child: Column(
                 key: ValueKey('auth-showcase-compact-${mode.name}'),
@@ -1022,7 +1043,7 @@ class _AuthShowcase extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Agenda, benefícios e contato com o salão no mesmo app',
+                                'Agenda, carteira e contato no app',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: const Color(0xFF6B4B3A),
                                   fontWeight: FontWeight.w700,
@@ -1087,6 +1108,23 @@ class _AuthShowcase extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _AuthShowcaseRibbon(
+                label: mode == _AuthMode.signIn
+                    ? 'Conta do cliente'
+                    : 'Nova conta',
+                icon: Icons.auto_awesome_rounded,
+              ),
+              const _AuthShowcaseRibbon(
+                label: 'Agenda e carteira',
+                icon: Icons.grid_view_rounded,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           _AuthModeSwitcher(
             child: Column(
               key: ValueKey('auth-showcase-wide-${mode.name}'),
@@ -1120,7 +1158,7 @@ class _AuthShowcase extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Agenda, benefícios e contato com o salão no mesmo app',
+                              'Agenda, carteira e contato no app',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: const Color(0xFF6B4B3A),
                                 fontWeight: FontWeight.w700,
@@ -1156,9 +1194,8 @@ class _AuthShowcase extends StatelessWidget {
                 const _EntranceMotion(
                   delay: Duration(milliseconds: 170),
                   child: _ShowcaseFeature(
-                    title: 'Agenda que converte',
-                    message:
-                        'Veja horários, confirme presença e faça rebook com menos fricção.',
+                    title: 'Agenda clara',
+                    message: 'Horários e confirmações no mesmo lugar.',
                     icon: Icons.calendar_month_rounded,
                   ),
                 ),
@@ -1166,9 +1203,8 @@ class _AuthShowcase extends StatelessWidget {
                 const _EntranceMotion(
                   delay: Duration(milliseconds: 205),
                   child: _ShowcaseFeature(
-                    title: 'Benefícios que puxam retorno',
-                    message:
-                        'Cashback, pacote e promoções ficam visíveis para incentivar a próxima visita.',
+                    title: 'Carteira visível',
+                    message: 'Cashback, planos e ofertas sem ruído.',
                     icon: Icons.workspace_premium_rounded,
                   ),
                 ),
@@ -1177,8 +1213,7 @@ class _AuthShowcase extends StatelessWidget {
                   delay: Duration(milliseconds: 240),
                   child: _ShowcaseFeature(
                     title: 'Contato que resolve rápido',
-                    message:
-                        'O cliente fala com o salão com contexto, sem perder histórico nem próximos passos.',
+                    message: 'Fale com o salão sem sair do app.',
                     icon: Icons.chat_bubble_outline_rounded,
                   ),
                 ),
@@ -1283,7 +1318,14 @@ class _ShowcaseSecurityCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.5),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.56),
+            const Color(0xFFFFEBD8).withValues(alpha: 0.72),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0x26A8562D)),
       ),
@@ -1305,14 +1347,14 @@ class _ShowcaseSecurityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Conta segura, experiência liberada em seguida',
+                  'Conta segura',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Você cria o acesso uma vez e, na sequência, conecta o código do salão para carregar agenda, benefícios e contato certo.',
+                  'Entre uma vez e conecte o salão depois.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: const Color(0xFF5F4334),
                   ),
@@ -1364,6 +1406,86 @@ class _AuthValueRow extends StatelessWidget {
   }
 }
 
+class _AuthSignalPill extends StatelessWidget {
+  const _AuthSignalPill({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 240),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7EE),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFE9DACB)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF8E441F)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: const Color(0xFF6B4B3A),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthShowcaseRibbon extends StatelessWidget {
+  const _AuthShowcaseRibbon({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.56),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0x26A8562D)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF8E441F)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: const Color(0xFF6B4B3A),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AuthHeroTag extends StatelessWidget {
   const _AuthHeroTag({required this.icon, required this.label});
 
@@ -1397,75 +1519,6 @@ class _AuthHeroTag extends StatelessWidget {
   }
 }
 
-class _AuthSignalRow extends StatelessWidget {
-  const _AuthSignalRow({required this.mode});
-
-  final _AuthMode mode;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = switch (mode) {
-      _AuthMode.signIn => const [
-        (icon: Icons.flash_on_rounded, label: 'Agenda sem fricção'),
-        (
-          icon: Icons.workspace_premium_outlined,
-          label: 'Benefícios sempre visíveis',
-        ),
-      ],
-      _AuthMode.signUp => const [
-        (icon: Icons.timer_outlined, label: 'Cadastro rápido'),
-        (icon: Icons.link_rounded, label: 'Conecta no próximo passo'),
-      ],
-    };
-
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        for (final item in items)
-          _AuthSignalChip(icon: item.icon, label: item.label),
-      ],
-    );
-  }
-}
-
-class _AuthSignalChip extends StatelessWidget {
-  const _AuthSignalChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 280),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF9F3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE9DACA)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: const Color(0xFFB55D34)),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              label,
-              softWrap: true,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF6B4B3A),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _AuthFormHeader extends StatelessWidget {
   const _AuthFormHeader({required this.title, required this.message});
 
@@ -1482,7 +1535,7 @@ class _AuthFormHeader extends StatelessWidget {
         Text(
           title,
           style: theme.textTheme.titleMedium?.copyWith(
-            color: const Color(0xFF4C3427),
+            color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -1490,7 +1543,7 @@ class _AuthFormHeader extends StatelessWidget {
         Text(
           message,
           style: theme.textTheme.bodySmall?.copyWith(
-            color: const Color(0xFF876F5F),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1507,12 +1560,16 @@ class _ModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8EEE4),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE6D6C8)),
+        color: theme.colorScheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
       ),
       child: Row(
         children: [
@@ -1554,25 +1611,33 @@ class _ModeSelectorButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final selectedColor = theme.colorScheme.primary;
+    final selectedForeground = theme.colorScheme.onPrimary;
+    final idleForeground = theme.colorScheme.onSurface.withValues(alpha: 0.72);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
         gradient: selected
-            ? const LinearGradient(
-                colors: [Color(0xFFCF764A), Color(0xFFB55D34)],
+            ? LinearGradient(
+                colors: [
+                  Color.lerp(selectedColor, Colors.white, 0.08)!,
+                  Color.lerp(selectedColor, Colors.black, 0.08)!,
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               )
             : null,
         color: selected ? null : Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: selected
-            ? const [
+            ? [
                 BoxShadow(
-                  color: Color(0x26C56B43),
-                  blurRadius: 16,
-                  offset: Offset(0, 8),
+                  color: selectedColor.withValues(alpha: 0.16),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ]
             : const [],
@@ -1580,15 +1645,15 @@ class _ModeSelectorButton extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             child: Center(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: selected ? Colors.white : const Color(0xFF7A5B4A),
+                  color: selected ? selectedForeground : idleForeground,
                   fontWeight: FontWeight.w800,
                   letterSpacing: selected ? 0.1 : 0,
                 ),
@@ -1734,69 +1799,6 @@ class _AuthSupportCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           child,
-        ],
-      ),
-    );
-  }
-}
-
-class _AuthNextStepNotice extends StatelessWidget {
-  const _AuthNextStepNotice({required this.title, required this.message});
-
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8F1),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5D5C6)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFEFE2),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: const Icon(
-              Icons.arrow_circle_right_outlined,
-              size: 18,
-              color: Color(0xFFB55D34),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF4C3427),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  message,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF876F5F),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -2088,19 +2090,19 @@ class _ShowcaseSpotlight extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final title = switch (mode) {
-      _AuthMode.signIn => 'O que fica liberado logo depois do login',
-      _AuthMode.signUp => 'Como a experiência entra em cena',
+      _AuthMode.signIn => 'O que abre depois do login',
+      _AuthMode.signUp => 'Como tudo começa',
     };
     final metrics = switch (mode) {
       _AuthMode.signIn => const [
         (
           label: 'Agenda',
-          value: 'Próximo horário e rebook',
+          value: 'Próximo horário e retorno',
           icon: Icons.calendar_today_rounded,
         ),
         (
-          label: 'Benefícios',
-          value: 'Cashback, pacote e promoções',
+          label: 'Carteira',
+          value: 'Cashback, planos e ofertas',
           icon: Icons.workspace_premium_rounded,
         ),
         (
@@ -2122,7 +2124,7 @@ class _ShowcaseSpotlight extends StatelessWidget {
         ),
         (
           label: 'Resultado',
-          value: 'Agenda, benefícios e contato no mesmo app',
+          value: 'Agenda, carteira e contato no app',
           icon: Icons.auto_awesome_rounded,
         ),
       ],

@@ -23,7 +23,7 @@ void main() {
           ],
         );
 
-        expect(find.text('Sua agenda pede atenção agora'), findsOneWidget);
+        expect(find.text('Sua agenda pede atenção'), findsOneWidget);
         expect(
           find.textContaining('pode mexer no seu próximo horário'),
           findsOneWidget,
@@ -64,16 +64,16 @@ void main() {
         );
 
         expect(
-          find.text('Tem retorno com boa chance de virar reserva'),
+          find.text('Tem retorno para olhar'),
           findsOneWidget,
         );
         expect(
-          find.textContaining('oferta ou rebook inteligente'),
+          find.textContaining('oferta ou rebook'),
           findsOneWidget,
         );
         expect(
           find.textContaining(
-            'Ação sugerida: Use esse incentivo para voltar ao salão antes que sua rotina esfrie mais.',
+            'Ação sugerida: Use esse incentivo para voltar ao salão.',
           ),
           findsOneWidget,
         );

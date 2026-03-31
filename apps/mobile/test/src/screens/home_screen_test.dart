@@ -59,33 +59,23 @@ void main() {
 
       expect(activeProfile?.id, 'customer-1');
       expect(find.text('Salon Fun'), findsAtLeastNWidgets(2));
-      expect(
-        find.text('Tudo para decidir, reservar e falar com o salão.'),
-        findsOneWidget,
-      );
-      expect(find.text('Destaques do dia'), findsOneWidget);
+      expect(find.text('Beleza com cuidado'), findsWidgets);
+      expect(find.text('Serviços em destaque'), findsOneWidget);
 
-      await tester.tap(find.text('Feed'));
+      await tester.tap(find.text('Galeria'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(
-        find.text('Inspirações, resultados e agenda em movimento.'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Seu próximo visual favorito vai aparecer aqui'),
+        find.text('Os próximos resultados do salão vão aparecer aqui'),
         findsOneWidget,
       );
 
-      await tester.tap(find.text('Histórico'));
+      await tester.tap(find.text('Agenda'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(
-        find.text('Seu histórico fica pronto para voltar na hora certa.'),
-        findsOneWidget,
-      );
+      expect(find.text('Sua jornada com o salão em um olhar'), findsOneWidget);
       expect(find.text('Hidratação premium'), findsOneWidget);
       expect(find.text('Confirmar presença'), findsOneWidget);
     });
@@ -111,9 +101,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         expect(
-          find.text(
-            'Planos, pacotes e horários do salão organizados para você decidir e reservar mais rápido.',
-          ),
+          find.text('Planos e horários do salão em uma leitura rápida.'),
           findsWidgets,
         );
       },
@@ -172,7 +160,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('Destaques do dia'), findsOneWidget);
+      expect(find.text('Serviços em destaque'), findsOneWidget);
       expect(loadAttemptCount, 2);
     });
 
@@ -200,12 +188,12 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        await tester.tap(find.text('Feed'));
+        await tester.tap(find.text('Galeria'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
         expect(
-          find.text('Não foi possível carregar o feed do salão'),
+          find.text('Não foi possível carregar a galeria do salão'),
           findsOneWidget,
         );
         expect(find.text('Tentar novamente'), findsOneWidget);
@@ -246,7 +234,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        await tester.tap(find.text('Feed'));
+        await tester.tap(find.text('Galeria'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
@@ -295,7 +283,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        await tester.tap(find.text('Feed'));
+        await tester.tap(find.text('Galeria'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
@@ -310,7 +298,7 @@ void main() {
         expect(find.text('1 curtida'), findsOneWidget);
         expect(find.text('Resultado glossy'), findsOneWidget);
         expect(
-          find.text('Não foi possível carregar o feed do salão'),
+          find.text('Não foi possível carregar a galeria do salão'),
           findsNothing,
         );
         expect(loadAttemptCount, 2);
@@ -340,7 +328,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        await tester.tap(find.text('Feed'));
+        await tester.tap(find.text('Galeria'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
@@ -386,7 +374,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      await tester.tap(find.text('Feed'));
+      await tester.tap(find.text('Galeria'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -422,7 +410,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      await tester.tap(find.text('Feed'));
+      await tester.tap(find.text('Galeria'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -462,7 +450,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        await tester.tap(find.text('Feed'));
+        await tester.tap(find.text('Galeria'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
@@ -526,7 +514,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        await tester.tap(find.text('Feed'));
+        await tester.tap(find.text('Galeria'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
@@ -645,7 +633,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Extrato recente'), findsOneWidget);
+      expect(find.text('Movimentos recentes'), findsOneWidget);
       expect(repository.loyaltyTransactionsRequestCount, 1);
     });
 

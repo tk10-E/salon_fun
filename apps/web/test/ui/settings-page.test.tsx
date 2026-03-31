@@ -60,8 +60,18 @@ describe("settings page UI", () => {
   it("renders branding, online schedule and join code forms", async () => {
     const businessHoursOrder = vi.fn().mockResolvedValue({
       data: [
-        { weekday: 1, is_open: true, opens_at: "09:00:00", closes_at: "18:00:00" },
-        { weekday: 2, is_open: true, opens_at: "09:00:00", closes_at: "18:00:00" },
+        {
+          weekday: 1,
+          is_open: true,
+          opens_at: "09:00:00",
+          closes_at: "18:00:00",
+        },
+        {
+          weekday: 2,
+          is_open: true,
+          opens_at: "09:00:00",
+          closes_at: "18:00:00",
+        },
       ],
       error: null,
     });
@@ -96,18 +106,59 @@ describe("settings page UI", () => {
     render(ui);
 
     expect(screen.getByText("Configurações salvas.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Identidade do salão" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Identidade do salão" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Preview do app")).toBeInTheDocument();
     expect(screen.getByLabelText("Nome do salão")).toBeInTheDocument();
     expect(screen.getByLabelText("Segmento do salão")).toBeInTheDocument();
     expect(screen.getByLabelText("Cor principal")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Salvar identidade" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Agenda online" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Modelo da experiência")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Tema do app do cliente"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Headline premium da home"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Imagem hero principal por arquivo"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Imagem da galeria por arquivo"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Capa institucional do perfil por arquivo"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByLabelText("Foco horizontal").length,
+    ).toBeGreaterThan(2);
+    expect(
+      screen.getByText("Módulos visíveis na home"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByLabelText("Zoom da imagem").length,
+    ).toBeGreaterThan(2);
+    expect(screen.getByLabelText("Instagram do salão")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar identidade" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Agenda online" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Fuso horário")).toBeInTheDocument();
     expect(screen.getByLabelText("Intervalo da agenda")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Salvar agenda" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Código para clientes" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar agenda" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Código para clientes" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("ABCD1234")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Gerar novo código" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Abrir vitrine pública" }),
+    ).toHaveAttribute("href", "/s/ABCD1234");
+    expect(
+      screen.getByRole("button", { name: "Gerar novo código" }),
+    ).toBeInTheDocument();
   });
 });

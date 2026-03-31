@@ -7,13 +7,27 @@ import {
 } from "@/app/actions";
 import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { FlashMessage } from "@/components/FlashMessage";
+import { PremiumImageCropField } from "@/components/PremiumImageCropField";
 import { requireOwnerSalon } from "@/lib/auth";
+import { CLIENT_APP_IMAGE_VARIANT_SPECS } from "@/lib/clientAppImageVariants";
 import {
+  CLIENT_APP_BANNER_STYLE_OPTIONS,
+  CLIENT_APP_BUTTON_STYLE_OPTIONS,
+  CLIENT_APP_CARD_STYLE_OPTIONS,
+  CLIENT_APP_HOME_MODULE_OPTIONS,
+  CLIENT_APP_THEME_MODE_OPTIONS,
+  CLIENT_EXPERIENCE_MODEL_OPTIONS,
   CLIENT_APP_VISUAL_STYLE_OPTIONS,
   CLIENT_HOME_EMPHASIS_OPTIONS,
+  getClientAppBannerStyleOption,
+  getClientAppButtonStyleOption,
+  getClientAppCardStyleOption,
+  getClientAppThemeModeOption,
+  getClientExperienceModelOption,
   getClientAppVisualStyleOption,
   getClientHomeEmphasisOption,
   normalizeSalonClientAppConfig,
+  resolveClientExperienceModel,
   resolveClientAppVisualStyle,
   resolveClientHomeEmphasis,
 } from "@/lib/clientAppConfig";
@@ -52,19 +66,28 @@ export default async function SettingsPage({
   const clientAppConfig = normalizeSalonClientAppConfig(
     salon.client_app_config,
   );
+  const experienceModelOption = getClientExperienceModelOption(
+    clientAppConfig.experienceModel,
+  );
   const visualStyleOption = getClientAppVisualStyleOption(
     clientAppConfig.visualStyle,
   );
   const emphasisOption = getClientHomeEmphasisOption(
     clientAppConfig.homeEmphasis,
   );
+  const resolvedExperienceModel = resolveClientExperienceModel(
+    clientAppConfig.experienceModel,
+    segmentPreset.value,
+  );
   const resolvedVisualStyle = resolveClientAppVisualStyle(
     clientAppConfig.visualStyle,
     segmentPreset.value,
+    clientAppConfig.experienceModel,
   );
   const resolvedHomeEmphasis = resolveClientHomeEmphasis(
     clientAppConfig.homeEmphasis,
     segmentPreset.value,
+    clientAppConfig.experienceModel,
   );
   const timezone = salon.timezone ?? "America/Sao_Paulo";
   const slotStepMinutes = salon.slot_step_minutes ?? 30;
@@ -96,17 +119,52 @@ export default async function SettingsPage({
     SALON_TIMEZONE_OPTIONS.find((option) => option.value === timezone)?.label ??
     timezone;
   const slotStepLabel =
-    SLOT_STEP_OPTIONS.find((option) => option.value === slotStepMinutes)?.label ??
-    `${slotStepMinutes} min`;
+    SLOT_STEP_OPTIONS.find((option) => option.value === slotStepMinutes)
+      ?.label ?? `${slotStepMinutes} min`;
   const openDaysCount = businessHours.filter((entry) => entry.is_open).length;
   const resolvedVisualStyleLabel =
     CLIENT_APP_VISUAL_STYLE_OPTIONS.find(
       (option) => option.value === resolvedVisualStyle,
     )?.label ?? visualStyleOption.label;
+  const resolvedExperienceModelOption =
+    CLIENT_EXPERIENCE_MODEL_OPTIONS.find(
+      (option) => option.value === resolvedExperienceModel,
+    ) ?? experienceModelOption;
+  const resolvedExperienceModelLabel = resolvedExperienceModelOption.label;
   const resolvedHomeEmphasisLabel =
     CLIENT_HOME_EMPHASIS_OPTIONS.find(
       (option) => option.value === resolvedHomeEmphasis,
     )?.label ?? emphasisOption.label;
+  const themeModeOption = getClientAppThemeModeOption(clientAppConfig.themeMode);
+  const buttonStyleOption = getClientAppButtonStyleOption(
+    clientAppConfig.buttonStyle,
+  );
+  const cardStyleOption = getClientAppCardStyleOption(clientAppConfig.cardStyle);
+  const bannerStyleOption = getClientAppBannerStyleOption(
+    clientAppConfig.bannerStyle,
+  );
+  const selectedHomeModules = CLIENT_APP_HOME_MODULE_OPTIONS.filter((option) =>
+    clientAppConfig.visibleHomeModules.includes(option.value),
+  );
+  const heroImageFocusX = clientAppConfig.heroImageFocusX ?? 50;
+  const heroImageFocusY = clientAppConfig.heroImageFocusY ?? 50;
+  const previewHeroImageUrl =
+    clientAppConfig.heroImageVariantUrl ?? clientAppConfig.heroImageUrl;
+  const heroImageEditorUrl =
+    typeof clientAppConfig.rawConfig.heroImageSourceUrl === "string"
+      ? clientAppConfig.rawConfig.heroImageSourceUrl
+      : clientAppConfig.heroImageUrl;
+  const galleryImageEditorUrl =
+    typeof clientAppConfig.rawConfig.galleryCoverImageSourceUrl === "string"
+      ? clientAppConfig.rawConfig.galleryCoverImageSourceUrl
+      : clientAppConfig.galleryCoverImageUrl;
+  const profileCoverEditorUrl =
+    typeof clientAppConfig.rawConfig.profileCoverImageSourceUrl === "string"
+      ? clientAppConfig.rawConfig.profileCoverImageSourceUrl
+      : clientAppConfig.profileCoverImageUrl;
+  const heroImageSpec = CLIENT_APP_IMAGE_VARIANT_SPECS.hero;
+  const galleryImageSpec = CLIENT_APP_IMAGE_VARIANT_SPECS.galleryCover;
+  const profileCoverSpec = CLIENT_APP_IMAGE_VARIANT_SPECS.profileCover;
 
   return (
     <div className="page-grid workspace-page settings-page">
@@ -116,8 +174,8 @@ export default async function SettingsPage({
         description="Essa tela virou a central de identidade do produto: o salão define nome, cor, logo, ritmo da agenda e o tipo de experiência visual que o cliente sente no app, sem sair dos dados reais de produção."
         highlight={{
           label: "Modelo ativo do app",
-          value: resolvedVisualStyleLabel,
-          note: `${resolvedHomeEmphasisLabel} como ênfase principal e CTA "${clientAppConfig.primaryCtaLabel || "Agendar agora"}".`,
+          value: resolvedExperienceModelLabel,
+          note: `${resolvedVisualStyleLabel} como visual, ${resolvedHomeEmphasisLabel.toLowerCase()} na home e CTA "${clientAppConfig.primaryCtaLabel || "Agendar agora"}".`,
         }}
         signals={[
           {
@@ -156,6 +214,12 @@ export default async function SettingsPage({
             tone: "accent",
           },
           {
+            label: "Modelo resolvido",
+            value: resolvedExperienceModelLabel,
+            note: "Arquitetura real da home que o cliente sente no app.",
+            tone: "soft",
+          },
+          {
             label: "Criado em",
             value: formatDate(salon.created_at),
             note: "Data de entrada dessa operação na plataforma.",
@@ -165,9 +229,13 @@ export default async function SettingsPage({
         aside={
           <>
             <span className="workspace-panel__eyebrow">Direção do produto</span>
-            <h3>{salonName} já pode ter uma experiência de marca mais própria.</h3>
+            <h3>
+              {salonName} já pode ter uma experiência de marca mais própria.
+            </h3>
             <p>
-              O salão não fica preso a um visual genérico: você consegue moldar linguagem, hero, CTA, ritmo da agenda e apresentação da marca preservando a mesma base operacional do sistema.
+              O salão não fica preso a um visual genérico: você consegue moldar
+              linguagem, hero, CTA, ritmo da agenda e apresentação da marca
+              preservando a mesma base operacional do sistema.
             </p>
           </>
         }
@@ -475,59 +543,112 @@ export default async function SettingsPage({
             </div>
 
             <div className="client-model-card">
-              <div className="client-model-card__preview">
-                <div className="client-model-card__eyebrow">
-                  Modelo do app do cliente
-                </div>
+                <div className="client-model-card__preview">
+                  <div className="client-model-card__eyebrow">
+                    Modelo do app do cliente
+                  </div>
                 <h3>
-                  {clientAppConfig.heroHeadline ||
-                    visualStyleOption.previewTitle}
+                  {clientAppConfig.welcomeHeadline ||
+                    clientAppConfig.heroHeadline ||
+                    resolvedExperienceModelOption.previewTitle}
                 </h3>
                 <p>
-                  {clientAppConfig.heroSupportLine ||
-                    visualStyleOption.previewSupport}
+                  {clientAppConfig.welcomeMessage ||
+                    clientAppConfig.heroSupportLine ||
+                    resolvedExperienceModelOption.previewSupport}
                 </p>
 
                 <div className="client-model-card__chips">
+                  <span>{resolvedExperienceModelLabel}</span>
                   <span>{visualStyleOption.label}</span>
                   <span>{emphasisOption.label}</span>
-                  <span>
-                    Foco em{" "}
-                    {resolvedHomeEmphasis === "services"
-                      ? "serviços"
-                      : resolvedHomeEmphasis === "portfolio"
-                        ? "galeria"
-                        : resolvedHomeEmphasis === "schedule"
-                          ? "agenda"
-                          : "benefícios"}
-                  </span>
+                  <span>{themeModeOption?.label ?? "Tema automático"}</span>
+                </div>
+
+                <div className="brand-preview-palette">
+                  <div className="brand-preview-palette__item">
+                    <span
+                      className="brand-preview-palette__swatch"
+                      style={{ backgroundColor: brandColor }}
+                    />
+                    <div>
+                      <strong>Primária</strong>
+                      <small>{brandColor}</small>
+                    </div>
+                  </div>
+                  <div className="brand-preview-palette__item">
+                    <span
+                      className="brand-preview-palette__swatch"
+                      style={{
+                        backgroundColor:
+                          clientAppConfig.secondaryColor ??
+                          "color-mix(in srgb, white 82%, var(--accent) 18%)",
+                      }}
+                    />
+                    <div>
+                      <strong>Secundária</strong>
+                      <small>
+                        {clientAppConfig.secondaryColor ?? "Automática"}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="brand-preview-palette__item">
+                    <span
+                      className="brand-preview-palette__swatch"
+                      style={{
+                        backgroundColor:
+                          clientAppConfig.accentColor ??
+                          "color-mix(in srgb, var(--accent) 68%, #ffffff 32%)",
+                      }}
+                    />
+                    <div>
+                      <strong>Destaque</strong>
+                      <small>{clientAppConfig.accentColor ?? "Automático"}</small>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="client-model-card__phone">
                   <div
                     className={`client-model-card__phone-hero client-model-card__phone-hero--${resolvedVisualStyle}`}
-                    style={{
-                      background: `linear-gradient(145deg, ${brandColor}, color-mix(in srgb, ${brandColor} 18%, #2F231C))`,
-                    }}
+                    style={
+                      previewHeroImageUrl
+                        ? {
+                            backgroundImage: `linear-gradient(180deg, rgba(17, 14, 12, 0.16), rgba(17, 14, 12, 0.72)), url(${previewHeroImageUrl})`,
+                            backgroundPosition: `center, ${heroImageFocusX}% ${heroImageFocusY}%`,
+                            backgroundRepeat: "no-repeat",
+                            backgroundSize: `cover, ${(clientAppConfig.heroImageZoom ?? 1) * 100}%`,
+                          }
+                        : {
+                            background: `linear-gradient(145deg, ${brandColor}, ${clientAppConfig.accentColor ?? `color-mix(in srgb, ${brandColor} 18%, #2F231C)`})`,
+                          }
+                    }
                   >
                     <strong>{salonName}</strong>
                     <span>
-                      {clientAppConfig.heroSupportLine ||
+                      {clientAppConfig.welcomeMessage ||
+                        clientAppConfig.heroSupportLine ||
                         salon.tagline ||
                         segmentPreset.mobileSupport}
                     </span>
                     <b>{clientAppConfig.primaryCtaLabel || "Agendar agora"}</b>
                   </div>
                   <div className="client-model-card__phone-grid">
-                    <span>Hero editorial</span>
-                    <span>Atalhos do segmento</span>
-                    <span>Próximo agendamento</span>
-                    <span>Galeria real</span>
+                    {(selectedHomeModules.length > 0
+                      ? selectedHomeModules.map((option) => option.label)
+                      : resolvedExperienceModelOption.previewBlocks
+                    ).map((block) => (
+                      <span key={block}>{block}</span>
+                    ))}
                   </div>
                 </div>
               </div>
 
               <div className="client-model-card__meta">
+                <div>
+                  <span className="eyebrow">Modelo resolvido</span>
+                  <p>{resolvedExperienceModelLabel}</p>
+                </div>
                 <div>
                   <span className="eyebrow">Estilo resolvido</span>
                   <p>
@@ -547,6 +668,32 @@ export default async function SettingsPage({
                 <div>
                   <span className="eyebrow">CTA principal</span>
                   <p>{clientAppConfig.primaryCtaLabel || "Agendar agora"}</p>
+                </div>
+                <div>
+                  <span className="eyebrow">Tema do app</span>
+                  <p>{themeModeOption?.label ?? "Automático por segmento"}</p>
+                </div>
+                <div>
+                  <span className="eyebrow">Botões</span>
+                  <p>
+                    {buttonStyleOption?.label ?? "Botões resolvidos pelo preset"}
+                  </p>
+                </div>
+                <div>
+                  <span className="eyebrow">Cards</span>
+                  <p>{cardStyleOption?.label ?? "Cards automáticos"}</p>
+                </div>
+                <div>
+                  <span className="eyebrow">Banner hero</span>
+                  <p>{bannerStyleOption?.label ?? "Hero automático"}</p>
+                </div>
+                <div>
+                  <span className="eyebrow">Módulos da home</span>
+                  <p>
+                    {selectedHomeModules.length > 0
+                      ? `${selectedHomeModules.length} módulos selecionados`
+                      : "Automáticos por segmento"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -574,6 +721,26 @@ export default async function SettingsPage({
               </div>
 
               <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppExperienceModel">
+                    Modelo da experiência
+                  </label>
+                  <select
+                    id="clientAppExperienceModel"
+                    name="clientAppExperienceModel"
+                    defaultValue={clientAppConfig.experienceModel}
+                  >
+                    {CLIENT_EXPERIENCE_MODEL_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">
+                    {experienceModelOption.description}
+                  </small>
+                </div>
+
                 <div className="field">
                   <label htmlFor="clientAppVisualStyle">Estilo visual</label>
                   <select
@@ -620,8 +787,8 @@ export default async function SettingsPage({
                   placeholder="Ex.: Seu próximo cuidado favorito começa aqui."
                 />
                 <small className="muted">
-                  Se deixar vazio, o app usa a headline automática do segmento e
-                  do estilo visual.
+                  Se deixar vazio, o app usa a headline automática do modelo e
+                  do segmento escolhido.
                 </small>
               </div>
 
@@ -648,6 +815,382 @@ export default async function SettingsPage({
                   defaultValue={clientAppConfig.primaryCtaLabel ?? ""}
                   placeholder="Ex.: Agendar agora"
                 />
+              </div>
+            </div>
+
+            <div className="premium-settings-panel">
+              <div>
+                <strong style={{ display: "block", color: "#2F231C" }}>
+                  Camada premium white-label
+                </strong>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Aqui o salão trava a assinatura visual do app do cliente sem
+                  precisar trocar layout, rotas ou estrutura de produto.
+                </p>
+              </div>
+
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppThemeMode">
+                    Tema do app do cliente
+                  </label>
+                  <select
+                    id="clientAppThemeMode"
+                    name="clientAppThemeMode"
+                    defaultValue={clientAppConfig.themeMode ?? ""}
+                  >
+                    <option value="">Automático por segmento</option>
+                    {CLIENT_APP_THEME_MODE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">
+                    {themeModeOption?.description ??
+                      "Deixe automático para o app seguir a atmosfera premium do segmento cadastrado."}
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppButtonStyle">
+                    Estilo dos botões
+                  </label>
+                  <select
+                    id="clientAppButtonStyle"
+                    name="clientAppButtonStyle"
+                    defaultValue={clientAppConfig.buttonStyle ?? ""}
+                  >
+                    <option value="">Automático por segmento</option>
+                    {CLIENT_APP_BUTTON_STYLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">
+                    {buttonStyleOption?.description ??
+                      "O sistema resolve o acabamento mais coerente com o preset do salão."}
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppCardStyle">Estilo dos cards</label>
+                  <select
+                    id="clientAppCardStyle"
+                    name="clientAppCardStyle"
+                    defaultValue={clientAppConfig.cardStyle ?? ""}
+                  >
+                    <option value="">Automático por segmento</option>
+                    {CLIENT_APP_CARD_STYLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">
+                    {cardStyleOption?.description ??
+                      "Bom para adaptar profundidade e peso visual sem criar um app novo."}
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppBannerStyle">
+                    Estilo dos banners
+                  </label>
+                  <select
+                    id="clientAppBannerStyle"
+                    name="clientAppBannerStyle"
+                    defaultValue={clientAppConfig.bannerStyle ?? ""}
+                  >
+                    <option value="">Automático por segmento</option>
+                    {CLIENT_APP_BANNER_STYLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="muted">
+                    {bannerStyleOption?.description ??
+                      "O preset define o hero mais forte para o tipo de negócio, mas você pode travar o estilo aqui."}
+                  </small>
+                </div>
+              </div>
+
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppSecondaryColor">Cor secundária</label>
+                  <input
+                    id="clientAppSecondaryColor"
+                    name="clientAppSecondaryColor"
+                    defaultValue={clientAppConfig.secondaryColor ?? ""}
+                    placeholder="Ex.: #E7D8CC"
+                  />
+                  <small className="muted">
+                    Deixe vazio para o app usar a composição automática do
+                    segmento.
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppAccentColor">
+                    Cor de destaque
+                  </label>
+                  <input
+                    id="clientAppAccentColor"
+                    name="clientAppAccentColor"
+                    defaultValue={clientAppConfig.accentColor ?? ""}
+                    placeholder="Ex.: #CDAA74"
+                  />
+                  <small className="muted">
+                    Usada em badges, chips, estados premium e chamadas de
+                    destaque.
+                  </small>
+                </div>
+              </div>
+            </div>
+
+            <div className="premium-settings-panel">
+              <div>
+                <strong style={{ display: "block", color: "#2F231C" }}>
+                  Conteúdo da vitrine do app
+                </strong>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Esses textos e imagens alimentam a home premium e a camada
+                  editorial do app do cliente.
+                </p>
+              </div>
+
+              <div className="field">
+                <label htmlFor="clientAppWelcomeHeadline">
+                  Headline premium da home
+                </label>
+                <input
+                  id="clientAppWelcomeHeadline"
+                  name="clientAppWelcomeHeadline"
+                  defaultValue={clientAppConfig.welcomeHeadline ?? ""}
+                  placeholder="Ex.: Seu próximo cuidado favorito começa aqui."
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="clientAppWelcomeMessage">
+                  Mensagem premium da home
+                </label>
+                <textarea
+                  id="clientAppWelcomeMessage"
+                  name="clientAppWelcomeMessage"
+                  defaultValue={clientAppConfig.welcomeMessage ?? ""}
+                  rows={3}
+                  placeholder="Ex.: Agenda viva, profissionais em destaque e uma vitrine pensada para converter com elegância."
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="clientAppPromotionHeadline">
+                  Headline de promoções
+                </label>
+                <input
+                  id="clientAppPromotionHeadline"
+                  name="clientAppPromotionHeadline"
+                  defaultValue={clientAppConfig.promotionHeadline ?? ""}
+                  placeholder="Ex.: Pacotes, clube e benefícios com acabamento premium."
+                />
+              </div>
+
+              <PremiumImageCropField
+                title="Imagem hero principal"
+                description="Crop interativo para a home premium com foco, zoom e derivacoes automaticas para mobile, tablet e share."
+                urlFieldId="clientAppHeroImageUrl"
+                urlFieldName="clientAppHeroImageUrl"
+                fileFieldId="clientAppHeroImageFile"
+                fileFieldName="clientAppHeroImageFile"
+                removeFieldName="removeClientAppHeroImage"
+                focusXFieldName="clientAppHeroImageFocusX"
+                focusYFieldName="clientAppHeroImageFocusY"
+                zoomFieldName="clientAppHeroImageZoom"
+                defaultUrl={heroImageEditorUrl}
+                defaultFocusX={clientAppConfig.heroImageFocusX}
+                defaultFocusY={clientAppConfig.heroImageFocusY}
+                defaultZoom={clientAppConfig.heroImageZoom}
+                currentAssetManagedInStorage={
+                  typeof clientAppConfig.rawConfig.heroImageSourcePath ===
+                    "string" ||
+                  typeof clientAppConfig.rawConfig.heroImagePath === "string"
+                }
+                recommendedRatioLabel={heroImageSpec.recommendedRatioLabel}
+                recommendedSizeLabel={heroImageSpec.recommendedSizeLabel}
+                safeAreaLabel={heroImageSpec.safeAreaLabel}
+                aspectRatio={heroImageSpec.aspectRatio}
+                maxWidth={heroImageSpec.outputWidth}
+                maxHeight={heroImageSpec.outputHeight}
+              />
+
+              <PremiumImageCropField
+                title="Imagem da galeria"
+                description="Crop interativo para feed premium e descoberta visual, com derivacoes automaticas para mobile, tablet e share."
+                urlFieldId="clientAppGalleryCoverImageUrl"
+                urlFieldName="clientAppGalleryCoverImageUrl"
+                fileFieldId="clientAppGalleryCoverImageFile"
+                fileFieldName="clientAppGalleryCoverImageFile"
+                removeFieldName="removeClientAppGalleryCoverImage"
+                focusXFieldName="clientAppGalleryCoverImageFocusX"
+                focusYFieldName="clientAppGalleryCoverImageFocusY"
+                zoomFieldName="clientAppGalleryCoverImageZoom"
+                defaultUrl={galleryImageEditorUrl}
+                defaultFocusX={clientAppConfig.galleryCoverImageFocusX}
+                defaultFocusY={clientAppConfig.galleryCoverImageFocusY}
+                defaultZoom={clientAppConfig.galleryCoverImageZoom}
+                currentAssetManagedInStorage={
+                  typeof clientAppConfig.rawConfig.galleryCoverImageSourcePath ===
+                    "string" ||
+                  typeof clientAppConfig.rawConfig.galleryCoverImagePath ===
+                    "string"
+                }
+                recommendedRatioLabel={galleryImageSpec.recommendedRatioLabel}
+                recommendedSizeLabel={galleryImageSpec.recommendedSizeLabel}
+                safeAreaLabel={galleryImageSpec.safeAreaLabel}
+                aspectRatio={galleryImageSpec.aspectRatio}
+                maxWidth={galleryImageSpec.outputWidth}
+                maxHeight={galleryImageSpec.outputHeight}
+              />
+
+              <PremiumImageCropField
+                title="Capa institucional do perfil"
+                description="Imagem dedicada para a tela institucional do salão, com derivacoes automaticas para mobile, tablet e share."
+                urlFieldId="clientAppProfileCoverImageUrl"
+                urlFieldName="clientAppProfileCoverImageUrl"
+                fileFieldId="clientAppProfileCoverImageFile"
+                fileFieldName="clientAppProfileCoverImageFile"
+                removeFieldName="removeClientAppProfileCoverImage"
+                focusXFieldName="clientAppProfileCoverImageFocusX"
+                focusYFieldName="clientAppProfileCoverImageFocusY"
+                zoomFieldName="clientAppProfileCoverImageZoom"
+                defaultUrl={profileCoverEditorUrl}
+                defaultFocusX={clientAppConfig.profileCoverImageFocusX}
+                defaultFocusY={clientAppConfig.profileCoverImageFocusY}
+                defaultZoom={clientAppConfig.profileCoverImageZoom}
+                currentAssetManagedInStorage={
+                  typeof clientAppConfig.rawConfig
+                    .profileCoverImageSourcePath === "string" ||
+                  typeof clientAppConfig.rawConfig.profileCoverImagePath ===
+                    "string"
+                }
+                recommendedRatioLabel={profileCoverSpec.recommendedRatioLabel}
+                recommendedSizeLabel={profileCoverSpec.recommendedSizeLabel}
+                safeAreaLabel={profileCoverSpec.safeAreaLabel}
+                aspectRatio={profileCoverSpec.aspectRatio}
+                maxWidth={profileCoverSpec.outputWidth}
+                maxHeight={profileCoverSpec.outputHeight}
+              />
+            </div>
+
+            <div className="premium-settings-panel">
+              <div>
+                <strong style={{ display: "block", color: "#2F231C" }}>
+                  Módulos visíveis na home
+                </strong>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Escolha quais blocos o cliente vê na home. Se não marcar nada,
+                  o sistema segue a composição automática do segmento.
+                </p>
+              </div>
+
+              <div className="module-toggle-grid">
+                {CLIENT_APP_HOME_MODULE_OPTIONS.map((option) => (
+                  <label key={option.value} className="module-toggle-card">
+                    <input
+                      type="checkbox"
+                      name="clientAppVisibleHomeModules"
+                      value={option.value}
+                      defaultChecked={clientAppConfig.visibleHomeModules.includes(
+                        option.value,
+                      )}
+                    />
+                    <strong>{option.label}</strong>
+                    <span>{option.description}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="premium-settings-panel">
+              <div>
+                <strong style={{ display: "block", color: "#2F231C" }}>
+                  Touchpoints institucionais do app
+                </strong>
+                <p className="muted" style={{ margin: "6px 0 0" }}>
+                  Informações que fortalecem confiança, descoberta e navegação
+                  para o cliente final.
+                </p>
+              </div>
+
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppInstagramUrl">
+                    Instagram do salão
+                  </label>
+                  <input
+                    id="clientAppInstagramUrl"
+                    name="clientAppInstagramUrl"
+                    type="url"
+                    defaultValue={clientAppConfig.instagramUrl ?? ""}
+                    placeholder="https://instagram.com/..."
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppMapUrl">Link do mapa</label>
+                  <input
+                    id="clientAppMapUrl"
+                    name="clientAppMapUrl"
+                    type="url"
+                    defaultValue={clientAppConfig.mapUrl ?? ""}
+                    placeholder="https://maps.app.goo.gl/..."
+                  />
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="clientAppAddressLabel">
+                  Endereço exibido no app
+                </label>
+                <input
+                  id="clientAppAddressLabel"
+                  name="clientAppAddressLabel"
+                  defaultValue={clientAppConfig.addressLabel ?? ""}
+                  placeholder="Ex.: Av. Paulista, 1400 - Bela Vista, São Paulo"
+                />
+              </div>
+
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppRatingValue">Nota média</label>
+                  <input
+                    id="clientAppRatingValue"
+                    name="clientAppRatingValue"
+                    inputMode="decimal"
+                    defaultValue={clientAppConfig.ratingValue?.toString() ?? ""}
+                    placeholder="Ex.: 4.9"
+                  />
+                  <small className="muted">
+                    Valor entre 0 e 5 para reforçar confiança no perfil do
+                    salão.
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppRatingCount">
+                    Total de avaliações
+                  </label>
+                  <input
+                    id="clientAppRatingCount"
+                    name="clientAppRatingCount"
+                    inputMode="numeric"
+                    defaultValue={clientAppConfig.ratingCount?.toString() ?? ""}
+                    placeholder="Ex.: 186"
+                  />
+                </div>
               </div>
             </div>
 
@@ -799,6 +1342,16 @@ export default async function SettingsPage({
               <small className="list-meta">
                 Criado em {formatDate(salon.created_at)}
               </small>
+              <div style={{ marginTop: 14 }}>
+                <a
+                  href={`/s/${salon.join_code}`}
+                  className="secondary-button"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Abrir vitrine pública
+                </a>
+              </div>
             </div>
 
             <div className="code-card__aside">

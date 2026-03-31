@@ -13,7 +13,7 @@ mixin _SalonRepositoryProfileMixin on _SalonRepositoryBase {
       final response = await client
           .from('customers')
           .select(
-            'id, name, phone, preferences, allergies, beauty_products, salon_id, salons(name, tagline, brand_color, business_segment, whatsapp_phone, logo_path)',
+            'id, name, phone, preferences, allergies, beauty_products, salon_id, salons(name, tagline, brand_color, business_segment, whatsapp_phone, logo_path, client_app_config)',
           )
           .eq('auth_user_id', user.id)
           .maybeSingle();

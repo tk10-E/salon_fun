@@ -74,10 +74,7 @@ void main() {
           updatedProfile?.preferences,
           'Prefiro a Ana e gosto de acabamento mais natural.',
         );
-        expect(
-          updatedProfile?.allergies,
-          'Sensibilidade a fragrância forte.',
-        );
+        expect(updatedProfile?.allergies, 'Sensibilidade a fragrância forte.');
         expect(
           updatedProfile?.beautyProducts,
           'Máscara reconstrutora e finalizador sem sulfato.',
@@ -110,20 +107,18 @@ void main() {
         );
 
         expect(
-          find.text(
-            'Falta 1 visita para subir de nível e puxar mais vantagem no app.',
-          ),
+          find.text('Falta 1 visita para subir de nível.'),
           findsOneWidget,
         );
         expect(
-          find.text('Sua próxima visita já pode destravar mais vantagem'),
+          find.text('Sua próxima visita pode liberar mais vantagem'),
           findsOneWidget,
         );
-        expect(find.text('Histórico recente'), findsOneWidget);
-        expect(find.text('Perfil de beleza'), findsOneWidget);
+        expect(find.text('Últimos atendimentos'), findsOneWidget);
+        expect(find.text('Ficha do cliente'), findsOneWidget);
         expect(find.text('Alergias e cuidados'), findsOneWidget);
-        expect(find.text('Produtos usados ou preferidos'), findsOneWidget);
-        expect(find.text('Cortes e atendimentos anteriores'), findsOneWidget);
+        expect(find.text('Produtos e rotina'), findsOneWidget);
+        expect(find.text('Atendimentos anteriores'), findsOneWidget);
         expect(find.text('Corte premium'), findsNWidgets(2));
         expect(find.text('Serviços salvos'), findsOneWidget);
         expect(find.text('Profissionais salvos'), findsOneWidget);

@@ -8,6 +8,7 @@ class SoftCard extends StatelessWidget {
     this.gradient,
     this.borderColor = const Color(0xFFE3D5C7),
     this.backgroundColor = Colors.white,
+    this.radius = 24,
   });
 
   final Widget child;
@@ -15,6 +16,7 @@ class SoftCard extends StatelessWidget {
   final Gradient? gradient;
   final Color borderColor;
   final Color backgroundColor;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -23,13 +25,13 @@ class SoftCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: gradient == null ? backgroundColor : null,
         gradient: gradient,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: borderColor),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x1427170F),
-            blurRadius: 24,
-            offset: Offset(0, 10),
+            color: Color(0x0C27170F),
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
         ],
       ),

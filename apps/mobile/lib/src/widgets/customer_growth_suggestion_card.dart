@@ -303,10 +303,10 @@ class _GrowthInfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: branding.outline.withValues(alpha: 0.58)),
       ),
       child: Row(
@@ -316,7 +316,7 @@ class _GrowthInfoChip extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: foregroundColor,
               fontWeight: FontWeight.w800,
             ),

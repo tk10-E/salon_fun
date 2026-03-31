@@ -1,0 +1,78 @@
+import 'package:flutter/material.dart';
+
+import '../theme/design_tokens.dart';
+import '../theme/tenant_theme.dart';
+import 'premium_surface_card.dart';
+
+class PremiumEmptyState extends StatelessWidget {
+  const PremiumEmptyState({
+    super.key,
+    required this.title,
+    required this.message,
+    this.eyebrow,
+    this.icon = Icons.auto_awesome_rounded,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String title;
+  final String message;
+  final String? eyebrow;
+  final IconData icon;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.premiumTheme;
+
+    return PremiumSurfaceCard(
+      tone: PremiumSurfaceTone.secondary,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              gradient: theme.buttonGradient,
+              borderRadius: BorderRadius.circular(26),
+            ),
+            child: Icon(icon, color: theme.onAccent, size: 34),
+          ),
+          if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
+            const SizedBox(height: PremiumSpacing.md),
+            Text(
+              eyebrow!,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(color: theme.textMuted),
+            ),
+          ],
+          const SizedBox(height: PremiumSpacing.sm),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: theme.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: PremiumSpacing.sm),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: theme.textMuted),
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: PremiumSpacing.lg),
+            FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+          ],
+        ],
+      ),
+    );
+  }
+}

@@ -53,7 +53,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.text('Último passo para entrar em Salon Fun.'),
+          find.text('Entrar em Salon Fun'),
           findsOneWidget,
         );
         expect(
@@ -61,11 +61,7 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Falar com o salão'), findsOneWidget);
-        expect(find.textContaining('agenda liberada'), findsOneWidget);
-        expect(
-          find.textContaining('benefícios prontos para aparecer'),
-          findsOneWidget,
-        );
+        expect(find.textContaining('agenda e marca certas'), findsOneWidget);
 
         await tester.tap(find.text('Conectar Salon Fun e continuar'));
         await tester.pump();
@@ -76,9 +72,7 @@ void main() {
         expect(repository.joinRequests.single.customerName, 'Talita');
         expect(joinedCount, 1);
         expect(
-          find.textContaining(
-            'Agenda, benefícios e contato já aparecem daqui para frente.',
-          ),
+          find.textContaining('Tudo pronto. Salon Fun já está no seu app.'),
           findsOneWidget,
         );
       },

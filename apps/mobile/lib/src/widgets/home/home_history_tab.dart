@@ -6,12 +6,12 @@ import '../../features/home/home_data.dart';
 import '../../models/app_models.dart';
 import '../../theme/salon_branding.dart';
 import '../customer_growth_suggestion_card.dart';
+import '../cinematic_reveal.dart';
 import '../empty_state.dart';
 import '../press_feedback.dart';
 import '../soft_card.dart';
 import 'home_appointment_card.dart';
 import 'home_history_brand_header.dart';
-import 'home_section_intro.dart';
 
 class HomeHistoryTab extends StatelessWidget {
   const HomeHistoryTab({
@@ -51,28 +51,25 @@ class HomeHistoryTab extends StatelessWidget {
         onRefresh: onRefresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
           children: [
-            HomeHistoryBrandHeader(
-              profile: profile,
-              branding: branding,
-              appointmentCount: appointments.length,
+            CinematicReveal(
+              delay: const Duration(milliseconds: 20),
+              child: HomeHistoryBrandHeader(
+                profile: profile,
+                branding: branding,
+                appointmentCount: appointments.length,
+                compact: true,
+              ),
             ),
             const SizedBox(height: 20),
-            const HomeSectionIntro(
-              eyebrow: 'Seu histórico',
-              title: 'Seus horários vão aparecer aqui',
-              description:
-                  'Assim que você fizer um agendamento, será fácil acompanhar serviços, datas, valores e profissional.',
-            ),
-            const SizedBox(height: 16),
             EmptyState(
               centered: true,
               icon: Icons.history_toggle_off_rounded,
               eyebrow: 'Nenhum horário ainda',
               title: 'Seu histórico está vazio',
               message:
-                  'Quando você reservar um atendimento, o app vai guardar serviço, data, valor e profissional para você consultar depois.',
+                  'Quando você fizer um agendamento, ele aparece aqui com status, data e profissional.',
               actionLabel: 'Falar com o salão',
               onAction: onWhatsApp,
             ),
@@ -85,7 +82,7 @@ class HomeHistoryTab extends StatelessWidget {
       onRefresh: onRefresh,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         itemCount: appointments.length + 1,
         separatorBuilder: (_, index) => index == 0
             ? const SizedBox(height: 18)
@@ -95,26 +92,27 @@ class HomeHistoryTab extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                HomeHistoryBrandHeader(
-                  profile: profile,
-                  branding: branding,
-                  appointmentCount: appointments.length,
+                CinematicReveal(
+                  delay: const Duration(milliseconds: 20),
+                  child: HomeHistoryBrandHeader(
+                    profile: profile,
+                    branding: branding,
+                    appointmentCount: appointments.length,
+                    compact: true,
+                  ),
                 ),
                 const SizedBox(height: 20),
-                HomeSectionIntro(
-                  eyebrow: 'Seu histórico',
-                  title: _historyIntroTitle,
-                  description: _historyIntroDescription,
-                ),
-                const SizedBox(height: 16),
-                _HistoryJourneyCard(
-                  branding: branding,
-                  upcomingCount: _upcomingCount,
-                  completedCount: _completedCount,
-                  cancelledCount: _cancelledCount,
-                  walletActive:
-                      insightData?.loyaltySummary?.hasVisibleContent == true,
-                  hasOffer: _featuredOffer != null,
+                CinematicReveal(
+                  delay: const Duration(milliseconds: 90),
+                  child: _HistoryJourneyCard(
+                    branding: branding,
+                    upcomingCount: _upcomingCount,
+                    completedCount: _completedCount,
+                    cancelledCount: _cancelledCount,
+                    walletActive:
+                        insightData?.loyaltySummary?.hasVisibleContent == true,
+                    hasOffer: _featuredOffer != null,
+                  ),
                 ),
                 ..._buildReturnWidgets(context),
               ],
@@ -157,40 +155,6 @@ class HomeHistoryTab extends StatelessWidget {
       .where((appointment) => appointment.status == 'cancelled')
       .length;
 
-  String get _historyIntroTitle {
-    if (_hasUpcomingAppointment) {
-      return 'Acompanhe seus atendimentos com clareza';
-    }
-
-    if (insightData?.growthSuggestions?.hasVisibleContent == true) {
-      return 'Seu histórico agora ajuda no próximo retorno';
-    }
-
-    if (insightData?.loyaltySummary?.hasVisibleContent == true ||
-        (insightData?.offers.isNotEmpty ?? false)) {
-      return 'Seu histórico agora trabalha a favor da recorrência';
-    }
-
-    return 'Acompanhe seus atendimentos com clareza';
-  }
-
-  String get _historyIntroDescription {
-    if (_hasUpcomingAppointment) {
-      return 'Datas, status, valores e profissional organizados para você resolver tudo sem conversa solta.';
-    }
-
-    if (insightData?.growthSuggestions?.hasVisibleContent == true) {
-      return 'O app usa seu histórico para sugerir o melhor momento de voltar, reservar de novo e recuperar frequência com menos atrito.';
-    }
-
-    if (insightData?.loyaltySummary?.hasVisibleContent == true ||
-        (insightData?.offers.isNotEmpty ?? false)) {
-      return 'Seu histórico, benefícios e campanhas do salão ficam juntos para facilitar seu próximo retorno.';
-    }
-
-    return 'Datas, status, valores e profissional organizados para você resolver tudo sem conversa solta.';
-  }
-
   List<Widget> _buildReturnWidgets(BuildContext context) {
     if (_hasUpcomingAppointment || insightData == null) {
       return const [];
@@ -203,11 +167,9 @@ class HomeHistoryTab extends StatelessWidget {
     if (suggestion != null) {
       widgets.add(const SizedBox(height: 22));
       widgets.add(
-        const HomeSectionIntro(
-          eyebrow: 'Rebook inteligente',
-          title: 'O melhor momento para voltar já apareceu no app',
-          description:
-              'Com base no seu histórico, o app já separou a sugestão com mais chance de virar retorno agora.',
+        const _HistoryInlineHeader(
+          eyebrow: 'Retorno inteligente',
+          title: 'Seu melhor próximo horário',
         ),
       );
       widgets.add(const SizedBox(height: 14));
@@ -289,16 +251,16 @@ class HomeHistoryTab extends StatelessWidget {
 
     final title =
         loyaltySummary?.hasVisibleContent == true && featuredOffer != null
-        ? 'Seu próximo retorno pode render vantagem dupla'
+        ? 'Sua próxima volta já tem vantagem'
         : loyaltySummary?.hasVisibleContent == true
-        ? 'Sua carteira já pode puxar a próxima visita'
-        : 'O salão já tem uma vantagem ativa para sua volta';
+        ? 'Sua carteira já entrou no jogo'
+        : 'O salão já deixou uma vantagem ativa';
 
     final message =
         loyaltySummary?.hasVisibleContent == true && featuredOffer != null
-        ? 'Você já acumulou ${loyaltySummary!.pointsBalance} pontos e ${loyaltySummary.completedVisits} visitas concluídas. Além disso, ${featuredOffer.isMembership ? 'o pacote' : 'a campanha'} ${featuredOffer.title} pode ajudar no seu próximo retorno.'
+        ? 'Você já acumulou ${loyaltySummary!.pointsBalance} pontos e ${loyaltySummary.completedVisits} visitas. ${featuredOffer.isMembership ? 'O pacote' : 'A campanha'} ${featuredOffer.title} também pode entrar no seu próximo retorno.'
         : loyaltySummary?.hasVisibleContent == true
-        ? 'Seus ${loyaltySummary!.pointsBalance} pontos, visitas e cashback ficam guardados na carteira para você acompanhar desconto progressivo e próximas vantagens.'
+        ? 'Seus ${loyaltySummary!.pointsBalance} pontos, visitas e cashback já estão organizados na carteira.'
         : featuredOffer!.highlightText?.trim().isNotEmpty == true
         ? featuredOffer.highlightText!
         : featuredOffer.description?.trim().isNotEmpty == true
@@ -471,8 +433,8 @@ class _HistoryJourneyCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             walletActive || hasOffer
-                ? 'Seu histórico agora também aponta retorno, benefícios e o melhor próximo passo.'
-                : 'Veja o que está por vir, o que já foi concluído e o ritmo da sua relação com o salão.',
+                ? 'Agenda, retorno e benefícios no mesmo resumo.'
+                : 'Tudo o que importa para acompanhar sua relação com o salão.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: const Color(0xFF705A4B),
               height: 1.45,
@@ -519,6 +481,37 @@ class _HistoryJourneyCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _HistoryInlineHeader extends StatelessWidget {
+  const _HistoryInlineHeader({required this.eyebrow, required this.title});
+
+  final String eyebrow;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          eyebrow,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: const Color(0xFF8E441F),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: const Color(0xFF2F231C),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
     );
   }
 }

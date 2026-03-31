@@ -32,7 +32,7 @@ void main() {
 
         expect(find.text('Carteira de benefícios'), findsOneWidget);
         expect(find.text('Falta só uma visita para subir de nível'), findsOneWidget);
-        expect(find.text('Extrato recente'), findsOneWidget);
+        expect(find.text('Movimentos recentes'), findsOneWidget);
         expect(find.text('Seu extrato ainda está vazio'), findsOneWidget);
         expect(repository.loyaltyTransactionsRequestCount, 1);
       },

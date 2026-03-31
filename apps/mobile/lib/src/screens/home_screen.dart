@@ -10,6 +10,7 @@ import '../core/serialized_refresh_controller.dart';
 import '../features/home/home_data.dart';
 import '../features/home/home_data_loader.dart';
 import '../models/app_models.dart';
+import '../navigation/salon_page_route.dart';
 import '../repositories/salon_repository.dart';
 import '../services/push_notification_service.dart';
 import '../services/push_token_sync_service.dart';
@@ -17,19 +18,24 @@ import '../theme/salon_branding.dart';
 import '../theme/salon_experience_preset.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cancel_appointment_sheet.dart';
+import '../widgets/cinematic_reveal.dart';
 import '../widgets/home/home_feed_tab.dart';
 import '../widgets/home/home_history_tab.dart';
 import '../widgets/home/home_load_error_view.dart';
+import '../widgets/home/home_profile_tab.dart';
 import '../widgets/home/home_services_tab.dart';
 import '../widgets/feed_comments_sheet.dart';
-import '../widgets/notification_center_sheet.dart';
 import '../widgets/press_feedback.dart';
+import '../widgets/premium_bottom_nav_bar.dart';
+import '../widgets/pulse_dot.dart';
 import '../widgets/salon_brand_mark.dart';
 import '../widgets/salon_home_skeleton.dart';
-import '../widgets/soft_card.dart';
 import 'benefits_wallet_screen.dart';
 import 'book_appointment_screen.dart';
-import 'profile_screen.dart';
+import 'premium_booking_screen.dart';
+import 'premium_client_profile_screen.dart';
+import 'premium_notifications_screen.dart';
+import 'premium_salon_profile_screen.dart';
 
 part 'home_screen_actions.dart';
 part 'home_screen_data.dart';
@@ -162,16 +168,16 @@ class _HomeScreenState extends _HomeScreenStateBase
     _pushTokenSyncService =
         widget.pushTokenSyncService ??
         PushTokenSyncService(repository: widget.repository);
-    _tabController = TabController(
-      length: 3,
-      vsync: this,
-      animationDuration: const Duration(milliseconds: 170),
-    )
-      ..addListener(() {
-        if (mounted) {
-          setState(() {});
-        }
-      });
+    _tabController =
+        TabController(
+          length: 4,
+          vsync: this,
+          animationDuration: const Duration(milliseconds: 170),
+        )..addListener(() {
+          if (mounted) {
+            setState(() {});
+          }
+        });
     _loadData();
     if (widget.enableRealtime) {
       _subscribeToVacancyAlerts();
@@ -302,239 +308,6 @@ class _HomeScreenState extends _HomeScreenStateBase
     return '$todayAppointments atendimentos';
   }
 
-  int _upcomingAppointmentCount(List<AppointmentItem> appointments) {
-    final now = DateTime.now();
-    return appointments
-        .where(
-          (appointment) =>
-              (appointment.status == 'pending' ||
-                  appointment.status == 'confirmed') &&
-              appointment.date.isAfter(now),
-        )
-        .length;
-  }
-
-  int _completedAppointmentCount(List<AppointmentItem> appointments) {
-    return appointments
-        .where((appointment) => appointment.status == 'completed')
-        .length;
-  }
-
-  int _uniqueFeedStaffCount(List<SalonPost> posts) {
-    return posts
-        .map((post) => post.staffMemberName?.trim() ?? '')
-        .where((name) => name.isNotEmpty)
-        .toSet()
-        .length;
-  }
-
-  String _formatCountLabel(
-    int count, {
-    required String singular,
-    required String plural,
-    String? zero,
-  }) {
-    if (count == 0) {
-      return zero ?? 'Sem $plural';
-    }
-
-    if (count == 1) {
-      return '1 $singular';
-    }
-
-    return '$count $plural';
-  }
-
-  _HomeShellSnapshot _buildHomeShellSnapshot(
-    HomeData? data,
-    SalonExperiencePreset preset,
-    int notificationCount,
-  ) {
-    final tabIndex = _tabController.index;
-    final services = data?.services ?? const <ServiceItem>[];
-    final appointments = data?.appointments ?? const <AppointmentItem>[];
-    final posts = data?.posts ?? const <SalonPost>[];
-    final offers = data?.offers ?? const <SalonOfferItem>[];
-    final hasBenefits = data?.loyaltySummary?.hasVisibleContent == true;
-    final feedStaffCount = _uniqueFeedStaffCount(posts);
-    final beforeAfterCount = posts.where((post) => post.isBeforeAfter).length;
-    final reservablePostsCount = posts
-        .where((post) => post.linkedService != null)
-        .length;
-    final upcomingCount = _upcomingAppointmentCount(appointments);
-    final completedCount = _completedAppointmentCount(appointments);
-    final nextAvailableLabel = data == null
-        ? 'Preparando agenda'
-        : _formatNextAvailable(data.nextAvailableAt);
-
-    switch (tabIndex) {
-      case 1:
-        return _HomeShellSnapshot(
-          eyebrow: 'Feed do salão',
-          title: 'Inspirações, resultados e agenda em movimento.',
-          description: posts.isEmpty
-              ? 'Quando o salão publicar novidades, fotos e referências vão aparecer aqui para ajudar na decisão.'
-              : '${_formatCountLabel(posts.length, singular: 'post', plural: 'posts')} para decidir mais rápido antes da próxima reserva.',
-          icon: Icons.auto_awesome_mosaic_rounded,
-          emphasisLabel: beforeAfterCount > 0
-              ? _formatCountLabel(
-                  beforeAfterCount,
-                  singular: 'resultado real',
-                  plural: 'resultados reais',
-                )
-              : notificationCount > 0
-              ? _formatCountLabel(
-                  notificationCount,
-                  singular: 'novo aviso',
-                  plural: 'novos avisos',
-                )
-              : 'Feed atualizado',
-          metrics: [
-            _HomeShellMetric(
-              icon: Icons.photo_library_outlined,
-              label: 'No feed',
-              value: posts.isEmpty
-                  ? 'Aguardando posts'
-                  : _formatCountLabel(
-                      posts.length,
-                      singular: 'publicação',
-                      plural: 'publicações',
-                    ),
-            ),
-            _HomeShellMetric(
-              icon: Icons.person_search_rounded,
-              label: 'Equipe',
-              value: feedStaffCount == 0
-                  ? 'Salão em destaque'
-                  : _formatCountLabel(
-                      feedStaffCount,
-                      singular: 'profissional',
-                      plural: 'profissionais',
-                    ),
-            ),
-            _HomeShellMetric(
-              icon: Icons.event_available_rounded,
-              label: 'Reserva',
-              value: reservablePostsCount == 0
-                  ? 'Chame no chat'
-                  : _formatCountLabel(
-                      reservablePostsCount,
-                      singular: 'post reservável',
-                      plural: 'posts reserváveis',
-                    ),
-            ),
-          ],
-        );
-      case 2:
-        return _HomeShellSnapshot(
-          eyebrow: 'Histórico organizado',
-          title: 'Seu histórico fica pronto para voltar na hora certa.',
-          description: appointments.isEmpty
-              ? 'Seus próximos horários e atendimentos passados vão aparecer aqui em uma linha do tempo mais clara.'
-              : 'Rebook, confirmações e benefícios aparecem juntos para você retomar sua rotina com menos atrito.',
-          icon: Icons.history_rounded,
-          emphasisLabel: upcomingCount > 0
-              ? _formatCountLabel(
-                  upcomingCount,
-                  singular: 'próximo horário',
-                  plural: 'próximos horários',
-                )
-              : completedCount > 0
-              ? _formatCountLabel(
-                  completedCount,
-                  singular: 'retorno salvo',
-                  plural: 'retornos salvos',
-                )
-              : 'Historico pronto',
-          metrics: [
-            _HomeShellMetric(
-              icon: Icons.upcoming_rounded,
-              label: 'Próximos',
-              value: upcomingCount == 0
-                  ? 'Sem agenda'
-                  : _formatCountLabel(
-                      upcomingCount,
-                      singular: 'agendado',
-                      plural: 'agendados',
-                    ),
-            ),
-            _HomeShellMetric(
-              icon: Icons.check_circle_outline_rounded,
-              label: 'Concluídos',
-              value: completedCount == 0
-                  ? 'Sem concluídos'
-                  : _formatCountLabel(
-                      completedCount,
-                      singular: 'atendimento',
-                      plural: 'atendimentos',
-                    ),
-            ),
-            _HomeShellMetric(
-              icon: hasBenefits
-                  ? Icons.loyalty_rounded
-                  : Icons.sell_outlined,
-              label: hasBenefits ? 'Benefícios' : 'Campanhas',
-              value: hasBenefits
-                  ? 'Carteira ativa'
-                  : offers.isEmpty
-                  ? 'Fale com o salão'
-                  : _formatCountLabel(
-                      offers.length,
-                      singular: 'oferta',
-                      plural: 'ofertas',
-                    ),
-            ),
-          ],
-        );
-      case 0:
-      default:
-        return _HomeShellSnapshot(
-          eyebrow: 'Centro do salão',
-          title: 'Tudo para decidir, reservar e falar com o salão.',
-          description: data == null
-              ? 'Agenda, benefícios, inspirações e contato do salão ficam organizados aqui em um só lugar.'
-              : _buildHeroSubtitle(data),
-          icon: Icons.spa_outlined,
-          emphasisLabel: notificationCount > 0
-              ? _formatCountLabel(
-                  notificationCount,
-                  singular: 'novo aviso',
-                  plural: 'novos avisos',
-                )
-              : preset.appBarLabel,
-          metrics: [
-            _HomeShellMetric(
-              icon: Icons.schedule_rounded,
-              label: 'Próximo horário',
-              value: nextAvailableLabel,
-            ),
-            _HomeShellMetric(
-              icon: Icons.today_outlined,
-              label: 'Hoje',
-              value: data == null
-                  ? 'Preparando agenda'
-                  : _todayAttendanceLabel(appointments),
-            ),
-            _HomeShellMetric(
-              icon: hasBenefits
-                  ? Icons.workspace_premium_outlined
-                  : Icons.content_cut_rounded,
-              label: hasBenefits ? 'Benefícios' : 'Serviços',
-              value: hasBenefits
-                  ? 'Carteira ativa'
-                  : services.isEmpty
-                  ? 'Fale com o salão'
-                  : _formatCountLabel(
-                      services.length,
-                      singular: 'serviço',
-                      plural: 'serviços',
-                    ),
-            ),
-          ],
-        );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final preset = SalonExperiencePreset.fromBusinessSegment(
@@ -544,6 +317,7 @@ class _HomeScreenState extends _HomeScreenStateBase
       _profile.salonName,
       overrideHexColor: _profile.salonBrandColor,
       businessSegment: _profile.salonBusinessSegment,
+      clientAppConfig: _profile.salonClientAppConfig,
     );
 
     return FutureBuilder<HomeData>(
@@ -555,335 +329,310 @@ class _HomeScreenState extends _HomeScreenStateBase
         final hasError = snapshot.hasError && data == null;
         final notificationCount =
             data?.notifications.where((item) => !item.isRead).length ?? 0;
-        final shellSnapshot = _buildHomeShellSnapshot(
-          data,
-          preset,
-          notificationCount,
-        );
-
+        final liveSignalLabel = data == null
+            ? 'Conectando'
+            : data.posts.isNotEmpty
+            ? 'Ao vivo'
+            : data.nextAvailableAt != null
+            ? 'Agenda aberta'
+            : 'App ativo';
         return Scaffold(
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            toolbarHeight: 84,
-            titleSpacing: 20,
-            title: Row(
-              children: [
-                SalonBrandMark(
-                  salonName: _profile.salonName,
-                  logoUrl: _profile.salonLogoUrl,
-                  branding: branding,
-                  size: 44,
-                  borderRadius: 16,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _profile.salonName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: branding.deep,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        preset.appBarLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: branding.mutedText,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            foregroundColor: branding.deep,
-            actions: [
-              PressFeedback(
-                enabled: data != null,
-                haptic: data != null,
-                child: IconButton(
-                  onPressed: data == null
-                      ? null
-                      : () {
-                          unawaited(
-                            _openNotificationsCenter(data.notifications),
-                          );
-                        },
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.82),
-                    foregroundColor: branding.deep,
-                    side: BorderSide(
-                      color: branding.outline.withValues(alpha: 0.68),
-                    ),
-                    minimumSize: const Size(46, 46),
-                  ),
-                  icon: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(Icons.notifications_none_rounded),
-                      if (notificationCount > 0)
-                        Positioned(
-                          right: -6,
-                          top: -5,
-                          child: Container(
-                            constraints: const BoxConstraints(minWidth: 18),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: branding.primary,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 1.4,
+          extendBody: true,
+          body: AppBackdrop(
+            branding: branding,
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+                    child: CinematicReveal(
+                      delay: const Duration(milliseconds: 24),
+                      beginOffset: const Offset(0, 14),
+                      child: _HomeShellHeader(
+                        branding: branding,
+                        title: _headerTitle,
+                        subtitle: _headerSubtitle(preset),
+                        salonName: _profile.salonName,
+                        onOpenSalonProfile: data == null
+                            ? null
+                            : () {
+                                unawaited(_openSalonProfile(data));
+                              },
+                        appBadgeLabel: preset.appBarLabel,
+                        liveSignalLabel: liveSignalLabel,
+                        liveActive: data != null,
+                        notificationCount: notificationCount,
+                        onOpenNotifications: data == null
+                            ? null
+                            : () {
+                                unawaited(
+                                  _openNotificationsCenter(data.notifications),
+                                );
+                              },
+                        accountMenu: PopupMenuButton<_AccountMenuAction>(
+                          tooltip: 'Minha conta',
+                          onSelected: (action) {
+                            unawaited(
+                              _handleAccountMenuSelection(action, data),
+                            );
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: _AccountMenuAction.profile,
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.person_outline_rounded),
+                                title: Text('Minha conta'),
                               ),
                             ),
-                            child: Text(
-                              notificationCount > 9
-                                  ? '9+'
-                                  : notificationCount.toString(),
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                            PopupMenuItem(
+                              value: _AccountMenuAction.wallet,
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  Icons.account_balance_wallet_outlined,
+                                ),
+                                title: Text('Minha carteira'),
+                              ),
+                            ),
+                            PopupMenuDivider(),
+                            PopupMenuItem(
+                              value: _AccountMenuAction.signOut,
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.logout_rounded),
+                                title: Text('Sair'),
+                              ),
+                            ),
+                          ],
+                          child: PressFeedback(
+                            haptic: true,
+                            child: _HomeProfileAvatar(
+                              branding: branding,
+                              label: _profile.name,
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                  tooltip: 'Notificações',
-                ),
-              ),
-              PopupMenuButton<_AccountMenuAction>(
-                tooltip: 'Minha conta',
-                onSelected: (action) {
-                  unawaited(_handleAccountMenuSelection(action, data));
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: _AccountMenuAction.profile,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.person_outline_rounded),
-                      title: Text('Minha conta'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _AccountMenuAction.wallet,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.account_balance_wallet_outlined),
-                      title: Text('Minha carteira'),
-                    ),
-                  ),
-                  PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: _AccountMenuAction.signOut,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.logout_rounded),
-                      title: Text('Sair'),
-                    ),
-                  ),
-                ],
-                child: PressFeedback(
-                  haptic: true,
-                  child: _HomeToolbarActionIcon(
-                    branding: branding,
-                    icon: Icons.account_circle_outlined,
-                  ),
-                ),
-              ),
-            ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(78),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.76),
-                    borderRadius: BorderRadius.circular(26),
-                    border: Border.all(
-                      color: branding.outline.withValues(alpha: 0.7),
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x12000000),
-                        blurRadius: 18,
-                        offset: Offset(0, 8),
                       ),
-                    ],
+                    ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(6),
-                    child: Row(
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
                       children: [
-                        Expanded(
-                          child: _HomePanelTabButton(
-                            label: 'Salão',
-                            icon: Icons.storefront_outlined,
+                        if (isLoading)
+                          SalonHomeSkeleton(branding: branding)
+                        else if (hasError)
+                          HomeLoadErrorView(
+                            title: 'Não foi possível carregar o salão',
+                            message:
+                                'Verifique sua conexão e tente atualizar para buscar os dados novamente.',
+                            onRetry: _refreshData,
+                            accentColor: branding.primary,
+                          )
+                        else
+                          HomeServicesTab(
+                            profile: _profile,
                             branding: branding,
-                            selected: _tabController.index == 0,
-                            onTap: () => _animateToTab(0),
+                            data: data!,
+                            onRefresh: _refreshData,
+                            onWhatsApp: () {
+                              _openWhatsApp();
+                            },
+                            onOpenAgenda: () => _animateToTab(1),
+                            onOpenGallery: () => _animateToTab(2),
+                            busyVacancyAlertIds: _busyVacancyAlertIds,
+                            bookedVacancyAlertIds: _bookedVacancyAlertIds,
+                            onBookVacancyAlert: _claimVacancyAlert,
+                            onCopyReferral: _copyReferralCode,
+                            onBook: (service) => _openBooking(service, data),
+                            onBookGrowthSuggestion: (service, suggestion) =>
+                                _openGrowthSuggestion(
+                                  service,
+                                  suggestion,
+                                  data,
+                                ),
+                            onBookSuggested: (service, suggestion) =>
+                                _openSuggestedBooking(
+                                  service,
+                                  suggestion,
+                                  data,
+                                ),
+                            heroSubtitle: _buildHeroSubtitle(data),
+                            nextAvailableLabel: _formatNextAvailable(
+                              data.nextAvailableAt,
+                            ),
+                            todayAttendanceLabel: _todayAttendanceLabel(
+                              data.appointments,
+                            ),
+                            favoriteServiceIds: data.favoriteServiceIds,
+                            busyFavoriteServiceIds: _busyFavoriteServiceIds,
+                            onToggleFavoriteService: _toggleFavoriteService,
                           ),
-                        ),
-                        Expanded(
-                          child: _HomePanelTabButton(
-                            label: 'Feed',
-                            icon: Icons.auto_awesome_mosaic_outlined,
+                        if (isLoading)
+                          SalonHomeSkeleton(
                             branding: branding,
-                            selected: _tabController.index == 1,
-                            onTap: () => _animateToTab(1),
-                          ),
-                        ),
-                        Expanded(
-                          child: _HomePanelTabButton(
-                            label: 'Histórico',
-                            icon: Icons.history_rounded,
+                            historyMode: true,
+                          )
+                        else if (hasError)
+                          HomeLoadErrorView(
+                            title: 'Não foi possível carregar sua agenda',
+                            message:
+                                'Atualize a tela para buscar novamente os horários do salão.',
+                            onRetry: _refreshData,
+                            accentColor: branding.primary,
+                          )
+                        else
+                          HomeHistoryTab(
+                            profile: _profile,
                             branding: branding,
-                            selected: _tabController.index == 2,
-                            onTap: () => _animateToTab(2),
+                            appointments: data!.appointments,
+                            onRefresh: _refreshData,
+                            onWhatsApp: () {
+                              _openWhatsApp();
+                            },
+                            insightData: data,
+                            onOpenWallet: () {
+                              _openBenefitsWallet(data);
+                            },
+                            onBookGrowthSuggestion: (service, suggestion) =>
+                                _openGrowthSuggestion(
+                                  service,
+                                  suggestion,
+                                  data,
+                                ),
+                            onCancelAppointment: _cancelAppointment,
+                            onConfirmAppointmentPresence:
+                                _confirmAppointmentPresence,
                           ),
-                        ),
+                        if (isLoading)
+                          SalonHomeSkeleton(
+                            branding: branding,
+                            historyMode: true,
+                          )
+                        else if (hasError)
+                          HomeLoadErrorView(
+                            title:
+                                'Não foi possível carregar a galeria do salão',
+                            message:
+                                'Atualize a tela para buscar novamente as fotos e os comentários.',
+                            onRetry: _refreshData,
+                            accentColor: branding.primary,
+                          )
+                        else
+                          HomeFeedTab(
+                            profile: _profile,
+                            branding: branding,
+                            posts: data!.posts,
+                            onRefresh: _refreshData,
+                            onWhatsApp: () {
+                              _openWhatsApp();
+                            },
+                            onToggleLike: _togglePostLike,
+                            onOpenComments: _openComments,
+                            onOpenVideo: _openPostVideo,
+                            onBookService: (service) =>
+                                _openBooking(service, data),
+                            busyPostIds: _busyPostIds,
+                          ),
+                        if (isLoading)
+                          SalonHomeSkeleton(
+                            branding: branding,
+                            historyMode: true,
+                          )
+                        else if (hasError)
+                          HomeLoadErrorView(
+                            title: 'Não foi possível carregar seu perfil',
+                            message:
+                                'Atualize a tela para buscar novamente seus dados e a ligação com o salão.',
+                            onRetry: _refreshData,
+                            accentColor: branding.primary,
+                          )
+                        else
+                          HomeProfileTab(
+                            profile: _profile,
+                            branding: branding,
+                            data: data!,
+                            onRefresh: _refreshData,
+                            onOpenProfile: () {
+                              unawaited(_openProfile(data));
+                            },
+                            onOpenWallet: () {
+                              unawaited(_openBenefitsWallet(data));
+                            },
+                            onWhatsApp: _openWhatsApp,
+                          ),
                       ],
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
-          body: AppBackdrop(
-            branding: branding,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-                  child: _HomePrimaryShell(
-                    branding: branding,
-                    snapshot: shellSnapshot,
+          bottomNavigationBar: SafeArea(
+            minimum: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+            child: CinematicReveal(
+              delay: const Duration(milliseconds: 80),
+              beginOffset: const Offset(0, 14),
+              child: PremiumBottomNavBar(
+                currentIndex: _tabController.index,
+                items: const [
+                  PremiumBottomNavItemData(
+                    label: 'Inicio',
+                    icon: Icons.home_rounded,
                   ),
-                ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      if (isLoading)
-                        SalonHomeSkeleton(branding: branding)
-                      else if (hasError)
-                        HomeLoadErrorView(
-                          title: 'Não foi possível carregar o salão',
-                          message:
-                              'Verifique sua conexão e tente atualizar para buscar os dados novamente.',
-                          onRetry: _refreshData,
-                          accentColor: branding.primary,
-                        )
-                      else
-                        HomeServicesTab(
-                          profile: _profile,
-                          branding: branding,
-                          data: data!,
-                          onRefresh: _refreshData,
-                          onWhatsApp: () {
-                            _openWhatsApp();
-                          },
-                          busyVacancyAlertIds: _busyVacancyAlertIds,
-                          bookedVacancyAlertIds: _bookedVacancyAlertIds,
-                          onBookVacancyAlert: _claimVacancyAlert,
-                          onCopyReferral: _copyReferralCode,
-                          onBook: (service) => _openBooking(service, data),
-                          onBookGrowthSuggestion: (service, suggestion) =>
-                              _openGrowthSuggestion(service, suggestion, data),
-                          onBookSuggested: (service, suggestion) =>
-                              _openSuggestedBooking(service, suggestion, data),
-                          heroSubtitle: _buildHeroSubtitle(data),
-                          nextAvailableLabel: _formatNextAvailable(
-                            data.nextAvailableAt,
-                          ),
-                          todayAttendanceLabel: _todayAttendanceLabel(
-                            data.appointments,
-                          ),
-                          favoriteServiceIds: data.favoriteServiceIds,
-                          busyFavoriteServiceIds: _busyFavoriteServiceIds,
-                          onToggleFavoriteService: _toggleFavoriteService,
-                        ),
-                      if (isLoading)
-                        SalonHomeSkeleton(branding: branding, historyMode: true)
-                      else if (hasError)
-                        HomeLoadErrorView(
-                          title: 'Não foi possível carregar o feed do salão',
-                          message:
-                              'Atualize a tela para buscar novamente as fotos e os comentários.',
-                          onRetry: _refreshData,
-                          accentColor: branding.primary,
-                        )
-                      else
-                        HomeFeedTab(
-                          profile: _profile,
-                          branding: branding,
-                          posts: data!.posts,
-                          onRefresh: _refreshData,
-                          onWhatsApp: () {
-                            _openWhatsApp();
-                          },
-                          onToggleLike: _togglePostLike,
-                          onOpenComments: _openComments,
-                          onOpenVideo: _openPostVideo,
-                          onBookService: (service) => _openBooking(service, data),
-                          busyPostIds: _busyPostIds,
-                        ),
-                      if (isLoading)
-                        SalonHomeSkeleton(branding: branding, historyMode: true)
-                      else if (hasError)
-                        HomeLoadErrorView(
-                          title: 'Não foi possível carregar seu histórico',
-                          message:
-                              'Atualize a tela para buscar novamente os horários do salão.',
-                          onRetry: _refreshData,
-                          accentColor: branding.primary,
-                        )
-                      else
-                        HomeHistoryTab(
-                          profile: _profile,
-                          branding: branding,
-                          appointments: data!.appointments,
-                          onRefresh: _refreshData,
-                          onWhatsApp: () {
-                            _openWhatsApp();
-                          },
-                          insightData: data,
-                          onOpenWallet: () {
-                            _openBenefitsWallet(data);
-                          },
-                          onBookGrowthSuggestion: (service, suggestion) =>
-                              _openGrowthSuggestion(service, suggestion, data),
-                          onCancelAppointment: _cancelAppointment,
-                          onConfirmAppointmentPresence:
-                              _confirmAppointmentPresence,
-                        ),
-                    ],
+                  PremiumBottomNavItemData(
+                    label: 'Agenda',
+                    icon: Icons.calendar_month_rounded,
                   ),
-                ),
-              ],
+                  PremiumBottomNavItemData(
+                    label: 'Galeria',
+                    icon: Icons.photo_camera_outlined,
+                  ),
+                  PremiumBottomNavItemData(
+                    label: 'Perfil',
+                    icon: Icons.person_outline_rounded,
+                  ),
+                ],
+                onTap: _animateToTab,
+              ),
             ),
           ),
         );
       },
     );
+  }
+
+  String get _headerTitle {
+    final firstName = _profile.name.trim().split(' ').first;
+
+    switch (_tabController.index) {
+      case 1:
+        return 'Sua agenda';
+      case 2:
+        return 'Galeria real';
+      case 3:
+        return 'Seu perfil';
+      case 0:
+      default:
+        return 'Olá, $firstName!';
+    }
+  }
+
+  String _headerSubtitle(SalonExperiencePreset preset) {
+    switch (_tabController.index) {
+      case 1:
+        return 'Sua agenda, confirmações e retornos em uma leitura simples.';
+      case 2:
+        return 'Resultados reais e referências do ${_profile.salonName}.';
+      case 3:
+        return 'Perfil, carteira e suporte conectados ao seu salão.';
+      case 0:
+      default:
+        return _profile.salonTagline ??
+            'Veja as novidades do ${_profile.salonName} com uma leitura feita para ${preset.label.toLowerCase()}.';
+    }
   }
 
   void _animateToTab(int index) {
@@ -899,303 +648,274 @@ class _HomeScreenState extends _HomeScreenStateBase
   }
 }
 
-class _HomeToolbarActionIcon extends StatelessWidget {
-  const _HomeToolbarActionIcon({
+class _HomeShellHeader extends StatelessWidget {
+  const _HomeShellHeader({
     required this.branding,
-    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.salonName,
+    required this.onOpenSalonProfile,
+    required this.appBadgeLabel,
+    required this.liveSignalLabel,
+    required this.liveActive,
+    required this.notificationCount,
+    required this.onOpenNotifications,
+    required this.accountMenu,
   });
 
   final SalonBranding branding;
-  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String salonName;
+  final VoidCallback? onOpenSalonProfile;
+  final String appBadgeLabel;
+  final String liveSignalLabel;
+  final bool liveActive;
+  final int notificationCount;
+  final VoidCallback? onOpenNotifications;
+  final Widget accountMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: branding.shellForeground,
+                  fontWeight: FontWeight.w900,
+                  height: 0.96,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: branding.shellMutedForeground,
+                  height: 1.42,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _HeaderGlassChip(
+                    branding: branding,
+                    child: GestureDetector(
+                      onTap: onOpenSalonProfile,
+                      behavior: HitTestBehavior.opaque,
+                      child: PressFeedback(
+                        enabled: onOpenSalonProfile != null,
+                        haptic: onOpenSalonProfile != null,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SalonBrandMark(
+                              salonName: salonName,
+                              branding: branding,
+                              size: 24,
+                              borderRadius: 9,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              salonName,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: branding.shellForeground,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  _HeaderGlassChip(
+                    branding: branding,
+                    child: Text(
+                      appBadgeLabel,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: branding.shellForeground,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  _HeaderGlassChip(
+                    branding: branding,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        PulseDot(
+                          size: 8,
+                          active: liveActive,
+                          color: liveActive
+                              ? branding.primary
+                              : branding.shellMutedForeground,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          liveSignalLabel,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: branding.shellForeground,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 14),
+        Column(
+          children: [
+            PressFeedback(
+              enabled: onOpenNotifications != null,
+              haptic: onOpenNotifications != null,
+              child: IconButton(
+                onPressed: onOpenNotifications,
+                tooltip: 'Notificações',
+                style: IconButton.styleFrom(
+                  backgroundColor: branding.shellGlassBackground,
+                  foregroundColor: branding.shellForeground,
+                  side: BorderSide(color: branding.shellNavigationBorder),
+                  minimumSize: const Size(48, 48),
+                ),
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.notifications_none_rounded),
+                    if (notificationCount > 0)
+                      Positioned(
+                        right: -6,
+                        top: -5,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 18),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: branding.primary,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: branding.usesDarkShell
+                                  ? const Color(0xFF1A110D)
+                                  : Colors.white,
+                              width: 1.4,
+                            ),
+                          ),
+                          child: Text(
+                            notificationCount > 9
+                                ? '9+'
+                                : notificationCount.toString(),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: branding.onPrimary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            accountMenu,
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _HeaderGlassChip extends StatelessWidget {
+  const _HeaderGlassChip({required this.branding, required this.child});
+
+  final SalonBranding branding;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 46,
-      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.82),
+        color: branding.shellGlassBackground,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.68)),
+        border: Border.all(color: branding.shellNavigationBorder),
+        boxShadow: [
+          BoxShadow(
+            color: branding.deep.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      child: Icon(icon, color: branding.deep),
+      child: child,
     );
   }
 }
 
-class _HomePrimaryShell extends StatelessWidget {
-  const _HomePrimaryShell({
-    required this.branding,
-    required this.snapshot,
-  });
+class _HomeProfileAvatar extends StatelessWidget {
+  const _HomeProfileAvatar({required this.branding, required this.label});
 
   final SalonBranding branding;
-  final _HomeShellSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      padding: const EdgeInsets.all(20),
-      gradient: LinearGradient(
-        colors: [
-          Color.lerp(branding.deep, Colors.black, 0.08)!,
-          branding.primary,
-          Color.lerp(branding.primary, Colors.white, 0.18)!,
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderColor: branding.primary.withValues(alpha: 0.48),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.18),
-                  ),
-                ),
-                child: Icon(snapshot.icon, color: Colors.white),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      snapshot.eyebrow,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.82),
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      snapshot.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        height: 1.05,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.18),
-                    ),
-                  ),
-                  child: Text(
-                    snapshot.emphasisLabel,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            snapshot.description,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.white.withValues(alpha: 0.88),
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (var index = 0; index < snapshot.metrics.length; index++) ...[
-                  _HomeShellMetricChip(metric: snapshot.metrics[index]),
-                  if (index != snapshot.metrics.length - 1)
-                    const SizedBox(width: 10),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomePanelTabButton extends StatelessWidget {
-  const _HomePanelTabButton({
-    required this.label,
-    required this.icon,
-    required this.branding,
-    required this.selected,
-    required this.onTap,
-  });
-
   final String label;
-  final IconData icon;
-  final SalonBranding branding;
-  final bool selected;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final foregroundColor = selected
-        ? branding.onPrimary
-        : branding.deep.withValues(alpha: 0.82);
+    final initials = label
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part.substring(0, 1).toUpperCase())
+        .join();
 
-    return PressFeedback(
-      haptic: true,
-      pressedScale: 0.985,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 170),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: selected ? branding.heroGradient : null,
-              color: selected ? null : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: selected
-                  ? const [
-                      BoxShadow(
-                        color: Color(0x18000000),
-                        blurRadius: 14,
-                        offset: Offset(0, 6),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedScale(
-                  scale: selected ? 1 : 0.96,
-                  duration: const Duration(milliseconds: 170),
-                  curve: Curves.easeOutCubic,
-                  child: Icon(icon, size: 20, color: foregroundColor),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: foregroundColor,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        gradient: branding.heroGradient,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: branding.usesDarkShell
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.white,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: branding.deep.withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          initials.isEmpty ? 'SF' : initials,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: branding.onPrimary,
+            fontWeight: FontWeight.w900,
           ),
         ),
       ),
     );
   }
-}
-
-class _HomeShellMetricChip extends StatelessWidget {
-  const _HomeShellMetricChip({required this.metric});
-
-  final _HomeShellMetric metric;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 136),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(metric.icon, size: 17, color: Colors.white),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                metric.label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.76),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                metric.value,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeShellSnapshot {
-  const _HomeShellSnapshot({
-    required this.eyebrow,
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.emphasisLabel,
-    required this.metrics,
-  });
-
-  final String eyebrow;
-  final String title;
-  final String description;
-  final IconData icon;
-  final String emphasisLabel;
-  final List<_HomeShellMetric> metrics;
-}
-
-class _HomeShellMetric {
-  const _HomeShellMetric({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
 }

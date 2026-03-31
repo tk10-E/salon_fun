@@ -7,14 +7,16 @@ class PressFeedback extends StatefulWidget {
     required this.child,
     this.enabled = true,
     this.haptic = false,
-    this.pressedScale = 0.97,
-    this.duration = const Duration(milliseconds: 110),
+    this.pressedScale = 0.975,
+    this.pressedOpacity = 0.97,
+    this.duration = const Duration(milliseconds: 140),
   });
 
   final Widget child;
   final bool enabled;
   final bool haptic;
   final double pressedScale;
+  final double pressedOpacity;
   final Duration duration;
 
   @override
@@ -46,15 +48,20 @@ class _PressFeedbackState extends State<PressFeedback> {
       },
       onPointerUp: (_) => _setPressed(false),
       onPointerCancel: (_) => _setPressed(false),
-      child: AnimatedScale(
-        scale: _pressed ? widget.pressedScale : 1,
+      child: AnimatedOpacity(
+        opacity: _pressed ? widget.pressedOpacity : 1,
         duration: widget.duration,
-        curve: Curves.easeOutCubic,
-        child: AnimatedSlide(
-          offset: _pressed ? const Offset(0, 0.012) : Offset.zero,
+        curve: Curves.easeOutQuad,
+        child: AnimatedScale(
+          scale: _pressed ? widget.pressedScale : 1,
           duration: widget.duration,
-          curve: Curves.easeOutCubic,
-          child: widget.child,
+          curve: Curves.easeOutBack,
+          child: AnimatedSlide(
+            offset: _pressed ? const Offset(0, 0.012) : Offset.zero,
+            duration: widget.duration,
+            curve: Curves.easeOutExpo,
+            child: widget.child,
+          ),
         ),
       ),
     );

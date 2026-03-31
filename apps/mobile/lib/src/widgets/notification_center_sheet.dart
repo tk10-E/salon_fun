@@ -744,9 +744,9 @@ _NotificationInsight? _insightForNotifications(
   );
   if (agendaNotifications.isNotEmpty) {
     return _NotificationInsight(
-      title: 'Sua agenda pede atenção agora',
+      title: 'Sua agenda pede atenção',
       message:
-          'Há aviso${agendaNotifications.length == 1 ? '' : 's'} que pode${agendaNotifications.length == 1 ? '' : 'm'} mexer no seu próximo horário. Vale olhar primeiro para confirmar, reagir ou aproveitar encaixe.',
+          'Há aviso${agendaNotifications.length == 1 ? '' : 's'} que pode${agendaNotifications.length == 1 ? '' : 'm'} mexer no seu próximo horário.',
     );
   }
 
@@ -755,9 +755,8 @@ _NotificationInsight? _insightForNotifications(
   );
   if (retentionNotifications.isNotEmpty) {
     return _NotificationInsight(
-      title: 'Tem retorno com boa chance de virar reserva',
-      message:
-          'O salão puxou seu próximo agendamento com oferta ou rebook inteligente. Esses avisos costumam render melhor quando você age rápido.',
+      title: 'Tem retorno para olhar',
+      message: 'O salão puxou seu próximo agendamento com oferta ou rebook.',
     );
   }
 
@@ -769,9 +768,8 @@ _NotificationInsight? _insightForNotifications(
   );
   if (benefitNotifications.isNotEmpty) {
     return _NotificationInsight(
-      title: 'Você tem vantagem nova para conferir',
-      message:
-          'Plano, fidelidade, cashback ou recompensa podem deixar sua próxima visita mais interessante se você usar isso a seu favor.',
+      title: 'Você tem uma vantagem nova',
+      message: 'Plano, fidelidade, cashback ou recompensa já podem estar ativos.',
     );
   }
 
@@ -783,31 +781,29 @@ _NotificationInsight? _insightForNotifications(
   );
   if (decisionNotifications.isNotEmpty) {
     return _NotificationInsight(
-      title: 'Tem novidade que pode virar decisão',
-      message:
-          'Feed, campanhas e serviços novos ajudam você a escolher com mais segurança antes de reservar ou falar com o salão.',
+      title: 'Tem novidade para decidir',
+      message: 'Feed, campanhas e serviços novos ajudam a escolher melhor.',
     );
   }
 
   return const _NotificationInsight(
-    title: 'Tudo o que mexe com sua relação com o salão fica aqui',
-    message:
-        'Agenda, benefícios e novidades aparecem organizados para você agir sem depender de conversa solta.',
+    title: 'Tudo do salão fica aqui',
+    message: 'Agenda, carteira e novidades em uma só leitura.',
   );
 }
 
 String? _recommendedActionFor(String type) {
   switch (type) {
     case 'vacancy_alert':
-      return 'Reserve logo se esse encaixe fizer sentido para você.';
+      return 'Reserve logo se esse encaixe fizer sentido.';
     case 'appointment_confirmation_required':
       return 'Confirme agora para não correr o risco de perder esse horário.';
     case 'appointment_confirmed':
-      return 'Guarde esse horário no radar e fale com o salão se precisar alinhar algo.';
+      return 'Guarde esse horário no radar.';
     case 'appointment_reminder_1h':
-      return 'Saia com antecedência ou avise o salão se precisar ajustar algo agora.';
+      return 'Saia com antecedência ou avise o salão.';
     case 'appointment_staff_reassigned':
-      return 'Confira o profissional e mantenha o horário se tudo continuar fazendo sentido.';
+      return 'Confira o profissional e siga com o horário se fizer sentido.';
     case 'appointment_auto_cancelled_unconfirmed':
       return 'Abra a agenda assim que puder para tentar recuperar outro encaixe.';
     case 'appointment_cancelled':
@@ -815,17 +811,17 @@ String? _recommendedActionFor(String type) {
     case 'appointment_completed':
       return 'Vale abrir sua carteira para ver pontos, cashback ou desconto dessa visita.';
     case 'winback_offer':
-      return 'Use esse incentivo para voltar ao salão antes que sua rotina esfrie mais.';
+      return 'Use esse incentivo para voltar ao salão.';
     case 'smart_rebook_prompt':
-      return 'Aproveite o lembrete e deixe seu próximo horário previsto enquanto seu ciclo ideal está aberto.';
+      return 'Aproveite o lembrete e deixe seu próximo horário previsto.';
     case 'promotion_published':
     case 'promotion_updated':
       return 'Veja se a campanha combina com a próxima visita e aproveite enquanto estiver ativa.';
     case 'membership_published':
     case 'membership_updated':
-      return 'Compare o plano com sua frequência real para ver se ele melhora seu custo por visita.';
+      return 'Compare o plano com sua frequência.';
     case 'loyalty_program_updated':
-      return 'Abra a carteira para entender o saldo, o cashback e o desconto progressivo atualizados.';
+      return 'Abra a carteira para conferir o saldo atualizado.';
     case 'loyalty_tier_unlocked':
     case 'loyalty_vip_unlocked':
       return 'Veja seu novo nível e use essa vantagem na próxima visita.';
@@ -833,7 +829,7 @@ String? _recommendedActionFor(String type) {
     case 'service_updated':
       return 'Confira se esse serviço combina com o que você já costuma reservar.';
     case 'feed_post_published':
-      return 'Use a foto como referência para decidir e reservar com mais segurança.';
+      return 'Use a foto como referência antes de reservar.';
     case 'referral_program_updated':
       return 'Veja as regras novas e compartilhe seu código enquanto a campanha estiver quente.';
     case 'referral_qualified':

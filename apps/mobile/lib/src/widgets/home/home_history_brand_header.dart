@@ -13,6 +13,7 @@ class HomeHistoryBrandHeader extends StatelessWidget {
     required this.appointmentCount,
     this.collectionLabel,
     this.fallbackMessage,
+    this.compact = false,
   });
 
   final CustomerProfile profile;
@@ -20,6 +21,7 @@ class HomeHistoryBrandHeader extends StatelessWidget {
   final int appointmentCount;
   final String? collectionLabel;
   final String? fallbackMessage;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -29,9 +31,15 @@ class HomeHistoryBrandHeader extends StatelessWidget {
         (upcomingCount == 1
             ? '1 horário salvo no seu histórico'
             : '$upcomingCount horários salvos no seu histórico');
+    final padding = compact ? 16.0 : 20.0;
+    final markSize = compact ? 48.0 : 58.0;
+    final markRadius = compact ? 16.0 : 20.0;
+    final summaryBackground = compact
+        ? branding.primary.withValues(alpha: 0.09)
+        : Colors.white.withValues(alpha: 0.74);
 
     return SoftCard(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(padding),
       gradient: LinearGradient(
         colors: [
           branding.surface,
@@ -48,49 +56,70 @@ class HomeHistoryBrandHeader extends StatelessWidget {
             salonName: profile.salonName,
             logoUrl: profile.salonLogoUrl,
             branding: branding,
-            size: 58,
-            borderRadius: 20,
+            size: markSize,
+            borderRadius: markRadius,
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: compact ? 12 : 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   profile.salonName,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(color: branding.deep),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: branding.deep,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: compact ? 4 : 6),
                 Text(
                   profile.salonTagline?.trim().isNotEmpty == true
                       ? profile.salonTagline!
                       : fallbackMessage ??
                             'Seu histórico de cuidados fica salvo aqui, com a cara do seu salão.',
+                  maxLines: compact ? 2 : 3,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: branding.deep.withValues(alpha: 0.82),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: compact ? 10 : 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 10 : 12,
+                    vertical: compact ? 6 : 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.74),
-                    borderRadius: BorderRadius.circular(14),
+                    color: summaryBackground,
+                    borderRadius: BorderRadius.circular(compact ? 999 : 14),
                     border: Border.all(
-                      color: branding.outline.withValues(alpha: 0.9),
+                      color: branding.outline.withValues(
+                        alpha: compact ? 0.56 : 0.9,
+                      ),
                     ),
                   ),
-                  child: Text(
-                    summaryLabel,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: branding.deep,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        size: compact ? 14 : 16,
+                        color: branding.deep.withValues(
+                          alpha: compact ? 0.72 : 0.9,
+                        ),
+                      ),
+                      SizedBox(width: compact ? 6 : 8),
+                      Flexible(
+                        child: Text(
+                          summaryLabel,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: branding.deep,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

@@ -111,25 +111,15 @@ void main() {
         );
 
         expect(
-          find.text('Seu histórico agora ajuda no próximo retorno'),
-          findsOneWidget,
-        );
-        expect(
-          find.text('O melhor momento para voltar já apareceu no app'),
+          find.text('Sua jornada com o salão em um olhar'),
           findsOneWidget,
         );
         expect(
           find.text('Seu próximo Corte premium já entrou na janela ideal'),
           findsOneWidget,
         );
-        expect(
-          find.text('Sua jornada com o salão em um olhar'),
-          findsOneWidget,
-        );
-        expect(
-          find.text('Seu próximo retorno pode render vantagem dupla'),
-          findsOneWidget,
-        );
+        expect(find.text('Seu melhor próximo horário'), findsOneWidget);
+        expect(find.text('Sua próxima volta já tem vantagem'), findsOneWidget);
         expect(find.text('Abrir carteira'), findsOneWidget);
 
         await tester.scrollUntilVisible(
@@ -176,9 +166,9 @@ void main() {
         ),
       );
 
-      expect(find.text('Feed do salão'), findsNWidgets(2));
+      expect(find.text('Galeria do salão'), findsWidgets);
       expect(
-        find.text('Seu próximo visual favorito vai aparecer aqui'),
+        find.text('Os próximos resultados do salão vão aparecer aqui'),
         findsOneWidget,
       );
 
@@ -207,13 +197,9 @@ void main() {
         ),
       );
 
-      expect(find.text('Portfólio da barbearia'), findsNWidgets(2));
+      expect(find.text('Portfólio da barbearia'), findsWidgets);
       expect(
-        find.text('Cortes, acabamentos e assinatura dos profissionais'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Seu próximo corte favorito vai aparecer aqui'),
+        find.text('A assinatura da barbearia vai aparecer aqui'),
         findsOneWidget,
       );
     });
@@ -253,12 +239,14 @@ void main() {
       expect(find.text('Resultado glossy'), findsOneWidget);
       expect(find.text('Ver 1 comentário'), findsOneWidget);
       expect(find.textContaining('Talita', findRichText: true), findsOneWidget);
-      expect(find.text('Destaques do feed'), findsOneWidget);
+      expect(find.text('Galeria do salão'), findsAtLeastNWidgets(1));
       expect(find.text('Tudo'), findsOneWidget);
       expect(find.text('Reserva'), findsOneWidget);
       expect(
-        find.text('Seu próximo visual pode sair do feed de hoje'),
-        findsOneWidget,
+        find.text(
+          'Resultados reais e referências para decidir sem excesso de informação.',
+        ),
+        findsWidgets,
       );
 
       await tester.ensureVisible(find.byTooltip('Curtir publicação'));
@@ -322,7 +310,7 @@ void main() {
       },
     );
 
-    testWidgets('filters the feed when a story highlight is tapped', (
+    testWidgets('filters the feed in place when a premium filter is tapped', (
       tester,
     ) async {
       final standardPost = _feedPost(title: 'Resultado glossy');
@@ -362,57 +350,44 @@ void main() {
       expect(find.text('Tudo'), findsOneWidget);
       expect(find.text('Reel'), findsOneWidget);
       expect(find.text('Antes e depois'), findsAtLeastNWidgets(1));
-      expect(find.text('Resultado glossy'), findsOneWidget);
-      expect(find.text('Brilho em movimento'), findsOneWidget);
-      expect(find.text('Virada de visual'), findsOneWidget);
+      expect(find.text('Resultado glossy'), findsWidgets);
+      expect(find.text('Brilho em movimento'), findsWidgets);
 
       await tester.ensureVisible(find.text('Reel'));
       await tester.tap(find.text('Reel'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 320));
 
-      expect(find.text('Stories do feed'), findsOneWidget);
-      expect(find.text('Reels'), findsOneWidget);
-      expect(find.text('Brilho em movimento'), findsAtLeastNWidgets(1));
-      expect(find.text('Ver no feed'), findsOneWidget);
-
-      await tester.tap(find.text('Ver no feed'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 220));
-      await tester.pump(const Duration(milliseconds: 320));
-
-      expect(find.text('Reels para decidir mais rápido'), findsOneWidget);
-      expect(find.text('Ver tudo'), findsOneWidget);
       expect(find.text('Brilho em movimento'), findsOneWidget);
       expect(find.text('Resultado glossy'), findsNothing);
       expect(find.text('Virada de visual'), findsNothing);
 
-      await tester.tap(find.text('Ver tudo'));
+      await tester.tap(find.text('Tudo'));
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Seu próximo visual pode sair do feed de hoje'),
-        findsOneWidget,
+        find.text(
+          'Resultados reais e referências para decidir sem excesso de informação.',
+        ),
+        findsWidgets,
       );
-      expect(find.text('Resultado glossy'), findsOneWidget);
-      expect(find.text('Virada de visual'), findsOneWidget);
+      expect(find.text('Resultado glossy'), findsWidgets);
     });
 
-    testWidgets('auto advances stories and pauses on long press', (
-      tester,
-    ) async {
-      final firstReel = _feedPost(
+    testWidgets('filters the feed to before and after content', (tester) async {
+      final standardPost = _feedPost(
         id: 'post-1',
-        title: 'Brilho em movimento',
-        postType: SalonPostType.reel,
-        videoUrl: 'https://example.com/reel-1.mp4',
+        title: 'Resultado glossy',
         linkedService: null,
       );
-      final secondReel = _feedPost(
+      final beforeAfterPost = _feedPost(
         id: 'post-2',
-        title: 'Luz em movimento',
-        postType: SalonPostType.reel,
-        videoUrl: 'https://example.com/reel-2.mp4',
+        title: 'Virada de visual',
+        postType: SalonPostType.beforeAfter,
+        imageUrls: const [
+          'https://example.com/before.jpg',
+          'https://example.com/after.jpg',
+        ],
         linkedService: null,
       );
 
@@ -421,7 +396,7 @@ void main() {
         HomeFeedTab(
           profile: _profile(),
           branding: _branding(),
-          posts: [firstReel, secondReel],
+          posts: [standardPost, beforeAfterPost],
           onRefresh: () async {},
           onWhatsApp: () {},
           onToggleLike: (_) async {},
@@ -431,119 +406,11 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Reels'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 320));
+      await tester.tap(find.text('Antes e depois').first);
+      await tester.pumpAndSettle();
 
-      expect(find.text('Stories do feed'), findsOneWidget);
-      expect(find.text('1/2'), findsOneWidget);
-      expect(find.text('Segure para pausar'), findsOneWidget);
-
-      final gesture = await tester.startGesture(
-        tester.getCenter(find.byType(PageView)),
-      );
-      await tester.pump(const Duration(milliseconds: 700));
-      await tester.pump(const Duration(seconds: 4));
-
-      expect(find.text('Pausado'), findsOneWidget);
-      expect(find.text('1/2'), findsOneWidget);
-
-      await gesture.up();
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.text('2/2'), findsOneWidget);
-    });
-
-    testWidgets('closes the story viewer when dragged down', (tester) async {
-      final reelPost = _feedPost(
-        id: 'post-1',
-        title: 'Brilho em movimento',
-        postType: SalonPostType.reel,
-        videoUrl: 'https://example.com/reel-1.mp4',
-        linkedService: null,
-      );
-
-      await _pumpHomeTestApp(
-        tester,
-        HomeFeedTab(
-          profile: _profile(),
-          branding: _branding(),
-          posts: [reelPost],
-          onRefresh: () async {},
-          onWhatsApp: () {},
-          onToggleLike: (_) async {},
-          onOpenComments: (_) async {},
-          onBookService: (_) async {},
-          busyPostIds: const {},
-        ),
-      );
-
-      await tester.tap(find.text('Reel'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 320));
-
-      expect(find.text('Stories do feed'), findsOneWidget);
-
-      await tester.drag(
-        find.byType(PageView),
-        const Offset(0, 220),
-        warnIfMissed: false,
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 220));
-      await tester.pump(const Duration(milliseconds: 320));
-
-      expect(find.text('Stories do feed'), findsNothing);
+      expect(find.text('Virada de visual'), findsWidgets);
       expect(find.text('Resultado glossy'), findsNothing);
-      expect(find.text('Brilho em movimento'), findsOneWidget);
-    });
-
-    testWidgets('closes the story viewer with a quick downward fling', (
-      tester,
-    ) async {
-      final reelPost = _feedPost(
-        id: 'post-1',
-        title: 'Brilho em movimento',
-        postType: SalonPostType.reel,
-        videoUrl: 'https://example.com/reel-1.mp4',
-        linkedService: null,
-      );
-
-      await _pumpHomeTestApp(
-        tester,
-        HomeFeedTab(
-          profile: _profile(),
-          branding: _branding(),
-          posts: [reelPost],
-          onRefresh: () async {},
-          onWhatsApp: () {},
-          onToggleLike: (_) async {},
-          onOpenComments: (_) async {},
-          onBookService: (_) async {},
-          busyPostIds: const {},
-        ),
-      );
-
-      await tester.tap(find.text('Reel'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 320));
-
-      expect(find.text('Stories do feed'), findsOneWidget);
-
-      await tester.fling(
-        find.byType(PageView),
-        const Offset(0, 110),
-        2200,
-        warnIfMissed: false,
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 220));
-      await tester.pump(const Duration(milliseconds: 320));
-
-      expect(find.text('Stories do feed'), findsNothing);
-      expect(find.text('Brilho em movimento'), findsOneWidget);
     });
 
     testWidgets('renders services tab and books a listed service', (
@@ -561,6 +428,8 @@ void main() {
           data: _homeData(services: [service]),
           onRefresh: () async {},
           onWhatsApp: () {},
+          onOpenAgenda: () {},
+          onOpenGallery: () {},
           busyVacancyAlertIds: const {},
           bookedVacancyAlertIds: const {},
           onBookVacancyAlert: (_) async {},
@@ -581,24 +450,11 @@ void main() {
         ),
       );
 
-      expect(find.text('Destaques do dia'), findsOneWidget);
-      expect(find.text('Visão rápida do salão'), findsOneWidget);
-      expect(find.text('Escolha seu próximo cuidado'), findsOneWidget);
+      expect(find.text('Serviços em destaque'), findsOneWidget);
+      expect(find.text('1 opção ativa'), findsOneWidget);
       expect(find.text('Corte premium'), findsOneWidget);
-      expect(
-        find.text(
-          'Seus serviços salvos aparecem primeiro para você voltar mais rápido ao que já gosta.',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.text(
-          'Salvo nos seus favoritos para facilitar o próximo agendamento.',
-        ),
-        findsOneWidget,
-      );
 
-      final bookButton = find.text('Agendar');
+      final bookButton = find.text('Agendar agora').first;
       await tester.tap(bookButton);
       await tester.pump();
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/salon_client_app_config.dart';
 import 'salon_experience_preset.dart';
 
 class SalonBranding {
@@ -10,6 +11,7 @@ class SalonBranding {
     required this.surface,
     required this.outline,
     required this.onPrimary,
+    required this.visualStyle,
   });
 
   final Color primary;
@@ -18,11 +20,13 @@ class SalonBranding {
   final Color surface;
   final Color outline;
   final Color onPrimary;
+  final SalonClientVisualStyle visualStyle;
 
   factory SalonBranding.fromName(
     String salonName, {
     String? overrideHexColor,
     String? businessSegment,
+    SalonClientAppConfig? clientAppConfig,
   }) {
     const beautyTones = <_SalonTone>[
       _SalonTone(
@@ -127,6 +131,8 @@ class SalonBranding {
       'aesthetics_clinic' => aestheticsTones,
       _ => beautyTones,
     };
+    final visualStyle = (clientAppConfig ?? const SalonClientAppConfig())
+        .resolveVisualStyle(businessSegment);
 
     final customPrimary = _parseHexColor(overrideHexColor);
     final tone = customPrimary != null
@@ -140,18 +146,123 @@ class SalonBranding {
       surface: Color.lerp(tone.primary, Colors.white, 0.9)!,
       outline: Color.lerp(tone.primary, Colors.white, 0.55)!,
       onPrimary: tone.onPrimary,
+      visualStyle: visualStyle,
     );
   }
 
-  LinearGradient get heroGradient => LinearGradient(
-    colors: [deep, primary, Color.lerp(primary, Colors.white, 0.1)!],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  LinearGradient get heroGradient {
+    switch (visualStyle) {
+      case SalonClientVisualStyle.softEditorial:
+        return LinearGradient(
+          colors: [
+            Color.lerp(primary, const Color(0xFFFBE1EA), 0.24)!,
+            primary,
+            Color.lerp(primary, Colors.white, 0.18)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case SalonClientVisualStyle.glowSignature:
+        return LinearGradient(
+          colors: [
+            Color.lerp(primary, const Color(0xFF7458C7), 0.42)!,
+            primary,
+            Color.lerp(primary, Colors.white, 0.08)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case SalonClientVisualStyle.heritageDark:
+        return LinearGradient(
+          colors: [
+            const Color(0xFF1F130F),
+            Color.lerp(deep, primary, 0.38)!,
+            Color.lerp(primary, const Color(0xFFB9805B), 0.36)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case SalonClientVisualStyle.clinicalRefined:
+        return LinearGradient(
+          colors: [
+            Color.lerp(primary, const Color(0xFF184F61), 0.46)!,
+            primary,
+            Color.lerp(primary, Colors.white, 0.14)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case SalonClientVisualStyle.auto:
+        return LinearGradient(
+          colors: [deep, primary, Color.lerp(primary, Colors.white, 0.1)!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+    }
+  }
 
   Color get chipBackground => Color.lerp(primary, Colors.white, 0.86)!;
   Color get mutedText => Color.lerp(deep, Colors.white, 0.32)!;
   Color get highlightBackground => Color.lerp(primary, Colors.white, 0.92)!;
+  bool get usesDarkShell => visualStyle == SalonClientVisualStyle.heritageDark;
+  Color get shellForeground => usesDarkShell ? const Color(0xFFF8EAD9) : deep;
+  Color get shellMutedForeground =>
+      usesDarkShell ? const Color(0xFFD9C0AE) : mutedText;
+  Color get shellNavigationBackground => usesDarkShell
+      ? const Color(0xFF231611).withValues(alpha: 0.94)
+      : Colors.white.withValues(alpha: 0.84);
+  Color get shellNavigationBorder => usesDarkShell
+      ? Colors.white.withValues(alpha: 0.08)
+      : outline.withValues(alpha: 0.48);
+  List<Color> get shellBackgroundGradient {
+    switch (visualStyle) {
+      case SalonClientVisualStyle.softEditorial:
+        return [
+          const Color(0xFFFFFBFD),
+          Color.lerp(soft, Colors.white, 0.16)!,
+          Color.lerp(surface, Colors.white, 0.1)!,
+        ];
+      case SalonClientVisualStyle.glowSignature:
+        return [
+          const Color(0xFFFFFBFF),
+          Color.lerp(primary, Colors.white, 0.78)!,
+          Color.lerp(surface, const Color(0xFFF3EEFF), 0.48)!,
+        ];
+      case SalonClientVisualStyle.heritageDark:
+        return const [Color(0xFF140D0A), Color(0xFF241712), Color(0xFF1A110D)];
+      case SalonClientVisualStyle.clinicalRefined:
+        return [
+          const Color(0xFFF8FEFF),
+          Color.lerp(surface, Colors.white, 0.08)!,
+          Color.lerp(soft, const Color(0xFFEAF6F7), 0.34)!,
+        ];
+      case SalonClientVisualStyle.auto:
+        return [
+          Color.lerp(surface, Colors.white, 0.18)!,
+          Color.lerp(soft, Colors.white, 0.34)!,
+          Color.lerp(surface, Colors.white, 0.52)!,
+        ];
+    }
+  }
+
+  Color get shellGlassBackground => usesDarkShell
+      ? Colors.white.withValues(alpha: 0.08)
+      : Colors.white.withValues(alpha: 0.82);
+  Color get shellCardBackground => usesDarkShell
+      ? const Color(0xFF231611).withValues(alpha: 0.84)
+      : Colors.white.withValues(alpha: 0.94);
+  Color get shellCardSoftBackground => usesDarkShell
+      ? const Color(0xFF2C1B15).withValues(alpha: 0.82)
+      : highlightBackground;
+  Color get shellCardBorder => usesDarkShell
+      ? Colors.white.withValues(alpha: 0.1)
+      : outline.withValues(alpha: 0.56);
+  Color get shellIconSurface => usesDarkShell
+      ? Colors.white.withValues(alpha: 0.08)
+      : Colors.white.withValues(alpha: 0.8);
+  Color get shellBadgeBackground => usesDarkShell
+      ? Colors.white.withValues(alpha: 0.1)
+      : Colors.white.withValues(alpha: 0.72);
 }
 
 class _SalonTone {

@@ -64,6 +64,7 @@ abstract class _SalonRepositoryBase {
     final message = error.message.toLowerCase();
     return message.contains('tagline') ||
         message.contains('brand_color') ||
+        message.contains('client_app_config') ||
         message.contains('whatsapp_phone') ||
         message.contains('logo_path') ||
         message.contains('phone') ||
