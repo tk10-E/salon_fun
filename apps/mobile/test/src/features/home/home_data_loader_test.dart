@@ -199,6 +199,13 @@ class _FakeHomeDataRepository implements HomeDataRepository {
   Future<Set<String>> getFavoriteServiceIds() async => const <String>{};
 
   @override
+  Future<Set<String>> getFavoriteStaffMemberIds() async => const <String>{};
+
+  @override
+  Future<List<SalonTeamMemberProfile>> getSalonTeamProfiles() async =>
+      const <SalonTeamMemberProfile>[];
+
+  @override
   Future<List<CustomerNotificationItem>> getCustomerNotifications() async =>
       notifications;
 
@@ -241,6 +248,10 @@ class _FakeHomeDataRepository implements HomeDataRepository {
 
   @override
   Future<CustomerLoyaltySummary?> getLoyaltySummary() async => loyaltySummary;
+
+  @override
+  Future<List<SalonRetailProduct>> getRetailProducts() async =>
+      const <SalonRetailProduct>[];
 
   @override
   Future<List<SalonOfferItem>> getSalonOffers() async => offers;

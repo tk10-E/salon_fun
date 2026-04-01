@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../features/home/home_data.dart';
+import '../features/home/home_data_loader.dart';
+import '../navigation/salon_page_route.dart';
+import '../models/app_models.dart';
 import '../repositories/salon_repository.dart';
 import '../services/push_notification_service.dart';
+import '../theme/salon_brand_config.dart';
+import '../theme/salon_branding.dart';
 import '../theme/service_category_visual.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cancel_appointment_sheet.dart';
 import '../widgets/cinematic_reveal.dart';
-import '../widgets/soft_card.dart';
+import '../widgets/feed_comments_sheet.dart';
+import '../widgets/premium_section_header.dart';
+import '../widgets/premium_surface_card.dart';
+import 'benefits_wallet_screen.dart';
+import 'book_appointment_screen.dart';
+import 'premium_campaigns_screen.dart';
+import 'premium_gallery_screen.dart';
+import 'premium_service_detail_screen.dart';
 
 class NotificationAlertScreen extends StatefulWidget {
   const NotificationAlertScreen({
@@ -26,17 +41,33 @@ class NotificationAlertScreen extends StatefulWidget {
 }
 
 class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
-  late final SalonRepository _repository;
+  SalonRepository? _repository;
   bool _isConfirmingPresence = false;
   bool _isCancellingAppointment = false;
+  bool _isOpeningDestination = false;
   _AppointmentAlertResolution? _resolution;
 
   NotificationTapPayload get notification => widget.notification;
 
   String? get _appointmentId => notification.data['appointmentId']?.toString();
+  String? get _serviceId {
+    final raw = notification.data['serviceId']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
+  }
+
   String get _serviceName {
     final raw = notification.data['serviceName']?.toString().trim();
     return raw == null || raw.isEmpty ? 'esse atendimento' : raw;
+  }
+
+  String? get _rewardServiceId {
+    final raw = notification.data['rewardServiceId']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
+  }
+
+  String? get _rewardServiceName {
+    final raw = notification.data['rewardServiceName']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
   }
 
   String? get _staffMemberName {
@@ -44,8 +75,18 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
     return raw == null || raw.isEmpty ? null : raw;
   }
 
+  String? get _staffMemberId {
+    final raw = notification.data['staffMemberId']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
+  }
+
   bool get _isFeedPostNotification =>
       notification.type == 'feed_post_published';
+
+  String? get _postId {
+    final raw = notification.data['postId']?.toString().trim();
+    return raw == null || raw.isEmpty ? null : raw;
+  }
 
   String? get _postTitle {
     final raw = notification.data['postTitle']?.toString().trim();
@@ -100,16 +141,356 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
     return DateTime.tryParse(raw)?.toLocal();
   }
 
+  DateTime? get _vacancyStartsAt {
+    final raw = notification.data['startsAt']?.toString();
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+
+    return DateTime.tryParse(raw)?.toLocal();
+  }
+
   bool get _requiresAttendanceConfirmation =>
       notification.type == 'appointment_confirmation_required' &&
       _appointmentId != null &&
       _resolution == null;
 
+  SalonRepository get _repositoryInstance =>
+      _repository ??= SalonRepository(Supabase.instance.client);
+
+  String? get _destinationActionLabel {
+    final destination = _destinationFor(notification);
+    if (destination == null) {
+      return null;
+    }
+
+    return switch (destination) {
+      _NotificationDestination.wallet => 'Abrir carteira',
+      _NotificationDestination.campaigns =>
+        notification.type.startsWith('membership_')
+            ? 'Ver plano'
+            : notification.type == 'smart_rebook_prompt'
+            ? 'Ver vitrine'
+            : 'Ver campanha',
+      _NotificationDestination.gallery => 'Abrir feed',
+      _NotificationDestination.serviceDetail => 'Ver serviço',
+      _NotificationDestination.booking => 'Abrir encaixe',
+    };
+  }
+
+  IconData get _destinationActionIcon {
+    final destination = _destinationFor(notification);
+    return switch (destination) {
+      _NotificationDestination.wallet => Icons.wallet_rounded,
+      _NotificationDestination.campaigns => Icons.auto_awesome_rounded,
+      _NotificationDestination.gallery => Icons.photo_library_rounded,
+      _NotificationDestination.serviceDetail => Icons.spa_rounded,
+      _NotificationDestination.booking => Icons.calendar_month_rounded,
+      null => Icons.open_in_new_rounded,
+    };
+  }
+
   @override
   void initState() {
     super.initState();
-    _repository =
-        widget.repository ?? SalonRepository(Supabase.instance.client);
+    _repository = widget.repository;
+  }
+
+  Future<_NotificationDestinationContext?> _loadDestinationContext() async {
+    final profile = await _repositoryInstance.getCustomerProfile();
+    if (profile == null) {
+      return null;
+    }
+
+    final data = await HomeDataLoader(
+      repository: _repositoryInstance,
+    ).load(customerId: profile.id);
+
+    final branding = SalonBranding.fromName(
+      profile.salonName,
+      overrideHexColor: profile.salonBrandColor,
+      businessSegment: profile.salonBusinessSegment,
+      clientAppConfig: profile.salonClientAppConfig,
+    );
+    final brandConfig = SalonBrandConfig.fromProfile(
+      profile,
+      services: data.services,
+      posts: data.posts,
+      offers: data.offers,
+    );
+
+    return _NotificationDestinationContext(
+      profile: profile,
+      data: data,
+      branding: branding,
+      brandConfig: brandConfig,
+    );
+  }
+
+  ServiceItem? _resolveNotificationService(List<ServiceItem> services) {
+    final preferredIds = [_serviceId, _rewardServiceId]
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+
+    for (final serviceId in preferredIds) {
+      for (final service in services) {
+        if (service.id == serviceId) {
+          return service;
+        }
+      }
+    }
+
+    final candidateNames =
+        [
+              notification.data['serviceName']?.toString().trim(),
+              _rewardServiceName,
+              notification.data['offerTitle']?.toString().trim(),
+            ]
+            .whereType<String>()
+            .map((value) => value.trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .toList();
+
+    for (final candidate in candidateNames) {
+      for (final service in services) {
+        if (service.name.trim().toLowerCase() == candidate) {
+          return service;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _copyReferralCode(String code) async {
+    final normalizedCode = code.trim();
+    if (normalizedCode.isEmpty) {
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: normalizedCode));
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Código de indicação copiado.')),
+    );
+  }
+
+  Future<void> _openDestination() async {
+    final destination = _destinationFor(notification);
+    if (destination == null || _isOpeningDestination) {
+      return;
+    }
+
+    setState(() => _isOpeningDestination = true);
+
+    try {
+      final contextData = await _loadDestinationContext();
+      if (!mounted) {
+        return;
+      }
+
+      if (contextData == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível carregar esse destino agora.'),
+          ),
+        );
+        return;
+      }
+
+      switch (destination) {
+        case _NotificationDestination.wallet:
+          await Navigator.of(context).push(
+            SalonPageRoute<void>(
+              builder: (_) => BenefitsWalletScreen(
+                repository: _repositoryInstance,
+                profile: contextData.profile,
+                initialLoyaltySummary: contextData.data.loyaltySummary,
+                initialReferralSummary: contextData.data.referralSummary,
+              ),
+            ),
+          );
+          return;
+        case _NotificationDestination.campaigns:
+          await Navigator.of(context).push(
+            SalonPageRoute<void>(
+              builder: (_) => PremiumCampaignsScreen(
+                salonName: contextData.profile.salonName,
+                logoUrl: contextData.profile.salonLogoUrl,
+                branding: contextData.branding,
+                heroImageUrl:
+                    contextData.brandConfig.profileCoverImageUrl ??
+                    contextData.brandConfig.heroImageUrl,
+                heroTabletImageUrl:
+                    contextData.brandConfig.profileCoverImageTabletUrl ??
+                    contextData.brandConfig.heroImageTabletUrl,
+                offers: contextData.data.offers,
+                services: contextData.data.services,
+                loyaltySummary: contextData.data.loyaltySummary,
+                referralSummary: contextData.data.referralSummary,
+                nextAvailableAt: contextData.data.nextAvailableAt,
+                onBookLeadService: contextData.data.services.firstOrNull == null
+                    ? null
+                    : () {
+                        Navigator.of(context).push(
+                          SalonPageRoute<void>(
+                            builder: (_) => BookAppointmentScreen(
+                              repository: _repositoryInstance,
+                              service: contextData.data.services.first,
+                              profile: contextData.profile,
+                              initialLoyaltySummary:
+                                  contextData.data.loyaltySummary,
+                              activeOffers: contextData.data.offers,
+                            ),
+                          ),
+                        );
+                      },
+                onOpenWallet: () {
+                  Navigator.of(context).push(
+                    SalonPageRoute<void>(
+                      builder: (_) => BenefitsWalletScreen(
+                        repository: _repositoryInstance,
+                        profile: contextData.profile,
+                        initialLoyaltySummary: contextData.data.loyaltySummary,
+                        initialReferralSummary:
+                            contextData.data.referralSummary,
+                      ),
+                    ),
+                  );
+                },
+                onCopyReferral:
+                    contextData.data.referralSummary?.referralCode
+                            .trim()
+                            .isNotEmpty ==
+                        true
+                    ? () {
+                        _copyReferralCode(
+                          contextData.data.referralSummary!.referralCode,
+                        );
+                      }
+                    : null,
+              ),
+            ),
+          );
+          return;
+        case _NotificationDestination.gallery:
+          await Navigator.of(context).push(
+            SalonPageRoute<void>(
+              builder: (_) => _NotificationGalleryDestinationScreen(
+                repository: _repositoryInstance,
+                profile: contextData.profile,
+                initialData: contextData.data,
+                branding: contextData.branding,
+                initialPostId: _postId,
+              ),
+            ),
+          );
+          return;
+        case _NotificationDestination.serviceDetail:
+          final service = _resolveNotificationService(
+            contextData.data.services,
+          );
+          if (service == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Esse serviço não está disponível agora.'),
+              ),
+            );
+            return;
+          }
+
+          final professionals = contextData.brandConfig
+              .resolveProfessionalHighlights(
+                teamProfiles: contextData.data.teamProfiles,
+                posts: contextData.data.posts,
+                appointments: contextData.data.appointments,
+              );
+          final relatedPosts = contextData.data.posts
+              .where((post) => post.linkedService?.id == service.id)
+              .toList();
+
+          await Navigator.of(context).push(
+            SalonPageRoute<void>(
+              builder: (_) => PremiumServiceDetailScreen(
+                profile: contextData.profile,
+                branding: contextData.branding,
+                service: service,
+                professionals: professionals,
+                relatedPosts: relatedPosts,
+                onBook: () {
+                  Navigator.of(context).push(
+                    SalonPageRoute<void>(
+                      builder: (_) => BookAppointmentScreen(
+                        repository: _repositoryInstance,
+                        service: service,
+                        profile: contextData.profile,
+                        initialLoyaltySummary: contextData.data.loyaltySummary,
+                        activeOffers: contextData.data.offers,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+          return;
+        case _NotificationDestination.booking:
+          final service = _resolveNotificationService(
+            contextData.data.services,
+          );
+          if (service == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Essa vaga não está mais disponível no app.'),
+              ),
+            );
+            return;
+          }
+
+          final bookingResult = await Navigator.of(context)
+              .push<BookAppointmentResult>(
+                SalonPageRoute(
+                  builder: (_) => BookAppointmentScreen(
+                    repository: _repositoryInstance,
+                    service: service,
+                    profile: contextData.profile,
+                    initialLoyaltySummary: contextData.data.loyaltySummary,
+                    activeOffers: contextData.data.offers,
+                    initialDay: _vacancyStartsAt,
+                    initialSlot: _vacancyStartsAt,
+                    initialStaffMemberId: _staffMemberId,
+                    entryMessage: notification.body,
+                  ),
+                ),
+              );
+
+          if (bookingResult != null && mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(bookingResult.message)));
+          }
+          return;
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível abrir esse destino agora.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningDestination = false);
+      }
+    }
   }
 
   Future<void> _confirmPresence() async {
@@ -123,7 +504,7 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
     setState(() => _isConfirmingPresence = true);
 
     try {
-      await _repository.confirmUpcomingAppointmentPresence(
+      await _repositoryInstance.confirmUpcomingAppointmentPresence(
         appointmentId: appointmentId,
       );
       if (!mounted) {
@@ -192,7 +573,7 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
     setState(() => _isCancellingAppointment = true);
 
     try {
-      await _repository.cancelAppointment(
+      await _repositoryInstance.cancelAppointment(
         appointmentId: appointmentId,
         reason: reason,
       );
@@ -405,20 +786,19 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
               const SizedBox(height: 18),
               CinematicReveal(
                 delay: const Duration(milliseconds: 140),
-                child: SoftCard(
+                child: PremiumSurfaceCard(
                   padding: const EdgeInsets.all(20),
-                  borderColor: const Color(0xFFE3D5C7),
+                  tone: PremiumSurfaceTone.secondary,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Resumo do aviso',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: const Color(0xFF2F231C),
-                          fontWeight: FontWeight.w800,
-                        ),
+                      const PremiumSectionHeader(
+                        eyebrow: 'Central do salão',
+                        title: 'Resumo do aviso',
+                        subtitle:
+                            'Entenda rápido o impacto desse alerta no seu próximo passo.',
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       Text(
                         _descriptionFor(notification.type),
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -522,12 +902,36 @@ class _NotificationAlertScreenState extends State<NotificationAlertScreen> {
                         const SizedBox(height: 20),
                         _ResolutionCard(resolution: _resolution!),
                       ],
+                      if (_destinationActionLabel != null) ...[
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _isOpeningDestination
+                                ? null
+                                : _openDestination,
+                            icon: Icon(_destinationActionIcon),
+                            label: Text(
+                              _isOpeningDestination
+                                  ? 'Abrindo destino...'
+                                  : _destinationActionLabel!,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
-                      FilledButton.icon(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.check_circle_outline_rounded),
-                        label: const Text('Entendi'),
-                      ),
+                      if (_destinationActionLabel == null)
+                        FilledButton.icon(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.check_circle_outline_rounded),
+                          label: const Text('Entendi'),
+                        )
+                      else
+                        OutlinedButton.icon(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.check_circle_outline_rounded),
+                          label: const Text('Entendi'),
+                        ),
                     ],
                   ),
                 ),
@@ -564,11 +968,10 @@ class _AlertContextStrip extends StatelessWidget {
         'A publicação já vira referência antes mesmo de você abrir o feed.',
       'vacancy_alert' =>
         'O valor desse alerta está em chegar cedo e agir antes de todo mundo.',
-      _ =>
-        'Aqui você vê rápido o que esse aviso muda no seu uso do app.',
+      _ => 'Aqui você vê rápido o que esse aviso muda no seu uso do app.',
     };
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(18),
       gradient: LinearGradient(
         colors: [
@@ -578,7 +981,7 @@ class _AlertContextStrip extends StatelessWidget {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      borderColor: tone.primary.withValues(alpha: 0.18),
+      tone: PremiumSurfaceTone.accent,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -648,14 +1051,17 @@ class _ResolutionCard extends StatelessWidget {
       ),
     };
 
-    return Container(
-      width: double.infinity,
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colors.background,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colors.border),
+      gradient: LinearGradient(
+        colors: [
+          colors.background,
+          Color.lerp(colors.background, Colors.white, 0.16)!,
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ),
+      tone: PremiumSurfaceTone.secondary,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -695,14 +1101,9 @@ class _NextStepCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F1E8),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE7D6C4)),
-      ),
+      tone: PremiumSurfaceTone.accent,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -926,6 +1327,247 @@ String? _nextStepFor(NotificationTapPayload notification) {
     default:
       return null;
   }
+}
+
+class _NotificationGalleryDestinationScreen extends StatefulWidget {
+  const _NotificationGalleryDestinationScreen({
+    required this.repository,
+    required this.profile,
+    required this.initialData,
+    required this.branding,
+    this.initialPostId,
+  });
+
+  final SalonRepository repository;
+  final CustomerProfile profile;
+  final HomeData initialData;
+  final SalonBranding branding;
+  final String? initialPostId;
+
+  @override
+  State<_NotificationGalleryDestinationScreen> createState() =>
+      _NotificationGalleryDestinationScreenState();
+}
+
+class _NotificationGalleryDestinationScreenState
+    extends State<_NotificationGalleryDestinationScreen> {
+  final Set<String> _busyPostIds = <String>{};
+  late HomeData _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _data = widget.initialData;
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _refresh() async {
+    final data = await HomeDataLoader(
+      repository: widget.repository,
+    ).load(customerId: widget.profile.id);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _data = data);
+  }
+
+  Future<void> _runPostAction(
+    String postId,
+    Future<void> Function() action, {
+    SalonPost Function(SalonPost current)? localTransform,
+  }) async {
+    if (_busyPostIds.contains(postId)) {
+      return;
+    }
+
+    setState(() => _busyPostIds.add(postId));
+
+    try {
+      await action();
+
+      if (localTransform != null) {
+        setState(() {
+          _data = _data.copyWith(
+            posts: _data.posts
+                .map((post) => post.id == postId ? localTransform(post) : post)
+                .toList(growable: false),
+          );
+        });
+      }
+
+      await _refresh();
+    } on PostgrestException catch (error) {
+      if (mounted) {
+        final raw = error.message.toLowerCase();
+        _showMessage(
+          raw.contains('comment')
+              ? 'Não foi possível atualizar os comentários agora.'
+              : 'Não foi possível atualizar o feed agora.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Não foi possível concluir sua interação agora.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyPostIds.remove(postId));
+      }
+    }
+  }
+
+  Future<void> _toggleLike(SalonPost post) async {
+    final liking = !post.likedByMe;
+    await _runPostAction(
+      post.id,
+      () async {
+        if (post.likedByMe) {
+          await widget.repository.unlikePost(
+            postId: post.id,
+            customerId: widget.profile.id,
+          );
+        } else {
+          await widget.repository.likePost(postId: post.id);
+        }
+      },
+      localTransform: (current) => current.copyWith(
+        likedByMe: liking,
+        likeCount: liking
+            ? current.likeCount + 1
+            : (current.likeCount > 0 ? current.likeCount - 1 : 0),
+      ),
+    );
+  }
+
+  Future<void> _openComments(SalonPost post) async {
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFFFFFBF7),
+      builder: (context) => FeedCommentsSheet(
+        post: post,
+        branding: widget.branding,
+        onSubmitComment: (body) =>
+            widget.repository.addPostComment(postId: post.id, body: body),
+      ),
+    );
+
+    if (created == true) {
+      if (mounted) {
+        _showMessage('Comentário enviado com sucesso.');
+      }
+      await _refresh();
+    }
+  }
+
+  Future<void> _openBooking(ServiceItem service) async {
+    final result = await Navigator.of(context).push<BookAppointmentResult>(
+      SalonPageRoute(
+        builder: (_) => BookAppointmentScreen(
+          repository: widget.repository,
+          service: service,
+          profile: widget.profile,
+          initialLoyaltySummary: _data.loyaltySummary,
+          activeOffers: _data.offers,
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      _showMessage(result.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumGalleryScreen(
+      profile: widget.profile,
+      branding: widget.branding,
+      posts: _data.posts,
+      onRefresh: _refresh,
+      onWhatsApp: () {},
+      onToggleLike: _toggleLike,
+      onOpenComments: _openComments,
+      onBookService: _openBooking,
+      busyPostIds: _busyPostIds,
+      initialPostId: widget.initialPostId,
+    );
+  }
+}
+
+enum _NotificationDestination {
+  campaigns,
+  wallet,
+  gallery,
+  serviceDetail,
+  booking,
+}
+
+_NotificationDestination? _destinationFor(NotificationTapPayload notification) {
+  final type = notification.type;
+  final serviceId = notification.data['serviceId']?.toString().trim();
+  final rewardServiceId = notification.data['rewardServiceId']
+      ?.toString()
+      .trim();
+  final serviceName = notification.data['serviceName']?.toString().trim();
+  final rewardServiceName = notification.data['rewardServiceName']
+      ?.toString()
+      .trim();
+  final hasServiceContext =
+      (serviceId != null && serviceId.isNotEmpty) ||
+      (rewardServiceId != null && rewardServiceId.isNotEmpty) ||
+      (serviceName != null && serviceName.isNotEmpty) ||
+      (rewardServiceName != null && rewardServiceName.isNotEmpty);
+
+  if (type.startsWith('promotion_') ||
+      type.startsWith('membership_') ||
+      type == 'winback_offer' ||
+      type == 'smart_rebook_prompt') {
+    return _NotificationDestination.campaigns;
+  }
+
+  if (type.startsWith('loyalty_') ||
+      type.startsWith('referral_') ||
+      type == 'appointment_completed') {
+    return _NotificationDestination.wallet;
+  }
+
+  if (type == 'vacancy_alert') {
+    return _NotificationDestination.booking;
+  }
+
+  if (type == 'feed_post_published') {
+    return _NotificationDestination.gallery;
+  }
+
+  if ((type == 'service_published' || type == 'service_updated') &&
+      hasServiceContext) {
+    return _NotificationDestination.serviceDetail;
+  }
+
+  return null;
+}
+
+class _NotificationDestinationContext {
+  const _NotificationDestinationContext({
+    required this.profile,
+    required this.data,
+    required this.branding,
+    required this.brandConfig,
+  });
+
+  final CustomerProfile profile;
+  final HomeData data;
+  final SalonBranding branding;
+  final SalonBrandConfig brandConfig;
 }
 
 class _FeedPostPreviewCard extends StatelessWidget {

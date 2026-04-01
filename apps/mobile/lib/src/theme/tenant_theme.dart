@@ -380,8 +380,8 @@ class PremiumTenantTheme extends ThemeExtension<PremiumTenantTheme> {
     final buttonShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(switch (brand.buttonStyle) {
         PremiumButtonStyle.capsule => PremiumRadius.pill,
-        PremiumButtonStyle.rounded => 22,
-        PremiumButtonStyle.elevated => 18,
+        PremiumButtonStyle.rounded => 24,
+        PremiumButtonStyle.elevated => 20,
       }),
     );
 
@@ -411,23 +411,29 @@ class PremiumTenantTheme extends ThemeExtension<PremiumTenantTheme> {
             alpha: 0.38,
           ),
           disabledForegroundColor: extension.textMuted,
-          minimumSize: const Size.fromHeight(56),
+          minimumSize: const Size.fromHeight(58),
+          elevation: 0,
+          shadowColor: Colors.transparent,
           shape: buttonShape,
           padding: const EdgeInsets.symmetric(
-            horizontal: PremiumSpacing.lg,
+            horizontal: PremiumSpacing.xl,
             vertical: PremiumSpacing.md,
           ),
-          textStyle: textTheme.labelLarge?.copyWith(fontSize: 15),
+          textStyle: textTheme.labelLarge?.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: extension.textPrimary,
-          minimumSize: const Size.fromHeight(54),
+          minimumSize: const Size.fromHeight(56),
+          backgroundColor: extension.backgroundRaised.withValues(alpha: 0.72),
           side: BorderSide(color: extension.strokeStrong),
           shape: buttonShape,
           padding: const EdgeInsets.symmetric(
-            horizontal: PremiumSpacing.lg,
+            horizontal: PremiumSpacing.xl,
             vertical: PremiumSpacing.md,
           ),
           textStyle: textTheme.labelLarge,
@@ -477,19 +483,19 @@ class PremiumTenantTheme extends ThemeExtension<PremiumTenantTheme> {
           vertical: PremiumSpacing.md,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           borderSide: BorderSide(color: extension.strokeSoft),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           borderSide: BorderSide(color: extension.strokeStrong, width: 1.4),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           borderSide: const BorderSide(color: Color(0xFFCF6A62), width: 1.2),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           borderSide: const BorderSide(color: Color(0xFFCF6A62), width: 1.4),
         ),
       ),

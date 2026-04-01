@@ -10,8 +10,8 @@ import '../theme/salon_branding.dart';
 import '../theme/salon_experience_preset.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cinematic_reveal.dart';
+import '../widgets/premium_surface_card.dart';
 import '../widgets/salon_brand_mark.dart';
-import '../widgets/soft_card.dart';
 
 class JoinSalonScreen extends StatefulWidget {
   const JoinSalonScreen({
@@ -323,7 +323,7 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                     const SizedBox(height: 16),
                     CinematicReveal(
                       delay: const Duration(milliseconds: 90),
-                      child: SoftCard(
+                      child: PremiumSurfaceCard(
                         padding: const EdgeInsets.all(20),
                         gradient: LinearGradient(
                           colors: [
@@ -333,7 +333,7 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        borderColor: branding.outline.withValues(alpha: 0.74),
+                        tone: PremiumSurfaceTone.secondary,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -593,14 +593,14 @@ class _JoinSalonScreenState extends State<JoinSalonScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SoftCard(
+                    PremiumSurfaceCard(
                       padding: const EdgeInsets.all(22),
                       gradient: LinearGradient(
                         colors: [branding.surface, branding.soft],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderColor: branding.outline,
+                      tone: PremiumSurfaceTone.accent,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -849,7 +849,7 @@ class _JoinEditorialHero extends StatelessWidget {
         ? 'Digite o código para liberar a marca certa.'
         : '$salonName já foi reconhecido e está pronto para entrar.';
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: EdgeInsets.zero,
       gradient: LinearGradient(
         colors: [
@@ -860,7 +860,7 @@ class _JoinEditorialHero extends StatelessWidget {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      borderColor: branding.primary.withValues(alpha: 0.28),
+      tone: PremiumSurfaceTone.contrast,
       child: Stack(
         children: [
           Positioned(

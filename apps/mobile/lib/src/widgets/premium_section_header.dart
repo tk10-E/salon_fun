@@ -23,65 +23,134 @@ class PremiumSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.premiumTheme;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: PremiumSpacing.sm,
-                    vertical: PremiumSpacing.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.surfaceSecondary,
-                    borderRadius: BorderRadius.circular(PremiumRadius.pill),
-                    border: Border.all(color: theme.strokeSoft),
-                  ),
-                  child: Text(
-                    eyebrow!,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: theme.textMuted,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.32,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(PremiumSpacing.md),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: theme.isDark ? 0.02 : 0.5),
+                    theme.surfaceSecondary.withValues(alpha: 0.94),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(color: theme.strokeSoft),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      gradient: theme.buttonGradient,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: theme.softShadow,
+                    ),
+                    child: Icon(
+                      Icons.auto_awesome_rounded,
+                      color: theme.onAccent,
+                      size: 22,
                     ),
                   ),
-                ),
-                const SizedBox(height: PremiumSpacing.sm),
-              ],
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: theme.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
+                  const SizedBox(width: PremiumSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: PremiumSpacing.md,
+                              vertical: PremiumSpacing.xs,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.surfaceAccent,
+                              borderRadius: BorderRadius.circular(
+                                PremiumRadius.pill,
+                              ),
+                              border: Border.all(color: theme.strokeSoft),
+                            ),
+                            child: Text(
+                              eyebrow!,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: theme.textPrimary,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.56,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(height: PremiumSpacing.sm),
+                        ],
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: theme.textPrimary,
+                                fontWeight: FontWeight.w900,
+                              ),
+                        ),
+                        if (subtitle != null &&
+                            subtitle!.trim().isNotEmpty) ...[
+                          const SizedBox(height: PremiumSpacing.xs),
+                          Text(
+                            subtitle!,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: theme.textMuted),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                const SizedBox(height: PremiumSpacing.xs),
-                Text(
-                  subtitle!,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: theme.textMuted),
-                ),
-              ],
-            ],
-          ),
-        ),
-        if (actionLabel != null && onAction != null)
-          Padding(
-            padding: const EdgeInsets.only(left: PremiumSpacing.md),
-            child: TextButton.icon(
-              onPressed: onAction,
-              iconAlignment: IconAlignment.end,
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: Text(actionLabel!),
             ),
           ),
-      ],
+          if (actionLabel != null && onAction != null)
+            Padding(
+              padding: const EdgeInsets.only(left: PremiumSpacing.md),
+              child: InkWell(
+                onTap: onAction,
+                borderRadius: BorderRadius.circular(22),
+                child: Ink(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: PremiumSpacing.md,
+                    vertical: PremiumSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: theme.buttonGradient,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: theme.softShadow,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        actionLabel!,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: theme.onAccent,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(width: PremiumSpacing.xs),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        color: theme.onAccent,
+                        size: 18,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

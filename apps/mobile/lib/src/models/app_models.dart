@@ -234,6 +234,101 @@ class SalonOfferItem {
   }
 }
 
+class SalonRetailProduct {
+  const SalonRetailProduct({
+    required this.id,
+    required this.name,
+    this.brand,
+    this.retailPrice,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final String? brand;
+  final double? retailPrice;
+  final DateTime? updatedAt;
+
+  String get subtitle {
+    final brandLabel = brand?.trim();
+    if (brandLabel != null && brandLabel.isNotEmpty) {
+      return brandLabel;
+    }
+
+    return 'Selecao disponivel no salao';
+  }
+
+  factory SalonRetailProduct.fromMap(Map<String, dynamic> map) {
+    final rawRetailPrice = map['retail_price'];
+
+    return SalonRetailProduct(
+      id: map['id'] as String,
+      name: (map['name'] ?? 'Produto do salao') as String,
+      brand: _readNullableString(map['brand']),
+      retailPrice: rawRetailPrice == null
+          ? null
+          : rawRetailPrice is num
+          ? rawRetailPrice.toDouble()
+          : double.tryParse(rawRetailPrice.toString()),
+      updatedAt: map['updated_at'] == null
+          ? null
+          : DateTime.tryParse(map['updated_at'].toString())?.toLocal(),
+    );
+  }
+}
+
+class SalonTeamMemberProfile {
+  const SalonTeamMemberProfile({
+    required this.id,
+    required this.name,
+    this.role,
+    this.isWorkingToday = false,
+    this.opensAt,
+    this.closesAt,
+    this.serviceNames = const <String>[],
+    this.serviceCategories = const <String>[],
+  });
+
+  final String id;
+  final String name;
+  final String? role;
+  final bool isWorkingToday;
+  final String? opensAt;
+  final String? closesAt;
+  final List<String> serviceNames;
+  final List<String> serviceCategories;
+
+  String get primarySpecialty {
+    final roleLabel = role?.trim();
+    if (roleLabel != null && roleLabel.isNotEmpty) {
+      return roleLabel;
+    }
+
+    if (serviceCategories.isNotEmpty) {
+      return serviceCategories.first;
+    }
+
+    if (serviceNames.isNotEmpty) {
+      return serviceNames.first;
+    }
+
+    return 'Profissional do salão';
+  }
+
+  factory SalonTeamMemberProfile.fromMap(Map<String, dynamic> map) {
+    return SalonTeamMemberProfile(
+      id: map['id'] as String,
+      name: (map['name'] ?? 'Profissional') as String,
+      role: _readNullableString(map['role']),
+      isWorkingToday: (map['is_working_today'] ?? false) as bool,
+      opensAt: _readNullableString(map['opens_at']),
+      closesAt: _readNullableString(map['closes_at']),
+      serviceNames: _readStringList(map['service_names']),
+      serviceCategories: _readStringList(map['service_categories']),
+    );
+  }
+}
+
 class ReferralProgramInfo {
   const ReferralProgramInfo({
     required this.title,
@@ -804,6 +899,8 @@ class CustomerNotificationItem {
       payload: {
         'startsAt': alert.startsAt.toIso8601String(),
         'endsAt': alert.endsAt.toIso8601String(),
+        'serviceId': alert.serviceId,
+        'staffMemberId': alert.staffMemberId,
       },
     );
   }
@@ -1455,6 +1552,18 @@ String? _readNullableString(Object? value) {
   }
 
   return text;
+}
+
+List<String> _readStringList(Object? value) {
+  if (value is! List) {
+    return const <String>[];
+  }
+
+  return value
+      .map((item) => item?.toString().trim())
+      .whereType<String>()
+      .where((item) => item.isNotEmpty)
+      .toList(growable: false);
 }
 
 int _readInt(Object? value, {int fallback = 0}) {

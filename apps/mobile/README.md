@@ -9,7 +9,7 @@ flutter pub get
 flutter run \
   --dart-define=SUPABASE_URL=https://your-project.supabase.co \
   --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-key \
-  --dart-define=AUTH_REDIRECT_URL=https://painel.example.com/login
+  --dart-define=AUTH_REDIRECT_URL=salonfun://auth-callback
 ```
 
 ## Push no Android
@@ -22,6 +22,17 @@ Para receber notificacoes reais de vaga liberada no Android:
 
 O app registra o token FCM automaticamente quando o cliente ja estiver vinculado a um salao.
 No logout, o token eh desativado para evitar push em conta errada.
+
+## Push no iOS
+
+Para receber notificacoes reais no iPhone:
+
+1. Adicione `GoogleService-Info.plist` em `ios/Runner/GoogleService-Info.plist`.
+2. Habilite as capacidades `Push Notifications` e `Background Modes > Remote notifications` no target `Runner`.
+3. Gere e vincule a chave/certificado APNs do app no projeto Firebase usado por este ambiente.
+4. Reinstale o app em um dispositivo fisico iOS e aceite as permissoes de notificacao.
+
+O app ja esta preparado para registrar token FCM e exibir notificacoes locais no iOS, mas a entrega real depende da configuracao APNs/Firebase do projeto.
 
 ## Observacao para Flutter Web
 
@@ -38,9 +49,7 @@ http://localhost:*
 
 ## Redirect de e-mail no app nativo
 
-Se o cadastro ou reset de senha for iniciado no Android/iOS, o Supabase usa o `Site URL` do projeto quando nenhum redirect eh informado.
-
-Para evitar links indo para `localhost`, gere o app com uma URL publica:
+O app usa `salonfun://auth-callback` como redirect nativo padrao para confirmacao de email e recuperacao de senha. Se voce quiser sobrescrever esse comportamento por ambiente, gere o app com o valor abaixo:
 
 ```bash
 flutter build apk --release --dart-define-from-file=.env.production
@@ -49,5 +58,7 @@ flutter build apk --release --dart-define-from-file=.env.production
 E dentro do arquivo `.env.production` inclua:
 
 ```text
-AUTH_REDIRECT_URL=https://painel.example.com/login
+AUTH_REDIRECT_URL=salonfun://auth-callback
 ```
+
+No Supabase, confirme tambem que `salonfun://auth-callback` esta cadastrado em `Authentication > URL Configuration > Redirect URLs`.

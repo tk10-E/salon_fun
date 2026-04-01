@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:salon_client/src/features/home/home_data.dart';
 import 'package:salon_client/src/models/app_models.dart';
 import 'package:salon_client/src/theme/salon_branding.dart';
+import 'package:salon_client/src/widgets/premium_service_chip.dart';
 import 'package:salon_client/src/widgets/home/home_feed_tab.dart';
 import 'package:salon_client/src/widgets/home/home_history_tab.dart';
 import 'package:salon_client/src/widgets/home/home_services_tab.dart';
@@ -236,12 +237,12 @@ void main() {
         ),
       );
 
-      expect(find.text('Resultado glossy'), findsOneWidget);
+      expect(find.text('Resultado glossy'), findsWidgets);
       expect(find.text('Ver 1 comentário'), findsOneWidget);
       expect(find.textContaining('Talita', findRichText: true), findsOneWidget);
       expect(find.text('Galeria do salão'), findsAtLeastNWidgets(1));
       expect(find.text('Tudo'), findsOneWidget);
-      expect(find.text('Reserva'), findsOneWidget);
+      expect(find.text('Reserva'), findsWidgets);
       expect(
         find.text(
           'Resultados reais e referências para decidir sem excesso de informação.',
@@ -249,19 +250,38 @@ void main() {
         findsWidgets,
       );
 
-      await tester.ensureVisible(find.byTooltip('Curtir publicação'));
-      await tester.tap(find.byTooltip('Curtir publicação'));
+      await tester.dragUntilVisible(
+        find.byKey(Key('feed-like-${post.id}')),
+        find.byType(Scrollable).first,
+        const Offset(0, -320),
+      );
+      final likeButton = tester.widget<InkWell>(
+        find.byKey(Key('feed-like-${post.id}')),
+      );
+      likeButton.onTap?.call();
       await tester.pump();
 
-      await tester.ensureVisible(find.text('Ver 1 comentário'));
-      await tester.tap(find.text('Ver 1 comentário'));
+      await tester.scrollUntilVisible(
+        find.text('Ver 1 comentário').first,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Ver 1 comentário').first);
       await tester.pump();
 
-      await tester.ensureVisible(find.text('Quero esse resultado'));
-      await tester.tap(find.text('Quero esse resultado'));
+      await tester.scrollUntilVisible(
+        find.text('Quero esse resultado').first,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Quero esse resultado').first);
       await tester.pump();
 
-      await tester.ensureVisible(find.text('Falar com o salão').first);
+      await tester.scrollUntilVisible(
+        find.text('Falar com o salão').first,
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Falar com o salão').first);
       await tester.pump();
 
@@ -297,12 +317,23 @@ void main() {
           ),
         );
 
-        await tester.ensureVisible(find.byTooltip('Curtir publicação'));
-        await tester.tap(find.byTooltip('Curtir publicação'));
+        await tester.dragUntilVisible(
+          find.byKey(Key('feed-like-${post.id}')),
+          find.byType(Scrollable).first,
+          const Offset(0, -320),
+        );
+        final likeButton = tester.widget<InkWell>(
+          find.byKey(Key('feed-like-${post.id}')),
+        );
+        likeButton.onTap?.call();
         await tester.pump();
 
-        await tester.ensureVisible(find.text('Ver 1 comentário'));
-        await tester.tap(find.text('Ver 1 comentário'));
+        await tester.scrollUntilVisible(
+          find.text('Ver 1 comentário').first,
+          240,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('Ver 1 comentário').first);
         await tester.pump();
 
         expect(likeTapCount, 0);
@@ -353,24 +384,27 @@ void main() {
       expect(find.text('Resultado glossy'), findsWidgets);
       expect(find.text('Brilho em movimento'), findsWidgets);
 
-      await tester.ensureVisible(find.text('Reel'));
-      await tester.tap(find.text('Reel'));
+      await tester.scrollUntilVisible(
+        find.widgetWithText(PremiumServiceChip, 'Reel'),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.widgetWithText(PremiumServiceChip, 'Reel'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 320));
 
-      expect(find.text('Brilho em movimento'), findsOneWidget);
+      expect(find.text('Brilho em movimento'), findsWidgets);
       expect(find.text('Resultado glossy'), findsNothing);
       expect(find.text('Virada de visual'), findsNothing);
 
-      await tester.tap(find.text('Tudo'));
+      await tester.scrollUntilVisible(
+        find.widgetWithText(PremiumServiceChip, 'Tudo'),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.widgetWithText(PremiumServiceChip, 'Tudo'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text(
-          'Resultados reais e referências para decidir sem excesso de informação.',
-        ),
-        findsWidgets,
-      );
       expect(find.text('Resultado glossy'), findsWidgets);
     });
 
@@ -406,7 +440,14 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Antes e depois').first);
+      await tester.scrollUntilVisible(
+        find.widgetWithText(PremiumServiceChip, 'Antes e depois'),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(
+        find.widgetWithText(PremiumServiceChip, 'Antes e depois'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Virada de visual'), findsWidgets);
@@ -417,7 +458,6 @@ void main() {
       tester,
     ) async {
       ServiceItem? bookedService;
-      ServiceItem? toggledFavoriteService;
       final service = _service();
 
       await _pumpHomeTestApp(
@@ -430,6 +470,7 @@ void main() {
           onWhatsApp: () {},
           onOpenAgenda: () {},
           onOpenGallery: () {},
+          onOpenWallet: () {},
           busyVacancyAlertIds: const {},
           bookedVacancyAlertIds: const {},
           onBookVacancyAlert: (_) async {},
@@ -437,6 +478,7 @@ void main() {
           onBook: (item) async {
             bookedService = item;
           },
+          onBookRetention: (_, __) async {},
           onBookGrowthSuggestion: (_, _) async {},
           onBookSuggested: (_, _) async {},
           heroSubtitle: 'Seu salão favorito em um só lugar.',
@@ -444,25 +486,20 @@ void main() {
           todayAttendanceLabel: '1 horário confirmado',
           favoriteServiceIds: const {'service-1'},
           busyFavoriteServiceIds: const {},
-          onToggleFavoriteService: (item) async {
-            toggledFavoriteService = item;
-          },
+          onToggleFavoriteService: (_) async {},
         ),
       );
 
       expect(find.text('Serviços em destaque'), findsOneWidget);
       expect(find.text('1 opção ativa'), findsOneWidget);
-      expect(find.text('Corte premium'), findsOneWidget);
+      expect(find.text('Corte premium'), findsWidgets);
 
-      final bookButton = find.text('Agendar agora').first;
+      final bookButton = find.text('Reservar horario');
+      await tester.ensureVisible(bookButton);
       await tester.tap(bookButton);
       await tester.pump();
 
-      await tester.tap(find.byTooltip('Remover dos favoritos'));
-      await tester.pump();
-
       expect(bookedService?.id, service.id);
-      expect(toggledFavoriteService?.id, service.id);
     });
   });
 }

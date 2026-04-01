@@ -26,6 +26,7 @@ class HomeProfileTab extends StatelessWidget {
     required this.onOpenSalonProfile,
     required this.onOpenProfessionals,
     required this.onOpenProducts,
+    required this.onOpenCampaigns,
     required this.onWhatsApp,
   });
 
@@ -43,6 +44,7 @@ class HomeProfileTab extends StatelessWidget {
   final VoidCallback onOpenSalonProfile;
   final VoidCallback onOpenProfessionals;
   final VoidCallback onOpenProducts;
+  final VoidCallback onOpenCampaigns;
   final VoidCallback onWhatsApp;
 
   @override
@@ -90,6 +92,15 @@ class HomeProfileTab extends StatelessWidget {
     final professionalsSummary = professionalHighlightsCount > 0
         ? '$professionalHighlightsCount profissional${professionalHighlightsCount == 1 ? '' : 's'} com presença no app.'
         : 'A equipe ganha destaque aqui conforme o salão reforça especialidades e portfólio.';
+    final activeCampaignsCount = data.offers
+        .where((offer) => offer.isActive)
+        .length;
+    final campaignsSummary = activeCampaignsCount > 0
+        ? '$activeCampaignsCount campanha${activeCampaignsCount == 1 ? '' : 's'} ativa${activeCampaignsCount == 1 ? '' : 's'} com clube e benefícios ligados ao app.'
+        : loyaltySummary?.hasVisibleContent == true ||
+              referralSummary?.hasVisibleContent == true
+        ? 'Clube, cashback e indicação já podem ser acompanhados pelo cliente no app.'
+        : 'A central comercial do cliente aparece aqui quando o salão ativa campanhas, clube ou indicação.';
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -286,6 +297,23 @@ class HomeProfileTab extends StatelessWidget {
                       width: cardWidth,
                       child: _ProfileFeatureCard(
                         branding: branding,
+                        eyebrow: 'Comercial',
+                        title: 'Campanhas e clube',
+                        subtitle: campaignsSummary,
+                        badge: activeCampaignsCount > 0
+                            ? '$activeCampaignsCount ativas'
+                            : loyaltySummary?.hasVisibleContent == true ||
+                                  referralSummary?.hasVisibleContent == true
+                            ? 'Benefícios'
+                            : 'Hub',
+                        icon: Icons.auto_awesome_rounded,
+                        onTap: onOpenCampaigns,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _ProfileFeatureCard(
+                        branding: branding,
                         eyebrow: 'Equipe',
                         title: 'Profissionais em destaque',
                         subtitle: professionalsSummary,
@@ -303,9 +331,7 @@ class HomeProfileTab extends StatelessWidget {
                         eyebrow: 'Coleção',
                         title: 'Produtos da marca',
                         subtitle: productsSummary,
-                        badge: productHighlightsCount > 0
-                            ? 'Shop'
-                            : 'Seleção',
+                        badge: productHighlightsCount > 0 ? 'Shop' : 'Seleção',
                         icon: Icons.shopping_bag_outlined,
                         onTap: onOpenProducts,
                       ),

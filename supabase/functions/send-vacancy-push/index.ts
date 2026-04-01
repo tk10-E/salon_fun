@@ -28,6 +28,16 @@ type CustomerNotificationRow = {
   payload: Record<string, unknown> | null;
 };
 
+type SalonBrandingRow = {
+  name: string;
+  logo_path: string | null;
+};
+
+type SalonBranding = {
+  salonName: string | null;
+  salonLogoUrl: string | null;
+};
+
 type PushTokenRow = {
   token: string;
   customer_id: string;
@@ -94,6 +104,15 @@ function maskToken(token: string): string {
   }
 
   return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
+function normalizeNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length ? normalized : null;
 }
 
 function isRetryablePushStatus(status: number): boolean {
@@ -266,6 +285,77 @@ function buildDataPayload(
   }
 
   return data;
+}
+
+async function resolveSalonLogoUrl(args: {
+  supabase: ReturnType<typeof createClient> | null;
+  salonId: string | null | undefined;
+}): Promise<SalonBranding> {
+  const salonId = normalizeNonEmptyString(args.salonId);
+  if (!salonId || !args.supabase) {
+    return {
+      salonName: null,
+      salonLogoUrl: null,
+    };
+  }
+
+  const response = await args.supabase
+    .from("salons")
+    .select("name, logo_path")
+    .eq("id", salonId)
+    .maybeSingle();
+  const salon = response.data as SalonBrandingRow | null;
+  const error = response.error as SupabaseErrorLike;
+
+  if (error) {
+    console.warn("Failed to load salon logo for push", {
+      salonId,
+      detail: error.message,
+    });
+    return {
+      salonName: null,
+      salonLogoUrl: null,
+    };
+  }
+
+  const salonName = normalizeNonEmptyString(salon?.name);
+  const logoPath = normalizeNonEmptyString(salon?.logo_path);
+  return {
+    salonName,
+    salonLogoUrl: logoPath
+      ? args.supabase.storage.from("salon-assets").getPublicUrl(logoPath).data.publicUrl
+      : null,
+  };
+}
+
+function buildDisplayedPushTitle(args: {
+  semanticTitle: string;
+  salonName: string | null;
+}): string {
+  return args.salonName ?? args.semanticTitle;
+}
+
+function buildDisplayedPushBody(args: {
+  semanticTitle: string;
+  semanticBody: string;
+  salonName: string | null;
+}): string {
+  const semanticTitle = args.semanticTitle.trim();
+  const semanticBody = args.semanticBody.trim();
+
+  if (!args.salonName) {
+    return semanticBody || semanticTitle;
+  }
+
+  if (!semanticTitle) {
+    return semanticBody;
+  }
+
+  if (!semanticBody || semanticBody === semanticTitle) {
+    return semanticTitle;
+  }
+
+  return `${semanticTitle}\n${semanticBody}`;
 }
 
 async function deactivateInvalidTokens(
@@ -521,6 +611,12 @@ Deno.serve(async (request: Request) => {
     });
 
     const { accessToken, projectId } = await getGoogleAccessToken(serviceAccountJson);
+    const salonBranding = await resolveSalonLogoUrl({
+      supabase,
+      salonId: payload.salon_id,
+    });
+    const salonName = salonBranding.salonName;
+    const salonLogoUrl = salonBranding.salonLogoUrl;
 
     if (payload.alert_id) {
       const alertResponse = await supabase
@@ -617,16 +713,25 @@ Deno.serve(async (request: Request) => {
         accessToken,
         projectId,
         tokens: activeTokens,
-        title: alert.headline,
-        body: alert.body,
+        title: buildDisplayedPushTitle({
+          semanticTitle: alert.headline,
+          salonName,
+        }),
+        body: buildDisplayedPushBody({
+          semanticTitle: alert.headline,
+          semanticBody: alert.body,
+          salonName,
+        }),
         channelId: vacancyChannelId,
         data: {
           type: "vacancy_alert",
           alertId: alert.id,
           salonId: alert.salon_id,
           startsAt: alert.starts_at,
+          ...(salonName ? { salonName } : {}),
           title: alert.headline,
           body: alert.body,
+          ...(salonLogoUrl ? { salonLogoUrl } : {}),
         },
       });
 
@@ -748,16 +853,25 @@ Deno.serve(async (request: Request) => {
       accessToken,
       projectId,
       tokens: activeTokens,
-      title: notification.title,
-      body: notification.body,
+      title: buildDisplayedPushTitle({
+        semanticTitle: notification.title,
+        salonName,
+      }),
+      body: buildDisplayedPushBody({
+        semanticTitle: notification.title,
+        semanticBody: notification.body,
+        salonName,
+      }),
       channelId: updatesChannelId,
       data: buildDataPayload(
         {
           type: notification.notification_type,
           notificationId: notification.id,
           salonId: notification.salon_id,
+          ...(salonName ? { salonName } : {}),
           title: notification.title,
           body: notification.body,
+          ...(salonLogoUrl ? { salonLogoUrl } : {}),
         },
         notification.payload,
       ),

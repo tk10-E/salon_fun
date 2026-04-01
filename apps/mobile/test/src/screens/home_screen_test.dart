@@ -7,6 +7,7 @@ import 'package:salon_client/src/features/home/home_data_loader.dart';
 import 'package:salon_client/src/models/app_models.dart';
 import 'package:salon_client/src/repositories/salon_repository.dart';
 import 'package:salon_client/src/screens/home_screen.dart';
+import 'package:salon_client/src/services/app_analytics_service.dart';
 import 'package:salon_client/src/services/push_token_sync_service.dart';
 import 'package:salon_client/src/widgets/salon_feed_post_card.dart';
 import 'package:salon_client/src/widgets/salon_home_skeleton.dart';
@@ -115,6 +116,127 @@ void main() {
       },
     );
 
+    testWidgets(
+      'renders the trust-first retention block when the customer has completed visit history',
+      (tester) async {
+        final loader = _FakeHomeDataLoader(
+          onLoad: (_) async => _homeData(
+            appointments: [_appointment(), _completedAppointment()],
+            posts: [_feedPost()],
+          ),
+        );
+
+        await _pumpHomeScreen(
+          tester,
+          repository: _FakeSalonRepository(),
+          loader: loader,
+        );
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          find.text('Seu benefício já pode entrar na próxima reserva.'),
+          findsOneWidget,
+        );
+        expect(find.text('Reservar com benefício'), findsOneWidget);
+        expect(find.text('Seu benefício'), findsOneWidget);
+      },
+    );
+
+    testWidgets('tracks the main retention CTA tap with analytics', (
+      tester,
+    ) async {
+      final analytics = _FakeAppAnalytics();
+      final loader = _FakeHomeDataLoader(
+        onLoad: (_) async => _homeData(
+          appointments: [_appointment(), _completedAppointment()],
+          posts: [_feedPost()],
+        ),
+      );
+
+      await _pumpHomeScreen(
+        tester,
+        repository: _FakeSalonRepository(),
+        loader: loader,
+        analytics: analytics,
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Reservar com benefício'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.text('14:00').first);
+      await tester.pump();
+
+      expect(
+        analytics.events,
+        contains(const _TrackedAnalyticsEvent(name: 'home_view')),
+      );
+      expect(
+        analytics.events,
+        contains(
+          const _TrackedAnalyticsEvent(
+            name: 'hero_click',
+            parameters: {
+              'mode': 'default',
+              'confidence': 'weak',
+              'urgency': 'dueNow',
+              'service_id': 'service-1',
+              'service_name': 'Corte premium',
+              'has_prefilled_day': true,
+              'has_prefilled_slot': false,
+              'has_staff_personalization': false,
+              'reward_highlighted': true,
+            },
+          ),
+        ),
+      );
+      expect(
+        analytics.events,
+        contains(
+          const _TrackedAnalyticsEvent(
+            name: 'booking_started',
+            parameters: {
+              'source': 'retention_v1_home',
+              'mode': 'default',
+              'confidence': 'weak',
+              'service_id': 'service-1',
+              'service_name': 'Corte premium',
+              'has_prefilled_day': true,
+              'has_prefilled_slot': false,
+              'staff_member_id': null,
+              'staff_member_name': null,
+            },
+          ),
+        ),
+      );
+      expect(
+        analytics.events,
+        contains(
+          const _TrackedAnalyticsEvent(
+            name: 'slot_selected',
+            parameters: {
+              'source': 'retention_v1_home',
+              'mode': 'default',
+              'confidence': 'weak',
+              'service_id': 'service-1',
+              'service_name': 'Corte premium',
+              'has_prefilled_day': true,
+              'has_prefilled_slot': false,
+              'staff_member_id': 'staff-1',
+              'staff_member_name': 'Lia',
+              'slot_time': 'dynamic',
+              'slot_surface': 'quick_chips',
+            },
+          ),
+        ),
+      );
+    });
+
     testWidgets('adapts the app bar label for the barbershop preset', (
       tester,
     ) async {
@@ -206,7 +328,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        expect(find.text('Resultado glossy'), findsOneWidget);
+        expect(find.text('Resultado glossy'), findsWidgets);
         expect(loadAttemptCount, 2);
       },
     );
@@ -296,7 +418,7 @@ void main() {
 
         expect(repository.likedPostIds, ['post-1']);
         expect(find.text('1 curtida'), findsOneWidget);
-        expect(find.text('Resultado glossy'), findsOneWidget);
+        expect(find.text('Resultado glossy'), findsWidgets);
         expect(
           find.text('Não foi possível carregar a galeria do salão'),
           findsNothing,
@@ -556,10 +678,12 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
-        expect(find.text('Notificações do salão'), findsOneWidget);
+        expect(find.text('Central inteligente do salão'), findsOneWidget);
         expect(find.text('Promoção da semana'), findsOneWidget);
 
-        final sheetContext = tester.element(find.text('Notificações do salão'));
+        final sheetContext = tester.element(
+          find.text('Central inteligente do salão'),
+        );
         Navigator.of(sheetContext).pop();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
@@ -587,7 +711,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      await tester.tap(find.text('Apagar avisos'));
+      await tester.tap(find.text('Arquivar visíveis'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -675,6 +799,7 @@ Future<void> _pumpHomeScreen(
   CustomerProfile? profile,
   ValueChanged<CustomerProfile?>? onActiveProfileChanged,
   PushTokenSyncService? pushTokenSyncService,
+  AppAnalytics? analytics,
 }) async {
   await tester.binding.setSurfaceSize(const Size(1200, 2600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -686,6 +811,7 @@ Future<void> _pumpHomeScreen(
         homeDataLoader: loader,
         onActiveProfileChanged: onActiveProfileChanged,
         pushTokenSyncService: pushTokenSyncService,
+        analytics: analytics,
         enableRealtime: false,
         enablePushTokenSync: false,
       ),
@@ -732,6 +858,22 @@ AppointmentItem _appointment() {
     serviceDuration: 60,
     servicePrice: 140,
     staffMemberName: 'Ana',
+  );
+}
+
+AppointmentItem _completedAppointment() {
+  final completedAt = DateTime.now().subtract(const Duration(days: 33));
+
+  return AppointmentItem(
+    id: 'appointment-completed-1',
+    date: completedAt.subtract(const Duration(hours: 1)),
+    endsAt: completedAt,
+    completedAt: completedAt,
+    status: 'completed',
+    serviceName: 'Corte premium',
+    serviceDuration: 60,
+    servicePrice: 120,
+    staffMemberName: 'Lia',
   );
 }
 
@@ -885,6 +1027,102 @@ class _FakeSalonRepository extends SalonRepository {
     commentedPostIds.add(postId);
     commentBodies.add(body.trim());
   }
+
+  @override
+  Future<Set<String>> getFavoriteStaffMemberIds() async => const <String>{};
+
+  @override
+  Future<DayAvailability> getDayAvailability({
+    required String serviceId,
+    required DateTime day,
+  }) async {
+    final startAt = DateTime(day.year, day.month, day.day, 14);
+    return DayAvailability(
+      day: DateTime(day.year, day.month, day.day),
+      timezone: 'America/Sao_Paulo',
+      slotStepMinutes: 30,
+      serviceDuration: 60,
+      isOpen: true,
+      opensAt: '09:00:00',
+      closesAt: '19:00:00',
+      staffMembers: [
+        StaffMemberItem(
+          id: 'staff-1',
+          name: 'Lia',
+          opensAt: '09:00:00',
+          closesAt: '19:00:00',
+          availableSlotsCount: 1,
+          nextAvailableAt: startAt,
+        ),
+      ],
+      availableSlots: [
+        AvailableSlot(
+          startAt: startAt,
+          endsAt: startAt.add(const Duration(hours: 1)),
+          staffMemberId: 'staff-1',
+          staffMemberName: 'Lia',
+        ),
+      ],
+    );
+  }
+}
+
+class _FakeAppAnalytics implements AppAnalytics {
+  final List<_TrackedAnalyticsEvent> events = <_TrackedAnalyticsEvent>[];
+  final List<String?> identifiedCustomerIds = <String?>[];
+
+  @override
+  Future<void> identifyCustomer(CustomerProfile? profile) async {
+    identifiedCustomerIds.add(profile?.id);
+  }
+
+  @override
+  Future<void> trackEvent(
+    String event, [
+    Map<String, Object?> parameters = const <String, Object?>{},
+  ]) async {
+    events.add(_TrackedAnalyticsEvent(name: event, parameters: parameters));
+  }
+}
+
+class _TrackedAnalyticsEvent {
+  const _TrackedAnalyticsEvent({
+    required this.name,
+    this.parameters = const <String, Object?>{},
+  });
+
+  final String name;
+  final Map<String, Object?> parameters;
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! _TrackedAnalyticsEvent) {
+      return false;
+    }
+
+    return other.name == name && _sameTrackedMap(other.parameters, parameters);
+  }
+
+  @override
+  int get hashCode => Object.hash(name, Object.hashAll(parameters.entries));
+}
+
+bool _sameTrackedMap(Map<String, Object?> left, Map<String, Object?> right) {
+  for (final entry in left.entries) {
+    final expectedValue = entry.value;
+    final actualValue = right[entry.key];
+    if (expectedValue == 'dynamic') {
+      if (actualValue == null) {
+        return false;
+      }
+      continue;
+    }
+    if (actualValue != expectedValue) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 SalonPost _feedPost({
@@ -1026,6 +1264,16 @@ class _NoopHomeDataRepository implements HomeDataRepository {
   }
 
   @override
+  Future<Set<String>> getFavoriteStaffMemberIds() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<SalonTeamMemberProfile>> getSalonTeamProfiles() {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<List<CustomerNotificationItem>> getCustomerNotifications() {
     throw UnimplementedError();
   }
@@ -1050,6 +1298,11 @@ class _NoopHomeDataRepository implements HomeDataRepository {
 
   @override
   Future<CustomerLoyaltySummary?> getLoyaltySummary() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<SalonRetailProduct>> getRetailProducts() {
     throw UnimplementedError();
   }
 

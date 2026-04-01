@@ -136,7 +136,8 @@ class PushNotificationService {
       return false;
     }
 
-    return defaultTargetPlatform == TargetPlatform.android;
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
   }
 
   bool get isReady => _isInitialized && _firebaseAvailable;
@@ -262,30 +263,41 @@ class PushNotificationService {
     final channel = notificationType == 'vacancy_alert'
         ? _vacancyChannel
         : _updatesChannel;
-    if (channel == null) {
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    if (isAndroid && channel == null) {
       return;
     }
+    final androidDetails = isAndroid
+        ? AndroidNotificationDetails(
+            channel!.id,
+            channel.name,
+            channelDescription: channel.description,
+            importance: Importance.max,
+            priority: Priority.high,
+            visibility: NotificationVisibility.public,
+            playSound: true,
+            enableVibration: true,
+            channelShowBadge: true,
+            autoCancel: true,
+            ticker: title,
+            icon: _androidNotificationIcon,
+            largeIcon: largeIcon,
+            styleInformation: BigTextStyleInformation(body),
+          )
+        : null;
 
     await _localNotifications.show(
       notificationPayload.dedupeKey.hashCode ^ body.hashCode,
       title,
       body,
       NotificationDetails(
-        android: AndroidNotificationDetails(
-          channel.id,
-          channel.name,
-          channelDescription: channel.description,
-          importance: Importance.max,
-          priority: Priority.high,
-          visibility: NotificationVisibility.public,
-          playSound: true,
-          enableVibration: true,
-          channelShowBadge: true,
-          autoCancel: true,
-          ticker: title,
-          icon: _androidNotificationIcon,
-          largeIcon: largeIcon,
-          styleInformation: BigTextStyleInformation(body),
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          interruptionLevel: InterruptionLevel.active,
+          threadIdentifier: notificationType,
         ),
       ),
       payload: notificationPayload.encode(),
@@ -297,6 +309,14 @@ class PushNotificationService {
   Future<void> _configureLocalNotifications() async {
     final initializationSettings = InitializationSettings(
       android: const AndroidInitializationSettings(_androidNotificationIcon),
+      iOS: const DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+        defaultPresentAlert: true,
+        defaultPresentBadge: true,
+        defaultPresentSound: true,
+      ),
     );
 
     await _localNotifications.initialize(
@@ -311,38 +331,40 @@ class PushNotificationService {
       _initialTapPayload = NotificationTapPayload.tryDecode(response?.payload);
     }
 
-    const vacancyChannel = AndroidNotificationChannel(
-      _vacancyNotificationChannelId,
-      _vacancyNotificationChannelName,
-      description: _vacancyNotificationChannelDescription,
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-      showBadge: true,
-    );
-    const updatesChannel = AndroidNotificationChannel(
-      _updatesNotificationChannelId,
-      _updatesNotificationChannelName,
-      description: _updatesNotificationChannelDescription,
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-      showBadge: true,
-    );
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      const vacancyChannel = AndroidNotificationChannel(
+        _vacancyNotificationChannelId,
+        _vacancyNotificationChannelName,
+        description: _vacancyNotificationChannelDescription,
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      );
+      const updatesChannel = AndroidNotificationChannel(
+        _updatesNotificationChannelId,
+        _updatesNotificationChannelName,
+        description: _updatesNotificationChannelDescription,
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      );
 
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(vacancyChannel);
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(updatesChannel);
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.createNotificationChannel(vacancyChannel);
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.createNotificationChannel(updatesChannel);
 
-    _vacancyChannel = vacancyChannel;
-    _updatesChannel = updatesChannel;
+      _vacancyChannel = vacancyChannel;
+      _updatesChannel = updatesChannel;
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -364,6 +386,11 @@ class PushNotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.requestNotificationsPermission();
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
   }
 
   void _handleNotificationResponse(NotificationResponse response) {

@@ -52,6 +52,10 @@ class PremiumBanner extends StatelessWidget {
         : imageUrl;
     final hasImage = resolvedImageUrl?.trim().isNotEmpty == true;
     final leadingWidget = leading;
+    final foregroundColor = theme.isDark ? Colors.white : theme.onAccent;
+    final glassSurfaceColor = theme.isDark
+        ? Colors.black.withValues(alpha: hasImage ? 0.26 : 0.14)
+        : Colors.white.withValues(alpha: hasImage ? 0.18 : 0.56);
 
     return PremiumSurfaceCard(
       padding: EdgeInsets.zero,
@@ -120,135 +124,151 @@ class PremiumBanner extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(PremiumSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: minHeight - 48),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (leadingWidget != null || badges.isNotEmpty)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ...?switch (leadingWidget) {
-                              final Widget leading => <Widget>[leading],
-                              null => null,
-                            },
-                            if (leadingWidget != null && badges.isNotEmpty)
-                              const SizedBox(width: PremiumSpacing.sm),
-                            if (badges.isNotEmpty)
-                              Expanded(
-                                child: Wrap(
-                                  alignment: WrapAlignment.end,
-                                  spacing: PremiumSpacing.xs,
-                                  runSpacing: PremiumSpacing.xs,
-                                  children: badges,
-                                ),
-                              ),
-                          ],
-                        ),
-                      if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
-                        const SizedBox(height: PremiumSpacing.lg),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: PremiumSpacing.sm,
-                            vertical: PremiumSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(
-                              alpha: theme.isDark ? 0.12 : 0.18,
-                            ),
-                            borderRadius: BorderRadius.circular(
-                              PremiumRadius.pill,
-                            ),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.14),
-                            ),
-                          ),
-                          child: Text(
-                            eyebrow!,
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  color: theme.isDark
-                                      ? Colors.white.withValues(alpha: 0.92)
-                                      : theme.onAccent.withValues(alpha: 0.88),
-                                ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: PremiumSpacing.lg),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        child: Text(
-                          title,
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                color: theme.isDark
-                                    ? Colors.white
-                                    : theme.onAccent,
-                                fontWeight: FontWeight.w900,
-                                height: 0.98,
-                              ),
+            padding: const EdgeInsets.all(PremiumSpacing.lg),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: minHeight),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (leadingWidget != null || badges.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(PremiumSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: glassSurfaceColor,
+                        borderRadius: BorderRadius.circular(26),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.14),
                         ),
                       ),
-                      const SizedBox(height: PremiumSpacing.sm),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 384),
-                        child: Text(
-                          subtitle,
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(
-                                color: theme.isDark
-                                    ? Colors.white.withValues(alpha: 0.82)
-                                    : theme.onAccent.withValues(alpha: 0.78),
-                              ),
-                        ),
-                      ),
-                      const SizedBox(height: PremiumSpacing.xl),
-                      Wrap(
-                        spacing: PremiumSpacing.sm,
-                        runSpacing: PremiumSpacing.sm,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (primaryActionLabel != null &&
-                              onPrimaryAction != null)
-                            FilledButton.icon(
-                              onPressed: onPrimaryAction,
-                              icon: const Icon(Icons.calendar_month_rounded),
-                              label: Text(primaryActionLabel!),
-                            ),
-                          if (secondaryActionLabel != null &&
-                              onSecondaryAction != null)
-                            OutlinedButton.icon(
-                              onPressed: onSecondaryAction,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: theme.isDark
-                                    ? Colors.white
-                                    : theme.textPrimary,
-                                backgroundColor: theme.isDark
-                                    ? Colors.white.withValues(alpha: 0.06)
-                                    : Colors.white.withValues(alpha: 0.64),
-                                side: BorderSide(
-                                  color: theme.isDark
-                                      ? Colors.white.withValues(alpha: 0.22)
-                                      : theme.strokeStrong,
-                                ),
+                          ...?switch (leadingWidget) {
+                            final Widget leading => <Widget>[leading],
+                            null => null,
+                          },
+                          if (leadingWidget != null && badges.isNotEmpty)
+                            const SizedBox(width: PremiumSpacing.sm),
+                          if (badges.isNotEmpty)
+                            Expanded(
+                              child: Wrap(
+                                alignment: WrapAlignment.end,
+                                spacing: PremiumSpacing.xs,
+                                runSpacing: PremiumSpacing.xs,
+                                children: badges,
                               ),
-                              icon: const Icon(Icons.auto_awesome_rounded),
-                              label: Text(secondaryActionLabel!),
                             ),
                         ],
                       ),
-                    ],
+                    ),
+                  SizedBox(height: minHeight * 0.14),
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    padding: const EdgeInsets.all(PremiumSpacing.lg),
+                    decoration: BoxDecoration(
+                      color: glassSurfaceColor,
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.14),
+                      ),
+                      boxShadow: theme.softShadow,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: PremiumSpacing.md,
+                              vertical: PremiumSpacing.xs,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(
+                                alpha: theme.isDark ? 0.08 : 0.24,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                PremiumRadius.pill,
+                              ),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.14),
+                              ),
+                            ),
+                            child: Text(
+                              eyebrow!,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: foregroundColor.withValues(
+                                      alpha: 0.92,
+                                    ),
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(height: PremiumSpacing.md),
+                        ],
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Text(
+                            title,
+                            style: Theme.of(context).textTheme.headlineMedium
+                                ?.copyWith(
+                                  color: foregroundColor,
+                                  fontWeight: FontWeight.w900,
+                                  height: 0.96,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(height: PremiumSpacing.sm),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 410),
+                          child: Text(
+                            subtitle,
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(
+                                  color: foregroundColor.withValues(alpha: 0.8),
+                                ),
+                          ),
+                        ),
+                        const SizedBox(height: PremiumSpacing.lg),
+                        Wrap(
+                          spacing: PremiumSpacing.sm,
+                          runSpacing: PremiumSpacing.sm,
+                          children: [
+                            if (primaryActionLabel != null &&
+                                onPrimaryAction != null)
+                              FilledButton.icon(
+                                onPressed: onPrimaryAction,
+                                icon: const Icon(Icons.calendar_month_rounded),
+                                label: Text(primaryActionLabel!),
+                              ),
+                            if (secondaryActionLabel != null &&
+                                onSecondaryAction != null)
+                              OutlinedButton.icon(
+                                onPressed: onSecondaryAction,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: foregroundColor,
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: theme.isDark ? 0.04 : 0.5,
+                                  ),
+                                  side: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.14),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.auto_awesome_rounded),
+                                label: Text(secondaryActionLabel!),
+                              ),
+                          ],
+                        ),
+                        if (footer != null) ...[
+                          const SizedBox(height: PremiumSpacing.lg),
+                          footer!,
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-                if (footer != null) ...[
-                  const SizedBox(height: PremiumSpacing.md),
-                  footer!,
                 ],
-              ],
+              ),
             ),
           ),
         ],

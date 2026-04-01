@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
 import '../models/salon_client_app_config.dart';
@@ -105,6 +106,28 @@ class ProfessionalHighlight {
   final String availabilityLabel;
   final String? imageUrl;
   final String? ratingLabel;
+
+  factory ProfessionalHighlight.fromTeamProfile(
+    SalonTeamMemberProfile profile,
+  ) {
+    final openingLabel = _trimDisplayTime(profile.opensAt);
+    final closingLabel = _trimDisplayTime(profile.closesAt);
+    final servicesCount = profile.serviceNames.length;
+
+    return ProfessionalHighlight(
+      id: profile.id,
+      name: profile.name,
+      specialty: profile.primarySpecialty,
+      availabilityLabel: profile.isWorkingToday
+          ? openingLabel != null && closingLabel != null
+                ? 'Atende hoje de $openingLabel as $closingLabel'
+                : 'Disponivel hoje no app'
+          : 'Agenda fechada hoje',
+      ratingLabel: servicesCount == 0
+          ? null
+          : '$servicesCount servico${servicesCount == 1 ? '' : 's'} no app',
+    );
+  }
 }
 
 class SalonBrandConfig {
@@ -372,6 +395,52 @@ class SalonBrandConfig {
     }
 
     return grouped.values.take(6).toList(growable: false);
+  }
+
+  List<ProfessionalHighlight> resolveProfessionalHighlights({
+    List<SalonTeamMemberProfile> teamProfiles =
+        const <SalonTeamMemberProfile>[],
+    List<SalonPost> posts = const <SalonPost>[],
+    List<AppointmentItem> appointments = const <AppointmentItem>[],
+  }) {
+    if (teamProfiles.isNotEmpty) {
+      return teamProfiles
+          .map(ProfessionalHighlight.fromTeamProfile)
+          .take(6)
+          .toList(growable: false);
+    }
+
+    return buildProfessionalHighlights(
+      posts: posts,
+      appointments: appointments,
+    );
+  }
+
+  List<PremiumProductItem> resolveProductHighlights({
+    List<SalonRetailProduct> liveProducts = const <SalonRetailProduct>[],
+  }) {
+    if (liveProducts.isEmpty) {
+      return products;
+    }
+
+    final currencyFormatter = NumberFormat.currency(
+      locale: 'pt_BR',
+      symbol: 'R\$',
+    );
+
+    return liveProducts
+        .map(
+          (product) => PremiumProductItem(
+            id: product.id,
+            name: product.name,
+            subtitle: product.subtitle,
+            priceLabel: product.retailPrice == null
+                ? 'Consulte'
+                : currencyFormatter.format(product.retailPrice),
+            badge: product.retailPrice == null ? 'Catalogo' : 'Ao vivo',
+          ),
+        )
+        .toList(growable: false);
   }
 
   IconData iconForService(ServiceItem service) {
@@ -813,6 +882,15 @@ Color? _parseHexColor(String? value) {
   }
 
   return Color(int.parse('FF${hex.substring(1)}', radix: 16));
+}
+
+String? _trimDisplayTime(String? value) {
+  final normalized = _readNullableString(value);
+  if (normalized == null) {
+    return null;
+  }
+
+  return normalized.length >= 5 ? normalized.substring(0, 5) : normalized;
 }
 
 extension<T> on List<T> {

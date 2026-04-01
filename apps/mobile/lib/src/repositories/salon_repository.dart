@@ -15,6 +15,7 @@ part 'salon_repository_favorites.dart';
 part 'salon_repository_notifications.dart';
 part 'salon_repository_profile.dart';
 part 'salon_repository_push_tokens.dart';
+part 'salon_repository_team.dart';
 
 class SignUpResult {
   const SignUpResult({
@@ -37,7 +38,7 @@ abstract class _SalonRepositoryBase {
     }
 
     if (!kIsWeb) {
-      return null;
+      return SupabaseConfig.defaultMobileAuthRedirectUrl;
     }
 
     final base = Uri.base;
@@ -106,6 +107,7 @@ class SalonRepository extends _SalonRepositoryBase
         _SalonRepositoryNotificationsMixin,
         _SalonRepositoryFavoritesMixin,
         _SalonRepositoryFeedMixin,
+        _SalonRepositoryTeamMixin,
         _SalonRepositoryPushTokensMixin
     implements HomeDataRepository, PushTokenSyncRepository {
   SalonRepository(this.client);

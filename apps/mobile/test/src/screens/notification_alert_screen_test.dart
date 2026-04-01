@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:salon_client/src/models/app_models.dart';
 import 'package:salon_client/src/repositories/salon_repository.dart';
 import 'package:salon_client/src/screens/notification_alert_screen.dart';
 import 'package:salon_client/src/services/push_notification_service.dart';
@@ -56,6 +57,35 @@ void main() {
 
       expect(find.text('Alert host'), findsOneWidget);
     });
+
+    testWidgets(
+      'opens the linked service destination with real repository data',
+      (tester) async {
+        final repository = _FakeNotificationAlertRepository();
+
+        await _pumpNotificationAlertScreen(
+          tester,
+          repository: repository,
+          notification: NotificationTapPayload(
+            type: 'service_updated',
+            title: 'Serviço atualizado',
+            body: 'O salão atualizou os detalhes do serviço.',
+            receivedAt: DateTime(2099, 4, 10, 16),
+            data: {'serviceId': 'service-1', 'serviceName': 'Corte premium'},
+          ),
+        );
+
+        expect(find.text('Ver serviço'), findsOneWidget);
+
+        await tester.tap(find.text('Ver serviço'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Detalhe do servico'), findsOneWidget);
+        expect(find.text('Corte premium'), findsAtLeastNWidgets(1));
+        expect(find.text('O que esperar'), findsOneWidget);
+      },
+    );
 
     testWidgets('confirms attendance and shows the success resolution', (
       tester,
@@ -185,6 +215,105 @@ class _FakeNotificationAlertRepository extends SalonRepository {
   final List<String> confirmedAppointmentIds = [];
   final List<String> cancelledAppointmentIds = [];
   final List<String> cancellationReasons = [];
+  final CustomerProfile profile = const CustomerProfile(
+    id: 'customer-1',
+    name: 'Cliente Teste',
+    salonId: 'salon-1',
+    salonName: 'Studio Premium',
+    salonTagline: 'Experiencias premium para cabelo e cor.',
+    salonBrandColor: '#C56B43',
+  );
+  final List<ServiceItem> services = const [
+    ServiceItem(
+      id: 'service-1',
+      name: 'Corte premium',
+      price: 180,
+      duration: 75,
+      sortOrder: 0,
+      category: 'Corte',
+      description: 'Corte com consultoria, finalização e brilho premium.',
+    ),
+  ];
+
+  @override
+  Future<CustomerProfile?> getCustomerProfile() async => profile;
+
+  @override
+  Future<List<ServiceItem>> getServices() async => services;
+
+  @override
+  Future<List<SalonTeamMemberProfile>> getSalonTeamProfiles({
+    int limit = 12,
+  }) async => const <SalonTeamMemberProfile>[];
+
+  @override
+  Future<List<SalonRetailProduct>> getRetailProducts({int limit = 24}) async =>
+      const <SalonRetailProduct>[];
+
+  @override
+  Future<Set<String>> getFavoriteServiceIds() async => const <String>{};
+
+  @override
+  Future<Set<String>> getFavoriteStaffMemberIds() async => const <String>{};
+
+  @override
+  Future<List<AppointmentItem>> getAppointments() async =>
+      const <AppointmentItem>[];
+
+  @override
+  Future<List<VacancyAlert>> getVacancyAlerts() async => const <VacancyAlert>[];
+
+  @override
+  Future<List<SalonPost>> getFeedPosts({required String customerId}) async =>
+      const <SalonPost>[];
+
+  @override
+  Future<List<SalonOfferItem>> getSalonOffers() async =>
+      const <SalonOfferItem>[];
+
+  @override
+  Future<CustomerGrowthSuggestionFeed?> getCustomerGrowthSuggestions() async =>
+      null;
+
+  @override
+  Future<CustomerLoyaltySummary?> getLoyaltySummary() async => null;
+
+  @override
+  Future<ReferralSummary?> getReferralSummary() async => null;
+
+  @override
+  Future<List<CustomerNotificationItem>> getCustomerNotifications() async =>
+      const <CustomerNotificationItem>[];
+
+  @override
+  Future<NotificationReceiptSnapshot> getNotificationReceiptSnapshot() async =>
+      const NotificationReceiptSnapshot(
+        readKeys: <String>{},
+        archivedKeys: <String>{},
+      );
+
+  @override
+  Future<DayAvailability> getDayAvailability({
+    required String serviceId,
+    required DateTime day,
+  }) async {
+    return DayAvailability(
+      day: DateTime(2099, 4, 10),
+      timezone: 'America/Sao_Paulo',
+      serviceDuration: 75,
+      isOpen: true,
+      slotStepMinutes: 30,
+      opensAt: '09:00:00',
+      closesAt: '18:00:00',
+      staffMembers: <StaffMemberItem>[],
+      availableSlots: <AvailableSlot>[],
+    );
+  }
+
+  @override
+  Future<SmartScheduleOpportunityFeed?> getSmartScheduleOpportunities({
+    DateTime? targetDay,
+  }) async => null;
 
   @override
   Future<void> confirmUpcomingAppointmentPresence({

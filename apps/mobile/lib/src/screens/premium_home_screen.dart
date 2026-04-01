@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../features/home/home_data.dart';
+import '../features/growth_journey/data/growth_journey_adapter.dart';
+import '../features/retention_v1/application/retention_v1_builder.dart';
+import '../features/retention_v1/domain/retention_v1_models.dart';
+import '../features/retention_v1/presentation/widgets/retention_v1_home_block.dart';
 import '../models/app_models.dart';
 import '../models/salon_client_app_config.dart';
 import '../theme/design_tokens.dart';
@@ -37,11 +41,13 @@ class PremiumHomeScreen extends StatelessWidget {
     required this.onWhatsApp,
     required this.onOpenAgenda,
     required this.onOpenGallery,
+    required this.onOpenWallet,
     required this.busyVacancyAlertIds,
     required this.bookedVacancyAlertIds,
     required this.onBookVacancyAlert,
     required this.onCopyReferral,
     required this.onBook,
+    required this.onBookRetention,
     required this.onBookGrowthSuggestion,
     required this.onBookSuggested,
     required this.heroSubtitle,
@@ -50,8 +56,11 @@ class PremiumHomeScreen extends StatelessWidget {
     required this.favoriteServiceIds,
     required this.busyFavoriteServiceIds,
     required this.onToggleFavoriteService,
+    this.onOpenProfile,
+    this.onTrackExperienceEvent,
     this.onOpenProfessionals,
     this.onOpenProducts,
+    this.onOpenPromotions,
     this.onOpenServiceDetails,
   });
 
@@ -62,11 +71,17 @@ class PremiumHomeScreen extends StatelessWidget {
   final VoidCallback onWhatsApp;
   final VoidCallback onOpenAgenda;
   final VoidCallback onOpenGallery;
+  final VoidCallback onOpenWallet;
   final Set<String> busyVacancyAlertIds;
   final Set<String> bookedVacancyAlertIds;
   final Future<void> Function(VacancyAlert alert) onBookVacancyAlert;
   final Future<void> Function(String code) onCopyReferral;
   final Future<void> Function(ServiceItem service) onBook;
+  final Future<void> Function(
+    ServiceItem service,
+    RetentionV1BookingRequest request,
+  )
+  onBookRetention;
   final Future<void> Function(
     ServiceItem service,
     CustomerGrowthSuggestionItem suggestion,
@@ -83,8 +98,12 @@ class PremiumHomeScreen extends StatelessWidget {
   final Set<String> favoriteServiceIds;
   final Set<String> busyFavoriteServiceIds;
   final Future<void> Function(ServiceItem service) onToggleFavoriteService;
+  final VoidCallback? onOpenProfile;
+  final void Function(String event, Map<String, Object?> payload)?
+  onTrackExperienceEvent;
   final VoidCallback? onOpenProfessionals;
   final VoidCallback? onOpenProducts;
+  final VoidCallback? onOpenPromotions;
   final Future<void> Function(ServiceItem service)? onOpenServiceDetails;
 
   @override
@@ -119,10 +138,62 @@ class PremiumHomeScreen extends StatelessWidget {
         )
         .cast<AppointmentItem?>()
         .firstWhere((item) => item != null, orElse: () => null);
-    final professionals = brandConfig.buildProfessionalHighlights(
+    final professionals = brandConfig.resolveProfessionalHighlights(
+      teamProfiles: data.teamProfiles,
       posts: data.posts,
       appointments: data.appointments,
     );
+    final productCatalog = brandConfig.resolveProductHighlights(
+      liveProducts: data.retailProducts,
+    );
+    final retentionSnapshot = buildGrowthJourneySnapshotFromExisting(
+      profile: profile,
+      services: data.services,
+      appointments: data.appointments,
+      favoriteServiceIds: data.favoriteServiceIds,
+      favoriteStaffMemberIds: data.favoriteStaffMemberIds,
+      loyaltySummary: data.loyaltySummary,
+      referralSummary: data.referralSummary,
+      smartSchedule: data.smartSchedule,
+      nextAvailableAt: data.nextAvailableAt,
+    );
+    final retentionFlags = RetentionV1FeatureFlags.fromClientConfig(
+      clientConfig,
+    );
+    final retentionExperience = const RetentionV1Builder().build(
+      retentionSnapshot,
+      flags: retentionFlags,
+    );
+    final retentionService = retentionExperience == null
+        ? null
+        : sortedServices.cast<ServiceItem?>().firstWhere(
+            (item) => item?.id == retentionExperience.bookingRequest.serviceId,
+            orElse: () => null,
+          );
+
+    void trackExperienceEvent(
+      String event, [
+      Map<String, Object?> payload = const {},
+    ]) {
+      onTrackExperienceEvent?.call(event, payload);
+    }
+
+    Future<void> openRetentionPrimaryBooking() async {
+      if (retentionExperience == null || retentionService == null) {
+        trackExperienceEvent('retention_open_schedule_fallback');
+        onOpenAgenda();
+        return;
+      }
+
+      trackExperienceEvent('retention_open_recommended_service', {
+        ...retentionExperience.analyticsPayload(),
+        'service_id': retentionService.id,
+      });
+      await onBookRetention(
+        retentionService,
+        retentionExperience.bookingRequest,
+      );
+    }
 
     final renderedModules = <PremiumHomeModule>{};
     final sections = <Widget>[];
@@ -160,7 +231,9 @@ class PremiumHomeScreen extends StatelessWidget {
       renderedModules.add(PremiumHomeModule.nextBooking);
     }
 
-    addSection(_buildSmartSignalsSection(sortedServices: sortedServices));
+    if (retentionExperience == null) {
+      addSection(_buildSmartSignalsSection(sortedServices: sortedServices));
+    }
 
     if (primarySurface == SalonHomeSurface.portfolio) {
       addSection(
@@ -213,7 +286,7 @@ class PremiumHomeScreen extends StatelessWidget {
           addSection(_buildPromotionsSection(currency));
           break;
         case PremiumHomeModule.products:
-          addSection(_buildProductsSection(brandConfig));
+          addSection(_buildProductsSection(productCatalog));
           break;
         case PremiumHomeModule.loyalty:
           addSection(_buildBenefitsSection());
@@ -233,61 +306,98 @@ class PremiumHomeScreen extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
         children: [
-          PremiumBanner(
-            eyebrow: profile.salonName,
-            title: brandConfig.welcomeHeadline.replaceAll('{name}', firstName),
-            subtitle: profile.salonTagline?.trim().isNotEmpty == true
-                ? brandConfig.welcomeMessage
-                : heroSubtitle,
-            imageUrl: brandConfig.heroImageUrl,
-            tabletImageUrl: brandConfig.heroImageTabletUrl,
-            imageAlignment: brandConfig.heroImageAlignment,
-            imageScale: brandConfig.heroImageScale,
-            primaryActionLabel: brandConfig.primaryCtaLabel,
-            onPrimaryAction: leadService == null
-                ? onOpenAgenda
-                : () => unawaited(onBook(leadService)),
-            secondaryActionLabel: data.posts.isEmpty ? null : 'Ver galeria',
-            onSecondaryAction: data.posts.isEmpty ? null : onOpenGallery,
-            leading: _BrandHeroIdentity(
+          if (retentionExperience != null)
+            RetentionV1HomeBlock(
               profile: profile,
               branding: branding,
-              slogan: brandConfig.slogan,
-            ),
-            badges: [
-              _BrandBadge(label: nextAvailableLabel),
-              _BrandBadge(label: todayAttendanceLabel),
-            ],
-            footer: Wrap(
-              spacing: PremiumSpacing.sm,
-              runSpacing: PremiumSpacing.sm,
-              children: [
-                _HeroMetricCard(
-                  label: 'Agenda',
-                  value: nextAvailableLabel,
-                  compact: true,
-                ),
-                _HeroMetricCard(
-                  label: 'Servicos',
-                  value: '${sortedServices.length}',
-                  compact: true,
-                ),
-                _HeroMetricCard(
-                  label: data.posts.isNotEmpty
-                      ? template.portfolioTitle
-                      : professionals.isNotEmpty
-                      ? 'Especialistas'
-                      : 'Beneficios',
-                  value: data.posts.isNotEmpty
-                      ? '${data.posts.length}'
-                      : professionals.isNotEmpty
-                      ? '${professionals.length}'
-                      : '${(data.loyaltySummary?.pointsBalance ?? 0)} pts',
-                  compact: true,
-                ),
+              model: retentionExperience.home,
+              onImpression: () {
+                trackExperienceEvent(
+                  'home_view',
+                  retentionExperience.analyticsPayload(),
+                );
+                trackExperienceEvent(
+                  'hero_impression',
+                  retentionExperience.analyticsPayload(),
+                );
+              },
+              onPrimaryAction: () {
+                trackExperienceEvent(
+                  'hero_click',
+                  retentionExperience.analyticsPayload(),
+                );
+                unawaited(openRetentionPrimaryBooking());
+              },
+              onSecondaryAction:
+                  retentionExperience.home.secondaryCtaLabel == null
+                  ? null
+                  : () {
+                      trackExperienceEvent(
+                        'retention_open_schedule',
+                        retentionExperience.analyticsPayload(),
+                      );
+                      onOpenAgenda();
+                    },
+            )
+          else
+            PremiumBanner(
+              eyebrow: profile.salonName,
+              title: brandConfig.welcomeHeadline.replaceAll(
+                '{name}',
+                firstName,
+              ),
+              subtitle: profile.salonTagline?.trim().isNotEmpty == true
+                  ? brandConfig.welcomeMessage
+                  : heroSubtitle,
+              imageUrl: brandConfig.heroImageUrl,
+              tabletImageUrl: brandConfig.heroImageTabletUrl,
+              imageAlignment: brandConfig.heroImageAlignment,
+              imageScale: brandConfig.heroImageScale,
+              primaryActionLabel: brandConfig.primaryCtaLabel,
+              onPrimaryAction: leadService == null
+                  ? onOpenAgenda
+                  : () => unawaited(onBook(leadService)),
+              secondaryActionLabel: data.posts.isEmpty ? null : 'Ver galeria',
+              onSecondaryAction: data.posts.isEmpty ? null : onOpenGallery,
+              leading: _BrandHeroIdentity(
+                profile: profile,
+                branding: branding,
+                slogan: brandConfig.slogan,
+              ),
+              badges: [
+                _BrandBadge(label: nextAvailableLabel),
+                _BrandBadge(label: todayAttendanceLabel),
               ],
+              footer: Wrap(
+                spacing: PremiumSpacing.sm,
+                runSpacing: PremiumSpacing.sm,
+                children: [
+                  _HeroMetricCard(
+                    label: 'Agenda',
+                    value: nextAvailableLabel,
+                    compact: true,
+                  ),
+                  _HeroMetricCard(
+                    label: 'Servicos',
+                    value: '${sortedServices.length}',
+                    compact: true,
+                  ),
+                  _HeroMetricCard(
+                    label: data.posts.isNotEmpty
+                        ? template.portfolioTitle
+                        : professionals.isNotEmpty
+                        ? 'Especialistas'
+                        : 'Beneficios',
+                    value: data.posts.isNotEmpty
+                        ? '${data.posts.length}'
+                        : professionals.isNotEmpty
+                        ? '${professionals.length}'
+                        : '${(data.loyaltySummary?.pointsBalance ?? 0)} pts',
+                    compact: true,
+                  ),
+                ],
+              ),
             ),
-          ),
           if (sections.isNotEmpty) const SizedBox(height: PremiumSpacing.lg),
           ...sections,
           if (!hasCommercialContent) ...[
@@ -693,6 +803,8 @@ class PremiumHomeScreen extends StatelessWidget {
           posts: data.posts,
           offers: data.offers,
         ).promotionHeadline,
+        actionLabel: onOpenPromotions == null ? null : 'Abrir central',
+        onAction: onOpenPromotions,
       ),
       const SizedBox(height: PremiumSpacing.md),
       ...data.offers
@@ -715,6 +827,8 @@ class PremiumHomeScreen extends StatelessWidget {
                   if (offer.price != null) currency.format(offer.price),
                 ],
                 highlightLabel: offer.isMembership ? 'Retencao premium' : null,
+                trailingLabel: onOpenPromotions == null ? null : 'Ver mais',
+                onTap: onOpenPromotions,
                 tone: PremiumSurfaceTone.accent,
               ),
             ),
@@ -722,8 +836,8 @@ class PremiumHomeScreen extends StatelessWidget {
     ];
   }
 
-  List<Widget> _buildProductsSection(SalonBrandConfig brandConfig) {
-    if (brandConfig.products.isEmpty ||
+  List<Widget> _buildProductsSection(List<PremiumProductItem> productCatalog) {
+    if (productCatalog.isEmpty ||
         !profileHasModule(PremiumHomeModule.products)) {
       return const <Widget>[];
     }
@@ -741,10 +855,10 @@ class PremiumHomeScreen extends StatelessWidget {
         height: 356,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          itemCount: brandConfig.products.length,
+          itemCount: productCatalog.length,
           separatorBuilder: (_, _) => const SizedBox(width: PremiumSpacing.md),
           itemBuilder: (context, index) {
-            final product = brandConfig.products[index];
+            final product = productCatalog[index];
             return SizedBox(
               width: 228,
               child: PremiumProductCard(
@@ -778,6 +892,8 @@ class PremiumHomeScreen extends StatelessWidget {
         subtitle: prominent
             ? 'O salao pode vender recorrencia e valor percebido sem poluir a home.'
             : 'Beneficios com acabamento de marca e leitura comercial.',
+        actionLabel: 'Abrir carteira',
+        onAction: onOpenWallet,
       ),
       const SizedBox(height: PremiumSpacing.md),
       if (data.loyaltySummary?.hasVisibleContent == true)

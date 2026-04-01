@@ -37,18 +37,156 @@ class PremiumSurfaceCard extends StatelessWidget {
             ? premiumBlend(theme.surfacePrimary, Colors.black, 0.14)
             : premiumBlend(theme.surfacePrimary, theme.accent, 0.08),
     };
+    final borderRadius = BorderRadius.circular(radius);
+    final resolvedGradient =
+        gradient ??
+        LinearGradient(
+          colors: [
+            premiumBlend(baseColor, Colors.white, theme.isDark ? 0.04 : 0.3),
+            baseColor,
+            premiumBlend(baseColor, theme.accent, theme.isDark ? 0.18 : 0.12),
+          ],
+          stops: const [0, 0.46, 1],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
 
     final childContent = Container(
       margin: margin,
-      padding: padding,
       decoration: BoxDecoration(
-        color: gradient == null ? baseColor : null,
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: theme.strokeSoft),
+        borderRadius: borderRadius,
         boxShadow: theme.softShadow,
       ),
-      child: child,
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: resolvedGradient,
+            borderRadius: borderRadius,
+            border: Border.all(color: theme.strokeSoft),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -42,
+                  right: -28,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 128,
+                      height: 128,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: theme.accent.withValues(alpha: 0.1),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: -32,
+                  right: 18,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: -18,
+                  top: 22,
+                  child: IgnorePointer(
+                    child: Transform.rotate(
+                      angle: -0.12,
+                      child: Container(
+                        width: 54,
+                        height: 164,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            PremiumRadius.pill,
+                          ),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.28),
+                              Colors.white.withValues(alpha: 0.03),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 32,
+                  top: 24,
+                  child: IgnorePointer(
+                    child: Transform.rotate(
+                      angle: 0.52,
+                      child: Container(
+                        width: 84,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                            PremiumRadius.pill,
+                          ),
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 20,
+                  right: 20,
+                  child: IgnorePointer(
+                    child: Container(
+                      height: 4,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(PremiumRadius.pill),
+                        gradient: LinearGradient(
+                          colors: [
+                            theme.accent.withValues(alpha: 0.0),
+                            theme.accent.withValues(alpha: 0.5),
+                            theme.accent.withValues(alpha: 0.0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 24,
+                  top: 22,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 54,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(PremiumRadius.pill),
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(padding: padding, child: child),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
 
     if (onTap == null) {

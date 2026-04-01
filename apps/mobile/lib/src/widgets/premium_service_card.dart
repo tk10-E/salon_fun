@@ -42,6 +42,7 @@ class PremiumServiceCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       tone: PremiumSurfaceTone.secondary,
       onTap: onExplore,
+      radius: PremiumRadius.cardLarge,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -49,7 +50,7 @@ class PremiumServiceCard extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(PremiumRadius.card),
+                  top: Radius.circular(PremiumRadius.cardLarge),
                 ),
                 child: AspectRatio(
                   aspectRatio: 16 / 10,
@@ -74,14 +75,15 @@ class PremiumServiceCard extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(PremiumRadius.card),
+                      top: Radius.circular(PremiumRadius.cardLarge),
                     ),
                     gradient: LinearGradient(
                       colors: [
                         Colors.black.withValues(alpha: 0.04),
-                        Colors.black.withValues(alpha: 0.34),
+                        Colors.black.withValues(alpha: 0.22),
+                        Colors.black.withValues(alpha: 0.62),
                       ],
-                      begin: Alignment.topCenter,
+                      begin: Alignment.topLeft,
                       end: Alignment.bottomCenter,
                     ),
                   ),
@@ -137,6 +139,116 @@ class PremiumServiceCard extends StatelessWidget {
                           ),
                   ),
                 ),
+              Positioned(
+                left: PremiumSpacing.md,
+                right: PremiumSpacing.md,
+                bottom: PremiumSpacing.md,
+                child: Container(
+                  padding: const EdgeInsets.all(PremiumSpacing.md),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.26),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.14),
+                              ),
+                            ),
+                            child: Icon(
+                              serviceVisual.icon,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(width: PremiumSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  service.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: materialTheme.textTheme.titleLarge
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                ),
+                                const SizedBox(height: PremiumSpacing.xs),
+                                Text(
+                                  service.description?.trim().isNotEmpty == true
+                                      ? service.description!
+                                      : serviceVisual.fallbackDescription,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: materialTheme.textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: PremiumSpacing.sm),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: PremiumSpacing.md,
+                              vertical: PremiumSpacing.sm,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: theme.buttonGradient,
+                              borderRadius: BorderRadius.circular(22),
+                              boxShadow: theme.softShadow,
+                            ),
+                            child: Text(
+                              currency.format(service.price),
+                              style: materialTheme.textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: theme.onAccent,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: PremiumSpacing.sm),
+                      Wrap(
+                        spacing: PremiumSpacing.sm,
+                        runSpacing: PremiumSpacing.sm,
+                        children: [
+                          _ServiceSpotlightChip(
+                            icon: Icons.schedule_rounded,
+                            label: '${service.duration} min',
+                          ),
+                          _ServiceSpotlightChip(
+                            icon: Icons.auto_awesome_rounded,
+                            label: service.category?.trim().isNotEmpty == true
+                                ? service.category!
+                                : 'Experiencia premium',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           Padding(
@@ -144,45 +256,57 @@ class PremiumServiceCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        gradient: theme.buttonGradient,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Icon(serviceVisual.icon, color: theme.onAccent),
+                Container(
+                  padding: const EdgeInsets.all(PremiumSpacing.md),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [theme.surfacePrimary, theme.surfaceSecondary],
                     ),
-                    const SizedBox(width: PremiumSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            service.name,
-                            style: materialTheme.textTheme.titleLarge?.copyWith(
-                              color: theme.textPrimary,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: PremiumSpacing.xs),
-                          Text(
-                            service.description?.trim().isNotEmpty == true
-                                ? service.description!
-                                : serviceVisual.fallbackDescription,
-                            style: materialTheme.textTheme.bodyMedium?.copyWith(
-                              color: theme.textSecondary,
-                            ),
-                          ),
-                        ],
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: theme.strokeSoft),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: theme.surfaceAccent,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: theme.strokeSoft),
+                        ),
+                        child: Icon(
+                          serviceVisual.icon,
+                          color: theme.textPrimary,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: PremiumSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Ritual selecionado',
+                              style: materialTheme.textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: theme.textMuted,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                            const SizedBox(height: PremiumSpacing.xs),
+                            Text(
+                              'Atendimento pensado para encaixar no seu ritmo, com tempo reservado e experiencia mais premium.',
+                              style: materialTheme.textTheme.bodyMedium
+                                  ?.copyWith(color: theme.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: PremiumSpacing.md),
+                const SizedBox(height: PremiumSpacing.lg),
                 Wrap(
                   spacing: PremiumSpacing.sm,
                   runSpacing: PremiumSpacing.sm,
@@ -194,9 +318,11 @@ class PremiumServiceCard extends StatelessWidget {
                       foregroundColor: theme.textPrimary,
                     ),
                     _ServiceMetaChip(
-                      icon: Icons.sell_rounded,
-                      label: currency.format(service.price),
-                      backgroundColor: theme.surfaceAccent,
+                      icon: Icons.workspace_premium_rounded,
+                      label: isFavorite
+                          ? 'Favorito do seu perfil'
+                          : 'Agenda inteligente',
+                      backgroundColor: theme.surfacePrimary,
                       foregroundColor: theme.textPrimary,
                     ),
                   ],
@@ -219,7 +345,7 @@ class PremiumServiceCard extends StatelessWidget {
                         child: OutlinedButton.icon(
                           onPressed: onExplore,
                           icon: const Icon(Icons.visibility_outlined, size: 18),
-                          label: const Text('Detalhes'),
+                          label: const Text('Ver ritual'),
                         ),
                       ),
                       const SizedBox(width: PremiumSpacing.sm),
@@ -231,12 +357,48 @@ class PremiumServiceCard extends StatelessWidget {
                           Icons.calendar_month_rounded,
                           size: 18,
                         ),
-                        label: const Text('Agendar'),
+                        label: const Text('Reservar horario'),
                       ),
                     ),
                   ],
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceSpotlightChip extends StatelessWidget {
+  const _ServiceSpotlightChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: PremiumSpacing.sm,
+        vertical: PremiumSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(PremiumRadius.pill),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: Colors.white),
+          const SizedBox(width: PremiumSpacing.xs),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],

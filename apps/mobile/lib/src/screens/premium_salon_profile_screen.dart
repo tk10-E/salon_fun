@@ -25,10 +25,13 @@ class PremiumSalonProfileScreen extends StatelessWidget {
     required this.services,
     required this.posts,
     required this.offers,
+    this.products = const <PremiumProductItem>[],
+    this.professionalHighlights = const <ProfessionalHighlight>[],
     required this.onBookService,
     required this.onWhatsApp,
     this.onOpenProfessionals,
     this.onOpenProducts,
+    this.onOpenCampaigns,
     this.onOpenServiceDetails,
   });
 
@@ -37,10 +40,13 @@ class PremiumSalonProfileScreen extends StatelessWidget {
   final List<ServiceItem> services;
   final List<SalonPost> posts;
   final List<SalonOfferItem> offers;
+  final List<PremiumProductItem> products;
+  final List<ProfessionalHighlight> professionalHighlights;
   final Future<void> Function(ServiceItem service) onBookService;
   final VoidCallback onWhatsApp;
   final VoidCallback? onOpenProfessionals;
   final VoidCallback? onOpenProducts;
+  final VoidCallback? onOpenCampaigns;
   final Future<void> Function(ServiceItem service)? onOpenServiceDetails;
 
   @override
@@ -51,7 +57,12 @@ class PremiumSalonProfileScreen extends StatelessWidget {
       posts: posts,
       offers: offers,
     );
-    final professionals = brandConfig.buildProfessionalHighlights(posts: posts);
+    final productCatalog = products.isNotEmpty
+        ? products
+        : brandConfig.products;
+    final professionals = professionalHighlights.isNotEmpty
+        ? professionalHighlights
+        : brandConfig.resolveProfessionalHighlights(posts: posts);
     final leadService = services.isEmpty ? null : services.first;
 
     return Scaffold(
@@ -234,7 +245,100 @@ class PremiumSalonProfileScreen extends StatelessWidget {
                 ),
               ),
             ],
-            if (brandConfig.products.isNotEmpty) ...[
+            if (offers.isNotEmpty) ...[
+              const SizedBox(height: PremiumSpacing.xl),
+              PremiumSectionHeader(
+                eyebrow: 'Campanhas',
+                title: 'Ofertas vivas do salão',
+                subtitle:
+                    'As campanhas publicadas no painel também podem aparecer aqui com a mesma assinatura premium.',
+                actionLabel: onOpenCampaigns == null ? null : 'Abrir central',
+                onAction: onOpenCampaigns,
+              ),
+              const SizedBox(height: PremiumSpacing.md),
+              ...offers
+                  .take(2)
+                  .map(
+                    (offer) => Padding(
+                      padding: const EdgeInsets.only(bottom: PremiumSpacing.md),
+                      child: PremiumSurfaceCard(
+                        tone: offer.isActive
+                            ? PremiumSurfaceTone.accent
+                            : PremiumSurfaceTone.secondary,
+                        onTap: onOpenCampaigns,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 54,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [branding.primary, branding.deep],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Icon(
+                                offer.isMembership
+                                    ? Icons.workspace_premium_rounded
+                                    : Icons.local_offer_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: PremiumSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    offer.title,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: PremiumSpacing.xs),
+                                  Text(
+                                    offer.description?.trim().isNotEmpty == true
+                                        ? offer.description!
+                                        : offer.isMembership
+                                        ? 'Plano recorrente com leitura premium no app.'
+                                        : 'Campanha ativa conectada ao painel do salão.',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: PremiumSpacing.sm),
+                                  Wrap(
+                                    spacing: PremiumSpacing.xs,
+                                    runSpacing: PremiumSpacing.xs,
+                                    children: [
+                                      if (offer.highlightText
+                                              ?.trim()
+                                              .isNotEmpty ==
+                                          true)
+                                        _OfferMetaChip(
+                                          label: offer.highlightText!,
+                                        ),
+                                      _OfferMetaChip(
+                                        label: offer.isActive
+                                            ? 'Disponível agora'
+                                            : 'Programada',
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+            ],
+            if (productCatalog.isNotEmpty) ...[
               const SizedBox(height: PremiumSpacing.xl),
               PremiumSectionHeader(
                 eyebrow: 'Retail',
@@ -249,11 +353,11 @@ class PremiumSalonProfileScreen extends StatelessWidget {
                 height: 340,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  itemCount: brandConfig.products.length,
+                  itemCount: productCatalog.length,
                   separatorBuilder: (_, _) =>
                       const SizedBox(width: PremiumSpacing.md),
                   itemBuilder: (context, index) {
-                    final product = brandConfig.products[index];
+                    final product = productCatalog[index];
                     return SizedBox(
                       width: 220,
                       child: PremiumProductCard(
@@ -353,6 +457,33 @@ class _InfoPanel extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _OfferMetaChip extends StatelessWidget {
+  const _OfferMetaChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: PremiumSpacing.sm,
+        vertical: PremiumSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.84),
+        borderRadius: BorderRadius.circular(PremiumRadius.pill),
+        border: Border.all(color: const Color(0xFFE6D7C9)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }

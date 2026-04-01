@@ -7,12 +7,15 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/app_models.dart';
 import '../repositories/salon_repository.dart';
+import '../services/app_analytics_service.dart';
 import '../theme/salon_branding.dart';
 import '../theme/service_category_visual.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cinematic_reveal.dart';
 import '../widgets/premium_banner.dart';
 import '../widgets/premium_empty_state.dart';
+import '../widgets/premium_section_header.dart';
+import '../widgets/premium_surface_card.dart';
 import '../widgets/salon_brand_mark.dart';
 import '../widgets/soft_card.dart';
 
@@ -40,6 +43,8 @@ class BookAppointmentScreen extends StatefulWidget {
     this.initialSlot,
     this.initialStaffMemberId,
     this.entryMessage,
+    this.analytics,
+    this.analyticsContext = const <String, Object?>{},
   });
 
   final SalonRepository repository;
@@ -51,6 +56,8 @@ class BookAppointmentScreen extends StatefulWidget {
   final DateTime? initialSlot;
   final String? initialStaffMemberId;
   final String? entryMessage;
+  final AppAnalytics? analytics;
+  final Map<String, Object?> analyticsContext;
 
   @override
   State<BookAppointmentScreen> createState() => _BookAppointmentScreenState();
@@ -509,6 +516,32 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _selectSlot(
+    AvailableSlot slot, {
+    required String surface,
+    bool track = true,
+  }) {
+    setState(() {
+      _selectedSlot = slot.startAt;
+    });
+
+    if (!track || widget.analytics == null) {
+      return;
+    }
+
+    unawaited(
+      widget.analytics!.trackEvent('slot_selected', <String, Object?>{
+        ...widget.analyticsContext,
+        'service_id': widget.service.id,
+        'service_name': widget.service.name,
+        'slot_time': slot.startAt.toIso8601String(),
+        'slot_surface': surface,
+        'staff_member_id': slot.staffMemberId,
+        'staff_member_name': slot.staffMemberName,
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -595,6 +628,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   child: PremiumBanner(
                     eyebrow: widget.profile.salonName,
                     title: widget.service.name,
+                    minHeight: 224,
                     subtitle:
                         widget.service.description?.trim().isNotEmpty == true
                         ? widget.service.description!
@@ -697,11 +731,26 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                 ),
                 const SizedBox(height: 18),
                 if ((widget.entryMessage ?? '').trim().isNotEmpty) ...[
-                  SoftCard(
+                  PremiumSurfaceCard(
+                    tone: PremiumSurfaceTone.accent,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.auto_awesome_rounded, color: branding.deep),
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.14),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -709,12 +758,21 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                             children: [
                               Text(
                                 'Encaixe sugerido',
-                                style: Theme.of(context).textTheme.titleMedium,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                    ),
                               ),
                               const SizedBox(height: 6),
                               Text(
                                 widget.entryMessage!,
-                                style: Theme.of(context).textTheme.bodyMedium,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.84,
+                                      ),
+                                    ),
                               ),
                             ],
                           ),
@@ -737,15 +795,18 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   ),
                   const SizedBox(height: 18),
                 ],
-                SoftCard(
+                PremiumSurfaceCard(
+                  tone: PremiumSurfaceTone.secondary,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Data',
-                        style: Theme.of(context).textTheme.titleLarge,
+                      const PremiumSectionHeader(
+                        eyebrow: 'Agenda',
+                        title: 'Data',
+                        subtitle:
+                            'O salão já filtra a operação real para te mostrar só o que faz sentido.',
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       Text(
                         'Data selecionada: ${dateFormat.format(_selectedDay)}',
                         style: Theme.of(context).textTheme.bodyMedium,
@@ -769,15 +830,18 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                 const SizedBox(height: 18),
                 if (availability != null &&
                     availability.staffMembers.isNotEmpty)
-                  SoftCard(
+                  PremiumSurfaceCard(
+                    tone: PremiumSurfaceTone.secondary,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Equipe',
-                          style: Theme.of(context).textTheme.titleLarge,
+                        const PremiumSectionHeader(
+                          eyebrow: 'Time do salão',
+                          title: 'Equipe',
+                          subtitle:
+                              'Escolha livre ou reserve com quem já conhece seu atendimento.',
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Text(
                           selectedStaff == null
                               ? 'Mostrando a agenda de qualquer profissional disponível.'
@@ -793,6 +857,62 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                                   color: const Color(0xFF8E441F),
                                   fontWeight: FontWeight.w700,
                                 ),
+                          ),
+                        ],
+                        if (selectedStaff != null &&
+                            selectedStaff.blockedRanges.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'Pausas de ${selectedStaff.name}',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          ...selectedStaff.blockedRanges
+                              .take(2)
+                              .map(
+                                (blockedRange) => Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    blockedRange.reason?.trim().isNotEmpty ==
+                                            true
+                                        ? blockedRange.reason!
+                                        : '${timeFormat.format(blockedRange.startsAt)} às ${timeFormat.format(blockedRange.endsAt)}',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: const Color(0xFF8E441F),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                        ],
+                        if (availableSlots.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Text(
+                            'Primeiros horários',
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: availableSlots
+                                .take(4)
+                                .map(
+                                  (slot) => ChoiceChip(
+                                    label: Text(
+                                      timeFormat.format(slot.startAt),
+                                    ),
+                                    selected: _selectedSlot == slot.startAt,
+                                    onSelected: (_) => _selectSlot(
+                                      slot,
+                                      surface: 'quick_chips',
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                           ),
                         ],
                         const SizedBox(height: 16),
@@ -852,7 +972,8 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   const SizedBox(height: 18),
                 if (selectedStaff != null &&
                     selectedStaff.blockedRanges.isNotEmpty)
-                  SoftCard(
+                  PremiumSurfaceCard(
+                    tone: PremiumSurfaceTone.contrast,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -966,20 +1087,19 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                         : _selectedStaffEmptyMessage(selectedStaff),
                   )
                 else
-                  SoftCard(
+                  PremiumSurfaceCard(
+                    tone: PremiumSurfaceTone.secondary,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Horários livres',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          selectedStaff == null
+                        PremiumSectionHeader(
+                          eyebrow: selectedStaff == null
+                              ? 'Agenda do dia'
+                              : 'Agenda de ${selectedStaff.name}',
+                          title: 'Horários livres',
+                          subtitle: selectedStaff == null
                               ? 'Escolha um horário e confirme a reserva no app.'
                               : 'Selecione um horário livre com ${selectedStaff.name}.',
-                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 18),
                         Wrap(
@@ -990,8 +1110,9 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                                 (slot) => ChoiceChip(
                                   label: Text(timeFormat.format(slot.startAt)),
                                   selected: _selectedSlot == slot.startAt,
-                                  onSelected: (_) => setState(
-                                    () => _selectedSlot = slot.startAt,
+                                  onSelected: (_) => _selectSlot(
+                                    slot,
+                                    surface: 'availability_list',
                                   ),
                                 ),
                               )
@@ -1002,7 +1123,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   ),
                 if (selectedSlot != null && availability != null) ...[
                   const SizedBox(height: 18),
-                  SoftCard(
+                  PremiumSurfaceCard(
                     padding: EdgeInsets.zero,
                     gradient: LinearGradient(
                       colors: [
@@ -1017,7 +1138,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderColor: branding.primary.withValues(alpha: 0.28),
+                    radius: 36,
                     child: Padding(
                       padding: const EdgeInsets.all(18),
                       child: Column(
@@ -1291,34 +1412,18 @@ class _BookingRunwayCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('dd/MM');
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(18),
-      gradient: LinearGradient(
-        colors: [
-          Colors.white.withValues(alpha: 0.98),
-          branding.surface.withValues(alpha: 0.94),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderColor: branding.outline.withValues(alpha: 0.72),
+      tone: PremiumSurfaceTone.secondary,
+      radius: 34,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Sua reserva em 3 passos',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: branding.deep,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Data, equipe e benefícios em uma leitura curta para você decidir rápido.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: branding.mutedText,
-              height: 1.45,
-            ),
+          PremiumSectionHeader(
+            eyebrow: 'Runway da reserva',
+            title: 'Sua reserva em 3 passos',
+            subtitle:
+                'Data, equipe e benefícios em uma leitura curta para você decidir rápido.',
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -1389,18 +1494,39 @@ class _BookingStageCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.white, accent.withValues(alpha: 0.14)],
+          colors: [
+            Colors.white,
+            accent.withValues(alpha: 0.1),
+            accent.withValues(alpha: 0.18),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: accent.withValues(alpha: 0.28)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D251910),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 18, color: const Color(0xFF2F231C)),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   eyebrow,
@@ -1410,7 +1536,6 @@ class _BookingStageCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(icon, size: 18, color: const Color(0xFF2F231C)),
             ],
           ),
           const SizedBox(height: 12),
@@ -1499,15 +1624,21 @@ class _StaffSelectionCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(26),
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           width: 240,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFFFFF5EC) : Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              colors: selected
+                  ? const [Color(0xFFFFF4EA), Color(0xFFFFE3D3)]
+                  : const [Colors.white, Color(0xFFF8F1EA)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(26),
             border: Border.all(
               color: selected
                   ? const Color(0xFFC56B43)
@@ -1522,7 +1653,13 @@ class _StaffSelectionCard extends StatelessWidget {
                       offset: Offset(0, 10),
                     ),
                   ]
-                : const [],
+                : const [
+                    BoxShadow(
+                      color: Color(0x0A2C1D14),
+                      blurRadius: 16,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1530,6 +1667,24 @@ class _StaffSelectionCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? const Color(0xFFC56B43)
+                          : const Color(0xFFF3E7DB),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Icon(
+                      selected
+                          ? Icons.workspace_premium_rounded
+                          : Icons.person_outline_rounded,
+                      size: 20,
+                      color: selected ? Colors.white : const Color(0xFF8E441F),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       title,

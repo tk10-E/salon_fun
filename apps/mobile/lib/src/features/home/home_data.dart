@@ -3,6 +3,8 @@ import '../../models/app_models.dart';
 class HomeData {
   const HomeData({
     required this.services,
+    this.teamProfiles = const <SalonTeamMemberProfile>[],
+    this.retailProducts = const <SalonRetailProduct>[],
     required this.appointments,
     required this.vacancyAlerts,
     required this.posts,
@@ -14,9 +16,12 @@ class HomeData {
     required this.nextAvailableAt,
     required this.smartSchedule,
     this.favoriteServiceIds = const <String>{},
+    this.favoriteStaffMemberIds = const <String>{},
   });
 
   final List<ServiceItem> services;
+  final List<SalonTeamMemberProfile> teamProfiles;
+  final List<SalonRetailProduct> retailProducts;
   final List<AppointmentItem> appointments;
   final List<VacancyAlert> vacancyAlerts;
   final List<SalonPost> posts;
@@ -28,9 +33,12 @@ class HomeData {
   final DateTime? nextAvailableAt;
   final SmartScheduleOpportunityFeed? smartSchedule;
   final Set<String> favoriteServiceIds;
+  final Set<String> favoriteStaffMemberIds;
 
   HomeData copyWith({
     List<ServiceItem>? services,
+    List<SalonTeamMemberProfile>? teamProfiles,
+    List<SalonRetailProduct>? retailProducts,
     List<AppointmentItem>? appointments,
     List<VacancyAlert>? vacancyAlerts,
     List<SalonPost>? posts,
@@ -47,9 +55,12 @@ class HomeData {
     SmartScheduleOpportunityFeed? smartSchedule,
     bool clearSmartSchedule = false,
     Set<String>? favoriteServiceIds,
+    Set<String>? favoriteStaffMemberIds,
   }) {
     return HomeData(
       services: services ?? this.services,
+      teamProfiles: teamProfiles ?? this.teamProfiles,
+      retailProducts: retailProducts ?? this.retailProducts,
       appointments: appointments ?? this.appointments,
       vacancyAlerts: vacancyAlerts ?? this.vacancyAlerts,
       posts: posts ?? this.posts,
@@ -71,6 +82,8 @@ class HomeData {
           ? null
           : smartSchedule ?? this.smartSchedule,
       favoriteServiceIds: favoriteServiceIds ?? this.favoriteServiceIds,
+      favoriteStaffMemberIds:
+          favoriteStaffMemberIds ?? this.favoriteStaffMemberIds,
     );
   }
 }

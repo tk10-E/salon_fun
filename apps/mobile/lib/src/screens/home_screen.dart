@@ -9,9 +9,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/serialized_refresh_controller.dart';
 import '../features/home/home_data.dart';
 import '../features/home/home_data_loader.dart';
+import '../features/retention_v1/domain/retention_v1_models.dart';
 import '../models/app_models.dart';
 import '../navigation/salon_page_route.dart';
 import '../repositories/salon_repository.dart';
+import '../services/app_analytics_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/push_token_sync_service.dart';
 import '../theme/salon_brand_config.dart';
@@ -33,13 +35,13 @@ import '../widgets/salon_brand_mark.dart';
 import '../widgets/salon_home_skeleton.dart';
 import 'benefits_wallet_screen.dart';
 import 'book_appointment_screen.dart';
-import 'premium_booking_screen.dart';
-import 'premium_client_profile_screen.dart';
+import 'premium_campaigns_screen.dart';
 import 'premium_notifications_screen.dart';
 import 'premium_products_screen.dart';
 import 'premium_professionals_screen.dart';
 import 'premium_salon_profile_screen.dart';
 import 'premium_service_detail_screen.dart';
+import 'profile_screen.dart';
 
 part 'home_screen_actions.dart';
 part 'home_screen_data.dart';
@@ -56,6 +58,7 @@ class HomeScreen extends StatefulWidget {
     this.onActiveProfileChanged,
     this.homeDataLoader,
     this.pushTokenSyncService,
+    this.analytics,
     this.enableRealtime = true,
     this.enablePushTokenSync = true,
   });
@@ -65,6 +68,7 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<CustomerProfile?>? onActiveProfileChanged;
   final HomeDataLoader? homeDataLoader;
   final PushTokenSyncService? pushTokenSyncService;
+  final AppAnalytics? analytics;
   final bool enableRealtime;
   final bool enablePushTokenSync;
 
@@ -124,6 +128,18 @@ abstract class _HomeScreenStateBase extends State<HomeScreen>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _trackExperienceEvent(
+    String event, [
+    Map<String, Object?> payload = const <String, Object?>{},
+  ]) {
+    unawaited(
+      (widget.analytics ?? FirebaseAppAnalyticsService.instance).trackEvent(
+        event,
+        payload,
+      ),
+    );
   }
 
   void _showWhatsAppFallback([String? message]) {
@@ -338,9 +354,17 @@ class _HomeScreenState extends _HomeScreenStateBase
           offers: data?.offers ?? const <SalonOfferItem>[],
         );
         final professionalHighlightsCount = brandConfig
-            .buildProfessionalHighlights(
+            .resolveProfessionalHighlights(
+              teamProfiles:
+                  data?.teamProfiles ?? const <SalonTeamMemberProfile>[],
               posts: data?.posts ?? const <SalonPost>[],
               appointments: data?.appointments ?? const <AppointmentItem>[],
+            )
+            .length;
+        final productHighlightsCount = brandConfig
+            .resolveProductHighlights(
+              liveProducts:
+                  data?.retailProducts ?? const <SalonRetailProduct>[],
             )
             .length;
         final notificationCount =
@@ -452,7 +476,7 @@ class _HomeScreenState extends _HomeScreenStateBase
                           salonName: _profile.salonName,
                           heroSubtitle: data == null
                               ? (_profile.salonTagline ??
-                                  'Sua experiência premium com o salão começa aqui.')
+                                    'Sua experiência premium com o salão começa aqui.')
                               : _buildHeroSubtitle(data),
                           leadMomentLabel: data?.nextAvailableAt != null
                               ? _formatNextAvailable(data!.nextAvailableAt)
@@ -512,11 +536,16 @@ class _HomeScreenState extends _HomeScreenStateBase
                             },
                             onOpenAgenda: () => _animateToTab(1),
                             onOpenGallery: () => _animateToTab(2),
+                            onOpenWallet: () {
+                              unawaited(_openBenefitsWallet(data));
+                            },
                             busyVacancyAlertIds: _busyVacancyAlertIds,
                             bookedVacancyAlertIds: _bookedVacancyAlertIds,
                             onBookVacancyAlert: _claimVacancyAlert,
                             onCopyReferral: _copyReferralCode,
                             onBook: (service) => _openBooking(service, data),
+                            onBookRetention: (service, request) =>
+                                _openRetentionBooking(service, request, data),
                             onBookGrowthSuggestion: (service, suggestion) =>
                                 _openGrowthSuggestion(
                                   service,
@@ -539,6 +568,10 @@ class _HomeScreenState extends _HomeScreenStateBase
                             favoriteServiceIds: data.favoriteServiceIds,
                             busyFavoriteServiceIds: _busyFavoriteServiceIds,
                             onToggleFavoriteService: _toggleFavoriteService,
+                            onOpenProfile: () {
+                              unawaited(_openProfile(data));
+                            },
+                            onTrackExperienceEvent: _trackExperienceEvent,
                             onOpenServiceDetails: (service) =>
                                 _openServiceDetail(service, data),
                             onOpenProfessionals: () {
@@ -546,6 +579,9 @@ class _HomeScreenState extends _HomeScreenStateBase
                             },
                             onOpenProducts: () {
                               unawaited(_openProducts(data));
+                            },
+                            onOpenPromotions: () {
+                              unawaited(_openCampaigns(data));
                             },
                           ),
                         if (isLoading)
@@ -636,7 +672,7 @@ class _HomeScreenState extends _HomeScreenStateBase
                             clientExperienceCount: clientExperienceCount,
                             professionalHighlightsCount:
                                 professionalHighlightsCount,
-                            productHighlightsCount: brandConfig.products.length,
+                            productHighlightsCount: productHighlightsCount,
                             onRefresh: _refreshData,
                             onOpenProfile: () {
                               unawaited(_openProfile(data));
@@ -657,6 +693,9 @@ class _HomeScreenState extends _HomeScreenStateBase
                             },
                             onOpenProducts: () {
                               unawaited(_openProducts(data));
+                            },
+                            onOpenCampaigns: () {
+                              unawaited(_openCampaigns(data));
                             },
                             onWhatsApp: _openWhatsApp,
                           ),
@@ -1104,7 +1143,9 @@ class _HomeCommandDeck extends StatelessWidget {
                           onPressed: onOpenGallery,
                           style: OutlinedButton.styleFrom(
                             foregroundColor: branding.shellForeground,
-                            side: BorderSide(color: branding.shellNavigationBorder),
+                            side: BorderSide(
+                              color: branding.shellNavigationBorder,
+                            ),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 18,
                               vertical: 14,
@@ -1126,7 +1167,9 @@ class _HomeCommandDeck extends StatelessWidget {
                                 vertical: 14,
                               ),
                             ),
-                            icon: const Icon(Icons.notifications_active_rounded),
+                            icon: const Icon(
+                              Icons.notifications_active_rounded,
+                            ),
                             label: const Text('Abrir alertas'),
                           ),
                       ],
@@ -1135,7 +1178,11 @@ class _HomeCommandDeck extends StatelessWidget {
                     if (isCompact)
                       Column(
                         children: [
-                          for (var index = 0; index < metrics.length; index++) ...[
+                          for (
+                            var index = 0;
+                            index < metrics.length;
+                            index++
+                          ) ...[
                             _HomeCommandMetricCard(
                               branding: branding,
                               label: metrics[index].label,
@@ -1151,7 +1198,11 @@ class _HomeCommandDeck extends StatelessWidget {
                     else
                       Row(
                         children: [
-                          for (var index = 0; index < metrics.length; index++) ...[
+                          for (
+                            var index = 0;
+                            index < metrics.length;
+                            index++
+                          ) ...[
                             Expanded(
                               child: _HomeCommandMetricCard(
                                 branding: branding,
@@ -1199,7 +1250,9 @@ class _HomeCommandMetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: branding.usesDarkShell ? 0.08 : 0.76),
+        color: Colors.white.withValues(
+          alpha: branding.usesDarkShell ? 0.08 : 0.76,
+        ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: branding.shellNavigationBorder),
       ),

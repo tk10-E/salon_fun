@@ -11,8 +11,11 @@ import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/join_salon_screen.dart';
 import 'screens/notification_alert_screen.dart';
+import 'screens/password_recovery_screen.dart';
 import 'services/app_link_service.dart';
+import 'services/app_analytics_service.dart';
 import 'services/push_notification_service.dart';
+import 'features/retention_v1/domain/retention_v1_models.dart';
 import 'theme/salon_brand_config.dart';
 import 'theme/salon_branding.dart';
 import 'theme/salon_experience_preset.dart';
@@ -34,6 +37,7 @@ class _SalonClientAppState extends State<SalonClientApp> {
   String? _lastOpenedNotificationKey;
   CustomerProfile? _activeProfile;
   String? _pendingJoinCode;
+  SalonAppAuthAction? _pendingAuthAction;
 
   @override
   void initState() {
@@ -72,6 +76,16 @@ class _SalonClientAppState extends State<SalonClientApp> {
   }
 
   void _handleIncomingAppLink(SalonAppLink link) {
+    final authAction = link.authAction;
+    if (authAction != null) {
+      if (_pendingAuthAction == authAction) {
+        return;
+      }
+
+      setState(() => _pendingAuthAction = authAction);
+      return;
+    }
+
     final joinCode = link.joinCode;
     if (joinCode == null ||
         _activeProfile != null ||
@@ -90,9 +104,30 @@ class _SalonClientAppState extends State<SalonClientApp> {
     setState(() => _pendingJoinCode = null);
   }
 
+  void _handleAuthActionConsumed(SalonAppAuthAction action) {
+    if (_pendingAuthAction != action) {
+      return;
+    }
+
+    setState(() => _pendingAuthAction = null);
+  }
+
   void _openNotificationAlert(NotificationTapPayload payload) {
     if (_lastOpenedNotificationKey == payload.dedupeKey) {
       return;
+    }
+
+    final retentionPushType = RetentionV1PushType.fromNotificationType(
+      payload.type,
+    );
+    if (retentionPushType != null) {
+      unawaited(
+        FirebaseAppAnalyticsService.instance.trackEvent('push_opened', {
+          'source': 'retention_v1',
+          'push_type': retentionPushType.name,
+          'notification_type': payload.type,
+        }),
+      );
     }
 
     _lastOpenedNotificationKey = payload.dedupeKey;
@@ -113,6 +148,7 @@ class _SalonClientAppState extends State<SalonClientApp> {
       return;
     }
 
+    unawaited(FirebaseAppAnalyticsService.instance.identifyCustomer(profile));
     setState(() => _activeProfile = profile);
   }
 
@@ -191,6 +227,8 @@ class _SalonClientAppState extends State<SalonClientApp> {
           onActiveProfileChanged: _handleActiveProfileChanged,
           pendingJoinCode: _pendingJoinCode,
           onJoinCodeConsumed: _handleJoinCodeConsumed,
+          pendingAuthAction: _pendingAuthAction,
+          onAuthActionConsumed: _handleAuthActionConsumed,
         ),
       ),
     );
@@ -259,11 +297,15 @@ class _SessionGate extends StatefulWidget {
     required this.onActiveProfileChanged,
     required this.pendingJoinCode,
     required this.onJoinCodeConsumed,
+    required this.pendingAuthAction,
+    required this.onAuthActionConsumed,
   });
 
   final ValueChanged<CustomerProfile?> onActiveProfileChanged;
   final String? pendingJoinCode;
   final ValueChanged<String> onJoinCodeConsumed;
+  final SalonAppAuthAction? pendingAuthAction;
+  final ValueChanged<SalonAppAuthAction> onAuthActionConsumed;
 
   @override
   State<_SessionGate> createState() => _SessionGateState();
@@ -274,6 +316,50 @@ class _SessionGateState extends State<_SessionGate> {
     Supabase.instance.client,
   );
   CustomerProfile? _reportedProfile;
+  StreamSubscription<AuthState>? _authSubscription;
+  bool _passwordRecoveryActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordRecoveryActive =
+        widget.pendingAuthAction == SalonAppAuthAction.passwordRecovery;
+    _authSubscription = _repository.authChanges.listen((state) {
+      if (!mounted) {
+        return;
+      }
+
+      switch (state.event) {
+        case AuthChangeEvent.passwordRecovery:
+          setState(() => _passwordRecoveryActive = true);
+          widget.onAuthActionConsumed(SalonAppAuthAction.passwordRecovery);
+          return;
+        case AuthChangeEvent.signedOut:
+          if (_passwordRecoveryActive) {
+            setState(() => _passwordRecoveryActive = false);
+          }
+          return;
+        default:
+          return;
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _SessionGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pendingAuthAction == SalonAppAuthAction.passwordRecovery &&
+        oldWidget.pendingAuthAction != widget.pendingAuthAction &&
+        !_passwordRecoveryActive) {
+      setState(() => _passwordRecoveryActive = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_authSubscription?.cancel());
+    super.dispose();
+  }
 
   void _reportActiveProfile(CustomerProfile? profile) {
     if (_sameBrandingProfile(_reportedProfile, profile)) {
@@ -309,6 +395,30 @@ class _SessionGateState extends State<_SessionGate> {
         if (_repository.currentUser == null) {
           _reportActiveProfile(null);
           return AuthScreen(repository: _repository);
+        }
+
+        if (_passwordRecoveryActive) {
+          _reportActiveProfile(null);
+          return PasswordRecoveryScreen(
+            repository: _repository,
+            onCompleted: () async {
+              if (!mounted) {
+                return;
+              }
+
+              setState(() => _passwordRecoveryActive = false);
+              widget.onAuthActionConsumed(SalonAppAuthAction.passwordRecovery);
+            },
+            onCancel: () async {
+              await _repository.signOut();
+              if (!mounted) {
+                return;
+              }
+
+              setState(() => _passwordRecoveryActive = false);
+              widget.onAuthActionConsumed(SalonAppAuthAction.passwordRecovery);
+            },
+          );
         }
 
         return _CustomerGate(

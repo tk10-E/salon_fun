@@ -76,6 +76,34 @@ mixin _SalonRepositoryBenefitsMixin on _SalonRepositoryBase {
     }
   }
 
+  Future<List<SalonRetailProduct>> getRetailProducts({int limit = 24}) async {
+    try {
+      final data = await client.rpc(
+        'get_customer_product_catalog',
+        params: {'limit_count': limit},
+      );
+
+      if (data is! List) {
+        return const [];
+      }
+
+      return data
+          .map(
+            (item) => SalonRetailProduct.fromMap(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList();
+    } on PostgrestException catch (error) {
+      final message = error.message.toLowerCase();
+      if (message.contains('get_customer_product_catalog') ||
+          message.contains('inventory_products')) {
+        return const [];
+      }
+      rethrow;
+    }
+  }
+
   Future<CustomerGrowthSuggestionFeed?> getCustomerGrowthSuggestions() async {
     try {
       final data = await client.rpc('get_customer_growth_suggestions');

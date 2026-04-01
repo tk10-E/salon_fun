@@ -11,7 +11,7 @@ import '../repositories/salon_repository.dart';
 import '../theme/salon_branding.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cinematic_reveal.dart';
-import '../widgets/soft_card.dart';
+import '../widgets/premium_surface_card.dart';
 import 'benefits_wallet_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -491,9 +491,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             CinematicReveal(
               delay: const Duration(milliseconds: 20),
-              child: SoftCard(
+              child: PremiumSurfaceCard(
                 padding: EdgeInsets.zero,
-                borderColor: _branding.primary.withValues(alpha: 0.28),
                 gradient: LinearGradient(
                   colors: [
                     Color.lerp(_branding.deep, const Color(0xFF120F17), 0.12)!,
@@ -503,6 +502,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
+                tone: PremiumSurfaceTone.contrast,
                 child: Stack(
                   children: [
                     Positioned(
@@ -745,7 +745,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            SoftCard(
+            PremiumSurfaceCard(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -876,8 +876,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            SoftCard(
+            PremiumSurfaceCard(
               padding: const EdgeInsets.all(20),
+              tone: PremiumSurfaceTone.secondary,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -957,8 +958,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            SoftCard(
+            PremiumSurfaceCard(
               padding: const EdgeInsets.all(20),
+              tone: PremiumSurfaceTone.secondary,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1022,8 +1024,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            SoftCard(
+            PremiumSurfaceCard(
               padding: const EdgeInsets.all(20),
+              tone: PremiumSurfaceTone.accent,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1083,8 +1086,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            SoftCard(
+            PremiumSurfaceCard(
               padding: const EdgeInsets.all(20),
+              tone: PremiumSurfaceTone.secondary,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1177,8 +1181,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            SoftCard(
+            PremiumSurfaceCard(
               padding: const EdgeInsets.all(20),
+              tone: PremiumSurfaceTone.contrast,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1227,27 +1232,27 @@ class _ProfileSectionEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: accentColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+      tone: PremiumSurfaceTone.secondary,
+      gradient: LinearGradient(
+        colors: [accentColor.withValues(alpha: 0.12), Colors.white],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(14),
+              color: accentColor.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: accentColor),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1774,7 +1779,7 @@ class _ProfileMomentumStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final nextTierVisits = loyaltySummary?.visitsToNextTier;
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(18),
       gradient: LinearGradient(
         colors: [
@@ -1784,7 +1789,7 @@ class _ProfileMomentumStrip extends StatelessWidget {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      borderColor: branding.outline.withValues(alpha: 0.72),
+      tone: PremiumSurfaceTone.contrast,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1865,52 +1870,51 @@ class _ProfileStageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: 238,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      child: PremiumSurfaceCard(
+        padding: const EdgeInsets.all(16),
         gradient: LinearGradient(
           colors: [Colors.white, accent.withValues(alpha: 0.14)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: accent.withValues(alpha: 0.26)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  eyebrow,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: const Color(0xFF7A5E4E),
-                    fontWeight: FontWeight.w800,
+        tone: PremiumSurfaceTone.secondary,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    eyebrow,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: const Color(0xFF7A5E4E),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
+                Icon(icon, size: 18, color: const Color(0xFF2F231C)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: const Color(0xFF2F231C),
+                fontWeight: FontWeight.w900,
               ),
-              Icon(icon, size: 18, color: const Color(0xFF2F231C)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: const Color(0xFF2F231C),
-              fontWeight: FontWeight.w900,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF6C5547),
-              height: 1.35,
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF6C5547),
+                height: 1.35,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

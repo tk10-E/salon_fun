@@ -5,6 +5,7 @@ abstract final class SupabaseConfig {
     'SUPABASE_PUBLISHABLE_KEY',
   );
   static const authRedirectUrl = String.fromEnvironment('AUTH_REDIRECT_URL');
+  static const defaultMobileAuthRedirectUrl = 'salonfun://auth-callback';
 
   static String get anonKey =>
       _publishableKey.isNotEmpty ? _publishableKey : _anonKey;

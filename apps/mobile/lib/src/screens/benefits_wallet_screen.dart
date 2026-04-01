@@ -9,10 +9,11 @@ import '../repositories/salon_repository.dart';
 import '../theme/salon_branding.dart';
 import '../widgets/app_backdrop.dart';
 import '../widgets/cinematic_reveal.dart';
-import '../widgets/empty_state.dart';
 import '../widgets/loyalty_summary_card.dart';
+import '../widgets/premium_empty_state.dart';
+import '../widgets/premium_section_header.dart';
+import '../widgets/premium_surface_card.dart';
 import '../widgets/referral_program_card.dart';
-import '../widgets/soft_card.dart';
 
 class BenefitsWalletScreen extends StatefulWidget {
   const BenefitsWalletScreen({
@@ -211,24 +212,12 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
                   ],
                   CinematicReveal(
                     delay: const Duration(milliseconds: 190),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Movimentos recentes',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: _branding.deep,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Veja quando pontos, cashback e visitas entraram na sua carteira.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: _branding.mutedText,
-                          ),
-                        ),
-                      ],
+                    child: PremiumSectionHeader(
+                      eyebrow: 'Extrato vivo',
+                      title: 'Movimentos recentes',
+                      subtitle: transactions.isEmpty
+                          ? 'Seu extrato ainda está vazio'
+                          : 'Veja quando pontos, cashback e visitas entraram na sua carteira.',
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -242,14 +231,12 @@ class _BenefitsWalletScreenState extends State<BenefitsWalletScreen> {
                   else if (isWaitingTransactions)
                     _WalletLoadingCard(branding: _branding)
                   else if (transactions.isEmpty)
-                    EmptyState(
-                      centered: true,
+                    PremiumEmptyState(
                       icon: Icons.receipt_long_outlined,
                       eyebrow: 'Sem movimentos ainda',
                       title: 'Seu extrato ainda está vazio',
                       message:
                           'Quando visitas forem concluídas ou houver uso de cashback, os lançamentos vão aparecer aqui.',
-                      accentColor: _branding.primary,
                     )
                   else
                     Column(
@@ -329,9 +316,8 @@ class _WalletHero extends StatelessWidget {
         ? 'Seu saldo já está disponível para entrar na decisão da próxima reserva com mais inteligência.'
         : 'Pontos, indicações e visitas começam a aparecer aqui conforme sua relação com o salão evolui.';
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: EdgeInsets.zero,
-      borderColor: branding.primary.withValues(alpha: 0.28),
       gradient: LinearGradient(
         colors: [
           Color.lerp(branding.deep, const Color(0xFF130F18), 0.12)!,
@@ -394,11 +380,11 @@ class _WalletHero extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      width: 52,
-                      height: 52,
+                      width: 58,
+                      height: 58,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: Colors.white.withValues(alpha: 0.14),
                         ),
@@ -498,10 +484,10 @@ class _WalletHero extends StatelessWidget {
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.circular(26),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.14),
                     ),
@@ -632,34 +618,18 @@ class _WalletMomentumStrip extends StatelessWidget {
     final rewardsReady = referralSummary?.availableRewardsCount ?? 0;
     final pendingReferrals = referralSummary?.pendingCount ?? 0;
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(18),
-      gradient: LinearGradient(
-        colors: [
-          Colors.white.withValues(alpha: 0.98),
-          branding.surface.withValues(alpha: 0.94),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderColor: branding.outline.withValues(alpha: 0.72),
+      tone: PremiumSurfaceTone.secondary,
+      radius: 34,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Status da sua relação com o salão',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: branding.deep,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'A carteira agora mostra com mais clareza o que está amadurecendo, o que já pode ser usado e o que ainda pode crescer.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: branding.mutedText,
-              height: 1.45,
-            ),
+          const PremiumSectionHeader(
+            eyebrow: 'Ritmo da carteira',
+            title: 'Status da sua relação com o salão',
+            subtitle:
+                'A carteira agora mostra com mais clareza o que está amadurecendo, o que já pode ser usado e o que ainda pode crescer.',
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -716,8 +686,8 @@ class _WalletLoadingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      borderColor: branding.outline.withValues(alpha: 0.6),
+    return PremiumSurfaceCard(
+      tone: PremiumSurfaceTone.contrast,
       child: Row(
         children: [
           SizedBox(
@@ -753,26 +723,23 @@ class _WalletEmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(18),
-      borderColor: branding.outline.withValues(alpha: 0.58),
-      gradient: LinearGradient(
-        colors: [
-          branding.primary.withValues(alpha: 0.08),
-          Colors.white.withValues(alpha: 0.96),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
+      tone: PremiumSurfaceTone.secondary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.86),
-              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(
+                colors: [
+                  branding.primary.withValues(alpha: 0.16),
+                  Colors.white.withValues(alpha: 0.9),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(Icons.auto_awesome_rounded, color: branding.deep),
           ),
@@ -808,9 +775,9 @@ class _LoyaltyTransactionCard extends StatelessWidget {
       'pt_BR',
     ).format(transaction.createdAt);
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(18),
-      borderColor: branding.outline.withValues(alpha: 0.72),
+      tone: PremiumSurfaceTone.secondary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

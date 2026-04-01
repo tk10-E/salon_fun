@@ -165,47 +165,92 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    _FeedIconActionButton(
-                      tooltip: 'Curtir publicação',
-                      icon: post.likedByMe
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      active: post.likedByMe,
-                      busy: widget.interactionBusy,
-                      branding: branding,
-                      onTap: widget.onToggleLike,
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color.lerp(branding.surface, Colors.white, 0.06)!,
+                        Colors.white,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(width: 6),
-                    _FeedIconActionButton(
-                      tooltip: 'Abrir comentários',
-                      icon: Icons.mode_comment_outlined,
-                      busy: widget.interactionBusy,
-                      branding: branding,
-                      onTap: widget.onOpenComments,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: branding.outline.withValues(alpha: 0.32),
                     ),
-                    if (widget.onContactSalon != null) ...[
-                      const SizedBox(width: 6),
-                      _FeedIconActionButton(
-                        tooltip: 'Falar com o salão',
-                        icon: Icons.send_outlined,
-                        busy: widget.interactionBusy,
-                        branding: branding,
-                        onTap: widget.onContactSalon,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _FeedIconActionButton(
+                              buttonKey: Key('feed-like-${post.id}'),
+                              tooltip: 'Curtir publicação',
+                              icon: post.likedByMe
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              active: post.likedByMe,
+                              busy: widget.interactionBusy,
+                              branding: branding,
+                              onTap: widget.onToggleLike,
+                              label: post.likeCount == 1
+                                  ? '1 curtida'
+                                  : '${post.likeCount} curtidas',
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _FeedIconActionButton(
+                              buttonKey: Key('feed-comment-${post.id}'),
+                              tooltip: 'Abrir comentários',
+                              icon: Icons.mode_comment_outlined,
+                              busy: widget.interactionBusy,
+                              branding: branding,
+                              onTap: widget.onOpenComments,
+                              label: post.commentCount == 1
+                                  ? 'Ver 1 comentário'
+                                  : 'Ver ${post.commentCount} comentários',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _FeedInfoTile(
+                              branding: branding,
+                              icon: primaryMediaIcon,
+                              label: primaryMediaLabel,
+                            ),
+                          ),
+                          if (widget.onContactSalon != null) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _FeedIconActionButton(
+                                buttonKey: Key('feed-contact-${post.id}'),
+                                tooltip: 'Falar com o salão',
+                                icon: Icons.chat_bubble_outline_rounded,
+                                busy: widget.interactionBusy,
+                                branding: branding,
+                                onTap: widget.onContactSalon,
+                                label: 'Conversar agora',
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
-                    const Spacer(),
-                    _FeedInlineBadge(
-                      icon: primaryMediaIcon,
-                      label: primaryMediaLabel,
-                      branding: branding,
-                    ),
-                  ],
+                  ),
                 ),
                 if (referenceDetailLabel != null ||
                     post.staffMemberName == null) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   _FeedReferenceCard(
                     branding: branding,
                     eyebrow: 'Referência do salão',
@@ -214,71 +259,69 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                         'Seleção editorial do salão para inspirar sua próxima visita.',
                   ),
                 ],
-                const SizedBox(height: 12),
-                Text(
-                  post.likeCount == 1
-                      ? '1 curtida'
-                      : '${post.likeCount} curtidas',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF2F231C),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                if (post.commentCount > 0) ...[
-                  const SizedBox(height: 2),
-                  TextButton(
-                    onPressed: widget.interactionBusy
-                        ? null
-                        : widget.onOpenComments,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      foregroundColor: const Color(0xFF7A5E4E),
-                    ),
-                    child: Text(
-                      post.commentCount == 1
-                          ? 'Ver 1 comentário'
-                          : 'Ver ${post.commentCount} comentários',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF7A5E4E),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
+                const SizedBox(height: 18),
                 Text(
                   post.title,
-                  style: theme.textTheme.titleLarge?.copyWith(
+                  style: theme.textTheme.headlineSmall?.copyWith(
                     color: const Color(0xFF2B2019),
                     fontWeight: FontWeight.w900,
-                    height: 1.08,
+                    height: 1.04,
                   ),
                 ),
                 if (captionText != null) ...[
-                  const SizedBox(height: 6),
-                  _FeedCaptionLine(author: headerTitle, text: captionText),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9F2EB),
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: _FeedCaptionLine(
+                      author: headerTitle,
+                      text: captionText,
+                    ),
+                  ),
                 ],
                 if (previewComments.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: previewComments
-                        .map(
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFCF8),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: branding.outline.withValues(alpha: 0.28),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'O que o app já captou',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF7A5E4E),
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ...previewComments.map(
                           (comment) => Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.only(bottom: 8),
                             child: _FeedCommentLine(
                               author: comment.customerName,
                               text: comment.body,
                             ),
                           ),
-                        )
-                        .toList(),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
                 if (post.linkedService != null) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   _FeedServiceCallout(
                     branding: branding,
                     icon:
@@ -289,7 +332,7 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                     signatureLabel: signatureLabel,
                   ),
                 ] else if (widget.onContactSalon != null) ...[
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   _FeedEditorialHint(
                     branding: branding,
                     text: post.isReel
@@ -313,42 +356,56 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                 const SizedBox(height: 16),
                 if (widget.onBookService != null &&
                     post.linkedService != null) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        if (widget.interactionBusy) {
-                          return;
-                        }
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            if (widget.interactionBusy) {
+                              return;
+                            }
 
-                        widget.onBookService?.call();
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: branding.primary,
-                        foregroundColor: branding.onPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      icon: const Icon(Icons.calendar_month_rounded, size: 18),
-                      label: const Text('Quero esse resultado'),
-                    ),
-                  ),
-                  if (widget.onContactSalon != null) ...[
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: widget.interactionBusy
-                            ? null
-                            : widget.onContactSalon,
-                        icon: const Icon(Icons.chat_bubble_outline_rounded),
-                        label: Text(
-                          post.isReel
-                              ? 'Falar sobre esse vídeo'
-                              : 'Falar com o salão',
+                            widget.onBookService?.call();
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: branding.deep,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(22),
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.calendar_month_rounded,
+                            size: 18,
+                          ),
+                          label: const Text('Quero esse resultado'),
                         ),
                       ),
-                    ),
-                  ],
+                      if (widget.onContactSalon != null) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: widget.interactionBusy
+                                ? null
+                                : widget.onContactSalon,
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(22),
+                              ),
+                            ),
+                            icon: const Icon(Icons.chat_bubble_outline_rounded),
+                            label: Text(
+                              post.isReel
+                                  ? 'Falar sobre esse vídeo'
+                                  : 'Falar com o salão',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ] else if (widget.onContactSalon != null) ...[
                   SizedBox(
                     width: double.infinity,
@@ -356,6 +413,12 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                       onPressed: widget.interactionBusy
                           ? null
                           : widget.onContactSalon,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                      ),
                       icon: const Icon(Icons.chat_bubble_outline_rounded),
                       label: Text(
                         post.isReel
@@ -366,13 +429,23 @@ class _SalonFeedPostCardState extends State<SalonFeedPostCard> {
                   ),
                 ],
                 const SizedBox(height: 12),
-                Text(
-                  postedAt,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF8D7566),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.schedule_rounded,
+                      size: 15,
+                      color: Color(0xFF8D7566),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      postedAt,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF8D7566),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -831,36 +904,40 @@ class _FeedPostHeader extends StatelessWidget {
   }
 }
 
-class _FeedInlineBadge extends StatelessWidget {
-  const _FeedInlineBadge({
+class _FeedInfoTile extends StatelessWidget {
+  const _FeedInfoTile({
+    required this.branding,
     required this.icon,
     required this.label,
-    required this.branding,
   });
 
+  final SalonBranding branding;
   final IconData icon;
   final String label;
-  final SalonBranding branding;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      height: 54,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: Color.lerp(branding.highlightBackground, Colors.white, 0.42),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.42)),
+        color: Color.lerp(branding.highlightBackground, Colors.white, 0.48),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.32)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: branding.deep),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: branding.deep,
-              fontWeight: FontWeight.w800,
+          Icon(icon, size: 18, color: branding.deep),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: const Color(0xFF2B2019),
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -884,21 +961,28 @@ class _FeedReferenceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Color.lerp(branding.highlightBackground, Colors.white, 0.5),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.4)),
+        gradient: LinearGradient(
+          colors: [
+            Color.lerp(branding.highlightBackground, Colors.white, 0.22)!,
+            Colors.white,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.34)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(999),
+              color: Colors.white.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(14),
             ),
             alignment: Alignment.center,
             child: Icon(
@@ -993,38 +1077,50 @@ class _BeforeAfterPanel extends StatelessWidget {
 
 class _FeedIconActionButton extends StatelessWidget {
   const _FeedIconActionButton({
+    this.buttonKey,
     required this.tooltip,
     required this.icon,
     required this.busy,
     required this.branding,
     this.onTap,
     this.active = false,
+    this.label,
   });
 
+  final Key? buttonKey;
   final String tooltip;
   final IconData icon;
   final bool busy;
   final SalonBranding branding;
   final VoidCallback? onTap;
   final bool active;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
     final foreground = active
         ? const Color(0xFFD34A63)
         : const Color(0xFF2B2019);
+    final background = active
+        ? const Color(0xFFFFEDF1)
+        : const Color(0xFFF8F2EC);
 
     return Tooltip(
       message: tooltip,
       child: InkWell(
+        key: buttonKey,
         onTap: busy ? null : onTap,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(label == null ? 999 : 20),
         child: Container(
-          width: 40,
-          height: 40,
+          width: label == null ? 40 : null,
+          height: label == null ? 40 : 54,
+          padding: label == null
+              ? null
+              : const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            color: active ? const Color(0xFFFFEDF1) : const Color(0xFFF8F2EC),
-            shape: BoxShape.circle,
+            color: background,
+            shape: label == null ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: label == null ? null : BorderRadius.circular(20),
             border: Border.all(
               color: active
                   ? const Color(0xFFFFD4DC)
@@ -1033,15 +1129,61 @@ class _FeedIconActionButton extends StatelessWidget {
           ),
           alignment: Alignment.center,
           child: busy
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    color: foreground,
-                  ),
-                )
-              : Icon(icon, size: 23, color: foreground),
+              ? label == null
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: foreground,
+                        ),
+                      )
+                    : Row(
+                        children: [
+                          Icon(icon, size: 20, color: foreground),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              label!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: foreground,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: foreground,
+                            ),
+                          ),
+                        ],
+                      )
+              : label == null
+              ? Icon(icon, size: 23, color: foreground)
+              : Row(
+                  children: [
+                    Icon(icon, size: 20, color: foreground),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: foreground,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -1145,21 +1287,28 @@ class _FeedServiceCallout extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Color.lerp(branding.highlightBackground, Colors.white, 0.32),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.38)),
+        gradient: LinearGradient(
+          colors: [
+            Color.lerp(branding.primary, Colors.white, 0.86)!,
+            Color.lerp(branding.highlightBackground, Colors.white, 0.32)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.32)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.86),
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(16),
             ),
             alignment: Alignment.center,
             child: Icon(icon, size: 19, color: branding.deep),
@@ -1211,18 +1360,43 @@ class _FeedEditorialHint extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       decoration: BoxDecoration(
-        color: Color.lerp(branding.surface, Colors.white, 0.18),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: branding.outline.withValues(alpha: 0.32)),
-      ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: const Color(0xFF6D5647),
-          height: 1.45,
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFFF9F4),
+            Color.lerp(branding.surface, Colors.white, 0.18)!,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: branding.outline.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            alignment: Alignment.center,
+            child: Icon(Icons.tips_and_updates_outlined, color: branding.deep),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF6D5647),
+                height: 1.45,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

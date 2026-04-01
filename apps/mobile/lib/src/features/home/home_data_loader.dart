@@ -4,7 +4,13 @@ import 'home_data.dart';
 abstract interface class HomeDataRepository {
   Future<List<ServiceItem>> getServices();
 
+  Future<List<SalonTeamMemberProfile>> getSalonTeamProfiles();
+
+  Future<List<SalonRetailProduct>> getRetailProducts();
+
   Future<Set<String>> getFavoriteServiceIds();
+
+  Future<Set<String>> getFavoriteStaffMemberIds();
 
   Future<List<AppointmentItem>> getAppointments();
 
@@ -47,9 +53,12 @@ class HomeDataLoader {
 
   Future<HomeData> load({required String customerId}) async {
     final servicesFuture = repository.getServices();
+    final teamProfilesFuture = repository.getSalonTeamProfiles();
+    final retailProductsFuture = repository.getRetailProducts();
     final nextAvailableAtFuture = servicesFuture.then(_findNextAvailableSlot);
     final appointmentsFuture = repository.getAppointments();
     final favoriteServiceIdsFuture = repository.getFavoriteServiceIds();
+    final favoriteStaffMemberIdsFuture = repository.getFavoriteStaffMemberIds();
     final vacancyAlertsFuture = repository.getVacancyAlerts();
     final postsFuture = repository.getFeedPosts(customerId: customerId);
     final offersFuture = repository.getSalonOffers();
@@ -61,8 +70,11 @@ class HomeDataLoader {
     final receiptSnapshotFuture = repository.getNotificationReceiptSnapshot();
 
     final services = await servicesFuture;
+    final teamProfiles = await teamProfilesFuture;
+    final retailProducts = await retailProductsFuture;
     final appointments = await appointmentsFuture;
     final favoriteServiceIds = await favoriteServiceIdsFuture;
+    final favoriteStaffMemberIds = await favoriteStaffMemberIdsFuture;
     final vacancyAlerts = await vacancyAlertsFuture;
     final posts = await postsFuture;
     final offers = await offersFuture;
@@ -76,6 +88,8 @@ class HomeDataLoader {
 
     return HomeData(
       services: services,
+      teamProfiles: teamProfiles,
+      retailProducts: retailProducts,
       appointments: appointments,
       vacancyAlerts: vacancyAlerts,
       posts: posts,
@@ -91,6 +105,7 @@ class HomeDataLoader {
       nextAvailableAt: nextAvailableAt,
       smartSchedule: smartSchedule,
       favoriteServiceIds: favoriteServiceIds,
+      favoriteStaffMemberIds: favoriteStaffMemberIds,
     );
   }
 

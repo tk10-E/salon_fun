@@ -37,6 +37,7 @@ class PremiumEmptyState extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: theme.buttonGradient,
               borderRadius: BorderRadius.circular(26),
+              boxShadow: theme.softShadow,
             ),
             child: Icon(icon, color: theme.onAccent, size: 34),
           ),
@@ -55,12 +56,22 @@ class PremiumEmptyState extends StatelessWidget {
               child: Text(
                 eyebrow!,
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: theme.textMuted),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: theme.textMuted,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
+          const SizedBox(height: PremiumSpacing.sm),
+          Container(
+            width: 56,
+            height: 4,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(PremiumRadius.pill),
+              gradient: theme.buttonGradient,
+            ),
+          ),
           const SizedBox(height: PremiumSpacing.sm),
           Text(
             title,

@@ -57,6 +57,45 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
     }
   }
 
+  Future<void> _toggleFavoriteProfessional(
+    ProfessionalHighlight professional,
+    bool shouldFavorite,
+  ) async {
+    try {
+      await widget.repository.toggleFavoriteStaffMember(
+        staffMemberId: professional.id,
+        isFavorite: shouldFavorite,
+      );
+
+      _replaceCachedData((current) {
+        final updatedIds = <String>{...current.favoriteStaffMemberIds};
+        if (shouldFavorite) {
+          updatedIds.add(professional.id);
+        } else {
+          updatedIds.remove(professional.id);
+        }
+
+        return current.copyWith(favoriteStaffMemberIds: updatedIds);
+      });
+
+      if (mounted) {
+        _showMessage(
+          shouldFavorite
+              ? '${professional.name} foi salvo nos seus profissionais favoritos.'
+              : '${professional.name} saiu dos seus profissionais favoritos.',
+        );
+      }
+    } on PostgrestException catch (error) {
+      final raw = error.message.toLowerCase();
+      final message = raw.contains('customer_favorite_staff_members')
+          ? 'Os favoritos de profissionais ainda não estão disponíveis agora.'
+          : 'Não foi possível atualizar seus profissionais favoritos agora.';
+      throw Exception(message);
+    } catch (_) {
+      rethrow;
+    }
+  }
+
   void _showBookingCreated(BookAppointmentResult result, [HomeData? data]) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -76,14 +115,22 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
   }
 
   Future<void> _openBooking(ServiceItem service, [HomeData? data]) async {
+    final analyticsPayload = <String, Object?>{
+      'source': 'service_catalog',
+      'service_id': service.id,
+      'service_name': service.name,
+    };
+    _trackExperienceEvent('booking_started', analyticsPayload);
     final result = await Navigator.of(context).push<BookAppointmentResult>(
       SalonPageRoute(
-        builder: (_) => PremiumBookingScreen(
+        builder: (_) => BookAppointmentScreen(
           repository: widget.repository,
           service: service,
           profile: _profile,
           initialLoyaltySummary: data?.loyaltySummary,
           activeOffers: data?.offers ?? const [],
+          analytics: widget.analytics,
+          analyticsContext: analyticsPayload,
         ),
       ),
     );
@@ -93,6 +140,7 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
         return;
       }
 
+      _trackExperienceEvent('booking_confirmed', analyticsPayload);
       _showBookingCreated(result, data);
       _refreshDataInBackground();
     }
@@ -103,9 +151,16 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
     SmartScheduleSuggestionItem suggestion, [
     HomeData? data,
   ]) async {
+    final analyticsPayload = <String, Object?>{
+      'source': 'smart_schedule',
+      'service_id': service.id,
+      'service_name': service.name,
+      'staff_member_id': suggestion.staffMemberId,
+    };
+    _trackExperienceEvent('booking_started', analyticsPayload);
     final result = await Navigator.of(context).push<BookAppointmentResult>(
       SalonPageRoute(
-        builder: (_) => PremiumBookingScreen(
+        builder: (_) => BookAppointmentScreen(
           repository: widget.repository,
           service: service,
           profile: _profile,
@@ -115,6 +170,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           initialSlot: suggestion.suggestedStart,
           initialStaffMemberId: suggestion.staffMemberId,
           entryMessage: suggestion.headline,
+          analytics: widget.analytics,
+          analyticsContext: analyticsPayload,
         ),
       ),
     );
@@ -124,6 +181,7 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
         return;
       }
 
+      _trackExperienceEvent('booking_confirmed', analyticsPayload);
       _showBookingCreated(result, data);
       _refreshDataInBackground();
     }
@@ -150,9 +208,17 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
             recommendedDate.day,
           );
 
+    final analyticsPayload = <String, Object?>{
+      'source': 'growth_suggestion',
+      'service_id': service.id,
+      'service_name': service.name,
+      'suggestion_type': suggestion.type,
+      'urgency': suggestion.urgency,
+    };
+    _trackExperienceEvent('booking_started', analyticsPayload);
     final result = await Navigator.of(context).push<BookAppointmentResult>(
       SalonPageRoute(
-        builder: (_) => PremiumBookingScreen(
+        builder: (_) => BookAppointmentScreen(
           repository: widget.repository,
           service: service,
           profile: _profile,
@@ -166,6 +232,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
               : suggestion.isCombo
               ? 'Sugestão de combo para sua próxima visita'
               : 'Sugestão automática para você não perder o melhor momento',
+          analytics: widget.analytics,
+          analyticsContext: analyticsPayload,
         ),
       ),
     );
@@ -175,6 +243,43 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
         return;
       }
 
+      _trackExperienceEvent('booking_confirmed', analyticsPayload);
+      _showBookingCreated(result, data);
+      _refreshDataInBackground();
+    }
+  }
+
+  Future<void> _openRetentionBooking(
+    ServiceItem service,
+    RetentionV1BookingRequest request, [
+    HomeData? data,
+  ]) async {
+    final analyticsPayload = <String, Object?>{...request.analyticsPayload()};
+    _trackExperienceEvent('booking_started', analyticsPayload);
+    final result = await Navigator.of(context).push<BookAppointmentResult>(
+      SalonPageRoute(
+        builder: (_) => BookAppointmentScreen(
+          repository: widget.repository,
+          service: service,
+          profile: _profile,
+          initialLoyaltySummary: data?.loyaltySummary,
+          activeOffers: data?.offers ?? const [],
+          initialDay: request.initialDay,
+          initialSlot: request.initialSlot,
+          initialStaffMemberId: request.initialStaffMemberId,
+          entryMessage: request.entryMessage,
+          analytics: widget.analytics,
+          analyticsContext: analyticsPayload,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      if (!mounted) {
+        return;
+      }
+
+      _trackExperienceEvent('booking_confirmed', analyticsPayload);
       _showBookingCreated(result, data);
       _refreshDataInBackground();
     }
@@ -372,7 +477,7 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
   Future<void> _openProfile([HomeData? data]) async {
     await Navigator.of(context).push(
       SalonPageRoute<void>(
-        builder: (_) => PremiumClientProfileScreen(
+        builder: (_) => ProfileScreen(
           repository: widget.repository,
           profile: _profile,
           userEmail: widget.repository.currentUser?.email,
@@ -404,6 +509,24 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
       businessSegment: _profile.salonBusinessSegment,
       clientAppConfig: _profile.salonClientAppConfig,
     );
+    final brandConfig = SalonBrandConfig.fromProfile(
+      _profile,
+      services: data?.services ?? const <ServiceItem>[],
+      posts: data?.posts ?? const <SalonPost>[],
+      offers: data?.offers ?? const <SalonOfferItem>[],
+    );
+    final productCatalog = brandConfig.resolveProductHighlights(
+      liveProducts: data?.retailProducts ?? const <SalonRetailProduct>[],
+    );
+    final professionalHighlights = brandConfig.resolveProfessionalHighlights(
+      teamProfiles: data?.teamProfiles ?? const <SalonTeamMemberProfile>[],
+      posts: data?.posts ?? const <SalonPost>[],
+      appointments: data?.appointments ?? const <AppointmentItem>[],
+    );
+
+    if (!mounted) {
+      return;
+    }
 
     await Navigator.of(context).push(
       SalonPageRoute<void>(
@@ -413,6 +536,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           services: data?.services ?? const <ServiceItem>[],
           posts: data?.posts ?? const <SalonPost>[],
           offers: data?.offers ?? const <SalonOfferItem>[],
+          products: productCatalog,
+          professionalHighlights: professionalHighlights,
           onBookService: (service) => _openBooking(service, data),
           onWhatsApp: _openWhatsApp,
           onOpenProfessionals: () {
@@ -421,7 +546,66 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           onOpenProducts: () {
             unawaited(_openProducts(data));
           },
+          onOpenCampaigns: () {
+            unawaited(_openCampaigns(data));
+          },
           onOpenServiceDetails: (service) => _openServiceDetail(service, data),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openCampaigns([HomeData? data]) async {
+    final branding = SalonBranding.fromName(
+      _profile.salonName,
+      overrideHexColor: _profile.salonBrandColor,
+      businessSegment: _profile.salonBusinessSegment,
+      clientAppConfig: _profile.salonClientAppConfig,
+    );
+    final brandConfig = SalonBrandConfig.fromProfile(
+      _profile,
+      services: data?.services ?? const <ServiceItem>[],
+      posts: data?.posts ?? const <SalonPost>[],
+      offers: data?.offers ?? const <SalonOfferItem>[],
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      SalonPageRoute<void>(
+        builder: (_) => PremiumCampaignsScreen(
+          salonName: _profile.salonName,
+          logoUrl: _profile.salonLogoUrl,
+          branding: branding,
+          heroImageUrl:
+              brandConfig.profileCoverImageUrl ?? brandConfig.heroImageUrl,
+          heroTabletImageUrl:
+              brandConfig.profileCoverImageTabletUrl ??
+              brandConfig.heroImageTabletUrl,
+          offers: data?.offers ?? const <SalonOfferItem>[],
+          services: data?.services ?? const <ServiceItem>[],
+          loyaltySummary: data?.loyaltySummary,
+          referralSummary: data?.referralSummary,
+          nextAvailableAt: data?.nextAvailableAt,
+          onBookLeadService: data?.services.firstOrNull == null
+              ? null
+              : () {
+                  unawaited(_openBooking(data!.services.first, data));
+                },
+          onOpenWallet: () {
+            unawaited(_openBenefitsWallet(data));
+          },
+          onWhatsApp: _openWhatsApp,
+          onCopyReferral:
+              data?.referralSummary?.referralCode.trim().isNotEmpty == true
+              ? () {
+                  unawaited(
+                    _copyReferralCode(data!.referralSummary!.referralCode),
+                  );
+                }
+              : null,
         ),
       ),
     );
@@ -440,7 +624,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
       posts: data?.posts ?? const <SalonPost>[],
       offers: data?.offers ?? const <SalonOfferItem>[],
     );
-    final professionals = brandConfig.buildProfessionalHighlights(
+    final professionals = brandConfig.resolveProfessionalHighlights(
+      teamProfiles: data?.teamProfiles ?? const <SalonTeamMemberProfile>[],
       posts: data?.posts ?? const <SalonPost>[],
       appointments: data?.appointments ?? const <AppointmentItem>[],
     );
@@ -454,9 +639,13 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           heroImageUrl: brandConfig.heroImageUrl,
           heroTabletImageUrl: brandConfig.heroImageTabletUrl,
           professionals: professionals,
+          initialFavoriteProfessionalIds:
+              data?.favoriteStaffMemberIds ?? const <String>{},
           onBook: data?.services.firstOrNull == null
               ? null
               : (_) => _openBooking(data!.services.first, data),
+          onToggleFavorite: (professional, isFavorite) =>
+              _toggleFavoriteProfessional(professional, isFavorite),
         ),
       ),
     );
@@ -475,6 +664,13 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
       posts: data?.posts ?? const <SalonPost>[],
       offers: data?.offers ?? const <SalonOfferItem>[],
     );
+    final productCatalog = brandConfig.resolveProductHighlights(
+      liveProducts: data?.retailProducts ?? const <SalonRetailProduct>[],
+    );
+
+    if (!mounted) {
+      return;
+    }
 
     await Navigator.of(context).push(
       SalonPageRoute<void>(
@@ -486,7 +682,7 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           heroTabletImageUrl:
               brandConfig.profileCoverImageTabletUrl ??
               brandConfig.heroImageTabletUrl,
-          products: brandConfig.products,
+          products: productCatalog,
         ),
       ),
     );
@@ -505,7 +701,8 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
       posts: data?.posts ?? const <SalonPost>[],
       offers: data?.offers ?? const <SalonOfferItem>[],
     );
-    final professionals = brandConfig.buildProfessionalHighlights(
+    final professionals = brandConfig.resolveProfessionalHighlights(
+      teamProfiles: data?.teamProfiles ?? const <SalonTeamMemberProfile>[],
       posts: data?.posts ?? const <SalonPost>[],
       appointments: data?.appointments ?? const <AppointmentItem>[],
     );
@@ -560,6 +757,18 @@ mixin _HomeScreenActionsMixin on _HomeScreenStateBase {
           branding: branding,
           notifications: notifications,
           onArchiveNotifications: widget.repository.archiveNotifications,
+          onOpenAgenda: () {
+            _tabController.animateTo(1);
+          },
+          onOpenWallet: () {
+            unawaited(_openBenefitsWallet(_cachedData));
+          },
+          onOpenGallery: () {
+            _tabController.animateTo(2);
+          },
+          onOpenPromotions: () {
+            unawaited(_openCampaigns(_cachedData));
+          },
         ),
       ),
     );

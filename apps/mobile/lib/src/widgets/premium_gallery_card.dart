@@ -29,15 +29,15 @@ class PremiumGalleryCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(PremiumRadius.card),
+      borderRadius: BorderRadius.circular(PremiumRadius.cardLarge),
       child: Ink(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(PremiumRadius.card),
+          borderRadius: BorderRadius.circular(PremiumRadius.cardLarge),
           border: Border.all(color: theme.strokeSoft),
           boxShadow: theme.softShadow,
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(PremiumRadius.card),
+          borderRadius: BorderRadius.circular(PremiumRadius.cardLarge),
           child: Stack(
             children: [
               AspectRatio(
@@ -63,9 +63,10 @@ class PremiumGalleryCard extends StatelessWidget {
                     gradient: LinearGradient(
                       colors: [
                         Colors.black.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: 0.54),
+                        Colors.black.withValues(alpha: 0.18),
+                        Colors.black.withValues(alpha: 0.58),
                       ],
-                      begin: Alignment.topCenter,
+                      begin: Alignment.topLeft,
                       end: Alignment.bottomCenter,
                     ),
                   ),
@@ -81,8 +82,11 @@ class PremiumGalleryCard extends StatelessWidget {
                       vertical: PremiumSpacing.xs,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.34),
+                      color: Colors.white.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(PremiumRadius.pill),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.14),
+                      ),
                     ),
                     child: Text(
                       badge!,
@@ -97,65 +101,78 @@ class PremiumGalleryCard extends StatelessWidget {
                 left: PremiumSpacing.md,
                 right: PremiumSpacing.md,
                 bottom: PremiumSpacing.md,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
-                      Text(
-                        eyebrow!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.84),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: PremiumSpacing.xs),
-                    ],
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
+                child: Container(
+                  padding: const EdgeInsets.all(PremiumSpacing.md),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.24),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
                     ),
-                    if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                      const SizedBox(height: PremiumSpacing.xs),
-                      Text(
-                        subtitle!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                    if (onTap != null) ...[
-                      const SizedBox(height: PremiumSpacing.sm),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: PremiumSpacing.sm,
-                          vertical: PremiumSpacing.xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(
-                            PremiumRadius.pill,
-                          ),
-                        ),
-                        child: Text(
-                          'Abrir',
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (eyebrow != null && eyebrow!.trim().isNotEmpty) ...[
+                        Text(
+                          eyebrow!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
+                                color: Colors.white.withValues(alpha: 0.84),
+                                fontWeight: FontWeight.w800,
                               ),
                         ),
+                        const SizedBox(height: PremiumSpacing.xs),
+                      ],
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
                       ),
+                      if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                        const SizedBox(height: PremiumSpacing.xs),
+                        Text(
+                          subtitle!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.8),
+                              ),
+                        ),
+                      ],
+                      if (onTap != null) ...[
+                        const SizedBox(height: PremiumSpacing.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: PremiumSpacing.sm,
+                            vertical: PremiumSpacing.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(
+                              PremiumRadius.pill,
+                            ),
+                          ),
+                          child: Text(
+                            'Descobrir agora',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ],

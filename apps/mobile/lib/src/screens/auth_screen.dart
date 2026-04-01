@@ -4,8 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../features/auth/auth_form_validators.dart';
 import '../repositories/salon_repository.dart';
 import '../services/biometric_quick_login_service.dart';
+import '../theme/tenant_theme.dart';
 import '../widgets/app_backdrop.dart';
-import '../widgets/soft_card.dart';
+import '../widgets/premium_surface_card.dart';
 
 enum _AuthMode { signIn, signUp }
 
@@ -451,6 +452,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _buildAuthPanel(BuildContext context, {required bool compact}) {
     final theme = Theme.of(context);
+    final premiumTheme = context.premiumTheme;
     final activeStatus = _loading
         ? (_mode == _AuthMode.signIn
               ? 'Entrando com segurança...'
@@ -459,14 +461,18 @@ class _AuthScreenState extends State<AuthScreen> {
         ? 'Validando biometria...'
         : null;
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       gradient: LinearGradient(
-        colors: [Colors.white.withValues(alpha: 0.98), const Color(0xFFFFF8F1)],
+        colors: [
+          Colors.white.withValues(alpha: premiumTheme.isDark ? 0.08 : 0.98),
+          premiumTheme.surfacePrimary,
+          premiumTheme.surfaceAccent,
+        ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      borderColor: const Color(0xFFE2D3C4),
+      tone: PremiumSurfaceTone.contrast,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -958,6 +964,7 @@ class _AuthShowcase extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final premiumTheme = context.premiumTheme;
     final title = switch (mode) {
       _AuthMode.signIn => 'Seu salão, no seu ritmo.',
       _AuthMode.signUp => 'Uma conta para entrar em qualquer salão.',
@@ -980,14 +987,18 @@ class _AuthShowcase extends StatelessWidget {
     };
 
     if (compact) {
-      return SoftCard(
+      return PremiumSurfaceCard(
         padding: const EdgeInsets.all(22),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF4EA), Color(0xFFF1CFB7)],
+        gradient: LinearGradient(
+          colors: [
+            premiumTheme.surfaceAccent,
+            premiumTheme.surfaceSecondary,
+            premiumTheme.surfacePrimary,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderColor: const Color(0xFFDAB79E),
+        tone: PremiumSurfaceTone.accent,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1097,14 +1108,18 @@ class _AuthShowcase extends StatelessWidget {
       );
     }
 
-    return SoftCard(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(28),
-      gradient: const LinearGradient(
-        colors: [Color(0xFFFFF4EA), Color(0xFFF1CFB7)],
+      gradient: LinearGradient(
+        colors: [
+          premiumTheme.surfaceAccent,
+          premiumTheme.surfaceSecondary,
+          premiumTheme.surfacePrimary,
+        ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      borderColor: const Color(0xFFDAB79E),
+      tone: PremiumSurfaceTone.accent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1699,14 +1714,9 @@ class _AuthActivityBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF7EC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE7D3BE)),
-      ),
+      tone: PremiumSurfaceTone.accent,
       child: Row(
         children: [
           const SizedBox.square(
@@ -1749,14 +1759,9 @@ class _AuthSupportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      width: double.infinity,
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8F1),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5D5C6)),
-      ),
+      tone: PremiumSurfaceTone.secondary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1836,13 +1841,14 @@ class _FeedbackBanner extends StatelessWidget {
       _AuthFeedbackTone.info => Icons.info_rounded,
     };
 
-    return Container(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: border),
+      gradient: LinearGradient(
+        colors: [background, Color.lerp(background, Colors.white, 0.2)!],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ),
+      tone: PremiumSurfaceTone.secondary,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1884,13 +1890,9 @@ class _PasswordStrengthBanner extends StatelessWidget {
       PasswordStrength.weak => 'Misture letras, números e mais caracteres.',
     };
 
-    return Container(
+    return PremiumSurfaceCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE3D5C7)),
-      ),
+      tone: PremiumSurfaceTone.secondary,
       child: Row(
         children: [
           Container(
@@ -1929,16 +1931,12 @@ class _AuthStepChecklist extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8F1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5D5C6)),
-      ),
+    return const PremiumSurfaceCard(
+      padding: EdgeInsets.all(16),
+      tone: PremiumSurfaceTone.secondary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           _AuthStepRow(
             step: '1',
             title: 'Criar o acesso',

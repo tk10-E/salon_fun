@@ -36,4 +36,8 @@ mixin _SalonRepositoryAuthMixin on _SalonRepositoryBase {
       redirectTo: _emailRedirectTo(),
     );
   }
+
+  Future<void> updatePassword({required String password}) async {
+    await client.auth.updateUser(UserAttributes(password: password));
+  }
 }
