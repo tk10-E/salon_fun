@@ -1,7 +1,7 @@
 name: salon_client
-description: App Flutter do cliente para agendamento em salões.
-publish_to: 'none'
-version: 1.1.0+2
+description: App Flutter do cliente para a plataforma Salon Fun.
+publish_to: "none"
+version: 2.0.0+1
 
 environment:
   sdk: ^3.10.7
@@ -10,44 +10,24 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  firebase_auth: ^6.1.2
   firebase_core: ^4.5.0
   firebase_messaging: ^16.1.2
-  font_awesome_flutter: ^10.10.0
+  flutter_facebook_auth: ^7.1.5
   flutter_local_notifications: ^19.5.0
-  flutter_secure_storage: ^9.2.4
+  font_awesome_flutter: ^10.8.0
+  google_sign_in: ^6.1.0
+  google_fonts: ^6.3.2
+  http: ^1.5.0
   intl: ^0.20.2
-  local_auth: ^2.3.0
+  shared_preferences: ^2.5.3
   supabase_flutter: ^2.10.3
   url_launcher: ^6.3.2
-  firebase_analytics: ^12.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/branding/
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: assets/branding/icone-app.png
-  adaptive_icon_foreground: assets/branding/icone-app.png
-  adaptive_icon_background: "#FFF7F1"
-  remove_alpha_ios: true
-
-flutter_native_splash:
-  color: "#FFF7F1"
-  image: assets/branding/app_splash.png
-  android: true
-  ios: true
-  web: false
-  fullscreen: true
-  android_12:
-    color: "#FFF7F1"
-    image: assets/branding/app_foreground.png
-    icon_background_color: "#FFF7F1"

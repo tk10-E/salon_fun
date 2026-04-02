@@ -7,6 +7,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../core/firebase_config.dart';
+
 const _vacancyNotificationChannelId = 'salon_vacancy_alerts';
 const _vacancyNotificationChannelName = 'Vagas do salão';
 const _vacancyNotificationChannelDescription =
@@ -23,7 +25,7 @@ class NotificationTapPayload {
     required this.title,
     required this.body,
     required this.receivedAt,
-    this.data = const {},
+    this.data = const <String, dynamic>{},
   });
 
   final String type;
@@ -41,7 +43,7 @@ class NotificationTapPayload {
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    return <String, dynamic>{
       'type': type,
       'title': title,
       'body': body,
@@ -183,7 +185,12 @@ class PushNotificationService {
 
     try {
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp();
+        final explicitOptions = FirebaseConfig.optionsForCurrentPlatform();
+        if (explicitOptions != null) {
+          await Firebase.initializeApp(options: explicitOptions);
+        } else {
+          await Firebase.initializeApp();
+        }
       }
       await FirebaseMessaging.instance.setAutoInitEnabled(true);
       _firebaseAvailable = true;

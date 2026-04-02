@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'src/app.dart';
-import 'src/services/push_notification_service.dart';
-import 'src/supabase_config.dart';
+import 'src/core/firebase_config.dart';
+import 'src/core/supabase_config.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    if (Firebase.apps.isEmpty) {
+      final firebaseOptions = FirebaseConfig.optionsForCurrentPlatform();
+      if (firebaseOptions != null) {
+        await Firebase.initializeApp(options: firebaseOptions);
+      } else {
+        await Firebase.initializeApp();
+      }
+    }
+
     SupabaseConfig.validate();
 
     await Supabase.initialize(
@@ -18,17 +28,9 @@ Future<void> main() async {
         authFlowType: AuthFlowType.implicit,
       ),
     );
-
   } catch (error) {
     runApp(_BootErrorApp(message: error.toString()));
     return;
-  }
-
-  try {
-    await PushNotificationService.instance.initialize();
-  } catch (error, stackTrace) {
-    debugPrint('Push init skipped: $error');
-    debugPrintStack(stackTrace: stackTrace);
   }
 
   runApp(const SalonClientApp());
@@ -49,49 +51,58 @@ class _BootErrorApp extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+              constraints: const BoxConstraints(maxWidth: 560),
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFE3D5C7)),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: const Color(0xFFE4D5CA)),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x1A5B3422),
+                      blurRadius: 42,
+                      offset: Offset(0, 24),
+                    ),
+                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Não foi possível iniciar o app',
+                      'Não foi possível iniciar o app do cliente',
                       style: TextStyle(
-                        color: Color(0xFF2F231C),
                         fontSize: 24,
                         fontWeight: FontWeight.w800,
+                        color: Color(0xFF2F211B),
                       ),
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'A compilação de release precisa das variáveis do Supabase. Gere o APK usando o arquivo .env.production.',
+                      'O app precisa das configurações do Supabase e do Firebase para autenticar o cliente com segurança.',
                       style: TextStyle(
-                        color: Color(0xFF765E4E),
+                        fontSize: 15,
                         height: 1.5,
+                        color: Color(0xFF6F5A50),
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 20),
                     const SelectableText(
-                      'flutter build apk --release --dart-define-from-file=.env.production',
+                      'flutter run --dart-define-from-file=.env.local',
                       style: TextStyle(
-                        color: Color(0xFF8E441F),
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
+                        color: Color(0xFFA24C2E),
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 20),
                     SelectableText(
                       message,
                       style: const TextStyle(
-                        color: Color(0xFF765E4E),
-                        fontSize: 13,
-                        height: 1.45,
+                        fontSize: 12,
+                        height: 1.5,
+                        color: Color(0xFF806B60),
                       ),
                     ),
                   ],

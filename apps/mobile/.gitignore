@@ -30,12 +30,9 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+.env.local
 /build/
 /coverage/
-.env.local
-.env.production
-android/app/google-services.json
-web/client_secret*.json
 
 # Symbolication related
 app.*.symbols

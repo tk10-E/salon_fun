@@ -3,6 +3,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 import { buildRedirectNotice } from "@/app/_actions/shared";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
+import { resolveRequestOriginFromRequest } from "@/lib/requestOrigin";
 
 function sanitizeNextPath(value: string | null) {
   if (!value || !value.startsWith("/")) {
@@ -10,18 +11,6 @@ function sanitizeNextPath(value: string | null) {
   }
 
   return value;
-}
-
-function resolveRequestOrigin(request: Request) {
-  const requestUrl = new URL(request.url);
-  const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.trim();
-
-  if (forwardedHost) {
-    return `${forwardedProto || "https"}://${forwardedHost}`;
-  }
-
-  return requestUrl.origin;
 }
 
 function createRouteHandlerClient(request: NextRequest, response: NextResponse) {
@@ -43,7 +32,7 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const nextPath = sanitizeNextPath(requestUrl.searchParams.get("next"));
-  const origin = resolveRequestOrigin(request);
+  const origin = resolveRequestOriginFromRequest(request);
 
   if (code) {
     const successResponse = NextResponse.redirect(`${origin}${nextPath}`);

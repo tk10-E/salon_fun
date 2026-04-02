@@ -18,5 +18,7 @@ apps/web/.env.local
 apps/web/tsconfig.tsbuildinfo
 apps/mobile/.env.production
 *firebase-adminsdk*.json
+apps/mobile/android/app/google-services.json
+apps/mobile/android/key.properties
 apps/web/.next_*
 supabase/.temp/

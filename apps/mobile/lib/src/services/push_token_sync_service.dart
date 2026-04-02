@@ -4,23 +4,27 @@ import 'package:flutter/foundation.dart';
 
 import 'push_notification_service.dart';
 
-abstract interface class PushTokenSyncRepository {
-  Future<void> registerPushToken({
-    required String token,
-    required String platform,
-    String? deviceLabel,
-  });
+typedef RegisterPushTokenCallback =
+    Future<void> Function({
+      required String token,
+      required String platform,
+      String? deviceLabel,
+    });
 
-  Future<void> deactivatePushToken({required String token});
-}
+typedef DeactivatePushTokenCallback =
+    Future<void> Function({required String token});
 
 class PushTokenSyncService {
   PushTokenSyncService({
-    required this.repository,
+    required RegisterPushTokenCallback registerPushToken,
+    required DeactivatePushTokenCallback deactivatePushToken,
     PushNotificationService? pushService,
-  }) : _pushService = pushService ?? PushNotificationService.instance;
+  }) : _registerPushToken = registerPushToken,
+       _deactivatePushToken = deactivatePushToken,
+       _pushService = pushService ?? PushNotificationService.instance;
 
-  final PushTokenSyncRepository repository;
+  final RegisterPushTokenCallback _registerPushToken;
+  final DeactivatePushTokenCallback _deactivatePushToken;
   final PushNotificationService _pushService;
 
   StreamSubscription<String>? _tokenRefreshSubscription;
@@ -67,7 +71,7 @@ class PushTokenSyncService {
         return;
       }
 
-      await repository.deactivatePushToken(token: normalizedToken);
+      await _deactivatePushToken(token: normalizedToken);
     } catch (error, stackTrace) {
       debugPrint('Não foi possível desativar o token push atual: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -104,7 +108,7 @@ class PushTokenSyncService {
     final deviceInfo = _deviceInfoForCurrentPlatform();
 
     try {
-      await repository.registerPushToken(
+      await _registerPushToken(
         token: normalizedToken,
         platform: deviceInfo.platform,
         deviceLabel: deviceInfo.label,

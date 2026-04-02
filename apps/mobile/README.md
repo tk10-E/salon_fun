@@ -1,6 +1,23 @@
 # Salon Client
 
-App Flutter do cliente para o MVP de agendamento.
+Reconstrução do app Flutter do cliente em cima das funcionalidades reais do painel web.
+
+## O que este app cobre
+
+- autenticação com Supabase
+- login por Firebase Auth com troca automática para sessão do Supabase
+- entrada social com Google e Facebook na tela de autenticação
+- entrada por código do salão
+- home premium com agenda, benefícios, campanhas e feed
+- catálogo de serviços e profissionais
+- reserva usando `get_day_availability` e `create_appointment`
+- agenda/histórico com cancelamento e confirmação de presença
+- feed do salão com curtidas e comentários
+- perfil do cliente com preferências, alergias e rotina de beleza
+- central de notificações lida direto das tabelas do projeto
+- snapshots com cache local para home, explore, agenda, feed e perfil
+- fallback offline com indicação de última sincronização
+- transições de entrada e cortina visual de abertura no app
 
 ## Rodar
 
@@ -9,56 +26,24 @@ flutter pub get
 flutter run \
   --dart-define=SUPABASE_URL=https://your-project.supabase.co \
   --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-key \
-  --dart-define=AUTH_REDIRECT_URL=salonfun://auth-callback
+  --dart-define=AUTH_REDIRECT_URL=salonfun://auth-callback \
+  --dart-define=FIREBASE_API_KEY=your-firebase-api-key \
+  --dart-define=FIREBASE_PROJECT_ID=your-firebase-project-id \
+  --dart-define=FIREBASE_MESSAGING_SENDER_ID=your-firebase-sender-id \
+  --dart-define=FIREBASE_ANDROID_APP_ID=your-firebase-android-app-id \
+  --dart-define=FIREBASE_IOS_APP_ID=your-firebase-ios-app-id \
+  --dart-define=FIREBASE_IOS_BUNDLE_ID=com.salonfun.salon_client \
+  --dart-define=FACEBOOK_APP_ID=your-facebook-app-id \
+  --dart-define=FACEBOOK_CLIENT_TOKEN=your-facebook-client-token
 ```
 
-## Push no Android
+## Observações
 
-Para receber notificacoes reais de vaga liberada no Android:
-
-1. Adicione `google-services.json` em `android/app/google-services.json`.
-2. Rode `flutter pub get`.
-3. Reinstale o app no dispositivo ou emulador Android.
-
-O app registra o token FCM automaticamente quando o cliente ja estiver vinculado a um salao.
-No logout, o token eh desativado para evitar push em conta errada.
-
-## Push no iOS
-
-Para receber notificacoes reais no iPhone:
-
-1. Adicione `GoogleService-Info.plist` em `ios/Runner/GoogleService-Info.plist`.
-2. Habilite as capacidades `Push Notifications` e `Background Modes > Remote notifications` no target `Runner`.
-3. Gere e vincule a chave/certificado APNs do app no projeto Firebase usado por este ambiente.
-4. Reinstale o app em um dispositivo fisico iOS e aceite as permissoes de notificacao.
-
-O app ja esta preparado para registrar token FCM e exibir notificacoes locais no iOS, mas a entrega real depende da configuracao APNs/Firebase do projeto.
-
-## Observacao para Flutter Web
-
-Se usar `flutter run -d chrome`, confirme no Supabase:
-
-- `Authentication > Providers > Email` habilitado
-- `Authentication > URL Configuration > Redirect URLs` contendo o endereco local do app
-
-Para desenvolvimento local, use um wildcard como:
-
-```text
-http://localhost:*
-```
-
-## Redirect de e-mail no app nativo
-
-O app usa `salonfun://auth-callback` como redirect nativo padrao para confirmacao de email e recuperacao de senha. Se voce quiser sobrescrever esse comportamento por ambiente, gere o app com o valor abaixo:
-
-```bash
-flutter build apk --release --dart-define-from-file=.env.production
-```
-
-E dentro do arquivo `.env.production` inclua:
-
-```text
-AUTH_REDIRECT_URL=salonfun://auth-callback
-```
-
-No Supabase, confirme tambem que `salonfun://auth-callback` esta cadastrado em `Authentication > URL Configuration > Redirect URLs`.
+- O app usa o `client_app_config` e a identidade do salão para ajustar tema, hero e microcopy.
+- A base mantém cache local via `shared_preferences` para sustentar navegação mesmo quando a conexão oscila.
+- O app autentica o cliente primeiro no Firebase e depois troca o ID token por uma sessão do Supabase para preservar RLS, reservas, feed e dados do salão.
+- No fluxo com e-mail e senha, a conta precisa confirmar o e-mail no Firebase antes de a sessão ser liberada no Supabase e vinculada ao salão.
+- Se você configurar Firebase como terceiro provedor dentro do Supabase Auth, a troca de sessão acontece sem alterar o resto do backend.
+- Se você optar pelo fluxo nativo do Firebase no Android, salve o arquivo `google-services.json` em `apps/mobile/android/app/google-services.json`. O Gradle já está preparado para aplicar o plugin automaticamente quando esse arquivo existir.
+- Para o Facebook em Android, preencha `FACEBOOK_APP_ID` e `FACEBOOK_CLIENT_TOKEN` no `.env.local`. O Gradle injeta esses valores no manifesto durante a build.
+- A reserva agora guarda snapshots da disponibilidade por serviço e data para fallback offline. Quando estiver offline, o app mostra a última grade salva e bloqueia a confirmação final até a conexão voltar.

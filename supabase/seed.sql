@@ -1,0 +1,3 @@
+-- Seed file kept intentionally minimal.
+-- The local Supabase config enables seeding on reset, so this file must exist
+-- even when there is no default sample data to load yet.

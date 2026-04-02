@@ -1,22 +1,48 @@
-import java.io.FileInputStream
-import java.util.Properties
+import java.util.Base64
 
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
+val googleServicesConfig = file("google-services.json")
 
-if (keystorePropertiesFile.exists()) {
-    FileInputStream(keystorePropertiesFile).use { stream ->
-        keystoreProperties.load(stream)
-    }
+if (googleServicesConfig.exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.lifecycle(
+        "google-services.json not found in android/app. Firebase Google Services plugin was skipped.",
+    )
 }
+
+fun dartDefineMap(): Map<String, String> {
+    val encodedDefines = project.findProperty("dart-defines") as String? ?: return emptyMap()
+    val decoder = Base64.getDecoder()
+
+    return encodedDefines
+        .split(",")
+        .mapNotNull { entry ->
+            if (entry.isBlank()) {
+                return@mapNotNull null
+            }
+
+            val decoded = String(decoder.decode(entry))
+            val separatorIndex = decoded.indexOf('=')
+            if (separatorIndex <= 0) {
+                return@mapNotNull null
+            }
+
+            decoded.substring(0, separatorIndex) to decoded.substring(separatorIndex + 1)
+        }
+        .toMap()
+}
+
+val socialDefines = dartDefineMap()
+val facebookAppId = socialDefines["FACEBOOK_APP_ID"] ?: ""
+val facebookClientToken = socialDefines["FACEBOOK_CLIENT_TOKEN"] ?: ""
+val facebookScheme = if (facebookAppId.isBlank()) "fb000000000000000" else "fb$facebookAppId"
 
 android {
     namespace = "com.salonfun.salon_client"
@@ -42,27 +68,16 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-    }
-
-    signingConfigs {
-        create("release") {
-            val storeFilePath = keystoreProperties.getProperty("storeFile")
-            if (!storeFilePath.isNullOrBlank()) {
-                storeFile = file(storeFilePath)
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
-            }
-        }
+        resValue("string", "facebook_app_id", facebookAppId)
+        resValue("string", "facebook_client_token", facebookClientToken)
+        resValue("string", "fb_login_protocol_scheme", facebookScheme)
     }
 
     buildTypes {
         release {
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }

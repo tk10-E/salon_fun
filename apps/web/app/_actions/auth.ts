@@ -1,25 +1,12 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
+import { buildRequestOrigin } from "@/lib/requestOrigin";
 
 import { buildRedirectNotice } from "./shared";
 
 function buildAppOrigin() {
-  const headerStore = headers();
-  const origin = headerStore.get("origin")?.trim();
-
-  if (origin) {
-    return origin.replace(/\/+$/, "");
-  }
-
-  const host = headerStore.get("x-forwarded-host")?.trim() ?? headerStore.get("host")?.trim();
-  if (!host) {
-    return undefined;
-  }
-
-  const protocol = headerStore.get("x-forwarded-proto")?.trim() || "https";
-  return `${protocol}://${host.replace(/\/+$/, "")}`;
+  return buildRequestOrigin();
 }
 
 function buildEmailRedirectUrl() {

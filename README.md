@@ -50,6 +50,7 @@ Se o `db push` falhar por causa do pooler, siga o guia em [GUIA_DEPLOY_MIGRATION
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+APP_URL=https://seu-dominio-do-painel.com
 ```
 
 4. Instale e rode:
@@ -70,6 +71,8 @@ O painel abre em `http://localhost:3000`.
 flutter pub get
 flutter run --dart-define-from-file=.env.local
 ```
+
+Se você criar conta por e-mail e senha no app mobile, confirme primeiro o link de verificação enviado pelo Firebase antes de tentar entrar.
 
 ## Push no Android
 
