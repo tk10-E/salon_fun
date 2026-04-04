@@ -20,6 +20,7 @@ apps/mobile/.env.production
 *firebase-adminsdk*.json
 apps/mobile/android/app/google-services.json
 apps/mobile/android/key.properties
+apps/mobile/android/.kotlin/
 apps/web/.next_*
 supabase/.temp/
 .vercel
