@@ -513,24 +513,30 @@ describe("dashboard page UI", () => {
     expect(screen.getByText("Resumo atualizado.")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Studio Beleza começa pelo essencial: agenda, clientes e caixa.",
+        name: "Studio Beleza: operação, vendas e cliente em um lugar.",
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Três movimentos claros para o salão agir sem se perder.",
+        name: "Acessos rápidos",
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Quatro frentes para entender o sistema em menos de um minuto",
+        name: "Onde cada função do sistema fica",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Operação do dia")).toBeInTheDocument();
-    expect(screen.getByText("Clientes pedindo reativação")).toBeInTheDocument();
-    expect(screen.getByText("Força percebida do app")).toBeInTheDocument();
-    expect(screen.getAllByText("Clubes e pacotes").length).toBeGreaterThan(0);
-    expect(screen.getByText(/5\/5 frentes visíveis/i)).toBeInTheDocument();
+    expect(screen.getByText("Agenda, clientes e equipe")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Serviços, benefícios e feed").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText("App do cliente, cobrança e ajustes"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Loja, pedidos e estoque").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/5\/5 frentes/i)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Agenda do Dia" }),
     ).toBeInTheDocument();
@@ -551,7 +557,7 @@ describe("dashboard page UI", () => {
     expect(screen.getByText("Shampoo reconstrutor")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Funções avançadas que o sistema já tem",
+        name: "Recursos avançados",
       }),
     ).toBeInTheDocument();
     expect(

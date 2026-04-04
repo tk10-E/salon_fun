@@ -14,106 +14,102 @@ type NavItem = {
 type NavSection = {
   label: string;
   description: string;
-  priority: "primary" | "secondary";
   items: NavItem[];
 };
 
 const navSections: NavSection[] = [
   {
-    label: "Essencial",
-    description: "O que o salão usa para rodar o dia com clareza.",
-    priority: "primary",
+    label: "Operação diária",
+    description: "Agenda, clientes, equipe e rotina do salão.",
     items: [
       {
         href: "/dashboard",
-        label: "Hoje",
-        description: "Resumo do dia",
+        label: "Painel",
+        description: "Visão geral",
         icon: "home",
       },
       {
         href: "/dashboard/appointments",
         label: "Agenda",
-        description: "Agendamentos",
+        description: "Horários e status",
         icon: "calendar",
       },
       {
         href: "/dashboard/customers",
         label: "Clientes",
-        description: "CRM do salao",
+        description: "CRM e histórico",
         icon: "users",
       },
       {
         href: "/dashboard/team",
         label: "Equipe",
-        description: "Profissionais e escala",
+        description: "Profissionais",
         icon: "team",
       },
       {
         href: "/dashboard/operations",
-        label: "Operação",
-        description: "Caixa e estoque",
+        label: "Loja e estoque",
+        description: "Pedidos e caixa",
         icon: "chart",
       },
     ],
   },
   {
-    label: "Crescimento",
-    description: "Catálogo, marketing e prova social para vender mais.",
-    priority: "secondary",
+    label: "Vendas e marketing",
+    description: "Tudo o que vende e fortalece o app da cliente.",
     items: [
       {
         href: "/dashboard/services",
         label: "Serviços",
-        description: "Catalogo e vitrine",
+        description: "Catálogo",
         icon: "sparkles",
       },
       {
         href: "/dashboard/benefits",
         label: "Benefícios",
-        description: "Promocoes e fidelidade",
+        description: "Promoções e fidelidade",
         icon: "bolt",
       },
       {
         href: "/dashboard/feed",
         label: "Feed",
-        description: "Conteudo e comentarios",
+        description: "Publicações",
         icon: "gallery",
-      },
-      {
-        href: "/dashboard/notifications",
-        label: "Notificações",
-        description: "Push e historico",
-        icon: "bell",
       },
       {
         href: "/dashboard/instagram",
         label: "Instagram",
-        description: "Conexao e mencoes",
+        description: "Conexão e menções",
         icon: "instagram",
+      },
+      {
+        href: "/dashboard/notifications",
+        label: "Notificações",
+        description: "Push e histórico",
+        icon: "bell",
       },
     ],
   },
   {
-    label: "Sistema",
-    description: "Cobrança, app do cliente e ajustes da operação.",
-    priority: "secondary",
+    label: "Configuração",
+    description: "App, cobrança e ajustes do painel.",
     items: [
       {
-        href: "/dashboard/billing",
-        label: "Billing",
-        description: "Planos e assinatura",
-        icon: "wallet",
+        href: "/dashboard/client-app",
+        label: "App do cliente",
+        description: "Experiência mobile",
+        icon: "phone",
       },
       {
-        href: "/dashboard/client-app",
-        label: "Cliente app",
-        description: "Central do cliente",
-        icon: "phone",
+        href: "/dashboard/billing",
+        label: "Cobrança",
+        description: "Plano e assinatura",
+        icon: "wallet",
       },
       {
         href: "/dashboard/settings",
         label: "Ajustes",
-        description: "App do cliente",
+        description: "Configurações gerais",
         icon: "gear",
       },
     ],
@@ -121,23 +117,6 @@ const navSections: NavSection[] = [
 ];
 
 const links = navSections.flatMap((section) => section.items);
-
-function isSectionActive(pathname: string, section: NavSection) {
-  return section.items.some((link) =>
-    link.href === "/dashboard"
-      ? pathname === link.href
-      : pathname === link.href || pathname.startsWith(`${link.href}/`),
-  );
-}
-
-function resolveInitialSectionState(pathname: string) {
-  return Object.fromEntries(
-    navSections.map((section) => [
-      section.label,
-      section.priority === "primary" || isSectionActive(pathname, section),
-    ]),
-  ) as Record<string, boolean>;
-}
 
 function NavIcon({ name }: { name: string }) {
   switch (name) {
@@ -281,35 +260,9 @@ export function SidebarNav({
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
-  const [expandedSections, setExpandedSections] = useState<
-    Record<string, boolean>
-  >(() => resolveInitialSectionState(pathname));
 
   useEffect(() => {
     setPendingHref(null);
-  }, [pathname]);
-
-  useEffect(() => {
-    setExpandedSections((previousState) => {
-      let didChange = false;
-      const nextState = { ...previousState };
-
-      for (const section of navSections) {
-        const shouldStayVisible =
-          section.priority === "primary" || isSectionActive(pathname, section);
-        if (shouldStayVisible && !nextState[section.label]) {
-          nextState[section.label] = true;
-          didChange = true;
-        }
-
-        if (!(section.label in nextState)) {
-          nextState[section.label] = shouldStayVisible;
-          didChange = true;
-        }
-      }
-
-      return didChange ? nextState : previousState;
-    });
   }, [pathname]);
 
   useEffect(() => {
@@ -373,13 +326,6 @@ export function SidebarNav({
     router.prefetch(href);
   };
 
-  const toggleSection = (label: string) => {
-    setExpandedSections((previousState) => ({
-      ...previousState,
-      [label]: !previousState[label],
-    }));
-  };
-
   return (
     <nav className="sidebar-nav" aria-label="Navegação do painel">
       <div
@@ -399,32 +345,9 @@ export function SidebarNav({
                 {section.description}
               </p>
             </div>
-
-            {section.priority === "secondary" ? (
-              <button
-                type="button"
-                className="sidebar-section__toggle"
-                aria-expanded={
-                  expandedSections[section.label] ? "true" : "false"
-                }
-                onClick={() => toggleSection(section.label)}
-              >
-                <span>
-                  {expandedSections[section.label] ? "Ocultar" : "Abrir"}
-                </span>
-                <strong>{section.items.length}</strong>
-              </button>
-            ) : null}
           </div>
 
-          <div
-            className={
-              expandedSections[section.label]
-                ? "sidebar-section__body"
-                : "sidebar-section__body sidebar-section__body--collapsed"
-            }
-            hidden={!expandedSections[section.label]}
-          >
+          <div className="sidebar-section__body">
             {section.items.map((link) => {
               const isActive =
                 link.href === "/dashboard"

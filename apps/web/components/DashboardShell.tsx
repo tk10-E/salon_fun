@@ -71,7 +71,10 @@ function ChevronIcon() {
 }
 
 function getBrandName(name: string) {
-  const cleaned = name.trim().replace(/^studio\s+/i, "").trim();
+  const cleaned = name
+    .trim()
+    .replace(/^studio\s+/i, "")
+    .trim();
   return cleaned || name;
 }
 
@@ -105,9 +108,11 @@ export function DashboardShell({
             </span>
 
             <div>
-              <span className="eyebrow">Studio</span>
+              <span className="eyebrow">Painel</span>
               <h1>{brandName}</h1>
-              <small className="sidebar-brand__detail">Painel executivo do salão</small>
+              <small className="sidebar-brand__detail">
+                Tudo do salão em um lugar
+              </small>
             </div>
           </div>
         </div>
@@ -121,13 +126,21 @@ export function DashboardShell({
           <div className="sidebar-code-card">
             <span className="eyebrow">Código do salão</span>
             <strong>{salonCode}</strong>
-            <p className="muted">Compartilhe esse código com novos clientes para liberar o app.</p>
+            <p className="muted">
+              Use esse código para conectar novas clientes ao app.
+            </p>
             <div className="sidebar-code-card__actions">
-              <Link href={`/s/${salonCode}`} className="sidebar-code-card__link">
-                Ver vitrine pública
+              <Link
+                href={`/s/${salonCode}`}
+                className="sidebar-code-card__link"
+              >
+                Vitrine pública
               </Link>
-              <Link href="/dashboard/settings" className="sidebar-code-card__link sidebar-code-card__link--ghost">
-                Ajustar app do cliente
+              <Link
+                href="/dashboard/settings"
+                className="sidebar-code-card__link sidebar-code-card__link--ghost"
+              >
+                App do cliente
               </Link>
             </div>
           </div>
@@ -135,13 +148,12 @@ export function DashboardShell({
           <div className="sidebar-billing-card">
             <span className="eyebrow">Assinatura</span>
             <strong>
-              {billingSnapshot.currentPlan.displayName}
-              {" "}
+              {billingSnapshot.currentPlan.displayName}{" "}
               <small>{billingSnapshot.statusLabel}</small>
             </strong>
             <p className="muted">{billingSnapshot.statusDetail}</p>
             <Link href="/dashboard/billing" className="sidebar-code-card__link">
-              Gerenciar cobrança
+              Cobrança
             </Link>
           </div>
 
@@ -151,14 +163,18 @@ export function DashboardShell({
 
       <div className="content-area">
         <header className="page-header">
-          <form action="/dashboard/appointments" className="dashboard-search" role="search">
+          <form
+            action="/dashboard/appointments"
+            className="dashboard-search"
+            role="search"
+          >
             <span className="dashboard-search__icon">
               <SearchIcon />
             </span>
             <input
               type="search"
               name="q"
-              placeholder="Buscar cliente, serviço, profissional ou campanha"
+              placeholder="Buscar no painel"
               aria-label="Pesquisar no painel"
             />
           </form>
@@ -167,8 +183,8 @@ export function DashboardShell({
             <div className="page-header__status" aria-label="Status do painel">
               <span className="page-header__status-dot" aria-hidden="true" />
               <div className="page-header__status-copy">
-                <strong>Ao vivo</strong>
-                <span>Dados de produção</span>
+                <strong>Online</strong>
+                <span>Painel conectado</span>
               </div>
             </div>
 
@@ -179,18 +195,28 @@ export function DashboardShell({
 
               <div className="page-header__profile-copy">
                 <strong>{ownerName}</strong>
-                <span>Gerente</span>
+                <span>Gestão do salão</span>
               </div>
             </div>
 
-            <Link href="/dashboard/settings" className="header-circle-button" aria-label="Abrir ajustes do painel">
+            <Link
+              href="/dashboard/settings"
+              className="header-circle-button"
+              aria-label="Abrir ajustes do painel"
+            >
               <ChevronIcon />
             </Link>
           </div>
         </header>
 
-        <main id="dashboard-main-content" className="dashboard-main" tabIndex={-1}>
-          {billingSnapshot.shouldShowBanner && billingSnapshot.bannerTitle && billingSnapshot.bannerMessage ? (
+        <main
+          id="dashboard-main-content"
+          className="dashboard-main"
+          tabIndex={-1}
+        >
+          {billingSnapshot.shouldShowBanner &&
+          billingSnapshot.bannerTitle &&
+          billingSnapshot.bannerMessage ? (
             <section
               className={`dashboard-billing-banner dashboard-billing-banner--${billingSnapshot.bannerTone}`}
               aria-label="Status da assinatura"

@@ -1258,7 +1258,35 @@ class _HomeTabState extends State<_HomeTab> {
                 StaggerReveal(
                   key: ValueKey('home-header-${widget.refreshSeed}'),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: Color.alphaBlend(
+                            context.salonTheme.brand.withValues(alpha: 0.12),
+                            context.salonTheme.surfaceStrong,
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: context.salonTheme.brand.withValues(
+                              alpha: 0.18,
+                            ),
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            _safeDisplayInitial(
+                              widget.profile.name,
+                              fallback: 'C',
+                            ),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(color: context.salonTheme.brand),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1268,9 +1296,26 @@ class _HomeTabState extends State<_HomeTab> {
                               style: Theme.of(context).textTheme.headlineMedium,
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              widget.profile.salonName,
-                              style: Theme.of(context).textTheme.bodySmall,
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  widget.profile.salonName,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                _ContextChip(
+                                  label: formatShortDate(DateTime.now()),
+                                  backgroundColor: Color.alphaBlend(
+                                    context.salonTheme.brand.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    context.salonTheme.surfaceStrong,
+                                  ),
+                                  foregroundColor: context.salonTheme.brandDark,
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -1454,34 +1499,18 @@ class _HomeTabState extends State<_HomeTab> {
                   StaggerReveal(
                     key: ValueKey('home-metrics-${widget.refreshSeed}'),
                     delay: const Duration(milliseconds: 210),
-                    child: Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        if (nextAppointment != null)
-                          MetricPill(
-                            label: 'Próximo horário',
-                            value: formatDateTime(nextAppointment.date),
-                          ),
-                        if (showLoyalty && data.loyaltySummary != null)
-                          MetricPill(
-                            label: 'Pontos',
-                            value: '${data.loyaltySummary!.pointsBalance}',
-                            toneColor: context.salonTheme.accent,
-                          ),
-                        if (showLoyalty && data.referralSummary != null)
-                          MetricPill(
-                            label: 'Indicações',
-                            value: '${data.referralSummary!.qualifiedCount}',
-                            toneColor: context.salonTheme.warning,
-                          ),
-                        if (data.vacancyAlerts.isNotEmpty)
-                          MetricPill(
-                            label: 'Encaixes',
-                            value: '${data.vacancyAlerts.length}',
-                            toneColor: context.salonTheme.success,
-                          ),
-                      ],
+                    child: _HomeAtAGlanceCard(
+                      data: data,
+                      showLoyalty: showLoyalty,
+                      onOpenExplore: () =>
+                          widget.onNavigateToTab(ClientShellTabIndex.explore),
+                      onOpenAppointments: () => widget.onNavigateToTab(
+                        ClientShellTabIndex.appointments,
+                      ),
+                      onOpenProfile: () =>
+                          widget.onNavigateToTab(ClientShellTabIndex.profile),
+                      onOpenFeed: () =>
+                          widget.onNavigateToTab(ClientShellTabIndex.feed),
                     ),
                   ),
                 ],
@@ -2087,6 +2116,337 @@ class _HomeJourneyCard extends StatelessWidget {
   }
 }
 
+class _HomeAtAGlanceCard extends StatelessWidget {
+  const _HomeAtAGlanceCard({
+    required this.data,
+    required this.showLoyalty,
+    required this.onOpenExplore,
+    required this.onOpenAppointments,
+    required this.onOpenProfile,
+    required this.onOpenFeed,
+  });
+
+  final HomeSnapshot data;
+  final bool showLoyalty;
+  final VoidCallback onOpenExplore;
+  final VoidCallback onOpenAppointments;
+  final VoidCallback onOpenProfile;
+  final VoidCallback onOpenFeed;
+
+  String _resolveTitle() {
+    if (data.nextAppointment != null) {
+      return 'Seu momento agora';
+    }
+
+    if (data.vacancyAlerts.isNotEmpty) {
+      return 'Um encaixe abriu para você';
+    }
+
+    if (data.products.isNotEmpty) {
+      return 'A loja do salão já está viva no app';
+    }
+
+    if (data.posts.isNotEmpty) {
+      return 'O salão já está publicando resultado real';
+    }
+
+    return 'O salão já está montando sua próxima jornada';
+  }
+
+  String _resolveSubtitle() {
+    final nextAppointment = data.nextAppointment;
+    if (nextAppointment != null) {
+      return 'Acompanhe agenda, feed, benefícios e tudo o que ficou mais relevante para sua próxima visita.';
+    }
+
+    if (data.vacancyAlerts.isNotEmpty) {
+      return 'O app já destaca a oportunidade que combina com seu ritmo para você agir sem ficar caçando informação.';
+    }
+
+    if (data.products.isNotEmpty) {
+      return 'Produtos, posts, serviços e campanhas já aparecem organizados na primeira dobra para a cliente decidir mais rápido.';
+    }
+
+    if (data.posts.isNotEmpty) {
+      return 'Posts, reserva e sinais do salão agora se juntam numa home mais útil e mais editorial.';
+    }
+
+    return 'Serviços, agenda, relacionamento e contexto do salão em uma leitura mais clara desde a entrada do app.';
+  }
+
+  List<_HomeGlanceMetricData> _buildMetrics(BuildContext context) {
+    final tokens = context.salonTheme;
+    final metrics = <_HomeGlanceMetricData>[
+      if (data.nextAppointment != null)
+        _HomeGlanceMetricData(
+          label: 'Próximo horário',
+          value: formatTime(data.nextAppointment!.date),
+          detail: formatShortDate(data.nextAppointment!.date),
+          tone: tokens.brand,
+          icon: Icons.event_available_rounded,
+        )
+      else if (data.vacancyAlerts.isNotEmpty)
+        _HomeGlanceMetricData(
+          label: 'Encaixe',
+          value: formatTime(data.vacancyAlerts.first.startsAt),
+          detail: 'Vaga liberada',
+          tone: tokens.warning,
+          icon: Icons.flash_on_rounded,
+        ),
+      _HomeGlanceMetricData(
+        label: 'Feed',
+        value: '${data.posts.length}',
+        detail: data.posts.isEmpty
+            ? 'Sem posts novos'
+            : 'Resultados publicados',
+        tone: tokens.success,
+        icon: Icons.dynamic_feed_rounded,
+      ),
+      _HomeGlanceMetricData(
+        label: 'Loja',
+        value: '${data.products.length}',
+        detail: data.products.isEmpty ? 'Sem produtos' : 'Itens no app',
+        tone: tokens.accent,
+        icon: Icons.shopping_bag_outlined,
+      ),
+      if (showLoyalty && data.loyaltySummary != null)
+        _HomeGlanceMetricData(
+          label: 'Pontos',
+          value: '${data.loyaltySummary!.pointsBalance}',
+          detail: 'Saldo atual',
+          tone: tokens.brand,
+          icon: Icons.workspace_premium_outlined,
+        )
+      else
+        _HomeGlanceMetricData(
+          label: 'Serviços',
+          value: '${data.services.length}',
+          detail: data.services.isEmpty ? 'Em preparação' : 'Para reservar',
+          tone: tokens.brand,
+          icon: Icons.design_services_outlined,
+        ),
+    ];
+
+    return metrics.take(4).toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = _buildMetrics(context);
+    final actions = <_HomeQuickActionData>[
+      _HomeQuickActionData(
+        label: 'Reservar',
+        icon: Icons.calendar_month_rounded,
+        onPressed: onOpenExplore,
+      ),
+      _HomeQuickActionData(
+        label: data.nextAppointment != null ? 'Agenda' : 'Horários',
+        icon: Icons.event_note_rounded,
+        onPressed: data.nextAppointment != null
+            ? onOpenAppointments
+            : onOpenExplore,
+      ),
+      _HomeQuickActionData(
+        label: 'Feed',
+        icon: Icons.dynamic_feed_rounded,
+        onPressed: onOpenFeed,
+      ),
+      _HomeQuickActionData(
+        label: showLoyalty ? 'Benefícios' : 'Perfil',
+        icon: showLoyalty
+            ? Icons.workspace_premium_rounded
+            : Icons.person_rounded,
+        onPressed: onOpenProfile,
+      ),
+    ];
+
+    return PremiumCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            eyebrow: 'Agora no app',
+            title: _resolveTitle(),
+            subtitle: _resolveSubtitle(),
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 540;
+              final itemWidth = compact
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - 12) / 2;
+
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: metrics
+                    .map(
+                      (metric) => SizedBox(
+                        width: itemWidth,
+                        child: _HomeGlanceMetricTile(metric: metric),
+                      ),
+                    )
+                    .toList(growable: false),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 48,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemBuilder: (context, index) =>
+                  _HomeQuickActionChip(action: actions[index]),
+              separatorBuilder: (context, index) => const SizedBox(width: 10),
+              itemCount: actions.length,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeGlanceMetricData {
+  const _HomeGlanceMetricData({
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.tone,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final String detail;
+  final Color tone;
+  final IconData icon;
+}
+
+class _HomeGlanceMetricTile extends StatelessWidget {
+  const _HomeGlanceMetricTile({required this.metric});
+
+  final _HomeGlanceMetricData metric;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.salonTheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          metric.tone.withValues(alpha: 0.08),
+          tokens.surfaceStrong,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: metric.tone.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Color.alphaBlend(
+                metric.tone.withValues(alpha: 0.16),
+                tokens.surfaceStrong,
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(metric.icon, color: metric.tone),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  metric.label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: tokens.textMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  metric.value,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(color: metric.tone),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  metric.detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeQuickActionData {
+  const _HomeQuickActionData({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+}
+
+class _HomeQuickActionChip extends StatelessWidget {
+  const _HomeQuickActionChip({required this.action});
+
+  final _HomeQuickActionData action;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.salonTheme;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: action.onPressed,
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Color.alphaBlend(
+              tokens.brand.withValues(alpha: 0.1),
+              tokens.surfaceStrong,
+            ),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: tokens.brand.withValues(alpha: 0.18)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(action.icon, size: 18, color: tokens.brandDark),
+              const SizedBox(width: 8),
+              Text(
+                action.label,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: tokens.brandDark),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HomeActionTile extends StatelessWidget {
   const _HomeActionTile({
     required this.icon,
@@ -2142,6 +2502,24 @@ class _HomeActionTile extends StatelessWidget {
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: tokens.textMuted),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text(
+                    'Abrir',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: tokens.brand,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: tokens.brand,
+                  ),
+                ],
               ),
             ],
           ),

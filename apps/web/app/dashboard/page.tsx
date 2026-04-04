@@ -669,10 +669,9 @@ export default async function DashboardPage({
     {
       eyebrow: "Agenda",
       highlight: `${todayAppointments.length} no dia`,
-      title: "Rodar a agenda sem ruído",
-      description:
-        "Confira quem chega hoje, confirme pendências e enxergue rápido o valor previsto do dia.",
-      ctaLabel: "Abrir agenda",
+      title: "Agenda do dia",
+      description: "Horários, confirmações e encaixes.",
+      ctaLabel: "Ir para agenda",
       href: "/dashboard/appointments",
       support: highValueOpportunities[0]
         ? `Proximo encaixe: ${formatTime(
@@ -683,97 +682,85 @@ export default async function DashboardPage({
       tone: "accent" as const,
     },
     {
-      eyebrow: "Clientes",
-      highlight: `${growthAutomation.overview.due_now_customers ?? 0} clientes`,
-      title: "Trazer de volta quem já confia no salão",
-      description:
-        "Use histórico, rebook e winback para não depender só de novas clientes entrando no caixa.",
-      ctaLabel: "Abrir clientes",
-      href: "/dashboard/customers",
-      support: automationLive
-        ? `${growthAutomation.overview.smart_rebook_due_customers ?? 0} rebooks e ${growthAutomation.overview.winbacks_sent_last_30d ?? 0} winbacks no radar.`
-        : "A automação está pronta para reduzir esquecimento e aumentar retorno.",
+      eyebrow: "Comercial",
+      highlight: `${serviceCatalogCount} serviços`,
+      title: "Serviços, benefícios e feed",
+      description: "Catálogo, campanhas e prova social.",
+      ctaLabel: "Abrir comercial",
+      href: "/dashboard/services",
+      support:
+        leadingCommercialOffer || feedPostsCount > 0
+          ? `${commercialOfferCount} ofertas e ${feedPostsCount} posts ativos no app.`
+          : "Publique serviços, campanhas e conteúdo para fortalecer o app.",
+      tone: "warm" as const,
+    },
+    {
+      eyebrow: "Operação",
+      highlight: `${operations.overview.low_stock_products ?? 0} alertas`,
+      title: "Loja, pedidos e estoque",
+      description: "Caixa, produtos e movimentações.",
+      ctaLabel: "Abrir operação",
+      href: "/dashboard/operations",
+      support: lowStockProducts[0]
+        ? `${lowStockProducts[0].name} já entrou no radar do estoque.`
+        : "Sem ruptura imediata de estoque no momento.",
       tone: "soft" as const,
     },
     {
       eyebrow: "App cliente",
-      highlight: `${clientAppVisibleSignalCount}/5 sinais vivos`,
-      title: "Fazer o app parecer útil logo na primeira visita",
-      description:
-        "Serviços, clubes, campanhas, feed e notificações precisam aparecer como valor para a cliente, não só como configuração.",
-      ctaLabel: "Ajustar experiência",
-      href: "/dashboard/settings",
+      highlight: `${clientAppVisibleSignalCount}/5 sinais`,
+      title: "App do cliente",
+      description: "O que a cliente vê no mobile.",
+      ctaLabel: "Abrir app",
+      href: "/dashboard/client-app",
       support:
         leadingCommercialOffer || feedPostsCount > 0
-          ? `${featuredMemberships.length} clubes e ${feedPostsCount} posts ja ajudam o app a parecer vivo.`
-          : "Publique clubes, campanhas e conteudo para o app deixar de parecer vazio.",
-      tone: "warm" as const,
+          ? `${featuredMemberships.length} clubes e ${feedPostsCount} posts já ajudam a deixar o app vivo.`
+          : "Ajuste o app do cliente para mostrar mais valor logo na entrada.",
+      tone: "accent" as const,
     },
   ];
   const focusCards = [
     {
       href: "/dashboard/appointments",
-      eyebrow: "Hoje",
-      title: "Operação do dia",
+      eyebrow: "Atendimento",
+      title: "Agenda, clientes e equipe",
       value: `${todayAppointments.length} atendimentos`,
-      note: `${todayPendingCount} pendentes, ${todayConfirmedCount} confirmados e ${formatCurrency(todayForecastRevenue)} previstos.`,
+      note: "Agenda, CRM e equipe ficam juntos no menu para o dia a dia.",
       tone: "accent" as const,
-      ctaLabel: "Cuidar da agenda",
+      ctaLabel: "Abrir atendimento",
     },
     {
-      href: "/dashboard/customers",
-      eyebrow: "Retorno",
-      title: "Clientes pedindo reativação",
-      value: `${growthAutomation.overview.due_now_customers ?? 0} em janela`,
-      note: nextTopCustomerWithoutReturn
-        ? `${nextTopCustomerWithoutReturn.name} já gerou ${formatCurrency(
-            Number(nextTopCustomerWithoutReturn.total_spent ?? 0),
-          )} e está sem próxima visita.`
-        : "Acompanhe rebook, winback e histórico de quem mais vale proteger.",
-      tone: "soft" as const,
-      ctaLabel: "Ver CRM",
+      href: "/dashboard/services",
+      eyebrow: "Comercial",
+      title: "Serviços, benefícios e feed",
+      value: `${commercialOfferCount + feedPostsCount} ativos`,
+      note: "Catálogo, campanhas, publicações, Instagram e notificações.",
+      tone: "warm" as const,
+      ctaLabel: "Abrir comercial",
     },
     {
       href: "/dashboard/operations",
-      eyebrow: "Caixa",
-      title: "Receita e gargalos",
+      eyebrow: "Operação",
+      title: "Loja, pedidos e estoque",
       value: formatCurrency(monthRevenue),
       note: lowStockProducts[0]
-        ? `${formatCurrency(pendingRevenue)} a receber e ${lowStockProducts[0].name} já no radar do estoque.`
-        : `${formatCurrency(pendingRevenue)} ainda em aberto e operação sem ruptura imediata.`,
+        ? `${formatCurrency(pendingRevenue)} em aberto e ${lowStockProducts[0].name} em alerta.`
+        : `${formatCurrency(pendingRevenue)} em aberto e estoque sem alerta imediato.`,
       tone: lowStockProducts.length ? ("warm" as const) : ("success" as const),
       ctaLabel: "Abrir operação",
     },
     {
-      href: "/dashboard/settings",
-      eyebrow: "Cliente final",
-      title: "Força percebida do app",
-      value: `${clientAppVisibleSignalCount}/5 frentes visíveis`,
-      note: clientAppVisibleSignalSummary,
+      href: "/dashboard/client-app",
+      eyebrow: "Configuração",
+      title: "App do cliente, cobrança e ajustes",
+      value: `${clientAppVisibleSignalCount}/5 frentes`,
+      note: "Configurações do app, assinatura e ajustes gerais do salão.",
       tone:
         clientAppVisibleSignalCount >= 4
           ? ("success" as const)
           : ("warm" as const),
-      ctaLabel: "Fortalecer app",
-    },
-    {
-      href: "/dashboard/benefits/promotions",
-      eyebrow: "Recorrencia",
-      title: "Clubes e pacotes",
-      value: featuredMemberships.length
-        ? `${featuredMemberships.length} em destaque`
-        : commercialOfferCount > 0
-          ? `${commercialOfferCount} campanhas no ar`
-          : "Sem clube publicado",
-      note: leadingCommercialOffer
-        ? `${leadingCommercialOffer.title} ${leadingCommercialOffer.kind === "membership" ? "ja vende previsibilidade no app." : "ja ajuda a abrir conversa comercial no app."}`
-        : "Publique um clube, pacote ou combo para o salao vender retorno com mais clareza e previsibilidade.",
-      tone: featuredMemberships.length
-        ? ("accent" as const)
-        : commercialOfferCount > 0
-          ? ("warm" as const)
-          : ("soft" as const),
-      ctaLabel: "Abrir comercial",
+      ctaLabel: "Abrir configuração",
     },
   ];
   return (
@@ -784,13 +771,11 @@ export default async function DashboardPage({
 
       <DashboardWorkspaceHero
         className="dashboard-command-hero"
-        eyebrow="Hoje no salão"
-        title={`${salon.name} começa pelo essencial: agenda, clientes e caixa.`}
-        description="A abertura ficou mais curta e mais útil: primeiro o que acontece hoje, depois quem precisa voltar e por fim o que ainda trava receita ou experiência."
+        eyebrow="Painel do salão"
+        title={`${salon.name}: operação, vendas e cliente em um lugar.`}
+        description="A navegação foi reorganizada para você encontrar agenda, comercial, loja e app do cliente sem ficar procurando função espalhada."
         highlight={{
-          label: automationLive
-            ? "Motor comercial ativo"
-            : "Pulso operacional do dia",
+          label: automationLive ? "Foco de agora" : "Foco do dia",
           value: heroHighlightValue,
           note: heroHighlightNote,
         }}
@@ -854,20 +839,17 @@ export default async function DashboardPage({
               Abrir agenda
             </Link>
             <Link href="/dashboard/operations" className="secondary-button">
-              Operacoes
+              Loja e estoque
             </Link>
-            <Link
-              href="/dashboard/benefits/automations"
-              className="secondary-button"
-            >
-              Retencao
+            <Link href="/dashboard/client-app" className="secondary-button">
+              App do cliente
             </Link>
           </>
         }
         aside={
           <div className="dashboard-command-hero__aside">
-            <span className="workspace-panel__eyebrow">Onde agir primeiro</span>
-            <h3>Uma leitura curta para decidir o próximo passo.</h3>
+            <span className="workspace-panel__eyebrow">Comece por aqui</span>
+            <h3>Entre pela área certa sem se perder no painel.</h3>
 
             <div className="dashboard-command-hero__checklist">
               <div className="dashboard-command-hero__check">
@@ -878,47 +860,47 @@ export default async function DashboardPage({
                         highValueOpportunities[0].suggested_start,
                         timeZone,
                       )}.`
-                    : "Sem encaixe premium critico no radar agora."}
+                    : "Sem encaixe crítico no radar agora."}
                 </span>
               </div>
               <div className="dashboard-command-hero__check">
-                <strong>Retencao</strong>
+                <strong>Comercial</strong>
                 <span>
-                  {nextTopCustomerWithoutReturn
-                    ? `${nextTopCustomerWithoutReturn.name} segue sem proxima agenda.`
-                    : "Clientes de maior valor seguem com recorrencia saudavel."}
+                  {leadingCommercialOffer
+                    ? `${leadingCommercialOffer.title} já está pronta para vender no app.`
+                    : "Serviços, campanhas e feed ficam agrupados para achar rápido."}
                 </span>
               </div>
               <div className="dashboard-command-hero__check">
-                <strong>Operacao</strong>
+                <strong>Operação</strong>
                 <span>
                   {lowStockProducts[0]
-                    ? `${lowStockProducts[0].name} merece reposicao antes do proximo pico.`
+                    ? `${lowStockProducts[0].name} merece reposição antes do próximo pico.`
                     : "Estoque e equipe sem gargalo imediato."}
                 </span>
               </div>
             </div>
 
             <div className="dashboard-command-hero__spotlight">
-              <span>Proximo foco premium</span>
+              <span>Próxima ação</span>
               <strong>
                 {leadingCommercialOffer?.title ??
                   topServices[0]?.name ??
                   topStaffName ??
-                  "Ajustar a vitrine comercial do salao"}
+                  "Ajustar a vitrine comercial do salão"}
               </strong>
               <p>
                 {leadingCommercialOffer
                   ? `${leadingCommercialOffer.kind === "membership" ? "Clube ou pacote" : "Campanha"} pronto para aparecer no app com ${
                       leadingCommercialOffer.price != null
                         ? formatCurrency(Number(leadingCommercialOffer.price))
-                        : "beneficio divulgado"
+                        : "benefício divulgado"
                     }.`
                   : topServices[0]
                     ? `${topServices[0].completed_appointments} atendimentos e ${formatCurrency(
                         Number(topServices[0].total_revenue ?? 0),
                       )} gerados pelo servico mais forte.`
-                    : "Use beneficios e feed para reforcar desejo, retorno e valor percebido."}
+                    : "Use benefícios e feed para reforçar desejo e valor percebido."}
               </p>
             </div>
           </div>
@@ -940,22 +922,19 @@ export default async function DashboardPage({
 
       <ActionCommandCenter
         className="dashboard-command-center"
-        title="Três movimentos claros para o salão agir sem se perder."
-        description="A abertura do painel ficou menor e mais direta: primeiro roda a agenda, depois protege retorno e por fim fortalece o app cliente."
+        title="Acessos rápidos"
+        description="As áreas principais do sistema ficam aqui e no menu lateral."
         cards={commandCards}
       />
 
       <section className="dashboard-capability-map">
         <div className="section-heading dashboard-capability-map__heading">
           <div>
-            <span className="eyebrow">Leitura simples do produto</span>
-            <h2>
-              Quatro frentes para entender o sistema em menos de um minuto
-            </h2>
+            <span className="eyebrow">Mapa do painel</span>
+            <h2>Onde cada função do sistema fica</h2>
             <p className="muted">
-              Em vez de listar tudo o que existe, a home agora mostra onde o
-              salão precisa olhar primeiro para operar bem e parecer forte para
-              a cliente.
+              O painel foi reorganizado por uso real para ficar mais fácil achar
+              cada área.
             </p>
           </div>
         </div>
@@ -1238,11 +1217,11 @@ export default async function DashboardPage({
       <section className="dashboard-radar">
         <div className="section-heading dashboard-radar__heading">
           <div>
-            <span className="eyebrow">Painel Inteligente</span>
-            <h2>Funções avançadas que o sistema já tem</h2>
+            <span className="eyebrow">Automação e inteligência</span>
+            <h2>Recursos avançados</h2>
             <p className="muted">
-              O topo ficou mais limpo e fiel à referência. Aqui embaixo
-              continuam os recursos de encaixe, retenção e automação do salão.
+              Os recursos de encaixe, retenção e leitura operacional continuam
+              aqui embaixo.
             </p>
           </div>
         </div>

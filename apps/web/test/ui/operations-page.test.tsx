@@ -17,19 +17,29 @@ const {
   requireOwnerSalonMock: vi.fn(),
   saveInventoryProductActionPath: "/__test/save-inventory-product",
   saveStaffCommissionSettingsActionPath: "/__test/save-staff-commission",
-  updateCustomerProductOrderStatusActionPath: "/__test/update-store-order-status",
+  updateCustomerProductOrderStatusActionPath:
+    "/__test/update-store-order-status",
 }));
 
 vi.mock("next/link", () => ({
-  default: (props: { children?: ReactNode; href: string; className?: string }) =>
-    createElement("a", { href: props.href, className: props.className }, props.children),
+  default: (props: {
+    children?: ReactNode;
+    href: string;
+    className?: string;
+  }) =>
+    createElement(
+      "a",
+      { href: props.href, className: props.className },
+      props.children,
+    ),
 }));
 
 vi.mock("@/app/actions", () => ({
   registerInventoryMovementAction: registerInventoryMovementActionPath,
   saveInventoryProductAction: saveInventoryProductActionPath,
   saveStaffCommissionSettingsAction: saveStaffCommissionSettingsActionPath,
-  updateCustomerProductOrderStatusAction: updateCustomerProductOrderStatusActionPath,
+  updateCustomerProductOrderStatusAction:
+    updateCustomerProductOrderStatusActionPath,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -129,7 +139,8 @@ describe("operations page UI", () => {
                         id: "product-1",
                         name: "Shampoo reconstrutor",
                         brand: "Wella",
-                        description: "Shampoo de reconstrução com vitrine visual para a cliente.",
+                        description:
+                          "Shampoo de reconstrução com vitrine visual para a cliente.",
                         image_paths: ["salon-1/product-1.webp"],
                         sku: "WEL-01",
                         unit: "un",
@@ -253,30 +264,58 @@ describe("operations page UI", () => {
     render(ui);
 
     expect(screen.getByText("Operação atualizada.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Relatórios automáticos do dono" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Resumo financeiro" }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Faturamento 7 dias/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Profissionais que mais rendem" })).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: "Ana" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: "Desempenho da equipe" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("heading", { name: "Ana" }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText(/R\$\s*780,00/).length).toBeGreaterThan(0);
     expect(screen.getByText(/R\$\s*234,00/)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Salvar comissão automática" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Loja virtual e estoque" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Adicionar produto na loja" })).toBeInTheDocument();
-    expect(screen.getByText("Fotos da vitrine")).toBeInTheDocument();
-    expect(screen.getAllByText("Limite por pedido no app").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Produtos e alertas" })).toBeInTheDocument();
-    expect(screen.getAllByText("Shampoo reconstrutor").length).toBeGreaterThan(0);
     expect(
-      screen.getAllByText("Shampoo de reconstrução com vitrine visual para a cliente.").length,
+      screen.getAllByRole("button", { name: "Salvar comissão" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: "Novo produto" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Salvar produto" }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Fotos da vitrine")).toBeInTheDocument();
+    expect(screen.getAllByText("Limite por pedido").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: "Produtos" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Shampoo reconstrutor").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.getAllByText(
+        "Shampoo de reconstrução com vitrine visual para a cliente.",
+      ).length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByText("Estoque em alerta").length).toBeGreaterThan(0);
     expect(screen.getByText("Até 4")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Pedidos da loja" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Pedidos" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Pedido #204")).toBeInTheDocument();
-    expect(screen.getByText(/Separar para retirada na recepcao/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirmar pedido" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Registrar movimento" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Movimentos recentes" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Separar para retirada na recepcao/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirmar pedido" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Registrar movimento" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Movimentos" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Uso no atendimento")).toBeInTheDocument();
   });
 });

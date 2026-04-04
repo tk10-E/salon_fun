@@ -120,7 +120,10 @@ type StoreOrderRow = {
   ready_at: string | null;
   completed_at: string | null;
   cancelled_at: string | null;
-  customers: { name: string; phone: string | null } | { name: string; phone: string | null }[] | null;
+  customers:
+    | { name: string; phone: string | null }
+    | { name: string; phone: string | null }[]
+    | null;
   customer_product_order_items: StoreOrderItemRow[] | null;
 };
 
@@ -200,8 +203,15 @@ function buildInventoryProductImageUrls(
   }
 
   return imagePaths
-    .filter((path): path is string => typeof path === "string" && path.trim().length > 0)
-    .map((path) => supabase.storage.from("inventory-products").getPublicUrl(path).data.publicUrl);
+    .filter(
+      (path): path is string =>
+        typeof path === "string" && path.trim().length > 0,
+    )
+    .map(
+      (path) =>
+        supabase.storage.from("inventory-products").getPublicUrl(path).data
+          .publicUrl,
+    );
 }
 
 function buildInventoryProductImageUrl(
@@ -212,47 +222,57 @@ function buildInventoryProductImageUrl(
     return null;
   }
 
-  return supabase.storage.from("inventory-products").getPublicUrl(imagePath).data.publicUrl;
+  return supabase.storage.from("inventory-products").getPublicUrl(imagePath)
+    .data.publicUrl;
 }
 
-export default async function OperationsPage({ searchParams }: OperationsPageProps) {
+export default async function OperationsPage({
+  searchParams,
+}: OperationsPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
-  const [operationsResult, inventoryProductsResult, storeOrdersResult, inventoryMovementsResult, staffOptionsResult] =
-    await Promise.all([
-      supabase.rpc("get_owner_operations_dashboard", {
-        days_input: 7,
-        top_staff_limit_input: 5,
-      }),
-      supabase
-        .from("inventory_products")
-        .select(
-          "id, name, brand, description, image_paths, sku, unit, current_stock, minimum_stock, cost_price, retail_price, max_purchase_quantity, is_active, updated_at",
-        )
-        .eq("salon_id", salon.id)
-        .order("is_active", { ascending: false })
-        .order("name"),
-      supabase
-        .from("customer_product_orders")
-        .select(
-          "id, order_number, status, total_items, subtotal_amount, notes, cancellation_reason, created_at, confirmed_at, ready_at, completed_at, cancelled_at, customers(name, phone), customer_product_order_items(id, product_name_snapshot, product_brand_snapshot, product_image_path, unit_snapshot, quantity, unit_price_snapshot, line_total_amount)",
-        )
-        .eq("salon_id", salon.id)
-        .order("created_at", { ascending: false })
-        .limit(12),
-      supabase
-        .from("inventory_movements")
-        .select("id, movement_type, quantity, previous_stock, resulting_stock, reason, created_at, inventory_products(name), staff_members(name)")
-        .eq("salon_id", salon.id)
-        .order("created_at", { ascending: false })
-        .limit(8),
-      supabase
-        .from("staff_members")
-        .select("id, name, is_active")
-        .eq("salon_id", salon.id)
-        .order("name"),
-    ]);
+  const [
+    operationsResult,
+    inventoryProductsResult,
+    storeOrdersResult,
+    inventoryMovementsResult,
+    staffOptionsResult,
+  ] = await Promise.all([
+    supabase.rpc("get_owner_operations_dashboard", {
+      days_input: 7,
+      top_staff_limit_input: 5,
+    }),
+    supabase
+      .from("inventory_products")
+      .select(
+        "id, name, brand, description, image_paths, sku, unit, current_stock, minimum_stock, cost_price, retail_price, max_purchase_quantity, is_active, updated_at",
+      )
+      .eq("salon_id", salon.id)
+      .order("is_active", { ascending: false })
+      .order("name"),
+    supabase
+      .from("customer_product_orders")
+      .select(
+        "id, order_number, status, total_items, subtotal_amount, notes, cancellation_reason, created_at, confirmed_at, ready_at, completed_at, cancelled_at, customers(name, phone), customer_product_order_items(id, product_name_snapshot, product_brand_snapshot, product_image_path, unit_snapshot, quantity, unit_price_snapshot, line_total_amount)",
+      )
+      .eq("salon_id", salon.id)
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase
+      .from("inventory_movements")
+      .select(
+        "id, movement_type, quantity, previous_stock, resulting_stock, reason, created_at, inventory_products(name), staff_members(name)",
+      )
+      .eq("salon_id", salon.id)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("staff_members")
+      .select("id, name, is_active")
+      .eq("salon_id", salon.id)
+      .order("name"),
+  ]);
 
   const operations = (operationsResult.data ?? {
     overview: {
@@ -269,14 +289,17 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
     top_staff: [],
     staff_agenda: [],
   }) as OperationsDashboardResponse;
-  const inventoryProducts = ((inventoryProductsResult.data ?? []) as InventoryProductRow[])
+  const inventoryProducts = (
+    (inventoryProductsResult.data ?? []) as InventoryProductRow[]
+  )
     .map((product) => ({
       ...product,
       image_urls: buildInventoryProductImageUrls(supabase, product.image_paths),
     }))
     .sort((left, right) => {
       const leftLow = Number(left.current_stock) <= Number(left.minimum_stock);
-      const rightLow = Number(right.current_stock) <= Number(right.minimum_stock);
+      const rightLow =
+        Number(right.current_stock) <= Number(right.minimum_stock);
 
       if (leftLow != rightLow) {
         return leftLow ? -1 : 1;
@@ -288,29 +311,41 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
 
       return left.name.localeCompare(right.name);
     });
-  const inventoryMovements = (inventoryMovementsResult.data ?? []) as InventoryMovementRow[];
-  const storeOrders = ((storeOrdersResult.data ?? []) as StoreOrderRow[]).map((order) => ({
-    ...order,
-    customer_product_order_items: (order.customer_product_order_items ?? []).map((item) => ({
-      ...item,
-      image_url: buildInventoryProductImageUrl(supabase, item.product_image_path),
-    })),
-  }));
-  const staffOptions = ((staffOptionsResult.data ?? []) as StaffOption[]).filter((staffMember) => staffMember.is_active);
+  const inventoryMovements = (inventoryMovementsResult.data ??
+    []) as InventoryMovementRow[];
+  const storeOrders = ((storeOrdersResult.data ?? []) as StoreOrderRow[]).map(
+    (order) => ({
+      ...order,
+      customer_product_order_items: (
+        order.customer_product_order_items ?? []
+      ).map((item) => ({
+        ...item,
+        image_url: buildInventoryProductImageUrl(
+          supabase,
+          item.product_image_path,
+        ),
+      })),
+    }),
+  );
+  const staffOptions = (
+    (staffOptionsResult.data ?? []) as StaffOption[]
+  ).filter((staffMember) => staffMember.is_active);
 
   return (
     <div className="page-grid dashboard-home operations-page workspace-page">
-      {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
+      {searchParams?.message ? (
+        <FlashMessage message={searchParams.message} tone={searchParams.tone} />
+      ) : null}
 
       <DashboardWorkspaceHero
-        eyebrow="Financeiro e estoque"
-        title="Operação do salão em tempo real"
-        description="Receita, comissão, equipe e estoque no mesmo fluxo operacional, com leitura mais rápida para tomar decisão e agir antes do problema bater na agenda."
+        eyebrow="Loja e caixa"
+        title="Pedidos, estoque, equipe e caixa"
+        description="Tudo o que move a operação do salão fica nesta tela, com leitura mais direta e fácil de achar."
         highlight={{
-          label: "Quem mais rende agora",
+          label: "Melhor resultado",
           value: operations.overview.top_staff_name ?? "Sem ranking ainda",
           note: operations.overview.top_staff_name
-            ? `${formatCurrency(Number(operations.overview.top_staff_revenue ?? 0))} gerados no recorte atual pela pessoa líder de faturamento.`
+            ? `${formatCurrency(Number(operations.overview.top_staff_revenue ?? 0))} gerados no recorte atual.`
             : "Assim que houver atendimentos concluídos com profissional, o ranking aparece aqui.",
         }}
         signals={[
@@ -322,7 +357,10 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
           {
             label: "Estoque em alerta",
             value: operations.overview.low_stock_products ?? 0,
-            tone: (operations.overview.low_stock_products ?? 0) > 0 ? "danger" : "success",
+            tone:
+              (operations.overview.low_stock_products ?? 0) > 0
+                ? "danger"
+                : "success",
           },
           {
             label: "Itens ativos",
@@ -333,19 +371,25 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
         stats={[
           {
             label: "Caixa dos últimos 7 dias",
-            value: formatCurrency(Number(operations.overview.total_revenue ?? 0)),
+            value: formatCurrency(
+              Number(operations.overview.total_revenue ?? 0),
+            ),
             note: "Leitura rápida do caixa gerado pelos atendimentos concluídos mais recentes.",
             tone: "warm",
           },
           {
             label: "Ticket atual",
-            value: formatCurrency(Number(operations.overview.average_ticket ?? 0)),
+            value: formatCurrency(
+              Number(operations.overview.average_ticket ?? 0),
+            ),
             note: "Quanto cada atendimento concluído está deixando, em média, para o salão.",
             tone: "soft",
           },
           {
             label: "Comissão prevista",
-            value: formatCurrency(Number(operations.overview.estimated_commissions ?? 0)),
+            value: formatCurrency(
+              Number(operations.overview.estimated_commissions ?? 0),
+            ),
             note: "Estimativa automática baseada nas regras configuradas por profissional.",
             tone: "accent",
           },
@@ -357,20 +401,29 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
           },
         ]}
         actions={
-          <Link href="/dashboard" className="secondary-button">
-            Voltar ao dashboard
-          </Link>
+          <>
+            <a href="#orders" className="secondary-button">
+              Pedidos
+            </a>
+            <a href="#products" className="secondary-button">
+              Produtos
+            </a>
+            <Link href="/dashboard/team" className="secondary-button">
+              Equipe
+            </Link>
+          </>
         }
         aside={
           <>
-            <span className="workspace-panel__eyebrow">Leitura operacional</span>
+            <span className="workspace-panel__eyebrow">Leitura rápida</span>
             <h3>
               {inventoryProducts.length > 0
-                ? "Caixa, estoque e equipe agora estão no mesmo ritmo."
-                : "O financeiro já está pronto para ganhar controle de estoque."}
+                ? "Pedidos, estoque e equipe agora andam juntos."
+                : "O caixa já está pronto para ganhar controle de estoque."}
             </h3>
             <p>
-              Esta área junta rentabilidade, comissionamento e movimentação de produto em uma superfície só, para o salão não depender de leitura espalhada entre várias telas.
+              Use esta área para cuidar de pedidos, comissão, estoque e loja sem
+              sair da mesma página.
             </p>
           </>
         }
@@ -379,50 +432,62 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
       <section className="stats-grid operations-stats-grid">
         <article className="card metric-card metric-card--warm operations-metric-card">
           <span className="eyebrow">Faturamento 7 dias</span>
-          <p className="stat-value">{formatCurrency(Number(operations.overview.total_revenue ?? 0))}</p>
-          <p className="metric-note">Leitura rápida do caixa gerado pelos atendimentos concluídos mais recentes.</p>
+          <p className="stat-value">
+            {formatCurrency(Number(operations.overview.total_revenue ?? 0))}
+          </p>
+          <p className="metric-note">Receita recente.</p>
         </article>
         <article className="card metric-card metric-card--soft operations-metric-card">
           <span className="eyebrow">Ticket médio</span>
-          <p className="stat-value">{formatCurrency(Number(operations.overview.average_ticket ?? 0))}</p>
-          <p className="metric-note">Quanto cada atendimento concluído está deixando, em média, para o salão.</p>
+          <p className="stat-value">
+            {formatCurrency(Number(operations.overview.average_ticket ?? 0))}
+          </p>
+          <p className="metric-note">Valor médio por atendimento.</p>
         </article>
         <article className="card metric-card metric-card--accent operations-metric-card">
           <span className="eyebrow">Comissão estimada</span>
-          <p className="stat-value">{formatCurrency(Number(operations.overview.estimated_commissions ?? 0))}</p>
-          <p className="metric-note">Estimativa automática baseada nas regras configuradas por profissional.</p>
+          <p className="stat-value">
+            {formatCurrency(
+              Number(operations.overview.estimated_commissions ?? 0),
+            )}
+          </p>
+          <p className="metric-note">Base automática por profissional.</p>
         </article>
         <article className="card metric-card metric-card--soft operations-metric-card">
           <span className="eyebrow">Estoque em alerta</span>
-          <p className="stat-value">{operations.overview.low_stock_products ?? 0}</p>
-          <p className="metric-note">Produtos que já chegaram ou passaram do mínimo definido no salão.</p>
+          <p className="stat-value">
+            {operations.overview.low_stock_products ?? 0}
+          </p>
+          <p className="metric-note">Itens no mínimo ou abaixo.</p>
         </article>
         <article className="card metric-card metric-card--warm operations-metric-card">
           <span className="eyebrow">Equipe ativa</span>
-          <p className="stat-value">{operations.overview.active_staff_members ?? 0}</p>
-          <p className="metric-note">Profissionais ativos hoje puxando agenda, receita e comissão automática.</p>
+          <p className="stat-value">
+            {operations.overview.active_staff_members ?? 0}
+          </p>
+          <p className="metric-note">Profissionais ativos no painel.</p>
         </article>
         <article className="card metric-card metric-card--accent operations-metric-card">
           <span className="eyebrow">Quem mais rende</span>
-          <p className="stat-value">{operations.overview.top_staff_name ?? "Sem ranking"}</p>
+          <p className="stat-value">
+            {operations.overview.top_staff_name ?? "Sem ranking"}
+          </p>
           <p className="metric-note">
             {operations.overview.top_staff_name
-              ? `${formatCurrency(Number(operations.overview.top_staff_revenue ?? 0))} gerados no recorte atual.`
-              : "Assim que houver atendimentos concluídos com profissional, o ranking aparece aqui."}
+              ? `${formatCurrency(Number(operations.overview.top_staff_revenue ?? 0))} no recorte atual.`
+              : "O ranking aparece após os atendimentos."}
           </p>
         </article>
       </section>
 
       <div className="two-column-grid operations-layout">
         <section className="page-grid">
-          <section className="card content-card operations-card">
+          <section id="reports" className="card content-card operations-card">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">Painel profissional</span>
-                <h2>Relatórios automáticos do dono</h2>
-                <p className="muted">
-                  Faturamento por dia, profissional que mais rende, agenda por funcionário e comissão automática em um só lugar.
-                </p>
+                <span className="eyebrow">Resumo</span>
+                <h2>Resumo financeiro</h2>
+                <p className="muted">Receita por dia e ritmo do caixa.</p>
               </div>
             </div>
 
@@ -439,13 +504,20 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                     <div className="list-row__content">
                       <h3>{formatDate(entry.day)}</h3>
                       <p className="muted list-description">
-                        {entry.completed_appointments} atendimento{entry.completed_appointments === 1 ? "" : "s"} concluído
-                        {entry.completed_appointments === 1 ? "" : "s"} nesse dia.
+                        {entry.completed_appointments} atendimento
+                        {entry.completed_appointments === 1 ? "" : "s"}{" "}
+                        concluído
+                        {entry.completed_appointments === 1 ? "" : "s"} nesse
+                        dia.
                       </p>
                     </div>
                     <div className="inline-actions">
-                      <span className="badge badge--soft">{entry.completed_appointments} concluídos</span>
-                      <strong>{formatCurrency(Number(entry.total_revenue ?? 0))}</strong>
+                      <span className="badge badge--soft">
+                        {entry.completed_appointments} concluídos
+                      </span>
+                      <strong>
+                        {formatCurrency(Number(entry.total_revenue ?? 0))}
+                      </strong>
                     </div>
                   </article>
                 ))
@@ -453,13 +525,11 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </div>
           </section>
 
-          <section className="card content-card operations-card">
+          <section id="orders" className="card content-card operations-card">
             <div className="section-heading">
               <div>
-                <h2>Pedidos da loja</h2>
-                <p className="muted">
-                  Tudo o que a cliente pediu pelo app aparece aqui com itens, total, status e ação operacional para o salão responder no ritmo certo.
-                </p>
+                <h2>Pedidos</h2>
+                <p className="muted">Pedidos da loja com status e itens.</p>
               </div>
             </div>
 
@@ -483,12 +553,18 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                     order.created_at;
 
                   return (
-                    <article key={order.id} className="list-row customer-card operations-row operations-record">
+                    <article
+                      key={order.id}
+                      className="list-row customer-card operations-row operations-record"
+                    >
                       <div className="customer-card__content">
                         <div className="inventory-product-preview">
                           <div className="inventory-product-preview__media">
                             {firstItem?.image_url ? (
-                              <img src={firstItem.image_url} alt={firstItem.product_name_snapshot} />
+                              <img
+                                src={firstItem.image_url}
+                                alt={firstItem.product_name_snapshot}
+                              />
                             ) : (
                               <div className="inventory-product-preview__placeholder">
                                 <span>Pedido</span>
@@ -501,11 +577,22 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                               <div className="list-row__content">
                                 <h3>Pedido #{order.order_number}</h3>
                                 <div className="customer-card__badges">
-                                  <span className={resolveStoreOrderBadgeClass(order.status)}>
+                                  <span
+                                    className={resolveStoreOrderBadgeClass(
+                                      order.status,
+                                    )}
+                                  >
                                     {formatStoreOrderStatusLabel(order.status)}
                                   </span>
-                                  {customer?.name ? <span className="badge badge--soft">{customer.name}</span> : null}
-                                  <span className="badge badge--soft">{order.total_items} item{order.total_items === 1 ? "" : "s"}</span>
+                                  {customer?.name ? (
+                                    <span className="badge badge--soft">
+                                      {customer.name}
+                                    </span>
+                                  ) : null}
+                                  <span className="badge badge--soft">
+                                    {order.total_items} item
+                                    {order.total_items === 1 ? "" : "s"}
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -513,24 +600,44 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                             <p className="inventory-product-preview__description">
                               {items.length === 0
                                 ? "Pedido sem itens visíveis."
-                                : items.map((item) => item.product_name_snapshot).join(" • ")}
+                                : items
+                                    .map((item) => item.product_name_snapshot)
+                                    .join(" • ")}
                             </p>
 
                             <div className="customer-card__metrics">
                               <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Total</span>
-                                <strong>{formatCurrency(Number(order.subtotal_amount ?? 0))}</strong>
+                                <span className="customer-detail-item__label">
+                                  Total
+                                </span>
+                                <strong>
+                                  {formatCurrency(
+                                    Number(order.subtotal_amount ?? 0),
+                                  )}
+                                </strong>
                               </div>
                               <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Cliente</span>
-                                <strong>{customer?.phone?.trim() || customer?.name || "Sem contato"}</strong>
+                                <span className="customer-detail-item__label">
+                                  Cliente
+                                </span>
+                                <strong>
+                                  {customer?.phone?.trim() ||
+                                    customer?.name ||
+                                    "Sem contato"}
+                                </strong>
                               </div>
                               <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Criado em</span>
-                                <strong>{formatDateTime(order.created_at)}</strong>
+                                <span className="customer-detail-item__label">
+                                  Criado em
+                                </span>
+                                <strong>
+                                  {formatDateTime(order.created_at)}
+                                </strong>
                               </div>
                               <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Última virada</span>
+                                <span className="customer-detail-item__label">
+                                  Última virada
+                                </span>
                                 <strong>{formatDateTime(orderMoment)}</strong>
                               </div>
                             </div>
@@ -538,13 +645,19 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                         </div>
 
                         {order.notes?.trim() ? (
-                          <p className="muted list-description" style={{ marginTop: 14 }}>
+                          <p
+                            className="muted list-description"
+                            style={{ marginTop: 14 }}
+                          >
                             Observação da cliente: {order.notes}
                           </p>
                         ) : null}
 
                         {order.cancellation_reason?.trim() ? (
-                          <p className="muted list-description" style={{ marginTop: 10 }}>
+                          <p
+                            className="muted list-description"
+                            style={{ marginTop: 10 }}
+                          >
                             Motivo do cancelamento: {order.cancellation_reason}
                           </p>
                         ) : null}
@@ -552,8 +665,14 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                         {!!items.length ? (
                           <div className="row-list" style={{ marginTop: 16 }}>
                             {items.map((item) => (
-                              <div key={item.id} className="list-row operations-row">
-                                <div className="inline-actions" style={{ alignItems: "center", gap: 12 }}>
+                              <div
+                                key={item.id}
+                                className="list-row operations-row"
+                              >
+                                <div
+                                  className="inline-actions"
+                                  style={{ alignItems: "center", gap: 12 }}
+                                >
                                   <div
                                     style={{
                                       width: 56,
@@ -569,48 +688,106 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                                       <img
                                         src={item.image_url}
                                         alt={item.product_name_snapshot}
-                                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                        style={{
+                                          width: "100%",
+                                          height: "100%",
+                                          objectFit: "cover",
+                                        }}
                                       />
                                     ) : null}
                                   </div>
                                   <div className="list-row__content">
                                     <h3>{item.product_name_snapshot}</h3>
                                     <p className="muted list-description">
-                                      {(item.product_brand_snapshot ?? "Seleção da loja")} • {formatStock(item.quantity, item.unit_snapshot)}
+                                      {item.product_brand_snapshot ??
+                                        "Seleção da loja"}{" "}
+                                      •{" "}
+                                      {formatStock(
+                                        item.quantity,
+                                        item.unit_snapshot,
+                                      )}
                                     </p>
                                   </div>
                                 </div>
-                                <strong>{formatCurrency(Number(item.line_total_amount ?? 0))}</strong>
+                                <strong>
+                                  {formatCurrency(
+                                    Number(item.line_total_amount ?? 0),
+                                  )}
+                                </strong>
                               </div>
                             ))}
                           </div>
                         ) : null}
 
-                        {order.status !== "completed" && order.status !== "cancelled" ? (
-                          <div className="inline-actions" style={{ marginTop: 16, flexWrap: "wrap" }}>
+                        {order.status !== "completed" &&
+                        order.status !== "cancelled" ? (
+                          <div
+                            className="inline-actions"
+                            style={{ marginTop: 16, flexWrap: "wrap" }}
+                          >
                             {order.status === "pending" ? (
-                              <form action={updateCustomerProductOrderStatusAction}>
-                                <input type="hidden" name="orderId" value={order.id} />
-                                <input type="hidden" name="status" value="confirmed" />
-                                <button type="submit" className="primary-button">
+                              <form
+                                action={updateCustomerProductOrderStatusAction}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="orderId"
+                                  value={order.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="status"
+                                  value="confirmed"
+                                />
+                                <button
+                                  type="submit"
+                                  className="primary-button"
+                                >
                                   Confirmar pedido
                                 </button>
                               </form>
                             ) : null}
-                            {(order.status === "pending" || order.status === "confirmed") ? (
-                              <form action={updateCustomerProductOrderStatusAction}>
-                                <input type="hidden" name="orderId" value={order.id} />
-                                <input type="hidden" name="status" value="ready" />
-                                <button type="submit" className="secondary-button">
+                            {order.status === "pending" ||
+                            order.status === "confirmed" ? (
+                              <form
+                                action={updateCustomerProductOrderStatusAction}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="orderId"
+                                  value={order.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="status"
+                                  value="ready"
+                                />
+                                <button
+                                  type="submit"
+                                  className="secondary-button"
+                                >
                                   Marcar como pronto
                                 </button>
                               </form>
                             ) : null}
                             {order.status === "ready" ? (
-                              <form action={updateCustomerProductOrderStatusAction}>
-                                <input type="hidden" name="orderId" value={order.id} />
-                                <input type="hidden" name="status" value="completed" />
-                                <button type="submit" className="primary-button">
+                              <form
+                                action={updateCustomerProductOrderStatusAction}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="orderId"
+                                  value={order.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="status"
+                                  value="completed"
+                                />
+                                <button
+                                  type="submit"
+                                  className="primary-button"
+                                >
                                   Concluir entrega
                                 </button>
                               </form>
@@ -618,13 +795,30 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                           </div>
                         ) : null}
 
-                        {order.status !== "completed" && order.status !== "cancelled" ? (
-                          <form action={updateCustomerProductOrderStatusAction} className="form-grid" style={{ marginTop: 16 }}>
-                            <input type="hidden" name="orderId" value={order.id} />
-                            <input type="hidden" name="status" value="cancelled" />
+                        {order.status !== "completed" &&
+                        order.status !== "cancelled" ? (
+                          <form
+                            action={updateCustomerProductOrderStatusAction}
+                            className="form-grid"
+                            style={{ marginTop: 16 }}
+                          >
+                            <input
+                              type="hidden"
+                              name="orderId"
+                              value={order.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="status"
+                              value="cancelled"
+                            />
                             <div className="split-grid">
                               <div className="field">
-                                <label htmlFor={`cancel-store-order-${order.id}`}>Cancelar pedido e devolver ao estoque</label>
+                                <label
+                                  htmlFor={`cancel-store-order-${order.id}`}
+                                >
+                                  Cancelar pedido e devolver ao estoque
+                                </label>
                                 <input
                                   id={`cancel-store-order-${order.id}`}
                                   name="cancellationReason"
@@ -632,8 +826,14 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                                   required
                                 />
                               </div>
-                              <div className="inline-actions" style={{ alignItems: "flex-end" }}>
-                                <button type="submit" className="secondary-button">
+                              <div
+                                className="inline-actions"
+                                style={{ alignItems: "flex-end" }}
+                              >
+                                <button
+                                  type="submit"
+                                  className="secondary-button"
+                                >
                                   Cancelar pedido
                                 </button>
                               </div>
@@ -648,13 +848,14 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </div>
           </section>
 
-          <section className="card content-card operations-card">
+          <section
+            id="team-performance"
+            className="card content-card operations-card"
+          >
             <div className="section-heading">
               <div>
-                <h2>Profissionais que mais rendem</h2>
-                <p className="muted">
-                  Receita, comissão estimada e agenda futura de quem mais está puxando o resultado do salão.
-                </p>
+                <h2>Desempenho da equipe</h2>
+                <p className="muted">Receita, comissão e agenda futura.</p>
               </div>
             </div>
 
@@ -667,17 +868,27 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                 />
               ) : (
                 operations.top_staff.map((staffMember) => (
-                  <article key={staffMember.id} className="list-row customer-card operations-row operations-record">
+                  <article
+                    key={staffMember.id}
+                    className="list-row customer-card operations-row operations-record"
+                  >
                     <div className="customer-card__content">
                       <div className="customer-card__header">
                         <div className="list-row__content">
                           <h3>{staffMember.name}</h3>
                           <div className="customer-card__badges">
-                            <span className={staffMember.is_active ? "badge badge--confirmed" : "badge badge--cancelled"}>
+                            <span
+                              className={
+                                staffMember.is_active
+                                  ? "badge badge--confirmed"
+                                  : "badge badge--cancelled"
+                              }
+                            >
                               {staffMember.is_active ? "Ativo" : "Pausado"}
                             </span>
                             <span className="badge badge--pending">
-                              {staffMember.role?.trim() || "Atendimento do salão"}
+                              {staffMember.role?.trim() ||
+                                "Atendimento do salão"}
                             </span>
                           </div>
                         </div>
@@ -685,29 +896,49 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
 
                       <div className="customer-card__metrics">
                         <div className="customer-metric-tile">
-                          <span className="customer-detail-item__label">Receita</span>
-                          <strong>{formatCurrency(Number(staffMember.total_revenue ?? 0))}</strong>
+                          <span className="customer-detail-item__label">
+                            Receita
+                          </span>
+                          <strong>
+                            {formatCurrency(
+                              Number(staffMember.total_revenue ?? 0),
+                            )}
+                          </strong>
                         </div>
                         <div className="customer-metric-tile">
-                          <span className="customer-detail-item__label">Comissão estimada</span>
-                          <strong>{formatCurrency(Number(staffMember.estimated_commission ?? 0))}</strong>
+                          <span className="customer-detail-item__label">
+                            Comissão estimada
+                          </span>
+                          <strong>
+                            {formatCurrency(
+                              Number(staffMember.estimated_commission ?? 0),
+                            )}
+                          </strong>
                         </div>
                         <div className="customer-metric-tile">
-                          <span className="customer-detail-item__label">Atendidos</span>
+                          <span className="customer-detail-item__label">
+                            Atendidos
+                          </span>
                           <strong>{staffMember.completed_appointments}</strong>
                         </div>
                         <div className="customer-metric-tile">
-                          <span className="customer-detail-item__label">Agenda futura</span>
+                          <span className="customer-detail-item__label">
+                            Agenda futura
+                          </span>
                           <strong>{staffMember.upcoming_appointments}</strong>
                         </div>
                       </div>
 
                       <small className="list-meta">
-                        Comissão atual: {formatPercent(staffMember.commission_rate_percent)} +{" "}
-                        {formatCurrency(Number(staffMember.commission_flat_fee ?? 0))} por atendimento concluído.
+                        Comissão atual:{" "}
+                        {formatPercent(staffMember.commission_rate_percent)} +{" "}
+                        {formatCurrency(
+                          Number(staffMember.commission_flat_fee ?? 0),
+                        )}{" "}
+                        por atendimento.
                         {staffMember.next_appointment_at
                           ? ` Próximo horário em ${formatDateTime(staffMember.next_appointment_at)}.`
-                          : " Sem horário futuro reservado no momento."}
+                          : " Sem horário futuro."}
                       </small>
                     </div>
                   </article>
@@ -716,17 +947,18 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </div>
           </section>
 
-          <section className="card content-card operations-card">
+          <section
+            id="commissions"
+            className="card content-card operations-card"
+          >
             <div className="section-heading">
               <div>
-                <h2>Agenda e comissão por funcionário</h2>
-                <p className="muted">
-                  A agenda individual já existe no painel da equipe. Aqui ela ganha leitura operacional e regra de comissão automática.
-                </p>
+                <h2>Comissão por profissional</h2>
+                <p className="muted">Ajuste a regra sem sair da operação.</p>
               </div>
 
               <Link href="/dashboard/team" className="secondary-button">
-                Abrir equipe e agenda
+                Abrir equipe
               </Link>
             </div>
 
@@ -739,33 +971,65 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                 />
               ) : (
                 operations.staff_agenda.map((staffMember) => (
-                  <article key={staffMember.id} className="list-row service-editor-card operations-row operations-record">
+                  <article
+                    key={staffMember.id}
+                    className="list-row service-editor-card operations-row operations-record"
+                  >
                     <div className="list-row__content">
-                      <div className="inline-actions" style={{ marginBottom: 8 }}>
-                        <span className={staffMember.is_active ? "badge badge--confirmed" : "badge badge--cancelled"}>
+                      <div
+                        className="inline-actions"
+                        style={{ marginBottom: 8 }}
+                      >
+                        <span
+                          className={
+                            staffMember.is_active
+                              ? "badge badge--confirmed"
+                              : "badge badge--cancelled"
+                          }
+                        >
                           {staffMember.is_active ? "Ativo" : "Pausado"}
                         </span>
-                        <span className="badge badge--soft">{staffMember.assigned_services} serviços</span>
-                        <span className="badge badge--pending">{staffMember.upcoming_appointments} futuros</span>
+                        <span className="badge badge--soft">
+                          {staffMember.assigned_services} serviços
+                        </span>
+                        <span className="badge badge--pending">
+                          {staffMember.upcoming_appointments} futuros
+                        </span>
                       </div>
                       <h3>{staffMember.name}</h3>
                       <p className="muted list-description">
                         {staffMember.role?.trim() || "Atendimento do salão"} •{" "}
                         {staffMember.next_appointment_at
                           ? `próximo horário em ${formatDateTime(staffMember.next_appointment_at)}`
-                          : "sem próxima reserva"}.
+                          : "sem próxima reserva"}
+                        .
                       </p>
                       <small className="list-meta">
                         {staffMember.pending_appointments} agenda
-                        {staffMember.pending_appointments === 1 ? " pendente" : "s pendentes"} aguardando operação.
+                        {staffMember.pending_appointments === 1
+                          ? " pendente"
+                          : "s pendentes"}{" "}
+                        aguardando operação.
                       </small>
 
-                      <form action={saveStaffCommissionSettingsAction} className="form-grid" style={{ marginTop: 16 }}>
-                        <input type="hidden" name="staffMemberId" value={staffMember.id} />
+                      <form
+                        action={saveStaffCommissionSettingsAction}
+                        className="form-grid"
+                        style={{ marginTop: 16 }}
+                      >
+                        <input
+                          type="hidden"
+                          name="staffMemberId"
+                          value={staffMember.id}
+                        />
 
                         <div className="split-grid">
                           <div className="field">
-                            <label htmlFor={`commission-rate-${staffMember.id}`}>Comissão (%)</label>
+                            <label
+                              htmlFor={`commission-rate-${staffMember.id}`}
+                            >
+                              Comissão (%)
+                            </label>
                             <input
                               id={`commission-rate-${staffMember.id}`}
                               name="commissionRatePercent"
@@ -773,20 +1037,28 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                               min="0"
                               max="100"
                               step="0.5"
-                              defaultValue={Number(staffMember.commission_rate_percent ?? 0)}
+                              defaultValue={Number(
+                                staffMember.commission_rate_percent ?? 0,
+                              )}
                               required
                             />
                           </div>
 
                           <div className="field">
-                            <label htmlFor={`commission-flat-${staffMember.id}`}>Fixo por atendimento</label>
+                            <label
+                              htmlFor={`commission-flat-${staffMember.id}`}
+                            >
+                              Fixo por atendimento
+                            </label>
                             <input
                               id={`commission-flat-${staffMember.id}`}
                               name="commissionFlatFee"
                               type="number"
                               min="0"
                               step="0.01"
-                              defaultValue={Number(staffMember.commission_flat_fee ?? 0)}
+                              defaultValue={Number(
+                                staffMember.commission_flat_fee ?? 0,
+                              )}
                               required
                             />
                           </div>
@@ -794,7 +1066,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
 
                         <div className="inline-actions">
                           <button type="submit" className="primary-button">
-                            Salvar comissão automática
+                            Salvar comissão
                           </button>
                         </div>
                       </form>
@@ -807,13 +1079,14 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
         </section>
 
         <section className="page-grid">
-          <section className="card content-card form-panel operations-card operations-form-panel">
+          <section
+            id="product-create"
+            className="card content-card form-panel operations-card operations-form-panel"
+          >
             <div className="section-heading">
               <div>
-                <h2>Loja virtual e estoque</h2>
-                <p className="muted">
-                  Cadastre produtos com foto, descrição, limite por pedido e estoque para que o app do cliente funcione como vitrine de compra.
-                </p>
+                <h2>Novo produto</h2>
+                <p className="muted">Cadastre o item que vai para a loja.</p>
               </div>
             </div>
 
@@ -825,62 +1098,118 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             >
               <div className="field">
                 <label htmlFor="inventory-name">Produto</label>
-                <input id="inventory-name" name="name" placeholder="Ex.: Shampoo reconstrutor" required />
+                <input
+                  id="inventory-name"
+                  name="name"
+                  placeholder="Ex.: Shampoo reconstrutor"
+                  required
+                />
               </div>
 
               <div className="split-grid">
                 <div className="field">
                   <label htmlFor="inventory-brand">Marca</label>
-                  <input id="inventory-brand" name="brand" placeholder="Ex.: Wella" />
+                  <input
+                    id="inventory-brand"
+                    name="brand"
+                    placeholder="Ex.: Wella"
+                  />
                 </div>
 
                 <div className="field">
                   <label htmlFor="inventory-sku">SKU interno</label>
-                  <input id="inventory-sku" name="sku" placeholder="Ex.: WELLA-001" />
+                  <input
+                    id="inventory-sku"
+                    name="sku"
+                    placeholder="Ex.: WELLA-001"
+                  />
                 </div>
               </div>
 
               <div className="field">
-                <label htmlFor="inventory-description">Descrição para a loja</label>
+                <label htmlFor="inventory-description">
+                  Descrição para a loja
+                </label>
                 <textarea
                   id="inventory-description"
                   name="description"
                   rows={4}
-                  placeholder="Explique benefícios, indicação de uso, fragrância, ativo principal e o motivo desse produto entrar na vitrine do salão."
+                  placeholder="Resumo curto do produto para a cliente."
                 />
               </div>
 
               <div className="split-grid">
                 <div className="field">
                   <label htmlFor="inventory-unit">Unidade</label>
-                  <input id="inventory-unit" name="unit" defaultValue="un" required />
+                  <input
+                    id="inventory-unit"
+                    name="unit"
+                    defaultValue="un"
+                    required
+                  />
                 </div>
 
                 <div className="field">
-                  <label htmlFor="inventory-current-stock">Estoque inicial</label>
-                  <input id="inventory-current-stock" name="currentStock" type="number" min="0" step="0.01" defaultValue="0" required />
+                  <label htmlFor="inventory-current-stock">
+                    Estoque inicial
+                  </label>
+                  <input
+                    id="inventory-current-stock"
+                    name="currentStock"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue="0"
+                    required
+                  />
                 </div>
               </div>
 
               <div className="split-grid">
                 <div className="field">
-                  <label htmlFor="inventory-minimum-stock">Estoque mínimo</label>
-                  <input id="inventory-minimum-stock" name="minimumStock" type="number" min="0" step="0.01" defaultValue="1" required />
+                  <label htmlFor="inventory-minimum-stock">
+                    Estoque mínimo
+                  </label>
+                  <input
+                    id="inventory-minimum-stock"
+                    name="minimumStock"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue="1"
+                    required
+                  />
                 </div>
 
                 <div className="field">
                   <label htmlFor="inventory-cost-price">Custo</label>
-                  <input id="inventory-cost-price" name="costPrice" type="number" min="0" step="0.01" placeholder="0,00" />
+                  <input
+                    id="inventory-cost-price"
+                    name="costPrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0,00"
+                  />
                 </div>
               </div>
 
               <div className="split-grid">
                 <div className="field">
                   <label htmlFor="inventory-retail-price">Preço de venda</label>
-                  <input id="inventory-retail-price" name="retailPrice" type="number" min="0" step="0.01" placeholder="0,00" />
+                  <input
+                    id="inventory-retail-price"
+                    name="retailPrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0,00"
+                  />
                 </div>
                 <div className="field">
-                  <label htmlFor="inventory-max-purchase-quantity">Limite por pedido no app</label>
+                  <label htmlFor="inventory-max-purchase-quantity">
+                    Limite por pedido
+                  </label>
                   <input
                     id="inventory-max-purchase-quantity"
                     name="maxPurchaseQuantity"
@@ -895,7 +1224,9 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
               </div>
 
               <div className="field">
-                <label htmlFor="inventory-product-images">Fotos da vitrine</label>
+                <label htmlFor="inventory-product-images">
+                  Fotos da vitrine
+                </label>
                 <input
                   id="inventory-product-images"
                   name="productImages"
@@ -903,27 +1234,27 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                   accept="image/png,image/jpeg,image/webp"
                   multiple
                 />
-                <span className="list-meta">Até 6 fotos. A primeira vira capa da loja virtual no app do cliente.</span>
+                <span className="list-meta">
+                  Até 6 fotos. A primeira vira capa.
+                </span>
               </div>
 
               <label className="checkbox-field">
                 <input type="checkbox" name="isActive" defaultChecked />
-                Produto ativo e visível na loja do salão
+                Produto visível na loja
               </label>
 
               <button type="submit" className="primary-button">
-                Adicionar produto na loja
+                Salvar produto
               </button>
             </form>
           </section>
 
-          <section className="card content-card operations-card">
+          <section id="products" className="card content-card operations-card">
             <div className="section-heading">
               <div>
-                <h2>Produtos e alertas</h2>
-                <p className="muted">
-                  O estoque continua monitorado, mas agora cada item também funciona como vitrine de loja para a cliente no app.
-                </p>
+                <h2>Produtos</h2>
+                <p className="muted">Estoque, preço e galeria.</p>
               </div>
             </div>
 
@@ -936,13 +1267,20 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                 />
               ) : (
                 inventoryProducts.map((product) => {
-                  const isLowStock = Number(product.current_stock ?? 0) <= Number(product.minimum_stock ?? 0);
-                  const productDescription = product.description?.trim() || "Produto pronto para venda consultiva no app do salão.";
+                  const isLowStock =
+                    Number(product.current_stock ?? 0) <=
+                    Number(product.minimum_stock ?? 0);
+                  const productDescription =
+                    product.description?.trim() ||
+                    "Produto pronto para venda consultiva no app do salão.";
                   const coverImageUrl = product.image_urls?.[0] ?? null;
                   const galleryCount = product.image_urls?.length ?? 0;
 
                   return (
-                    <article key={product.id} className="list-row customer-card operations-row operations-record">
+                    <article
+                      key={product.id}
+                      className="list-row customer-card operations-row operations-record"
+                    >
                       <div className="customer-card__content">
                         <div className="inventory-product-preview">
                           <div className="inventory-product-preview__media">
@@ -960,37 +1298,79 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                               <div className="list-row__content">
                                 <h3>{product.name}</h3>
                                 <div className="customer-card__badges">
-                                  <span className={product.is_active ? "badge badge--confirmed" : "badge badge--cancelled"}>
+                                  <span
+                                    className={
+                                      product.is_active
+                                        ? "badge badge--confirmed"
+                                        : "badge badge--cancelled"
+                                    }
+                                  >
                                     {product.is_active ? "Ativo" : "Pausado"}
                                   </span>
-                                  {isLowStock ? <span className="badge badge--pending">Estoque em alerta</span> : null}
-                                  {product.brand ? <span className="badge badge--soft">{product.brand}</span> : null}
+                                  {isLowStock ? (
+                                    <span className="badge badge--pending">
+                                      Estoque em alerta
+                                    </span>
+                                  ) : null}
+                                  {product.brand ? (
+                                    <span className="badge badge--soft">
+                                      {product.brand}
+                                    </span>
+                                  ) : null}
                                   <span className="badge badge--soft">
-                                    {galleryCount === 0 ? "Sem fotos" : `${galleryCount} foto${galleryCount === 1 ? "" : "s"}`}
+                                    {galleryCount === 0
+                                      ? "Sem fotos"
+                                      : `${galleryCount} foto${galleryCount === 1 ? "" : "s"}`}
                                   </span>
                                 </div>
                               </div>
                             </div>
 
-                            <p className="inventory-product-preview__description">{productDescription}</p>
+                            <p className="inventory-product-preview__description">
+                              {productDescription}
+                            </p>
 
                             <div className="customer-card__metrics">
                               <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Disponível</span>
-                                <strong>{formatStock(product.current_stock, product.unit)}</strong>
-                              </div>
-                              <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Mínimo</span>
-                                <strong>{formatStock(product.minimum_stock, product.unit)}</strong>
-                              </div>
-                              <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Compra por pedido</span>
-                                <strong>Até {product.max_purchase_quantity}</strong>
-                              </div>
-                              <div className="customer-metric-tile">
-                                <span className="customer-detail-item__label">Venda</span>
+                                <span className="customer-detail-item__label">
+                                  Disponível
+                                </span>
                                 <strong>
-                                  {product.retail_price == null ? "Sem preço" : formatCurrency(Number(product.retail_price))}
+                                  {formatStock(
+                                    product.current_stock,
+                                    product.unit,
+                                  )}
+                                </strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">
+                                  Mínimo
+                                </span>
+                                <strong>
+                                  {formatStock(
+                                    product.minimum_stock,
+                                    product.unit,
+                                  )}
+                                </strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">
+                                  Compra por pedido
+                                </span>
+                                <strong>
+                                  Até {product.max_purchase_quantity}
+                                </strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">
+                                  Venda
+                                </span>
+                                <strong>
+                                  {product.retail_price == null
+                                    ? "Sem preço"
+                                    : formatCurrency(
+                                        Number(product.retail_price),
+                                      )}
                                 </strong>
                               </div>
                             </div>
@@ -1002,21 +1382,42 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                           className="form-grid inventory-product-form"
                           encType="multipart/form-data"
                         >
-                          <input type="hidden" name="productId" value={product.id} />
+                          <input
+                            type="hidden"
+                            name="productId"
+                            value={product.id}
+                          />
 
                           <div className="split-grid">
                             <div className="field">
-                              <label htmlFor={`product-name-${product.id}`}>Produto</label>
-                              <input id={`product-name-${product.id}`} name="name" defaultValue={product.name} required />
+                              <label htmlFor={`product-name-${product.id}`}>
+                                Produto
+                              </label>
+                              <input
+                                id={`product-name-${product.id}`}
+                                name="name"
+                                defaultValue={product.name}
+                                required
+                              />
                             </div>
                             <div className="field">
-                              <label htmlFor={`product-brand-${product.id}`}>Marca</label>
-                              <input id={`product-brand-${product.id}`} name="brand" defaultValue={product.brand ?? ""} />
+                              <label htmlFor={`product-brand-${product.id}`}>
+                                Marca
+                              </label>
+                              <input
+                                id={`product-brand-${product.id}`}
+                                name="brand"
+                                defaultValue={product.brand ?? ""}
+                              />
                             </div>
                           </div>
 
                           <div className="field">
-                            <label htmlFor={`product-description-${product.id}`}>Descrição para a loja</label>
+                            <label
+                              htmlFor={`product-description-${product.id}`}
+                            >
+                              Descrição para a loja
+                            </label>
                             <textarea
                               id={`product-description-${product.id}`}
                               name="description"
@@ -1027,26 +1428,34 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
 
                           <div className="split-grid">
                             <div className="field">
-                              <label htmlFor={`product-stock-${product.id}`}>Estoque atual</label>
+                              <label htmlFor={`product-stock-${product.id}`}>
+                                Estoque atual
+                              </label>
                               <input
                                 id={`product-stock-${product.id}`}
                                 name="currentStock"
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                defaultValue={Number(product.current_stock ?? 0)}
+                                defaultValue={Number(
+                                  product.current_stock ?? 0,
+                                )}
                                 required
                               />
                             </div>
                             <div className="field">
-                              <label htmlFor={`product-minimum-${product.id}`}>Estoque mínimo</label>
+                              <label htmlFor={`product-minimum-${product.id}`}>
+                                Estoque mínimo
+                              </label>
                               <input
                                 id={`product-minimum-${product.id}`}
                                 name="minimumStock"
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                defaultValue={Number(product.minimum_stock ?? 0)}
+                                defaultValue={Number(
+                                  product.minimum_stock ?? 0,
+                                )}
                                 required
                               />
                             </div>
@@ -1054,43 +1463,72 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
 
                           <div className="split-grid">
                             <div className="field">
-                              <label htmlFor={`product-cost-${product.id}`}>Custo</label>
+                              <label htmlFor={`product-cost-${product.id}`}>
+                                Custo
+                              </label>
                               <input
                                 id={`product-cost-${product.id}`}
                                 name="costPrice"
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                defaultValue={product.cost_price == null ? "" : Number(product.cost_price)}
+                                defaultValue={
+                                  product.cost_price == null
+                                    ? ""
+                                    : Number(product.cost_price)
+                                }
                               />
                             </div>
                             <div className="field">
-                              <label htmlFor={`product-retail-${product.id}`}>Preço de venda</label>
+                              <label htmlFor={`product-retail-${product.id}`}>
+                                Preço de venda
+                              </label>
                               <input
                                 id={`product-retail-${product.id}`}
                                 name="retailPrice"
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                defaultValue={product.retail_price == null ? "" : Number(product.retail_price)}
+                                defaultValue={
+                                  product.retail_price == null
+                                    ? ""
+                                    : Number(product.retail_price)
+                                }
                               />
                             </div>
                           </div>
 
                           <div className="split-grid">
                             <div className="field">
-                              <label htmlFor={`product-unit-${product.id}`}>Unidade</label>
-                              <input id={`product-unit-${product.id}`} name="unit" defaultValue={product.unit} required />
+                              <label htmlFor={`product-unit-${product.id}`}>
+                                Unidade
+                              </label>
+                              <input
+                                id={`product-unit-${product.id}`}
+                                name="unit"
+                                defaultValue={product.unit}
+                                required
+                              />
                             </div>
                             <div className="field">
-                              <label htmlFor={`product-sku-${product.id}`}>SKU</label>
-                              <input id={`product-sku-${product.id}`} name="sku" defaultValue={product.sku ?? ""} />
+                              <label htmlFor={`product-sku-${product.id}`}>
+                                SKU
+                              </label>
+                              <input
+                                id={`product-sku-${product.id}`}
+                                name="sku"
+                                defaultValue={product.sku ?? ""}
+                              />
                             </div>
                           </div>
 
                           <div className="split-grid">
                             <div className="field">
-                              <label htmlFor={`product-max-purchase-${product.id}`}>Limite por pedido no app</label>
+                              <label
+                                htmlFor={`product-max-purchase-${product.id}`}
+                              >
+                                Limite por pedido
+                              </label>
                               <input
                                 id={`product-max-purchase-${product.id}`}
                                 name="maxPurchaseQuantity"
@@ -1104,7 +1542,9 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                             </div>
 
                             <div className="field">
-                              <label htmlFor={`product-images-${product.id}`}>Atualizar fotos da loja</label>
+                              <label htmlFor={`product-images-${product.id}`}>
+                                Atualizar fotos da loja
+                              </label>
                               <input
                                 id={`product-images-${product.id}`}
                                 name="productImages"
@@ -1112,38 +1552,66 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                                 accept="image/png,image/jpeg,image/webp"
                                 multiple
                               />
-                              <span className="list-meta">Ao enviar novas fotos, a galeria atual da loja é substituída.</span>
+                              <span className="list-meta">
+                                Novas fotos substituem a galeria atual.
+                              </span>
                             </div>
                           </div>
 
                           <label className="checkbox-field">
-                            <input type="checkbox" name="isActive" defaultChecked={product.is_active} />
-                            Produto ativo e visível para a cliente
+                            <input
+                              type="checkbox"
+                              name="isActive"
+                              defaultChecked={product.is_active}
+                            />
+                            Produto visível para a cliente
                           </label>
 
                           <div className="inline-actions">
                             <button type="submit" className="secondary-button">
-                              Salvar produto da loja
+                              Salvar produto
                             </button>
-                            <span className="list-meta">Atualizado em {formatDateTime(product.updated_at)}</span>
+                            <span className="list-meta">
+                              Atualizado em {formatDateTime(product.updated_at)}
+                            </span>
                           </div>
                         </form>
 
-                        <form action={registerInventoryMovementAction} className="form-grid" style={{ marginTop: 16 }}>
-                          <input type="hidden" name="productId" value={product.id} />
+                        <form
+                          action={registerInventoryMovementAction}
+                          className="form-grid"
+                          style={{ marginTop: 16 }}
+                        >
+                          <input
+                            type="hidden"
+                            name="productId"
+                            value={product.id}
+                          />
 
                           <div className="split-grid">
                             <div className="field">
-                              <label htmlFor={`movement-type-${product.id}`}>Movimento</label>
-                              <select id={`movement-type-${product.id}`} name="movementType" defaultValue="out">
+                              <label htmlFor={`movement-type-${product.id}`}>
+                                Movimento
+                              </label>
+                              <select
+                                id={`movement-type-${product.id}`}
+                                name="movementType"
+                                defaultValue="out"
+                              >
                                 <option value="out">Saída</option>
                                 <option value="in">Entrada</option>
-                                <option value="adjustment">Ajuste de saldo</option>
+                                <option value="adjustment">
+                                  Ajuste de saldo
+                                </option>
                               </select>
                             </div>
 
                             <div className="field">
-                              <label htmlFor={`movement-quantity-${product.id}`}>Quantidade</label>
+                              <label
+                                htmlFor={`movement-quantity-${product.id}`}
+                              >
+                                Quantidade
+                              </label>
                               <input
                                 id={`movement-quantity-${product.id}`}
                                 name="quantity"
@@ -1158,7 +1626,9 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
 
                           <div className="split-grid">
                             <div className="field">
-                              <label htmlFor={`movement-reason-${product.id}`}>Motivo</label>
+                              <label htmlFor={`movement-reason-${product.id}`}>
+                                Motivo
+                              </label>
                               <input
                                 id={`movement-reason-${product.id}`}
                                 name="reason"
@@ -1167,11 +1637,20 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                             </div>
 
                             <div className="field">
-                              <label htmlFor={`movement-staff-${product.id}`}>Profissional</label>
-                              <select id={`movement-staff-${product.id}`} name="staffMemberId" defaultValue="">
+                              <label htmlFor={`movement-staff-${product.id}`}>
+                                Profissional
+                              </label>
+                              <select
+                                id={`movement-staff-${product.id}`}
+                                name="staffMemberId"
+                                defaultValue=""
+                              >
                                 <option value="">Sem vínculo direto</option>
                                 {staffOptions.map((staffMember) => (
-                                  <option key={staffMember.id} value={staffMember.id}>
+                                  <option
+                                    key={staffMember.id}
+                                    value={staffMember.id}
+                                  >
                                     {staffMember.name}
                                   </option>
                                 ))}
@@ -1193,13 +1672,11 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
             </div>
           </section>
 
-          <section className="card content-card operations-card">
+          <section id="movements" className="card content-card operations-card">
             <div className="section-heading">
               <div>
-                <h2>Movimentos recentes</h2>
-                <p className="muted">
-                  Histórico rápido para entender quem mexeu no estoque e como o saldo evoluiu no dia a dia.
-                </p>
+                <h2>Movimentos</h2>
+                <p className="muted">Entradas, saídas e ajustes.</p>
               </div>
             </div>
 
@@ -1216,19 +1693,33 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                   const staffMember = firstRelation(movement.staff_members);
 
                   return (
-                    <article key={movement.id} className="list-row operations-row">
+                    <article
+                      key={movement.id}
+                      className="list-row operations-row"
+                    >
                       <div className="list-row__content">
-                        <div className="inline-actions" style={{ marginBottom: 8 }}>
-                          <span className="badge badge--soft">{formatMovementLabel(movement.movement_type)}</span>
-                          {staffMember?.name ? <span className="badge badge--pending">{staffMember.name}</span> : null}
+                        <div
+                          className="inline-actions"
+                          style={{ marginBottom: 8 }}
+                        >
+                          <span className="badge badge--soft">
+                            {formatMovementLabel(movement.movement_type)}
+                          </span>
+                          {staffMember?.name ? (
+                            <span className="badge badge--pending">
+                              {staffMember.name}
+                            </span>
+                          ) : null}
                         </div>
                         <h3>{product?.name ?? "Produto removido"}</h3>
                         <p className="muted list-description">
-                          {movement.reason?.trim() || "Sem observação operacional."}
+                          {movement.reason?.trim() ||
+                            "Sem observação operacional."}
                         </p>
                         <small className="list-meta">
-                          {formatDateTime(movement.created_at)} • estoque saiu de{" "}
-                          {Number(movement.previous_stock ?? 0)} para {Number(movement.resulting_stock ?? 0)}.
+                          {formatDateTime(movement.created_at)} • estoque saiu
+                          de {Number(movement.previous_stock ?? 0)} para{" "}
+                          {Number(movement.resulting_stock ?? 0)}.
                         </small>
                       </div>
                       <strong>{Number(movement.quantity ?? 0)}</strong>
