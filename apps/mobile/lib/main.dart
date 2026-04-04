@@ -1,5 +1,12 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'src/app.dart';
@@ -19,6 +26,9 @@ Future<void> main() async {
       }
     }
 
+    await initializeDateFormatting('pt_BR');
+    Intl.defaultLocale = 'pt_BR';
+
     SupabaseConfig.validate();
 
     await Supabase.initialize(
@@ -28,12 +38,46 @@ Future<void> main() async {
         authFlowType: AuthFlowType.implicit,
       ),
     );
+
+    await _configureCrashReporting();
   } catch (error) {
     runApp(_BootErrorApp(message: error.toString()));
     return;
   }
 
-  runApp(const SalonClientApp());
+  await runZonedGuarded<Future<void>>(
+    () async {
+      runApp(const SalonClientApp());
+    },
+    (error, stackTrace) async {
+      await FirebaseCrashlytics.instance.recordError(
+        error,
+        stackTrace,
+        fatal: true,
+      );
+    },
+  );
+}
+
+Future<void> _configureCrashReporting() async {
+  final crashlytics = FirebaseCrashlytics.instance;
+  await crashlytics.setCrashlyticsCollectionEnabled(!kDebugMode);
+
+  final previousOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    previousOnError?.call(details);
+    if (kDebugMode) {
+      FlutterError.presentError(details);
+      return;
+    }
+
+    crashlytics.recordFlutterFatalError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    crashlytics.recordError(error, stack, fatal: true);
+    return true;
+  };
 }
 
 class _BootErrorApp extends StatelessWidget {

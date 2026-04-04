@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
@@ -9,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/auth_identity_policy.dart';
+import '../core/firebase_config.dart';
 import '../core/social_auth_config.dart';
 import '../core/supabase_config.dart';
 import 'app_cache_store.dart';
@@ -25,6 +27,62 @@ class SignUpResult {
   final bool requiresEmailConfirmation;
 }
 
+class _SupabaseBridgeCredentials {
+  const _SupabaseBridgeCredentials({
+    required this.email,
+    required this.password,
+  });
+
+  final String email;
+  final String password;
+}
+
+class ManagedDepositChargeResult {
+  const ManagedDepositChargeResult({
+    required this.appointmentId,
+    required this.depositStatus,
+    this.depositPaidAt,
+    this.providerChargeId,
+    this.providerStatus,
+    this.providerPayload,
+    this.providerInvoiceUrl,
+    this.providerLastSyncedAt,
+    this.providerError,
+  });
+
+  final String appointmentId;
+  final String depositStatus;
+  final DateTime? depositPaidAt;
+  final String? providerChargeId;
+  final String? providerStatus;
+  final String? providerPayload;
+  final String? providerInvoiceUrl;
+  final DateTime? providerLastSyncedAt;
+  final String? providerError;
+
+  factory ManagedDepositChargeResult.fromMap(Map<String, dynamic> map) {
+    final providerMap = map['provider'] is Map
+        ? Map<String, dynamic>.from(map['provider'] as Map)
+        : const <String, dynamic>{};
+
+    return ManagedDepositChargeResult(
+      appointmentId: _readNullableString(map['appointment_id']) ?? '',
+      depositStatus: _readNullableString(map['deposit_status']) ?? 'pending',
+      depositPaidAt: _readNullableDateTime(map['deposit_paid_at']),
+      providerChargeId: _readNullableString(providerMap['charge_id']),
+      providerStatus: _readNullableString(providerMap['status']),
+      providerPayload: _readNullableString(providerMap['payload']),
+      providerInvoiceUrl: _readNullableString(providerMap['invoice_url']),
+      providerLastSyncedAt: _readNullableDateTime(
+        providerMap['last_synced_at'],
+      ),
+      providerError: _readNullableString(providerMap['error']),
+    );
+  }
+}
+
+typedef OperationalIssueReporter = void Function(OperationalIssue issue);
+
 class SalonRepository {
   SalonRepository(this.client);
 
@@ -35,10 +93,30 @@ class SalonRepository {
     scopes: const <String>['email'],
   );
   final AppCacheStore _cacheStore = const AppCacheStore();
-  static const String _cacheVersion = '2026-04-shell-v1';
+  static const String _cacheVersion = '2026-04-shell-v3-store-orders';
 
   User? get currentUser => client.auth.currentUser;
   Stream<AuthState> get authChanges => client.auth.onAuthStateChange;
+
+  void _reportOperationalIssue(
+    OperationalIssueReporter? onIssue, {
+    required String scope,
+    required String title,
+    required String message,
+  }) {
+    onIssue?.call(
+      OperationalIssue(scope: scope, title: title, message: message),
+    );
+  }
+
+  OperationalIssueReporter _dedupeIssues(List<OperationalIssue> issues) {
+    return (issue) {
+      final alreadyIncluded = issues.any((item) => item.scope == issue.scope);
+      if (!alreadyIncluded) {
+        issues.add(issue);
+      }
+    };
+  }
 
   Future<void> signIn({required String email, required String password}) async {
     final normalizedEmail = email.trim();
@@ -59,9 +137,11 @@ class SalonRepository {
         firebaseUser,
         resendIfNeeded: true,
       );
-      await _bridgeFirebaseSessionToSupabase(firebaseUser, forceRefresh: true);
+      await _signInToSupabaseWithFirebaseIdentity(firebaseUser);
     } on firebase_auth.FirebaseAuthException catch (error) {
       throw StateError(_firebaseAuthMessage(error));
+    } on AuthException catch (error) {
+      throw StateError(_supabaseEmailAuthMessage(error));
     } catch (error) {
       await _rollbackFirebaseSession();
       rethrow;
@@ -139,9 +219,11 @@ class SalonRepository {
         );
       }
 
-      await _bridgeFirebaseSessionToSupabase(firebaseUser, forceRefresh: true);
+      await _signInToSupabaseWithFirebaseIdentity(firebaseUser);
     } on firebase_auth.FirebaseAuthException catch (error) {
       throw StateError(_firebaseAuthMessage(error));
+    } on AuthException catch (error) {
+      throw StateError(_supabaseEmailAuthMessage(error));
     } catch (error) {
       await _rollbackFirebaseSession();
       rethrow;
@@ -182,10 +264,7 @@ class SalonRepository {
             );
           }
 
-          await _bridgeFirebaseSessionToSupabase(
-            firebaseUser,
-            forceRefresh: true,
-          );
+          await _signInToSupabaseWithFirebaseIdentity(firebaseUser);
         case LoginStatus.cancelled:
           throw StateError('O login com Facebook foi cancelado.');
         case LoginStatus.failed:
@@ -201,6 +280,8 @@ class SalonRepository {
       }
     } on firebase_auth.FirebaseAuthException catch (error) {
       throw StateError(_firebaseAuthMessage(error));
+    } on AuthException catch (error) {
+      throw StateError(_supabaseEmailAuthMessage(error));
     } catch (error) {
       await _rollbackFirebaseSession();
       rethrow;
@@ -208,13 +289,15 @@ class SalonRepository {
   }
 
   Future<void> bootstrapAuthSession() async {
-    var firebaseUser = _firebaseAuth.currentUser;
     final supabaseUser = currentUser;
+    var firebaseUser = _firebaseAuth.currentUser;
+
+    if (supabaseUser != null && firebaseUser == null) {
+      await _linkCustomerIdentityByEmail();
+      return;
+    }
 
     if (firebaseUser == null) {
-      if (supabaseUser != null) {
-        await client.auth.signOut();
-      }
       return;
     }
 
@@ -245,7 +328,7 @@ class SalonRepository {
             firebaseEmail != supabaseEmail);
 
     if (needsBridge) {
-      await _bridgeFirebaseSessionToSupabase(firebaseUser, forceRefresh: false);
+      await _signInToSupabaseWithFirebaseIdentity(firebaseUser);
       return;
     }
 
@@ -273,76 +356,243 @@ class SalonRepository {
     final cacheKey = _cacheKey('customer-profile', suffix: user.id);
 
     try {
-      final response = await client
-          .from('customers')
-          .select(
-            'id, name, phone, preferences, allergies, beauty_products, salon_id, salons(name, tagline, brand_color, business_segment, whatsapp_phone, logo_path, client_app_config)',
-          )
-          .eq('auth_user_id', user.id)
-          .maybeSingle();
+      final response = await _getCurrentCustomerRow(user.id);
 
       if (response == null) {
         return null;
       }
 
       final data = Map<String, dynamic>.from(response);
-      final salonMap = _asSingleMap(data['salons']);
+      final salonId = _readNullableString(data['salon_id']);
+      final salonMap = salonId == null
+          ? <String, dynamic>{}
+          : await _getSalonProfileMap(salonId);
       final logoPath = _readNullableString(salonMap['logo_path']);
       final salonLogoUrl = _buildStorageUrl('salon-assets', logoPath);
-      final profile = CustomerProfile.fromMap(data, salonLogoUrl: salonLogoUrl);
+      final profile = CustomerProfile.fromMap({
+        ...data,
+        'salons': salonMap,
+      }, salonLogoUrl: salonLogoUrl);
       await _writeCachedData(cacheKey, encodeCustomerProfile(profile));
       return profile;
-    } catch (_) {
+    } catch (error) {
       final cached = await _readCachedData(cacheKey);
       if (cached == null) {
-        rethrow;
+        throw StateError('Falha ao carregar o perfil do cliente: $error');
       }
 
       return decodeCustomerProfile(cached);
     }
   }
 
-  Future<void> _bridgeFirebaseSessionToSupabase(
-    firebase_auth.User firebaseUser, {
-    required bool forceRefresh,
-  }) async {
-    final idToken = await firebaseUser.getIdToken(forceRefresh);
-    final normalizedToken = idToken?.trim() ?? '';
-    if (normalizedToken.isEmpty) {
+  Future<Map<String, dynamic>?> _getCurrentCustomerRow(
+    String authUserId,
+  ) async {
+    for (var attempt = 0; attempt < 10; attempt += 1) {
+      final directResponse = await _fetchCustomerRowByAuthUserId(authUserId);
+      if (directResponse != null) {
+        return directResponse;
+      }
+
+      final currentCustomerId = await _getCurrentCustomerId();
+      if (currentCustomerId != null) {
+        final customerById = await _fetchCustomerRowById(currentCustomerId);
+        if (customerById != null) {
+          final currentSalonId = await _getCurrentCustomerSalonId();
+          if (_readNullableString(customerById['salon_id']) == null &&
+              currentSalonId != null) {
+            return <String, dynamic>{
+              ...customerById,
+              'salon_id': currentSalonId,
+            };
+          }
+
+          return customerById;
+        }
+      }
+
+      if (attempt < 9) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    }
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _fetchCustomerRowByAuthUserId(
+    String authUserId,
+  ) async {
+    final response = await client
+        .from('customers')
+        .select(
+          'id, name, phone, preferences, allergies, beauty_products, consent_status, consent_signed_at, consent_version, salon_id',
+        )
+        .eq('auth_user_id', authUserId)
+        .limit(1);
+
+    if (response.isNotEmpty) {
+      return Map<String, dynamic>.from(response.first);
+    }
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _fetchCustomerRowById(String customerId) async {
+    final response = await client
+        .from('customers')
+        .select(
+          'id, name, phone, preferences, allergies, beauty_products, consent_status, consent_signed_at, consent_version, salon_id',
+        )
+        .eq('id', customerId)
+        .limit(1);
+
+    if (response.isNotEmpty) {
+      return Map<String, dynamic>.from(response.first);
+    }
+
+    return null;
+  }
+
+  Future<String?> _getCurrentCustomerId() async {
+    try {
+      final response = await client.rpc('current_customer_id');
+      return _readNullableString(response);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _getCurrentCustomerSalonId() async {
+    try {
+      final response = await client.rpc('current_customer_salon_id');
+      return _readNullableString(response);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> waitForCurrentCustomerLink() async {
+    final user = currentUser;
+    if (user == null) {
+      return;
+    }
+
+    for (var attempt = 0; attempt < 12; attempt += 1) {
+      final row = await _getCurrentCustomerRow(user.id);
+      if (row != null && _readNullableString(row['salon_id']) != null) {
+        return;
+      }
+
+      if (attempt < 11) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> _getSalonProfileMap(String salonId) async {
+    try {
+      final response = await client
+          .from('salons')
+          .select(
+            'name, tagline, brand_color, business_segment, whatsapp_phone, logo_path, client_app_config, booking_policy_enabled, booking_policy_title, booking_policy_summary, booking_policy_cancellation_window_hours, booking_policy_confirmation_required, booking_policy_confirmation_lead_minutes, booking_policy_auto_cancel_unconfirmed, booking_policy_auto_cancel_lead_minutes, booking_policy_auto_cancel_pending_deposit, booking_policy_deposit_reminder_lead_hours, booking_policy_requires_deposit, booking_policy_deposit_amount, booking_policy_payment_mode, booking_policy_pix_key, booking_policy_pix_recipient_name, booking_policy_pix_recipient_city, booking_policy_external_checkout_url, booking_policy_payment_instructions, booking_policy_version',
+          )
+          .eq('id', salonId)
+          .limit(1);
+
+      if (response.isNotEmpty) {
+        return Map<String, dynamic>.from(response.first);
+      }
+
+      return <String, dynamic>{};
+    } catch (_) {
+      return <String, dynamic>{};
+    }
+  }
+
+  Future<void> _signInToSupabaseWithFirebaseIdentity(
+    firebase_auth.User firebaseUser,
+  ) async {
+    final bridgeCredentials = await _provisionSupabaseBridgeCredentials(
+      firebaseUser,
+    );
+    if (currentUser != null) {
+      await client.auth.signOut();
+    }
+
+    final response = await client.auth.signInWithPassword(
+      email: bridgeCredentials.email,
+      password: bridgeCredentials.password,
+    );
+    if (response.user == null || response.session == null) {
       throw StateError(
-        'Nao foi possivel ler o token do Firebase para abrir a sessao do app.',
+        'O Supabase nao retornou uma sessao valida depois de sincronizar a conta.',
+      );
+    }
+
+    await _linkCustomerIdentityByEmail();
+  }
+
+  Future<_SupabaseBridgeCredentials> _provisionSupabaseBridgeCredentials(
+    firebase_auth.User firebaseUser,
+  ) async {
+    final firebaseApiKey = FirebaseConfig.apiKey.trim();
+    if (firebaseApiKey.isEmpty) {
+      throw StateError(
+        'Preencha FIREBASE_API_KEY no .env.local para sincronizar o login com o Supabase.',
+      );
+    }
+
+    final firebaseIdToken = await firebaseUser.getIdToken(true);
+    final normalizedIdToken = firebaseIdToken?.trim() ?? '';
+    if (normalizedIdToken.isEmpty) {
+      throw StateError(
+        'Nao foi possivel confirmar a sessao do Firebase para entrar no app.',
       );
     }
 
     final response = await http.post(
-      Uri.parse('${SupabaseConfig.url}/auth/v1/token?grant_type=id_token'),
+      Uri.parse('${SupabaseConfig.url}/functions/v1/firebase-auth-bridge'),
       headers: <String, String>{
-        ...client.auth.headers,
         'apikey': SupabaseConfig.anonKey,
+        'authorization': 'Bearer ${SupabaseConfig.anonKey}',
         'content-type': 'application/json',
       },
       body: jsonEncode(<String, dynamic>{
-        'provider': 'firebase',
-        'id_token': normalizedToken,
+        'firebase_api_key': firebaseApiKey,
+        'firebase_id_token': normalizedIdToken,
       }),
     );
 
-    final decodedBody = jsonDecode(response.body);
+    final decodedBody = response.body.isNotEmpty
+        ? jsonDecode(response.body)
+        : null;
     final responseMap = decodedBody is Map
         ? Map<String, dynamic>.from(decodedBody)
         : <String, dynamic>{};
 
     if (response.statusCode >= 400) {
-      throw StateError(_supabaseFirebaseBridgeError(responseMap));
-    }
-    if (responseMap['access_token'] == null || responseMap['user'] == null) {
       throw StateError(
-        'O Supabase nao retornou uma sessao valida apos validar o Firebase.',
+        _firebaseSupabaseProvisioningError(
+          payload: responseMap,
+          statusCode: response.statusCode,
+        ),
       );
     }
 
-    await client.auth.recoverSession(jsonEncode(responseMap));
-    await _linkCustomerIdentityByEmail();
+    final email =
+        _readNullableString(responseMap['email']) ?? firebaseUser.email?.trim();
+    final password = _readNullableString(responseMap['supabase_password']);
+
+    if (email == null ||
+        email.isEmpty ||
+        password == null ||
+        password.isEmpty) {
+      throw StateError(
+        'A funcao de sincronizacao respondeu sem credenciais validas do Supabase.',
+      );
+    }
+
+    return _SupabaseBridgeCredentials(email: email, password: password);
   }
 
   Future<void> _rollbackFirebaseSession() async {
@@ -402,15 +652,22 @@ class SalonRepository {
   }
 
   Future<void> _linkCustomerIdentityByEmail() async {
-    if (currentUser == null) {
+    final supabaseUser = currentUser;
+    if (supabaseUser == null) {
       return;
     }
 
     final firebaseUser = _firebaseAuth.currentUser;
-    if (!hasVerifiedEmailIdentity(
-      email: firebaseUser?.email,
-      emailVerified: firebaseUser?.emailVerified ?? false,
-    )) {
+    final hasTrustedEmailIdentity =
+        hasVerifiedEmailIdentity(
+          email: firebaseUser?.email,
+          emailVerified: firebaseUser?.emailVerified ?? false,
+        ) ||
+        hasConfirmedSupabaseEmailIdentity(
+          email: supabaseUser.email,
+          emailConfirmedAt: supabaseUser.emailConfirmedAt,
+        );
+    if (!hasTrustedEmailIdentity) {
       return;
     }
 
@@ -452,19 +709,54 @@ class SalonRepository {
     }
   }
 
-  String _supabaseFirebaseBridgeError(Map<String, dynamic> payload) {
-    final rawMessage =
-        payload['msg']?.toString() ??
-        payload['message']?.toString() ??
-        payload['error_description']?.toString() ??
-        payload['error']?.toString();
-    final normalizedMessage = rawMessage?.trim();
+  String _supabaseEmailAuthMessage(AuthException error) {
+    return error.message.trim().isNotEmpty
+        ? error.message.trim()
+        : 'Nao foi possivel abrir a sessao do app no Supabase.';
+  }
 
-    if (normalizedMessage != null && normalizedMessage.isNotEmpty) {
-      return normalizedMessage;
+  String _firebaseSupabaseProvisioningError({
+    required Map<String, dynamic> payload,
+    required int statusCode,
+  }) {
+    final errorCode = payload['error']?.toString().trim().toLowerCase();
+    final detail = payload['detail']?.toString().trim();
+    final message = payload['message']?.toString().trim();
+
+    switch (errorCode) {
+      case 'email_not_verified':
+        return 'Confirme o e-mail antes de entrar para liberar sua conta no app.';
+      case 'missing_server_secrets':
+        return 'A funcao de login do app ainda nao foi configurada no Supabase. Publique a Edge Function firebase-auth-bridge e tente de novo.';
+      case 'missing_firebase_context':
+      case 'invalid_payload':
+        return 'A configuracao atual do app nao conseguiu validar sua conta do Firebase.';
+      case 'invalid_firebase_session':
+      case 'firebase_lookup_failed':
+        return detail?.isNotEmpty == true
+            ? detail!
+            : 'O Firebase autenticou a conta, mas o app nao conseguiu sincronizar a sessao com o Supabase.';
+      case 'email_missing':
+        return 'A conta autenticada precisa ter um e-mail valido para continuar.';
+      case 'email_mismatch':
+        return 'O e-mail validado pelo Firebase nao bate com a conta que o app tentou sincronizar.';
+      case 'user_lookup_failed':
+      case 'user_sync_failed':
+        return detail?.isNotEmpty == true
+            ? detail!
+            : 'Nao foi possivel preparar sua conta no Supabase.';
+      default:
+        if (message != null && message.isNotEmpty) {
+          return message;
+        }
+        if (detail != null && detail.isNotEmpty) {
+          return detail;
+        }
+        if (statusCode == 404) {
+          return 'A Edge Function firebase-auth-bridge ainda nao foi publicada no Supabase.';
+        }
+        return 'Nao foi possivel sincronizar o login do Firebase com o Supabase.';
     }
-
-    return 'O Firebase autenticou a conta, mas o Supabase nao aceitou o token. Confirme se o provedor Firebase esta ativo no Supabase Auth.';
   }
 
   Future<SalonJoinPreview?> getSalonJoinPreview(String joinCode) async {
@@ -503,14 +795,14 @@ class SalonRepository {
     }
   }
 
-  Future<void> joinSalon({
+  Future<CustomerProfile> joinSalon({
     required String code,
     required String customerName,
     String? referralCode,
   }) async {
     final normalizedReferral = referralCode?.trim().toUpperCase();
 
-    await client.rpc(
+    final response = await client.rpc(
       'join_salon',
       params: {
         'input_join_code': code.trim().toUpperCase(),
@@ -521,6 +813,48 @@ class SalonRepository {
             : normalizedReferral,
       },
     );
+
+    final joinedCustomerMap = switch (response) {
+      final Map<dynamic, dynamic> map => Map<String, dynamic>.from(map),
+      final List<dynamic> list when list.isNotEmpty =>
+        Map<String, dynamic>.from(list.first as Map),
+      _ => null,
+    };
+
+    if (joinedCustomerMap == null) {
+      throw StateError(
+        'O salão confirmou o vínculo, mas o app não recebeu o perfil do cliente.',
+      );
+    }
+
+    await _invalidateCacheScopes(const <String>[
+      'customer-profile',
+      'home',
+      'explore',
+      'appointments',
+      'feed',
+      'profile-hub',
+      'notifications',
+      'notification-receipts',
+    ]);
+
+    final salonId = _readNullableString(joinedCustomerMap['salon_id']);
+    final salonMap = salonId == null
+        ? <String, dynamic>{}
+        : await _getSalonProfileMap(salonId);
+    final logoPath = _readNullableString(salonMap['logo_path']);
+    final profile = CustomerProfile.fromMap({
+      ...joinedCustomerMap,
+      'salons': salonMap,
+    }, salonLogoUrl: _buildStorageUrl('salon-assets', logoPath));
+
+    final user = currentUser;
+    if (user != null) {
+      final cacheKey = _cacheKey('customer-profile', suffix: user.id);
+      await _writeCachedData(cacheKey, encodeCustomerProfile(profile));
+    }
+
+    return profile;
   }
 
   Future<void> registerPushToken({
@@ -571,6 +905,21 @@ class SalonRepository {
     ]);
   }
 
+  Future<void> acceptOperationalConsent({
+    String consentVersion = '2026-04-prontuario-v1',
+  }) async {
+    await client.rpc(
+      'accept_customer_operational_consent',
+      params: {'consent_version_input': consentVersion},
+    );
+
+    await _invalidateCacheScopes(const <String>[
+      'customer-profile',
+      'profile-hub',
+      'home',
+    ]);
+  }
+
   Future<List<ServiceItem>> getServices() async {
     final response = await client
         .from('services')
@@ -594,7 +943,10 @@ class SalonRepository {
         .toList(growable: false);
   }
 
-  Future<List<TeamMember>> getTeamMembers({int limit = 12}) async {
+  Future<List<TeamMember>> getTeamMembers({
+    int limit = 12,
+    OperationalIssueReporter? onIssue,
+  }) async {
     final weekday = DateTime.now().weekday % 7;
 
     try {
@@ -656,13 +1008,20 @@ class SalonRepository {
       if (message.contains('staff_members') ||
           message.contains('staff_service_assignments') ||
           message.contains('staff_business_hours')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'team_members',
+          title: 'Equipe indisponível',
+          message:
+              'O painel não conseguiu sincronizar profissionais, especialidades ou horários agora.',
+        );
         return const <TeamMember>[];
       }
       rethrow;
     }
   }
 
-  Future<List<OfferItem>> getOffers() async {
+  Future<List<OfferItem>> getOffers({OperationalIssueReporter? onIssue}) async {
     try {
       final response = await client
           .from('salon_offers')
@@ -673,18 +1032,119 @@ class SalonRepository {
           .order('sort_order')
           .order('created_at', ascending: false);
 
-      return (response as List)
+      final offers = (response as List)
           .map((item) => OfferItem.fromMap(Map<String, dynamic>.from(item)))
-          .toList(growable: false);
+          .toList(growable: true);
+
+      offers.sort((left, right) {
+        final kindComparison = (left.isMembership ? 0 : 1).compareTo(
+          right.isMembership ? 0 : 1,
+        );
+        if (kindComparison != 0) {
+          return kindComparison;
+        }
+
+        final sortOrderComparison = left.sortOrder.compareTo(right.sortOrder);
+        if (sortOrderComparison != 0) {
+          return sortOrderComparison;
+        }
+
+        final leftReferenceDate =
+            left.startsOn ??
+            left.endsOn ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final rightReferenceDate =
+            right.startsOn ??
+            right.endsOn ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return rightReferenceDate.compareTo(leftReferenceDate);
+      });
+
+      return offers.toList(growable: false);
     } on PostgrestException catch (error) {
       if (error.message.toLowerCase().contains('salon_offers')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'offers',
+          title: 'Campanhas indisponíveis',
+          message:
+              'Promoções e memberships do painel não chegaram ao app nesta atualização.',
+        );
         return const <OfferItem>[];
       }
       rethrow;
     }
   }
 
-  Future<List<RetailProduct>> getRetailProducts({int limit = 24}) async {
+  Future<List<CustomerMembershipPackage>> getCustomerMembershipPackages({
+    OperationalIssueReporter? onIssue,
+  }) async {
+    final customerId = await _getCurrentCustomerId();
+    if (customerId == null) {
+      return const <CustomerMembershipPackage>[];
+    }
+
+    try {
+      final response = await client
+          .from('customer_memberships')
+          .select(
+            'id, title, service_name_snapshot, price_snapshot, sessions_included, sessions_used, started_at, expires_at, status, notes, created_at',
+          )
+          .eq('customer_id', customerId)
+          .order('created_at', ascending: false);
+
+      final memberships = (response as List)
+          .map(
+            (item) => CustomerMembershipPackage.fromMap(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList(growable: true);
+
+      memberships.sort((left, right) {
+        final leftPriority = left.isActive
+            ? 0
+            : left.isCompleted
+            ? 1
+            : left.isExpired
+            ? 2
+            : 3;
+        final rightPriority = right.isActive
+            ? 0
+            : right.isCompleted
+            ? 1
+            : right.isExpired
+            ? 2
+            : 3;
+
+        if (leftPriority != rightPriority) {
+          return leftPriority.compareTo(rightPriority);
+        }
+
+        return left.expiresAt.compareTo(right.expiresAt);
+      });
+
+      return memberships.toList(growable: false);
+    } on PostgrestException catch (error) {
+      final message = error.message.toLowerCase();
+      if (message.contains('customer_memberships')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'memberships',
+          title: 'Pacotes indisponíveis',
+          message:
+              'Os pacotes ativos da sua conta não puderam ser sincronizados agora.',
+        );
+        return const <CustomerMembershipPackage>[];
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<RetailProduct>> getRetailProducts({
+    int limit = 24,
+    OperationalIssueReporter? onIssue,
+  }) async {
     try {
       final response = await client.rpc(
         'get_customer_product_catalog',
@@ -696,16 +1156,155 @@ class SalonRepository {
       }
 
       return response
-          .map(
-            (item) =>
-                RetailProduct.fromMap(Map<String, dynamic>.from(item as Map)),
-          )
+          .map((item) {
+            final productMap = Map<String, dynamic>.from(item as Map);
+            final rawImagePaths = productMap['image_paths'];
+            final imagePaths = rawImagePaths is List
+                ? rawImagePaths
+                      .map((entry) => entry?.toString().trim())
+                      .whereType<String>()
+                      .where((entry) => entry.isNotEmpty)
+                      .toList(growable: false)
+                : const <String>[];
+
+            productMap['image_urls'] = imagePaths
+                .map((path) => _buildStorageUrl('inventory-products', path))
+                .whereType<String>()
+                .toList(growable: false);
+
+            return RetailProduct.fromMap(productMap);
+          })
           .toList(growable: false);
     } on PostgrestException catch (error) {
       final message = error.message.toLowerCase();
       if (message.contains('get_customer_product_catalog') ||
           message.contains('inventory_products')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'products',
+          title: 'Produtos indisponíveis',
+          message:
+              'O catálogo consultivo do salão não pôde ser sincronizado agora.',
+        );
         return const <RetailProduct>[];
+      }
+      rethrow;
+    }
+  }
+
+  Future<StoreOrderSubmissionResult> submitStoreOrder({
+    required List<StoreOrderLineInput> items,
+    String? notes,
+  }) async {
+    if (items.isEmpty) {
+      throw StateError(
+        'Adicione pelo menos um produto antes de fechar o pedido.',
+      );
+    }
+
+    try {
+      final response = await client.rpc(
+        'create_customer_product_order',
+        params: {
+          'items_input': items
+              .map((item) => item.toMap())
+              .toList(growable: false),
+          'notes_input': _readNullableString(notes),
+        },
+      );
+
+      Map<String, dynamic>? orderMap;
+      if (response is List && response.isNotEmpty && response.first is Map) {
+        orderMap = Map<String, dynamic>.from(response.first as Map);
+      } else if (response is Map) {
+        orderMap = Map<String, dynamic>.from(response);
+      }
+
+      if (orderMap == null) {
+        throw StateError('Nao foi possivel confirmar o pedido da loja agora.');
+      }
+
+      await _invalidateCacheScopes(const <String>[
+        'home',
+        'explore',
+        'profile-hub',
+      ]);
+      return StoreOrderSubmissionResult.fromMap(orderMap);
+    } on PostgrestException catch (error) {
+      final message = error.message.toLowerCase();
+      if (message.contains('inventory_product_purchase_limit_exceeded')) {
+        throw StateError(
+          'Um dos produtos passou do limite permitido por pedido.',
+        );
+      }
+      if (message.contains('inventory_product_insufficient_stock')) {
+        throw StateError(
+          'Um dos produtos ficou sem estoque suficiente enquanto voce montava o carrinho.',
+        );
+      }
+      if (message.contains('inventory_product_not_found')) {
+        throw StateError(
+          'Um dos produtos nao esta mais disponivel na loja do salao.',
+        );
+      }
+      if (message.contains('empty_product_order') ||
+          message.contains('invalid_product_order_item') ||
+          message.contains('invalid_product_order_payload')) {
+        throw StateError('Revise o carrinho antes de enviar o pedido.');
+      }
+      if (message.contains('product_order_notes_too_long')) {
+        throw StateError(
+          'As observacoes do pedido podem ter no maximo 500 caracteres.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<CustomerStoreOrder>> getCustomerStoreOrders({
+    int limit = 12,
+    OperationalIssueReporter? onIssue,
+  }) async {
+    try {
+      final response = await client
+          .from('customer_product_orders')
+          .select(
+            'id,order_number,status,total_items,subtotal_amount,notes,cancellation_reason,created_at,confirmed_at,ready_at,completed_at,cancelled_at,customer_product_order_items(id,product_name_snapshot,product_brand_snapshot,unit_snapshot,quantity,unit_price_snapshot,line_total_amount,product_image_path)',
+          )
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      return (response as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .map((orderMap) {
+            final itemMaps =
+                _readListMaps(orderMap['customer_product_order_items'])
+                    .map((item) {
+                      final mutableItem = Map<String, dynamic>.from(item);
+                      mutableItem['image_url'] = _buildStorageUrl(
+                        'inventory-products',
+                        _readNullableString(item['product_image_path']),
+                      );
+                      return mutableItem;
+                    })
+                    .toList(growable: false);
+
+            return CustomerStoreOrder.fromMap(<String, dynamic>{
+              ...orderMap,
+              'customer_product_order_items': itemMaps,
+            });
+          })
+          .toList(growable: false);
+    } on PostgrestException catch (error) {
+      final message = error.message.toLowerCase();
+      if (message.contains('customer_product_orders')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'store-orders',
+          title: 'Pedidos da loja indisponiveis',
+          message: 'Os pedidos da loja nao puderam ser sincronizados agora.',
+        );
+        return const <CustomerStoreOrder>[];
       }
       rethrow;
     }
@@ -715,7 +1314,7 @@ class SalonRepository {
     final response = await client
         .from('appointments')
         .select(
-          'id, date, ends_at, status, completed_at, cancelled_at, cancelled_by, cancellation_reason, customer_confirmation_requested_at, customer_presence_confirmed_at, services(name, price, duration), staff_members(name)',
+          'id, date, ends_at, status, completed_at, cancelled_at, cancelled_by, cancellation_reason, customer_confirmation_requested_at, customer_presence_confirmed_at, protection_confirmation_required, protection_confirmation_lead_minutes, protection_auto_cancel_unconfirmed, protection_auto_cancel_lead_minutes, protection_auto_cancel_pending_deposit, protection_deposit_reminder_lead_hours, deposit_amount, deposit_customer_reported_paid_at, deposit_customer_reported_paid_via, deposit_customer_reported_reference, deposit_status, deposit_paid_at, deposit_payment_provider, deposit_payment_provider_charge_id, deposit_payment_provider_status, deposit_payment_provider_payload, deposit_payment_provider_invoice_url, deposit_payment_provider_last_synced_at, deposit_payment_provider_error, deposit_receipt_content_type, deposit_receipt_path, deposit_receipt_uploaded_at, deposit_notes, booking_policy_acknowledged_at, booking_policy_version, services(name, price, duration), staff_members(name)',
         )
         .order('date', ascending: false);
 
@@ -724,7 +1323,9 @@ class SalonRepository {
         .toList(growable: false);
   }
 
-  Future<List<VacancyAlert>> getVacancyAlerts() async {
+  Future<List<VacancyAlert>> getVacancyAlerts({
+    OperationalIssueReporter? onIssue,
+  }) async {
     try {
       final response = await client
           .from('salon_vacancy_alerts')
@@ -740,6 +1341,13 @@ class SalonRepository {
           .toList(growable: false);
     } on PostgrestException catch (error) {
       if (error.message.toLowerCase().contains('salon_vacancy_alerts')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'vacancy_alerts',
+          title: 'Encaixes indisponíveis',
+          message:
+              'Os alertas de vaga liberada do painel não puderam ser carregados agora.',
+        );
         return const <VacancyAlert>[];
       }
       rethrow;
@@ -803,23 +1411,107 @@ class SalonRepository {
     }
   }
 
-  Future<void> createAppointment({
+  Future<String> createAppointment({
     required String serviceId,
     required DateTime startAt,
     String? preferredStaffMemberId,
+    String? bookingPolicyVersion,
   }) async {
-    await client.rpc(
-      'create_appointment',
-      params: {
-        'service_uuid': serviceId,
-        'requested_date': startAt.toUtc().toIso8601String(),
-        'preferred_staff_member_uuid': preferredStaffMemberId,
-      },
-    );
+    Map<String, dynamic>? appointmentMap;
+
+    try {
+      final response = await client.rpc(
+        'create_appointment',
+        params: {
+          'service_uuid': serviceId,
+          'requested_date': startAt.toUtc().toIso8601String(),
+          'preferred_staff_member_uuid': preferredStaffMemberId,
+          'booking_policy_version_input': bookingPolicyVersion,
+        },
+      );
+
+      appointmentMap = switch (response) {
+        final Map<dynamic, dynamic> map => Map<String, dynamic>.from(map),
+        final List<dynamic> list when list.isNotEmpty =>
+          Map<String, dynamic>.from(list.first as Map),
+        _ => null,
+      };
+    } on PostgrestException catch (error) {
+      if (error.message.contains('booking_policy_version_stale')) {
+        throw StateError(
+          'A politica de reserva mudou enquanto voce navegava. Abra de novo a reserva para revisar a regra atual.',
+        );
+      }
+      rethrow;
+    }
 
     final day = DateTime(startAt.year, startAt.month, startAt.day);
     await _invalidateCacheScopes(const <String>['home', 'appointments']);
     await _invalidateDayAvailability(serviceId: serviceId, day: day);
+
+    final appointmentId = _readNullableString(appointmentMap?['id']);
+    if (appointmentId == null || appointmentId.isEmpty) {
+      throw StateError(
+        'O horario foi criado, mas o app nao recebeu o identificador da reserva.',
+      );
+    }
+
+    return appointmentId;
+  }
+
+  Future<ManagedDepositChargeResult> createManagedDepositCharge({
+    required String appointmentId,
+    bool forceRefresh = false,
+  }) async {
+    final session = client.auth.currentSession;
+    final accessToken = session?.accessToken.trim() ?? '';
+
+    if (accessToken.isEmpty) {
+      throw StateError(
+        'Sua sessao expirou antes de gerar o Pix do sinal. Entre novamente e tente de novo.',
+      );
+    }
+
+    final response = await http.post(
+      Uri.parse(
+        '${SupabaseConfig.url}/functions/v1/asaas-create-deposit-charge',
+      ),
+      headers: <String, String>{
+        'apikey': SupabaseConfig.anonKey,
+        'authorization': 'Bearer $accessToken',
+        'content-type': 'application/json',
+      },
+      body: jsonEncode(<String, dynamic>{
+        'appointment_id': appointmentId,
+        'force_refresh': forceRefresh,
+      }),
+    );
+
+    final decodedBody = response.body.isNotEmpty
+        ? jsonDecode(response.body)
+        : null;
+    final responseMap = decodedBody is Map
+        ? Map<String, dynamic>.from(decodedBody)
+        : <String, dynamic>{};
+
+    if (response.statusCode >= 400) {
+      final detail = _readNullableString(responseMap['detail']);
+      final errorCode = _readNullableString(responseMap['error']);
+
+      throw StateError(
+        detail ??
+            (errorCode == 'managed_pix_not_enabled'
+                ? 'O salão ainda não ativou a cobrança Pix automática para esse sinal.'
+                : errorCode == 'deposit_not_required'
+                ? 'Este horário não precisa de sinal.'
+                : errorCode == 'appointment_not_collectable'
+                ? 'Este horário não aceita mais cobrança automática de sinal.'
+                : 'Nao foi possivel gerar o Pix automatico do sinal agora.'),
+      );
+    }
+
+    await _invalidateCacheScopes(const <String>['home', 'appointments']);
+    return ManagedDepositChargeResult.fromMap(responseMap);
   }
 
   Future<void> cancelAppointment({
@@ -848,6 +1540,114 @@ class SalonRepository {
     await _invalidateCacheScopes(const <String>['home', 'appointments']);
   }
 
+  Future<void> reportAppointmentDepositPaid({
+    required String appointmentId,
+    required String paymentMethod,
+    String? paymentReference,
+  }) async {
+    try {
+      await client.rpc(
+        'report_appointment_deposit_paid',
+        params: {
+          'appointment_uuid': appointmentId,
+          'payment_method_input': paymentMethod.trim(),
+          'payment_reference_input': _readNullableString(paymentReference),
+        },
+      );
+    } on PostgrestException catch (error) {
+      if (error.message.contains('deposit_not_required')) {
+        throw StateError('Este horário não precisa de sinal.');
+      }
+      if (error.message.contains('appointment_not_collectable')) {
+        throw StateError(
+          'Este horário não aceita mais confirmação de pagamento pelo app.',
+        );
+      }
+      rethrow;
+    }
+
+    await _invalidateCacheScopes(const <String>['home', 'appointments']);
+  }
+
+  Future<void> submitAppointmentDepositReceipt({
+    required String appointmentId,
+    required Uint8List receiptBytes,
+    required String contentType,
+    required String fileExtension,
+    required String paymentMethod,
+    String? paymentReference,
+  }) async {
+    final customerId = await _getCurrentCustomerId();
+    final salonId = await _getCurrentCustomerSalonId();
+
+    if (customerId == null || salonId == null) {
+      throw StateError(
+        'Nao foi possivel identificar sua conta para anexar o comprovante.',
+      );
+    }
+
+    final normalizedContentType = _normalizeDepositReceiptContentType(
+      contentType,
+    );
+    final normalizedExtension = _normalizeDepositReceiptExtension(
+      fileExtension,
+      normalizedContentType,
+    );
+    final uploadPath =
+        '$salonId/$customerId/$appointmentId/receipt.$normalizedExtension';
+
+    try {
+      await client.storage
+          .from('appointment-deposit-proofs')
+          .uploadBinary(
+            uploadPath,
+            receiptBytes,
+            fileOptions: FileOptions(
+              contentType: normalizedContentType,
+              upsert: true,
+            ),
+          );
+
+      await client.rpc(
+        'attach_appointment_deposit_receipt',
+        params: {
+          'appointment_uuid': appointmentId,
+          'receipt_path_input': uploadPath,
+          'receipt_content_type_input': normalizedContentType,
+        },
+      );
+
+      await client.rpc(
+        'report_appointment_deposit_paid',
+        params: {
+          'appointment_uuid': appointmentId,
+          'payment_method_input': paymentMethod.trim(),
+          'payment_reference_input': _readNullableString(paymentReference),
+        },
+      );
+    } on StorageException catch (error) {
+      throw StateError(
+        'Nao foi possivel enviar o comprovante agora. ${error.message}',
+      );
+    } on PostgrestException catch (error) {
+      if (error.message.contains('deposit_not_required')) {
+        throw StateError('Este horário não precisa de sinal.');
+      }
+      if (error.message.contains('appointment_not_collectable')) {
+        throw StateError('Este horário não aceita mais comprovante pelo app.');
+      }
+      if (error.message.contains('invalid_receipt_path') ||
+          error.message.contains('invalid_receipt_content_type')) {
+        throw StateError(
+          'O comprovante precisa ser uma imagem valida desse agendamento.',
+        );
+      }
+      rethrow;
+    }
+
+    await _invalidateCacheScopes(const <String>['home', 'appointments']);
+  }
+
   Future<void> claimVacancyAlert({required String alertId}) async {
     await client.rpc(
       'claim_vacancy_alert',
@@ -857,12 +1657,15 @@ class SalonRepository {
     await _invalidateCacheScopes(const <String>['home', 'appointments']);
   }
 
-  Future<List<FeedPost>> getFeedPosts({required String customerId}) async {
+  Future<List<FeedPost>> getFeedPosts({
+    required String customerId,
+    OperationalIssueReporter? onIssue,
+  }) async {
     try {
       final response = await client
           .from('salon_posts')
           .select(
-            'id,title,caption,image_path,post_type,video_path,created_at,services(id,name,price,duration),staff_members(name,role),salon_post_images(image_path,sort_order),salon_post_likes(customer_id),salon_post_comments(id,customer_id,customer_name,body,created_at)',
+            'id,title,caption,image_path,post_type,video_path,created_at,source_type,external_platform,external_permalink,external_author_username,services(id,name,price,duration),staff_members(name,role),salon_post_images(image_path,sort_order),salon_post_likes(customer_id),salon_post_comments(id,customer_id,customer_name,body,created_at)',
           )
           .order('created_at', ascending: false);
 
@@ -910,6 +1713,13 @@ class SalonRepository {
       if (message.contains('salon_posts') ||
           message.contains('salon_post_likes') ||
           message.contains('salon_post_comments')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'feed',
+          title: 'Feed indisponível',
+          message:
+              'As publicações do salão não puderam ser sincronizadas nesta atualização.',
+        );
         return const <FeedPost>[];
       }
       rethrow;
@@ -938,7 +1748,9 @@ class SalonRepository {
     });
   }
 
-  Future<LoyaltySummary?> getLoyaltySummary() async {
+  Future<LoyaltySummary?> getLoyaltySummary({
+    OperationalIssueReporter? onIssue,
+  }) async {
     try {
       final response = await client.rpc('get_customer_loyalty_summary');
       final summary = LoyaltySummary.fromMap(
@@ -951,13 +1763,22 @@ class SalonRepository {
       if (message.contains('get_customer_loyalty_summary') ||
           message.contains('salon_loyalty_programs') ||
           message.contains('customer_loyalty_transactions')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'loyalty',
+          title: 'Fidelidade indisponível',
+          message:
+              'O programa de pontos e cashback do painel não pôde ser lido agora.',
+        );
         return null;
       }
       rethrow;
     }
   }
 
-  Future<ReferralSummary?> getReferralSummary() async {
+  Future<ReferralSummary?> getReferralSummary({
+    OperationalIssueReporter? onIssue,
+  }) async {
     try {
       final response = await client.rpc('get_customer_referral_summary');
       final summary = ReferralSummary.fromMap(
@@ -970,13 +1791,22 @@ class SalonRepository {
       if (message.contains('get_customer_referral_summary') ||
           message.contains('salon_referral_') ||
           message.contains('referral_code')) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'referrals',
+          title: 'Indicações indisponíveis',
+          message:
+              'O programa de indicação do salão não pôde ser sincronizado agora.',
+        );
         return null;
       }
       rethrow;
     }
   }
 
-  Future<List<CustomerNotificationItem>> getCustomerNotifications() async {
+  Future<List<CustomerNotificationItem>> getCustomerNotifications({
+    OperationalIssueReporter? onIssue,
+  }) async {
     try {
       final response = await client
           .from('salon_customer_notifications')
@@ -995,13 +1825,22 @@ class SalonRepository {
       if (error.message.toLowerCase().contains(
         'salon_customer_notifications',
       )) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'notifications',
+          title: 'Notificações indisponíveis',
+          message:
+              'A central de notificações não conseguiu sincronizar novos avisos do salão agora.',
+        );
         return const <CustomerNotificationItem>[];
       }
       rethrow;
     }
   }
 
-  Future<NotificationReceiptSnapshot> getNotificationReceiptSnapshot() async {
+  Future<NotificationReceiptSnapshot> getNotificationReceiptSnapshot({
+    OperationalIssueReporter? onIssue,
+  }) async {
     try {
       final response = await client
           .from('customer_notification_receipts')
@@ -1028,6 +1867,13 @@ class SalonRepository {
       if (error.message.toLowerCase().contains(
         'customer_notification_receipts',
       )) {
+        _reportOperationalIssue(
+          onIssue,
+          scope: 'notification_receipts',
+          title: 'Leitura de notificações indisponível',
+          message:
+              'O app não conseguiu sincronizar recibos de leitura e arquivamento nesta atualização.',
+        );
         return const NotificationReceiptSnapshot(
           readKeys: <String>{},
           archivedKeys: <String>{},
@@ -1067,22 +1913,25 @@ class SalonRepository {
     return _loadCachedView(
       cacheKey: _cacheKey('home', suffix: customerId),
       fetcher: () async {
+        final issues = <OperationalIssue>[];
+        final reportIssue = _dedupeIssues(issues);
         final results = await Future.wait<Object?>([
           getServices(),
-          getTeamMembers(limit: 8),
-          getOffers(),
-          getRetailProducts(limit: 8),
+          getTeamMembers(limit: 8, onIssue: reportIssue),
+          getOffers(onIssue: reportIssue),
+          getCustomerMembershipPackages(onIssue: reportIssue),
+          getRetailProducts(limit: 8, onIssue: reportIssue),
           getAppointments(),
-          getVacancyAlerts(),
-          getFeedPosts(customerId: customerId),
-          getCustomerNotifications(),
-          getLoyaltySummary(),
-          getReferralSummary(),
-          getNotificationReceiptSnapshot(),
+          getVacancyAlerts(onIssue: reportIssue),
+          getFeedPosts(customerId: customerId, onIssue: reportIssue),
+          getCustomerNotifications(onIssue: reportIssue),
+          getLoyaltySummary(onIssue: reportIssue),
+          getReferralSummary(onIssue: reportIssue),
+          getNotificationReceiptSnapshot(onIssue: reportIssue),
         ]);
 
-        final notifications = results[7] as List<CustomerNotificationItem>;
-        final receipts = results[10] as NotificationReceiptSnapshot;
+        final notifications = results[8] as List<CustomerNotificationItem>;
+        final receipts = results[11] as NotificationReceiptSnapshot;
         final hydratedNotifications = notifications
             .where((item) => !receipts.archivedKeys.contains(item.readKey))
             .map(
@@ -1096,13 +1945,15 @@ class SalonRepository {
           services: results[0] as List<ServiceItem>,
           teamMembers: results[1] as List<TeamMember>,
           offers: results[2] as List<OfferItem>,
-          products: results[3] as List<RetailProduct>,
-          appointments: results[4] as List<AppointmentItem>,
-          vacancyAlerts: results[5] as List<VacancyAlert>,
-          posts: results[6] as List<FeedPost>,
+          memberships: results[3] as List<CustomerMembershipPackage>,
+          products: results[4] as List<RetailProduct>,
+          appointments: results[5] as List<AppointmentItem>,
+          vacancyAlerts: results[6] as List<VacancyAlert>,
+          posts: results[7] as List<FeedPost>,
           notifications: hydratedNotifications,
-          loyaltySummary: results[8] as LoyaltySummary?,
-          referralSummary: results[9] as ReferralSummary?,
+          loyaltySummary: results[9] as LoyaltySummary?,
+          referralSummary: results[10] as ReferralSummary?,
+          issues: issues,
         );
       },
       encode: encodeHomeSnapshot,
@@ -1114,11 +1965,13 @@ class SalonRepository {
     return _loadCachedView(
       cacheKey: _cacheKey('explore'),
       fetcher: () async {
+        final issues = <OperationalIssue>[];
+        final reportIssue = _dedupeIssues(issues);
         final results = await Future.wait<Object?>([
           getServices(),
-          getTeamMembers(),
-          getOffers(),
-          getRetailProducts(limit: 12),
+          getTeamMembers(onIssue: reportIssue),
+          getOffers(onIssue: reportIssue),
+          getRetailProducts(limit: 12, onIssue: reportIssue),
         ]);
 
         return ExploreSnapshot(
@@ -1126,6 +1979,7 @@ class SalonRepository {
           teamMembers: results[1] as List<TeamMember>,
           offers: results[2] as List<OfferItem>,
           products: results[3] as List<RetailProduct>,
+          issues: issues,
         );
       },
       encode: encodeExploreSnapshot,
@@ -1137,14 +1991,17 @@ class SalonRepository {
     return _loadCachedView(
       cacheKey: _cacheKey('appointments'),
       fetcher: () async {
+        final issues = <OperationalIssue>[];
+        final reportIssue = _dedupeIssues(issues);
         final results = await Future.wait<Object?>([
           getAppointments(),
-          getVacancyAlerts(),
+          getVacancyAlerts(onIssue: reportIssue),
         ]);
 
         return AppointmentsSnapshot(
           appointments: results[0] as List<AppointmentItem>,
           vacancyAlerts: results[1] as List<VacancyAlert>,
+          issues: issues,
         );
       },
       encode: encodeAppointmentsSnapshot,
@@ -1158,8 +2015,12 @@ class SalonRepository {
     return _loadCachedView(
       cacheKey: _cacheKey('feed', suffix: customerId),
       fetcher: () async {
-        final posts = await getFeedPosts(customerId: customerId);
-        return FeedSnapshot(posts: posts);
+        final issues = <OperationalIssue>[];
+        final posts = await getFeedPosts(
+          customerId: customerId,
+          onIssue: _dedupeIssues(issues),
+        );
+        return FeedSnapshot(posts: posts, issues: issues);
       },
       encode: encodeFeedSnapshot,
       decode: decodeFeedSnapshot,
@@ -1170,15 +2031,19 @@ class SalonRepository {
     return _loadCachedView(
       cacheKey: _cacheKey('profile-hub'),
       fetcher: () async {
+        final issues = <OperationalIssue>[];
+        final reportIssue = _dedupeIssues(issues);
         final results = await Future.wait<Object?>([
-          getLoyaltySummary(),
-          getReferralSummary(),
-          getCustomerNotifications(),
-          getNotificationReceiptSnapshot(),
+          getLoyaltySummary(onIssue: reportIssue),
+          getReferralSummary(onIssue: reportIssue),
+          getCustomerMembershipPackages(onIssue: reportIssue),
+          getCustomerStoreOrders(onIssue: reportIssue),
+          getCustomerNotifications(onIssue: reportIssue),
+          getNotificationReceiptSnapshot(onIssue: reportIssue),
         ]);
 
-        final notifications = results[2] as List<CustomerNotificationItem>;
-        final receipts = results[3] as NotificationReceiptSnapshot;
+        final notifications = results[4] as List<CustomerNotificationItem>;
+        final receipts = results[5] as NotificationReceiptSnapshot;
         final unreadCount = notifications
             .where((item) => !receipts.readKeys.contains(item.readKey))
             .length;
@@ -1186,7 +2051,10 @@ class SalonRepository {
         return ProfileSnapshot(
           loyaltySummary: results[0] as LoyaltySummary?,
           referralSummary: results[1] as ReferralSummary?,
+          memberships: results[2] as List<CustomerMembershipPackage>,
+          storeOrders: results[3] as List<CustomerStoreOrder>,
           unreadNotificationsCount: unreadCount,
+          issues: issues,
         );
       },
       encode: encodeProfileSnapshot,
@@ -1302,6 +2170,66 @@ class SalonRepository {
   }
 }
 
+String _normalizeDepositReceiptExtension(
+  String input,
+  String normalizedContentType,
+) {
+  final sanitized = input.trim().toLowerCase().replaceAll(
+    RegExp(r'[^a-z0-9]'),
+    '',
+  );
+
+  if (sanitized == 'png') {
+    return 'png';
+  }
+  if (sanitized == 'webp') {
+    return 'webp';
+  }
+  if (sanitized == 'heic') {
+    return 'heic';
+  }
+  if (sanitized == 'heif') {
+    return 'heif';
+  }
+  if (sanitized == 'jpeg' || sanitized == 'jpg') {
+    return 'jpg';
+  }
+
+  if (normalizedContentType == 'image/png') {
+    return 'png';
+  }
+  if (normalizedContentType == 'image/webp') {
+    return 'webp';
+  }
+  if (normalizedContentType == 'image/heic') {
+    return 'heic';
+  }
+  if (normalizedContentType == 'image/heif') {
+    return 'heif';
+  }
+
+  return 'jpg';
+}
+
+String _normalizeDepositReceiptContentType(String input) {
+  final normalized = input.trim().toLowerCase();
+
+  switch (normalized) {
+    case 'image/png':
+      return 'image/png';
+    case 'image/webp':
+      return 'image/webp';
+    case 'image/heic':
+      return 'image/heic';
+    case 'image/heif':
+      return 'image/heif';
+    case 'image/jpg':
+    case 'image/jpeg':
+    default:
+      return 'image/jpeg';
+  }
+}
+
 Map<String, dynamic> _asSingleMap(Object? value) {
   if (value is List && value.isNotEmpty && value.first is Map) {
     return Map<String, dynamic>.from(value.first as Map);
@@ -1331,4 +2259,13 @@ String? _readNullableString(Object? value) {
   }
 
   return text;
+}
+
+DateTime? _readNullableDateTime(Object? value) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) {
+    return null;
+  }
+
+  return DateTime.tryParse(text)?.toLocal();
 }

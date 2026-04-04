@@ -1,11 +1,19 @@
+type PublicSupabaseEnvName =
+  | "NEXT_PUBLIC_SUPABASE_URL"
+  | "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY";
+
+const publicSupabaseEnv: Record<PublicSupabaseEnvName, string | undefined> = {
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+};
+
 function requireEnv(
-  names: readonly [
-    "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-    ...("NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")[],
-  ],
+  names: readonly [PublicSupabaseEnvName, ...PublicSupabaseEnvName[]],
 ) {
   for (const name of names) {
-    const value = process.env[name];
+    const value = publicSupabaseEnv[name]?.trim();
 
     if (value) {
       return value;

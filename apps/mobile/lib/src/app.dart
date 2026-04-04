@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/notification_destination.dart';
 import 'data/salon_repository.dart';
 import 'models/app_models.dart';
 import 'screens/auth_screen.dart';
 import 'screens/client_shell_screen.dart';
 import 'screens/join_salon_screen.dart';
-import 'screens/notifications_screen.dart';
+import 'services/app_analytics_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/push_token_sync_service.dart';
 import 'theme/app_theme.dart';
@@ -26,14 +27,20 @@ class _SalonClientAppState extends State<SalonClientApp> {
     Supabase.instance.client,
   );
   late final PushNotificationService _pushNotifications;
+  final AppAnalyticsService _analytics = AppAnalyticsService.instance;
   PushTokenSyncService? _pushTokenSync;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<ClientShellScreenState> _shellKey =
+      GlobalKey<ClientShellScreenState>();
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription<NotificationTapPayload>? _pushTapSubscription;
   CustomerProfile? _profile;
   NotificationTapPayload? _pendingNotificationTap;
   bool _isResolvingSession = true;
   bool _showLaunchVeil = true;
+  Future<void>? _sessionResolutionInFlight;
+  bool _sessionResolutionQueued = false;
+  String? _lastTrackedSurface;
 
   @override
   void initState() {
@@ -75,23 +82,83 @@ class _SalonClientAppState extends State<SalonClientApp> {
   }
 
   Future<void> _resolveSession() async {
+    if (_sessionResolutionInFlight != null) {
+      _sessionResolutionQueued = true;
+      return _sessionResolutionInFlight!;
+    }
+
+    final completer = Completer<void>();
+    _sessionResolutionInFlight = completer.future;
+
+    try {
+      do {
+        _sessionResolutionQueued = false;
+        await _resolveSessionOnce();
+      } while (_sessionResolutionQueued && mounted);
+      completer.complete();
+    } catch (error, stackTrace) {
+      completer.completeError(error, stackTrace);
+      rethrow;
+    } finally {
+      _sessionResolutionInFlight = null;
+    }
+  }
+
+  Future<void> _resolveSessionOnce() async {
     if (!mounted) {
       return;
     }
 
     setState(() => _isResolvingSession = true);
-    await _repository.bootstrapAuthSession();
-    final nextProfile = await _repository.getCustomerProfile();
-    if (!mounted) {
-      return;
+
+    try {
+      await _repository.bootstrapAuthSession();
+      final nextProfile = await _repository.getCustomerProfile();
+      final fallbackProfile = _repository.currentUser != null ? _profile : null;
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _profile = nextProfile ?? fallbackProfile;
+        _isResolvingSession = false;
+      });
+
+      unawaited(_syncPushLifecycle());
+      unawaited(_syncAnalyticsContext());
+      _trackTopLevelSurface();
+    } catch (error, stackTrace) {
+      debugPrint('Session resolution failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) {
+        return;
+      }
+
+      final fallbackProfile = _repository.currentUser != null ? _profile : null;
+      setState(() {
+        _profile = fallbackProfile;
+        _isResolvingSession = false;
+      });
+
+      unawaited(_syncAnalyticsContext());
+      _trackTopLevelSurface();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_resolveSessionErrorMessage(error))),
+      );
+    }
+  }
+
+  String _resolveSessionErrorMessage(Object error) {
+    final message = error.toString().trim();
+    if (message.startsWith('Bad state: ')) {
+      return message.substring('Bad state: '.length).trim();
+    }
+    if (message.isEmpty) {
+      return 'Nao foi possivel carregar sua sessao agora.';
     }
 
-    setState(() {
-      _profile = nextProfile;
-      _isResolvingSession = false;
-    });
-
-    unawaited(_syncPushLifecycle());
+    return message;
   }
 
   Future<void> _signOutAndReload() async {
@@ -102,12 +169,30 @@ class _SalonClientAppState extends State<SalonClientApp> {
     await _resolveSession();
   }
 
+  Future<void> _handleJoinedProfile(CustomerProfile profile) async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _profile = profile;
+      _isResolvingSession = false;
+    });
+
+    unawaited(_syncPushLifecycle());
+    unawaited(_analytics.logJoinSalonCompleted(salonId: profile.salonId));
+    unawaited(_syncAnalyticsContext());
+    _trackTopLevelSurface();
+    unawaited(_resolveSession());
+  }
+
   void _handleProfileChanged(CustomerProfile profile) {
     setState(() {
       _profile = profile;
     });
 
     unawaited(_syncPushLifecycle());
+    unawaited(_syncAnalyticsContext());
   }
 
   Future<void> _syncPushLifecycle() async {
@@ -132,17 +217,45 @@ class _SalonClientAppState extends State<SalonClientApp> {
       return;
     }
 
+    final destination = resolveNotificationDestination(payload.type);
+    await _analytics.logNotificationOpened(
+      type: payload.type,
+      target: destination.analyticsTarget,
+    );
+
     final navigator = _navigatorKey.currentState;
     if (navigator == null) {
       _pendingNotificationTap = payload;
       return;
     }
 
+    navigator.popUntil((route) => route.isFirst);
+    await Future<void>.delayed(Duration.zero);
+
+    final shellState = _shellKey.currentState;
+    if (shellState == null) {
+      _pendingNotificationTap = payload;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _drainPendingNotificationTap();
+        }
+      });
+      return;
+    }
+
     _pendingNotificationTap = null;
-    await navigator.push<void>(
-      MaterialPageRoute(
-        builder: (_) => NotificationsScreen(repository: _repository),
-      ),
+    if (destination.opensNotificationsCenter) {
+      await shellState.openNotificationsCenter();
+      return;
+    }
+
+    shellState.navigateToTab(destination.tabIndex!);
+    if (!mounted || destination.feedbackMessage == null) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(destination.feedbackMessage!)),
     );
   }
 
@@ -158,6 +271,19 @@ class _SalonClientAppState extends State<SalonClientApp> {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      _trackTopLevelSurface();
+      if (_pendingNotificationTap != null &&
+          _repository.currentUser != null &&
+          _profile != null) {
+        _drainPendingNotificationTap();
+      }
+    });
+
     return MaterialApp(
       title: _profile?.salonName ?? 'Salon Fun',
       debugShowCheckedModeBanner: false,
@@ -237,16 +363,49 @@ class _SalonClientAppState extends State<SalonClientApp> {
     if (_profile == null) {
       return JoinSalonScreen(
         repository: _repository,
-        onJoined: _resolveSession,
+        onJoined: _handleJoinedProfile,
         onSignOutRequested: _signOutAndReload,
       );
     }
 
     return ClientShellScreen(
+      key: _shellKey,
       repository: _repository,
       profile: _profile!,
       onProfileChanged: _handleProfileChanged,
       onSignOutRequested: _signOutAndReload,
     );
+  }
+
+  Future<void> _syncAnalyticsContext() async {
+    final user = _repository.currentUser;
+    final profile = _profile;
+
+    if (user == null || profile == null) {
+      await _analytics.clearUserContext();
+      return;
+    }
+
+    await _analytics.setUserContext(
+      userId: user.id,
+      salonId: profile.salonId,
+      salonName: profile.salonName,
+    );
+  }
+
+  void _trackTopLevelSurface() {
+    final surface = switch (_routeIdentity()) {
+      'loading' => 'client_loading',
+      'auth' => 'client_auth',
+      'join' => 'client_join_salon',
+      _ => 'client_shell',
+    };
+
+    if (_lastTrackedSurface == surface) {
+      return;
+    }
+
+    _lastTrackedSurface = surface;
+    unawaited(_analytics.logScreenView(surface));
   }
 }

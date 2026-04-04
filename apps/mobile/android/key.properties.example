@@ -1,0 +1,4 @@
+storeFile=../keystores/upload-keystore.jks
+storePassword=troque-por-sua-senha
+keyAlias=upload
+keyPassword=troque-por-sua-senha

@@ -31,6 +31,7 @@ import {
   signInWithGoogleActionImpl,
   signOutActionImpl,
   signUpActionImpl,
+  updatePasswordActionImpl,
 } from "@/app/_actions/auth";
 
 describe("auth actions", () => {
@@ -196,7 +197,7 @@ describe("auth actions", () => {
       redirectTo: "https://painel.jc7desenvolvimento.online/auth/recovery",
     });
     expect(location).toBe(
-      "/login?message=Enviamos+um+link+de+recupera%C3%A7%C3%A3o+para+seu+e-mail.+Abra+a+mensagem+para+redefinir+a+senha.&tone=success",
+      "/login?message=Enviamos+um+link+de+recupera%C3%A7%C3%A3o+para+seu+e-mail.+Abra+a+mensagem+mais+recente+para+redefinir+a+senha.&tone=success",
     );
   });
 
@@ -213,5 +214,32 @@ describe("auth actions", () => {
 
     expect(signOut).toHaveBeenCalled();
     expect(location).toBe("/login");
+  });
+
+  it("updates the password and redirects back to login with a success notice", async () => {
+    const updateUser = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      auth: {
+        updateUser,
+      },
+    });
+
+    const location = await captureRedirect(
+      updatePasswordActionImpl(
+        makeFormData({
+          password: "123456",
+          passwordConfirmation: "123456",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateUser).toHaveBeenCalledWith({
+      password: "123456",
+    });
+    expect(location).toBe(
+      "/login?message=Senha+atualizada+com+sucesso.+Entre+com+sua+nova+senha.&tone=success",
+    );
   });
 });

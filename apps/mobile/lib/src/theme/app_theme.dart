@@ -18,6 +18,9 @@ class SalonThemeTokens extends ThemeExtension<SalonThemeTokens> {
     required this.success,
     required this.warning,
     required this.isDarkShell,
+    required this.buttonStyle,
+    required this.cardStyle,
+    required this.bannerStyle,
   });
 
   final Color brand;
@@ -31,6 +34,9 @@ class SalonThemeTokens extends ThemeExtension<SalonThemeTokens> {
   final Color success;
   final Color warning;
   final bool isDarkShell;
+  final SalonButtonStyle buttonStyle;
+  final SalonCardStyle cardStyle;
+  final SalonBannerStyle bannerStyle;
 
   LinearGradient get appGradient => LinearGradient(
     begin: Alignment.topLeft,
@@ -45,13 +51,33 @@ class SalonThemeTokens extends ThemeExtension<SalonThemeTokens> {
   );
 
   LinearGradient get heroGradient => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: <Color>[
-      brand,
-      Color.lerp(brandDark, accent, 0.45) ?? accent,
-      brandDark,
-    ],
+    begin: switch (bannerStyle) {
+      SalonBannerStyle.editorial => Alignment.topCenter,
+      SalonBannerStyle.spotlight => Alignment.centerLeft,
+      SalonBannerStyle.immersive => Alignment.topLeft,
+    },
+    end: switch (bannerStyle) {
+      SalonBannerStyle.editorial => Alignment.bottomCenter,
+      SalonBannerStyle.spotlight => Alignment.centerRight,
+      SalonBannerStyle.immersive => Alignment.bottomRight,
+    },
+    colors: switch (bannerStyle) {
+      SalonBannerStyle.editorial => <Color>[
+        Color.alphaBlend(accent.withValues(alpha: 0.18), brand),
+        Color.lerp(brand, accent, 0.58) ?? accent,
+        Color.lerp(brandDark, Colors.white, 0.08) ?? brandDark,
+      ],
+      SalonBannerStyle.spotlight => <Color>[
+        Color.lerp(accent, Colors.white, 0.16) ?? accent,
+        Color.lerp(brand, accent, 0.72) ?? accent,
+        brandDark,
+      ],
+      SalonBannerStyle.immersive => <Color>[
+        brand,
+        Color.lerp(brandDark, accent, 0.45) ?? accent,
+        brandDark,
+      ],
+    },
   );
 
   @override
@@ -67,6 +93,9 @@ class SalonThemeTokens extends ThemeExtension<SalonThemeTokens> {
     Color? success,
     Color? warning,
     bool? isDarkShell,
+    SalonButtonStyle? buttonStyle,
+    SalonCardStyle? cardStyle,
+    SalonBannerStyle? bannerStyle,
   }) {
     return SalonThemeTokens(
       brand: brand ?? this.brand,
@@ -80,6 +109,9 @@ class SalonThemeTokens extends ThemeExtension<SalonThemeTokens> {
       success: success ?? this.success,
       warning: warning ?? this.warning,
       isDarkShell: isDarkShell ?? this.isDarkShell,
+      buttonStyle: buttonStyle ?? this.buttonStyle,
+      cardStyle: cardStyle ?? this.cardStyle,
+      bannerStyle: bannerStyle ?? this.bannerStyle,
     );
   }
 
@@ -105,6 +137,9 @@ class SalonThemeTokens extends ThemeExtension<SalonThemeTokens> {
       success: Color.lerp(success, other.success, t) ?? success,
       warning: Color.lerp(warning, other.warning, t) ?? warning,
       isDarkShell: t < 0.5 ? isDarkShell : other.isDarkShell,
+      buttonStyle: t < 0.5 ? buttonStyle : other.buttonStyle,
+      cardStyle: t < 0.5 ? cardStyle : other.cardStyle,
+      bannerStyle: t < 0.5 ? bannerStyle : other.bannerStyle,
     );
   }
 }
@@ -112,7 +147,9 @@ class SalonThemeTokens extends ThemeExtension<SalonThemeTokens> {
 ThemeData buildSalonTheme(CustomerProfile? profile) {
   final config = profile?.salonClientAppConfig ?? const SalonClientAppConfig();
   final brand =
-      _parseHexColor(profile?.salonBrandColor) ?? const Color(0xFFC56B43);
+      _parseHexColor(config.secondaryColor) ??
+      _parseHexColor(profile?.salonBrandColor) ??
+      const Color(0xFFC56B43);
   final accent =
       _parseHexColor(config.accentColor) ??
       _fallbackAccent(config.visualStyle, brand);
@@ -146,6 +183,9 @@ ThemeData buildSalonTheme(CustomerProfile? profile) {
     success: const Color(0xFF2D9C75),
     warning: const Color(0xFFDA8A32),
     isDarkShell: isDarkShell,
+    buttonStyle: config.resolvedButtonStyle,
+    cardStyle: config.resolvedCardStyle,
+    bannerStyle: config.resolvedBannerStyle,
   );
 
   final textTheme = GoogleFonts.plusJakartaSansTextTheme().copyWith(
@@ -226,6 +266,21 @@ ThemeData buildSalonTheme(CustomerProfile? profile) {
     onTertiary: Colors.white,
   );
 
+  final filledButtonRadius = switch (config.resolvedButtonStyle) {
+    SalonButtonStyle.capsule => 999.0,
+    SalonButtonStyle.rounded => 18.0,
+    SalonButtonStyle.elevated => 22.0,
+  };
+  final outlinedButtonRadius = switch (config.resolvedButtonStyle) {
+    SalonButtonStyle.capsule => 999.0,
+    SalonButtonStyle.rounded => 18.0,
+    SalonButtonStyle.elevated => 22.0,
+  };
+  final filledButtonElevation = switch (config.resolvedButtonStyle) {
+    SalonButtonStyle.elevated => 4.0,
+    SalonButtonStyle.capsule || SalonButtonStyle.rounded => 0.0,
+  };
+
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
@@ -242,10 +297,14 @@ ThemeData buildSalonTheme(CustomerProfile? profile) {
     ),
     cardTheme: CardThemeData(
       color: surfaceStrong,
-      elevation: 0,
+      elevation: config.resolvedCardStyle == SalonCardStyle.floating ? 3 : 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(28),
-        side: BorderSide(color: outline),
+        side: BorderSide(
+          color: config.resolvedCardStyle == SalonCardStyle.outlined
+              ? outline
+              : outline.withValues(alpha: 0.55),
+        ),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -285,7 +344,10 @@ ThemeData buildSalonTheme(CustomerProfile? profile) {
         foregroundColor: scheme.onPrimary,
         textStyle: textTheme.labelLarge,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        elevation: filledButtonElevation,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(filledButtonRadius),
+        ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -294,7 +356,9 @@ ThemeData buildSalonTheme(CustomerProfile? profile) {
         textStyle: textTheme.titleMedium,
         side: BorderSide(color: outline),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(outlinedButtonRadius),
+        ),
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(

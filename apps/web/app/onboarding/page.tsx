@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 
 import { createSalonAction } from "@/app/actions";
 import { FlashMessage } from "@/components/FlashMessage";
+import { getOwnerSalon, requireUser } from "@/lib/auth";
 import { SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -15,23 +15,11 @@ type OnboardingPageProps = {
 };
 
 export default async function OnboardingPage({ searchParams }: OnboardingPageProps) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await requireUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  const existingSalon = await getOwnerSalon(user.id);
 
-  const { data: existingSalon } = await supabase
-    .from("salons")
-    .select("*")
-    .match({ owner_user_id: user.id })
-    .maybeSingle();
-  const existingSalonData = existingSalon as { id: string } | null;
-
-  if (existingSalonData?.id) {
+  if (existingSalon?.id) {
     redirect("/dashboard");
   }
 

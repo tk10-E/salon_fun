@@ -60,7 +60,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
         final message = result.requiresEmailConfirmation
             ? 'Conta criada para ${result.email}. Enviamos um link de verificação; confirme o e-mail e depois entre no app.'
-            : 'Conta criada com sucesso no Firebase. Agora e so entrar e vincular ao salao.';
+            : 'Conta criada com sucesso. Agora e so entrar e vincular ao salao.';
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(message)));
@@ -131,6 +131,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final tokens = context.salonTheme;
+    final compactHero = MediaQuery.sizeOf(context).width < 430;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -145,54 +146,94 @@ class _AuthScreenState extends State<AuthScreen> {
                 const SizedBox(height: 8),
                 StaggerReveal(
                   child: HeroImagePanel(
-                    height: 356,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: const [
-                            _AuthGlassPill(label: 'Cadastro premium'),
-                            _AuthGlassPill(label: 'Google e Facebook'),
-                          ],
-                        ),
-                        const Spacer(),
-                        Text(
-                          _isSignUp
-                              ? 'Crie sua presença no app do seu salão com uma entrada digna de produto premium.'
-                              : 'Volte para sua agenda, seus benefícios e o feed do salão com uma experiência à altura.',
-                          style: textTheme.displaySmall?.copyWith(
-                            color: Colors.white,
-                            height: 1.15,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Entre com Google, Facebook ou e-mail. O app mantém a estética editorial e a velocidade de um produto maduro desde o primeiro toque.',
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.84),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
+                    height: compactHero ? 540 : 356,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compactContent =
+                            constraints.maxWidth < 340 ||
+                            constraints.maxHeight < 330;
+                        final signalCardWidth = (constraints.maxWidth - 12) / 2;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: _HeroSignalCard(
-                                label: 'Reserva viva',
-                                value: 'Agenda, push e feed',
+                            if (compactContent)
+                              const _AuthGlassPill(label: 'Entrada premium')
+                            else
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: const [
+                                  _AuthGlassPill(label: 'Cadastro premium'),
+                                  _AuthGlassPill(label: 'Google e Facebook'),
+                                ],
                               ),
+                            SizedBox(height: compactContent ? 16 : 0),
+                            if (!compactContent) const Spacer(),
+                            Text(
+                              _isSignUp
+                                  ? 'Crie sua presença no app do seu salão com uma entrada digna de produto premium.'
+                                  : 'Volte para sua agenda, seus benefícios e o feed do salão com uma experiência à altura.',
+                              maxLines: compactContent ? 3 : 5,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  (compactContent
+                                          ? textTheme.headlineMedium
+                                          : textTheme.displaySmall)
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        height: 1.12,
+                                      ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _HeroSignalCard(
-                                label: 'Entrada social',
-                                value: 'Google + Facebook',
+                            SizedBox(height: compactContent ? 8 : 12),
+                            Text(
+                              'Entre com Google, Facebook ou e-mail. O app mantém a estética editorial e a velocidade de um produto maduro desde o primeiro toque.',
+                              maxLines: compactContent ? 2 : 4,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  (compactContent
+                                          ? textTheme.bodySmall
+                                          : textTheme.bodyMedium)
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.84,
+                                        ),
+                                      ),
+                            ),
+                            SizedBox(height: compactContent ? 14 : 18),
+                            if (compactContent)
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: const [
+                                  _AuthGlassPill(label: 'Agenda, push e feed'),
+                                  _AuthGlassPill(label: 'Google + Facebook'),
+                                ],
+                              )
+                            else
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  SizedBox(
+                                    width: signalCardWidth,
+                                    child: const _HeroSignalCard(
+                                      label: 'Reserva viva',
+                                      value: 'Agenda, push e feed',
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: signalCardWidth,
+                                    child: const _HeroSignalCard(
+                                      label: 'Entrada social',
+                                      value: 'Google + Facebook',
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -388,9 +429,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                         ),
                                       );
                                     },
-                              child: const Text(
-                                'Esqueci minha senha no Firebase',
-                              ),
+                              child: const Text('Esqueci minha senha'),
                             ),
                           const SizedBox(height: 6),
                           Text(
@@ -530,20 +569,27 @@ class _AuthDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.salonTheme;
-    return Row(
-      children: [
-        Expanded(child: Divider(color: tokens.outline)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ),
-        Expanded(child: Divider(color: tokens.outline)),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 320;
+        return Row(
+          children: [
+            Expanded(child: Divider(color: tokens.outline)),
+            SizedBox(width: compact ? 8 : 12),
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            SizedBox(width: compact ? 8 : 12),
+            Expanded(child: Divider(color: tokens.outline)),
+          ],
+        );
+      },
     );
   }
 }

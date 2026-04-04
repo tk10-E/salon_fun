@@ -33,6 +33,7 @@ import {
   registerInventoryMovementActionImpl,
   saveInventoryProductActionImpl,
   saveStaffCommissionSettingsActionImpl,
+  updateCustomerProductOrderStatusActionImpl,
 } from "@/app/_actions/operations";
 
 describe("operations actions", () => {
@@ -133,12 +134,15 @@ describe("operations actions", () => {
       salon_id: "salon-1",
       name: "Shampoo reconstrutor",
       brand: "Wella",
+      description: null,
       sku: "WEL-01",
       unit: "un",
       current_stock: 8,
       minimum_stock: 2,
       cost_price: 24.9,
       retail_price: 44.9,
+      max_purchase_quantity: 6,
+      image_paths: [],
       is_active: true,
     });
     expect(location).toBe(
@@ -195,6 +199,44 @@ describe("operations actions", () => {
     });
     expect(location).toBe(
       "/dashboard/operations?message=O+estoque+de+Shampoo+reconstrutor+n%C3%A3o+cobre+essa+sa%C3%ADda.&tone=error",
+    );
+  });
+
+  it("updates the store order status for the salon", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          order_id: "order-1",
+          order_number: 204,
+          status: "ready",
+          updated_at: "2026-04-04T12:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+
+    createClientMock.mockReturnValue({ rpc });
+
+    const location = await captureRedirect(
+      updateCustomerProductOrderStatusActionImpl(
+        makeFormData({
+          orderId: "order-1",
+          status: "ready",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(rpc).toHaveBeenCalledWith("update_customer_product_order_status", {
+      order_id_input: "order-1",
+      status_input: "ready",
+      cancellation_reason_input: null,
+    });
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
+      expect.arrayContaining(["/dashboard/operations", "/dashboard"]),
+    );
+    expect(location).toBe(
+      "/dashboard/operations?message=Pedido+%23204+marcado+como+pronto.&tone=success",
     );
   });
 });

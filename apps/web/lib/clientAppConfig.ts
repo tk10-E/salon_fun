@@ -40,6 +40,38 @@ export type ClientAppHomeModule =
   | "products"
   | "loyalty";
 
+export type ClientAppCampaignPriority = "high" | "medium" | "low";
+
+export type ClientAppCampaignTarget =
+  | "explore"
+  | "appointments"
+  | "feed"
+  | "profile"
+  | "notifications"
+  | "support";
+
+export type ClientAppCampaignAudience =
+  | "all"
+  | "with_upcoming_appointment"
+  | "without_upcoming_appointment"
+  | "with_active_benefits"
+  | "without_active_benefits";
+
+export type ClientAppCampaign = {
+  id: string;
+  isActive: boolean;
+  priority: ClientAppCampaignPriority;
+  startsAt: string | null;
+  endsAt: string | null;
+  audience: ClientAppCampaignAudience;
+  eyebrow: string | null;
+  title: string;
+  message: string;
+  campaignLabel: string | null;
+  ctaLabel: string | null;
+  ctaTarget: ClientAppCampaignTarget;
+};
+
 export type SalonClientAppConfig = {
   experienceModel: ClientExperienceModel;
   visualStyle: ClientAppVisualStyle;
@@ -80,9 +112,14 @@ export type SalonClientAppConfig = {
   instagramUrl: string | null;
   addressLabel: string | null;
   mapUrl: string | null;
+  privacyPolicyUrl: string | null;
+  termsOfUseUrl: string | null;
+  supportUrl: string | null;
+  supportEmail: string | null;
   ratingValue: number | null;
   ratingCount: number | null;
   visibleHomeModules: ClientAppHomeModule[];
+  centralCampaigns: ClientAppCampaign[];
   rawConfig: Record<string, Json | undefined>;
 };
 
@@ -119,6 +156,24 @@ type PremiumSettingOption<T extends string> = {
 
 type HomeModuleOption = {
   value: ClientAppHomeModule;
+  label: string;
+  description: string;
+};
+
+type ClientAppCampaignPriorityOption = {
+  value: ClientAppCampaignPriority;
+  label: string;
+  description: string;
+};
+
+type ClientAppCampaignTargetOption = {
+  value: ClientAppCampaignTarget;
+  label: string;
+  description: string;
+};
+
+type ClientAppCampaignAudienceOption = {
+  value: ClientAppCampaignAudience;
   label: string;
   description: string;
 };
@@ -340,20 +395,17 @@ export const CLIENT_APP_BUTTON_STYLE_OPTIONS: readonly PremiumSettingOption<Clie
     {
       value: "capsule",
       label: "Capsule luxury",
-      description:
-        "Botões alongados e fluidos, com leitura mais aspiracional.",
+      description: "Botões alongados e fluidos, com leitura mais aspiracional.",
     },
     {
       value: "rounded",
       label: "Rounded premium",
-      description:
-        "Acabamento arredondado com cara de app pago e moderno.",
+      description: "Acabamento arredondado com cara de app pago e moderno.",
     },
     {
       value: "elevated",
       label: "Elevated strong",
-      description:
-        "Botões com mais peso visual, sombra e presença de CTA.",
+      description: "Botões com mais peso visual, sombra e presença de CTA.",
     },
   ] as const;
 
@@ -415,26 +467,22 @@ export const CLIENT_APP_HOME_MODULE_OPTIONS: readonly HomeModuleOption[] = [
   {
     value: "professionals",
     label: "Profissionais em destaque",
-    description:
-      "Mostra especialistas da casa com foto, especialidade e CTA.",
+    description: "Mostra especialistas da casa com foto, especialidade e CTA.",
   },
   {
     value: "gallery",
     label: "Galeria e trabalhos",
-    description:
-      "Usa imagens e prova social para puxar desejo e conversão.",
+    description: "Usa imagens e prova social para puxar desejo e conversão.",
   },
   {
     value: "promotions",
     label: "Promoções ativas",
-    description:
-      "Expõe campanhas, combos e chamadas comerciais da operação.",
+    description: "Expõe campanhas, combos e chamadas comerciais da operação.",
   },
   {
     value: "products",
     label: "Produtos em destaque",
-    description:
-      "Abre espaço para vitrine, kits e itens recomendados na home.",
+    description: "Abre espaço para vitrine, kits e itens recomendados na home.",
   },
   {
     value: "loyalty",
@@ -443,6 +491,100 @@ export const CLIENT_APP_HOME_MODULE_OPTIONS: readonly HomeModuleOption[] = [
       "Valoriza cashback, clube VIP e motivos para o cliente voltar.",
   },
 ] as const;
+
+export const CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS: readonly ClientAppCampaignPriorityOption[] =
+  [
+    {
+      value: "high",
+      label: "Alta prioridade",
+      description:
+        "Aparece primeiro e deve ser usada para recados ou campanhas que pedem ação rápida.",
+    },
+    {
+      value: "medium",
+      label: "Prioridade média",
+      description:
+        "Boa para campanhas da semana, benefícios e chamadas de retorno.",
+    },
+    {
+      value: "low",
+      label: "Baixa prioridade",
+      description:
+        "Funciona como reforço editorial sem tomar a frente da jornada principal.",
+    },
+  ] as const;
+
+export const CLIENT_APP_CAMPAIGN_TARGET_OPTIONS: readonly ClientAppCampaignTargetOption[] =
+  [
+    {
+      value: "explore",
+      label: "Reservar",
+      description: "Leva a cliente para catálogo e agendamento dentro do app.",
+    },
+    {
+      value: "appointments",
+      label: "Agenda",
+      description: "Abre compromissos, confirmações e horários já reservados.",
+    },
+    {
+      value: "feed",
+      label: "Central",
+      description:
+        "Abre a central viva do salão com posts, sinais e campanhas.",
+    },
+    {
+      value: "profile",
+      label: "Perfil e benefícios",
+      description:
+        "Leva para pontos, recompensas, políticas e canais do salão.",
+    },
+    {
+      value: "notifications",
+      label: "Avisos",
+      description:
+        "Abre a central de notificações e recados publicados pelo salão.",
+    },
+    {
+      value: "support",
+      label: "Canal do salão",
+      description:
+        "Leva a cliente para o canal oficial de suporte publicado pelo salão.",
+    },
+  ] as const;
+
+export const CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS: readonly ClientAppCampaignAudienceOption[] =
+  [
+    {
+      value: "all",
+      label: "Toda a base",
+      description:
+        "A publicação pode aparecer para qualquer cliente que abrir o app.",
+    },
+    {
+      value: "with_upcoming_appointment",
+      label: "Quem já tem agenda",
+      description:
+        "Mostra a peça apenas para clientes com próximo horário marcado.",
+    },
+    {
+      value: "without_upcoming_appointment",
+      label: "Quem está sem agenda",
+      description:
+        "Usa a publicação para puxar reserva ou retorno de quem ainda não tem horário.",
+    },
+    {
+      value: "with_active_benefits",
+      label: "Quem já tem benefícios",
+      description:
+        "Aparece para clientes com pontos, indicações, ofertas ou membership ativa.",
+    },
+    {
+      value: "without_active_benefits",
+      label: "Quem ainda não tem benefícios",
+      description:
+        "Serve para apresentar clube, cashback ou programa de relacionamento para quem ainda não entrou nessa camada.",
+    },
+  ] as const;
 
 const DEFAULT_CLIENT_APP_CONFIG: SalonClientAppConfig = {
   experienceModel: "auto",
@@ -484,9 +626,14 @@ const DEFAULT_CLIENT_APP_CONFIG: SalonClientAppConfig = {
   instagramUrl: null,
   addressLabel: null,
   mapUrl: null,
+  privacyPolicyUrl: null,
+  termsOfUseUrl: null,
+  supportUrl: null,
+  supportEmail: null,
   ratingValue: null,
   ratingCount: null,
   visibleHomeModules: [],
+  centralCampaigns: [],
   rawConfig: {},
 };
 
@@ -597,6 +744,10 @@ export function normalizeSalonClientAppConfig(
     instagramUrl: normalizeNullableText(raw.instagramUrl),
     addressLabel: normalizeNullableText(raw.addressLabel),
     mapUrl: normalizeNullableText(raw.mapUrl),
+    privacyPolicyUrl: normalizeNullableText(raw.privacyPolicyUrl),
+    termsOfUseUrl: normalizeNullableText(raw.termsOfUseUrl),
+    supportUrl: normalizeNullableText(raw.supportUrl),
+    supportEmail: normalizeNullableText(raw.supportEmail),
     ratingValue: normalizeNullableNumber(raw.ratingValue, {
       minimum: 0,
       maximum: 5,
@@ -604,9 +755,8 @@ export function normalizeSalonClientAppConfig(
     ratingCount: normalizeNullableInteger(raw.ratingCount, {
       minimum: 0,
     }),
-    visibleHomeModules: normalizeClientAppHomeModules(
-      raw.visibleHomeModules,
-    ),
+    visibleHomeModules: normalizeClientAppHomeModules(raw.visibleHomeModules),
+    centralCampaigns: normalizeClientAppCampaigns(raw.centralCampaigns),
     rawConfig: raw,
   };
 }
@@ -700,7 +850,11 @@ export function serializeSalonClientAppConfig(
     value.profileCoverImageFocusY,
   );
   setNullableNumber(raw, "profileCoverImageZoom", value.profileCoverImageZoom);
-  setNullableText(raw, "heroImagePath", normalizeNullableText(raw.heroImagePath));
+  setNullableText(
+    raw,
+    "heroImagePath",
+    normalizeNullableText(raw.heroImagePath),
+  );
   setNullableText(
     raw,
     "heroImageSourcePath",
@@ -744,6 +898,10 @@ export function serializeSalonClientAppConfig(
   setNullableText(raw, "instagramUrl", value.instagramUrl);
   setNullableText(raw, "addressLabel", value.addressLabel);
   setNullableText(raw, "mapUrl", value.mapUrl);
+  setNullableText(raw, "privacyPolicyUrl", value.privacyPolicyUrl);
+  setNullableText(raw, "termsOfUseUrl", value.termsOfUseUrl);
+  setNullableText(raw, "supportUrl", value.supportUrl);
+  setNullableText(raw, "supportEmail", value.supportEmail);
   setNullableNumber(raw, "ratingValue", value.ratingValue);
   setNullableNumber(raw, "ratingCount", value.ratingCount);
 
@@ -751,6 +909,25 @@ export function serializeSalonClientAppConfig(
     raw.visibleHomeModules = [...value.visibleHomeModules];
   } else {
     delete raw.visibleHomeModules;
+  }
+
+  if (value.centralCampaigns.length > 0) {
+    raw.centralCampaigns = value.centralCampaigns.map((campaign) => ({
+      id: campaign.id,
+      isActive: campaign.isActive,
+      priority: campaign.priority,
+      startsAt: campaign.startsAt,
+      endsAt: campaign.endsAt,
+      audience: campaign.audience,
+      eyebrow: campaign.eyebrow,
+      title: campaign.title,
+      message: campaign.message,
+      campaignLabel: campaign.campaignLabel,
+      ctaLabel: campaign.ctaLabel,
+      ctaTarget: campaign.ctaTarget,
+    }));
+  } else {
+    delete raw.centralCampaigns;
   }
 
   return raw;
@@ -848,6 +1025,36 @@ export function getClientHomeEmphasisOption(value: ClientHomeEmphasis) {
   );
 }
 
+export function getClientAppCampaignPriorityOption(
+  value: ClientAppCampaignPriority,
+) {
+  return (
+    CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS.find(
+      (option) => option.value === value,
+    ) ?? CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS[1]
+  );
+}
+
+export function getClientAppCampaignTargetOption(
+  value: ClientAppCampaignTarget,
+) {
+  return (
+    CLIENT_APP_CAMPAIGN_TARGET_OPTIONS.find(
+      (option) => option.value === value,
+    ) ?? CLIENT_APP_CAMPAIGN_TARGET_OPTIONS[0]
+  );
+}
+
+export function getClientAppCampaignAudienceOption(
+  value: ClientAppCampaignAudience,
+) {
+  return (
+    CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS.find(
+      (option) => option.value === value,
+    ) ?? CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS[0]
+  );
+}
+
 export function getClientAppThemeModeOption(value: ClientAppThemeMode | null) {
   return (
     CLIENT_APP_THEME_MODE_OPTIONS.find((option) => option.value === value) ??
@@ -913,6 +1120,15 @@ function normalizeNullableText(value: Json | undefined) {
   return normalized ? normalized : null;
 }
 
+function normalizeNullableDateTimeText(value: Json | undefined) {
+  const normalized = normalizeNullableText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return Number.isNaN(Date.parse(normalized)) ? null : normalized;
+}
+
 function normalizeNullableHexColor(value: Json | undefined) {
   const normalized = normalizeNullableText(value)?.toUpperCase() ?? null;
   if (!normalized) {
@@ -965,6 +1181,53 @@ function normalizeClientAppHomeModules(value: Json | undefined) {
   }
 
   return value.filter(isClientAppHomeModule);
+}
+
+function normalizeClientAppCampaigns(value: Json | undefined) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry, index) => normalizeClientAppCampaign(entry, index))
+    .filter((entry): entry is ClientAppCampaign => Boolean(entry));
+}
+
+function normalizeClientAppCampaign(
+  value: Json | undefined,
+  index: number,
+): ClientAppCampaign | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const source = value as Record<string, Json | undefined>;
+  const title = normalizeNullableText(source.title);
+  const message = normalizeNullableText(source.message);
+  if (!title || !message) {
+    return null;
+  }
+
+  return {
+    id: normalizeNullableText(source.id) ?? `campaign-${index + 1}`,
+    isActive: source.isActive !== false,
+    priority: isClientAppCampaignPriority(source.priority)
+      ? source.priority
+      : "medium",
+    startsAt: normalizeNullableDateTimeText(source.startsAt),
+    endsAt: normalizeNullableDateTimeText(source.endsAt),
+    audience: isClientAppCampaignAudience(source.audience)
+      ? source.audience
+      : "all",
+    eyebrow: normalizeNullableText(source.eyebrow),
+    title,
+    message,
+    campaignLabel: normalizeNullableText(source.campaignLabel),
+    ctaLabel: normalizeNullableText(source.ctaLabel),
+    ctaTarget: isClientAppCampaignTarget(source.ctaTarget)
+      ? source.ctaTarget
+      : "explore",
+  };
 }
 
 function setNullableText(
@@ -1064,5 +1327,36 @@ function isClientAppHomeModule(
   return (
     typeof value === "string" &&
     CLIENT_APP_HOME_MODULE_OPTIONS.some((option) => option.value === value)
+  );
+}
+
+function isClientAppCampaignPriority(
+  value: Json | undefined,
+): value is ClientAppCampaignPriority {
+  return (
+    typeof value === "string" &&
+    CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS.some(
+      (option) => option.value === value,
+    )
+  );
+}
+
+function isClientAppCampaignTarget(
+  value: Json | undefined,
+): value is ClientAppCampaignTarget {
+  return (
+    typeof value === "string" &&
+    CLIENT_APP_CAMPAIGN_TARGET_OPTIONS.some((option) => option.value === value)
+  );
+}
+
+function isClientAppCampaignAudience(
+  value: Json | undefined,
+): value is ClientAppCampaignAudience {
+  return (
+    typeof value === "string" &&
+    CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS.some(
+      (option) => option.value === value,
+    )
   );
 }

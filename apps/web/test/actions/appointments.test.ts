@@ -29,7 +29,10 @@ vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
 }));
 
-import { updateAppointmentStatusActionImpl } from "@/app/_actions/appointments";
+import {
+  updateAppointmentDepositActionImpl,
+  updateAppointmentStatusActionImpl,
+} from "@/app/_actions/appointments";
 
 describe("appointment actions", () => {
   beforeEach(() => {
@@ -136,5 +139,119 @@ describe("appointment actions", () => {
       ]),
     );
     expect(location).toBe("/dashboard/appointments?message=Agendamento+confirmado+com+sucesso.&tone=success");
+  });
+
+  it("marks a protected booking deposit as received", async () => {
+    const selectAppointment = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: {
+              id: "appointment-1",
+              deposit_amount: 40,
+              deposit_paid_at: null,
+              deposit_status: "pending",
+            },
+          }),
+        })),
+      })),
+    }));
+    const updateAppointment = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "appointments") {
+          return {
+            select: selectAppointment,
+            update: updateAppointment,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      rpc: vi.fn(),
+    });
+
+    const location = await captureRedirect(
+      updateAppointmentDepositActionImpl(
+        makeFormData({
+          appointmentId: "appointment-1",
+          depositStatus: "received",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deposit_status: "received",
+        deposit_notes: null,
+      }),
+    );
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
+      expect.arrayContaining(["/dashboard", "/dashboard/appointments"]),
+    );
+    expect(location).toBe(
+      "/dashboard/appointments?message=Sinal+marcado+como+recebido.&tone=success",
+    );
+  });
+
+  it("clears the customer payment report when a deposit goes back to pending", async () => {
+    const selectAppointment = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: {
+              id: "appointment-1",
+              deposit_amount: 40,
+              deposit_paid_at: "2026-04-03T12:00:00.000Z",
+              deposit_status: "refunded",
+            },
+          }),
+        })),
+      })),
+    }));
+    const updateAppointment = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "appointments") {
+          return {
+            select: selectAppointment,
+            update: updateAppointment,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      rpc: vi.fn(),
+    });
+
+    await captureRedirect(
+      updateAppointmentDepositActionImpl(
+        makeFormData({
+          appointmentId: "appointment-1",
+          depositStatus: "pending",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deposit_status: "pending",
+        deposit_customer_reported_paid_at: null,
+        deposit_customer_reported_paid_via: null,
+        deposit_customer_reported_reference: null,
+      }),
+    );
   });
 });

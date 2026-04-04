@@ -5,8 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 
 type Salon = Database["public"]["Tables"]["salons"]["Row"];
+type FlashTone = "success" | "error" | "info";
 
-const getAuthenticatedUser = cache(async () => {
+const SESSION_EXPIRED_MESSAGE = "Sessao expirada. Entre novamente para continuar.";
+const withCache = typeof cache === "function"
+  ? cache
+  : (<T extends (...args: never[]) => unknown>(fn: T) => fn);
+
+const getAuthenticatedUser = withCache(async () => {
   const supabase = createClient();
   const {
     data: { user },
@@ -15,17 +21,46 @@ const getAuthenticatedUser = cache(async () => {
   return user;
 });
 
+export function buildRedirectPath(
+  pathname: string,
+  options?: {
+    message?: string;
+    tone?: FlashTone;
+  },
+) {
+  if (!options?.message) {
+    return pathname;
+  }
+
+  const searchParams = new URLSearchParams({
+    message: options.message,
+    tone: options.tone ?? "info",
+  });
+
+  return `${pathname}?${searchParams.toString()}`;
+}
+
+export function buildLoginRedirectPath(options?: {
+  message?: string;
+  tone?: FlashTone;
+}) {
+  return buildRedirectPath("/login", options);
+}
+
 export async function requireUser() {
   const user = await getAuthenticatedUser();
 
   if (!user) {
-    redirect("/login");
+    redirect(buildLoginRedirectPath({
+      message: SESSION_EXPIRED_MESSAGE,
+      tone: "info",
+    }));
   }
 
   return { supabase: createClient(), user };
 }
 
-export const getOwnerSalon = cache(async (userId: string) => {
+export const getOwnerSalon = withCache(async (userId: string) => {
   const supabase = createClient();
   const { data } = await supabase
     .from("salons")
@@ -35,6 +70,17 @@ export const getOwnerSalon = cache(async (userId: string) => {
 
   return data as Salon | null;
 });
+
+export async function getAuthenticatedPanelEntryPath() {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const salon = await getOwnerSalon(user.id);
+  return salon ? "/dashboard" : "/onboarding";
+}
 
 export async function requireOwnerSalon(): Promise<{
   salon: Salon;

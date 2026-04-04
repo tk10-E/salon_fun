@@ -22,3 +22,4 @@ apps/mobile/android/app/google-services.json
 apps/mobile/android/key.properties
 apps/web/.next_*
 supabase/.temp/
+.vercel

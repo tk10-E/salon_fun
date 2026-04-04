@@ -1,13 +1,16 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { signOutAction } from "@/app/actions";
+import { DashboardAccessGate } from "@/components/DashboardAccessGate";
 import { SidebarNav } from "@/components/SidebarNav";
+import { PanelSignOutButton } from "@/components/auth/PanelSignOutButton";
+import type { SalonBillingSnapshot } from "@/lib/billing";
 
 type DashboardShellProps = {
   salonCode: string;
   salonName: string;
   ownerEmail?: string | null;
+  billingSnapshot: SalonBillingSnapshot;
   children: ReactNode;
 };
 
@@ -56,17 +59,6 @@ function SearchIcon() {
   );
 }
 
-function LogoutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M14.25 4.75a.75.75 0 0 1 .75-.75h2.25A2.75 2.75 0 0 1 20 6.75v10.5A2.75 2.75 0 0 1 17.25 20H15a.75.75 0 0 1 0-1.5h2.25c.69 0 1.25-.56 1.25-1.25V6.75c0-.69-.56-1.25-1.25-1.25H15a.75.75 0 0 1-.75-.75Zm-7.72 6.72a.75.75 0 0 0 0 1.06l3 3a.75.75 0 1 0 1.06-1.06l-1.72-1.72H15a.75.75 0 0 0 0-1.5H8.87l1.72-1.72a.75.75 0 1 0-1.06-1.06l-3 3Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 function ChevronIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -83,7 +75,13 @@ function getBrandName(name: string) {
   return cleaned || name;
 }
 
-export function DashboardShell({ salonCode, salonName, ownerEmail, children }: DashboardShellProps) {
+export function DashboardShell({
+  salonCode,
+  salonName,
+  ownerEmail,
+  billingSnapshot,
+  children,
+}: DashboardShellProps) {
   const ownerName = toDisplayName(ownerEmail);
   const initials = getInitials(ownerName);
   const brandName = getBrandName(salonName);
@@ -114,7 +112,10 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
           </div>
         </div>
 
-        <SidebarNav />
+        <SidebarNav
+          isWorkspaceLocked={billingSnapshot.isLocked}
+          allowedPathsWhenLocked={billingSnapshot.allowedPathsWhenLocked}
+        />
 
         <div className="sidebar-footer">
           <div className="sidebar-code-card">
@@ -131,14 +132,20 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
             </div>
           </div>
 
-          <form action={signOutAction} className="sidebar-signout">
-            <button type="submit" className="sidebar-signout__button">
-              <span className="sidebar-signout__icon">
-                <LogoutIcon />
-              </span>
-              Sair do painel
-            </button>
-          </form>
+          <div className="sidebar-billing-card">
+            <span className="eyebrow">Assinatura</span>
+            <strong>
+              {billingSnapshot.currentPlan.displayName}
+              {" "}
+              <small>{billingSnapshot.statusLabel}</small>
+            </strong>
+            <p className="muted">{billingSnapshot.statusDetail}</p>
+            <Link href="/dashboard/billing" className="sidebar-code-card__link">
+              Gerenciar cobrança
+            </Link>
+          </div>
+
+          <PanelSignOutButton />
         </div>
       </aside>
 
@@ -183,7 +190,30 @@ export function DashboardShell({ salonCode, salonName, ownerEmail, children }: D
         </header>
 
         <main id="dashboard-main-content" className="dashboard-main" tabIndex={-1}>
-          {children}
+          {billingSnapshot.shouldShowBanner && billingSnapshot.bannerTitle && billingSnapshot.bannerMessage ? (
+            <section
+              className={`dashboard-billing-banner dashboard-billing-banner--${billingSnapshot.bannerTone}`}
+              aria-label="Status da assinatura"
+            >
+              <div className="dashboard-billing-banner__copy">
+                <strong>{billingSnapshot.bannerTitle}</strong>
+                <p>{billingSnapshot.bannerMessage}</p>
+              </div>
+              <Link href="/dashboard/billing" className="secondary-button">
+                Abrir billing
+              </Link>
+            </section>
+          ) : null}
+
+          <div className="dashboard-main__surface">
+            {children}
+            <DashboardAccessGate
+              isLocked={billingSnapshot.isLocked}
+              allowedPaths={billingSnapshot.allowedPathsWhenLocked}
+              title="Regularize sua assinatura para continuar operando"
+              description="O painel continua disponível para cobrança e ajustes, mas as áreas operacionais ficam bloqueadas até a assinatura voltar para ativa."
+            />
+          </div>
         </main>
       </div>
     </div>

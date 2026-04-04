@@ -16,7 +16,7 @@ vi.mock("@/lib/env", () => ({
 
 import { GET } from "@/app/auth/callback/route";
 
-describe("Google auth callback route", () => {
+describe("auth callback route", () => {
   it("exchanges the auth code and returns the session cookies with the redirect", async () => {
     const exchangeCodeForSession = vi.fn().mockImplementation(async () => {
       const [, , options] = createServerClientMock.mock.calls.at(-1) ?? [];
@@ -54,5 +54,29 @@ describe("Google auth callback route", () => {
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://salon-fun.vercel.app/dashboard");
     expect(response.cookies.get("sb-test-auth-token")?.value).toBe("session-token");
+  });
+
+  it("reuses the same exchange flow for password recovery links", async () => {
+    const exchangeCodeForSession = vi.fn().mockResolvedValue({ error: null });
+
+    createServerClientMock.mockReturnValue({
+      auth: {
+        exchangeCodeForSession,
+      },
+    });
+
+    const request = new NextRequest("https://salon-fun.vercel.app/auth/callback?code=recovery-code&next=%2Fauth%2Frecovery", {
+      headers: {
+        cookie: "sb-test-code-verifier=pkce-verifier",
+        "x-forwarded-host": "salon-fun.vercel.app",
+        "x-forwarded-proto": "https",
+      },
+    });
+
+    const response = await GET(request);
+
+    expect(exchangeCodeForSession).toHaveBeenCalledWith("recovery-code");
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://salon-fun.vercel.app/auth/recovery");
   });
 });

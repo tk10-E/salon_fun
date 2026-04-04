@@ -9,6 +9,8 @@ Roteiro de validação funcional do produto em ambiente local com Supabase remot
 - App cliente: `flutter test` passando
 - Supabase: manter o remoto alinhado com a migration mais recente de `supabase/migrations`
 - Push: function `send-vacancy-push` ativa no Supabase
+- Painel: autenticacao do salao usando Firebase Web + bridge para sessao no Supabase
+- Android release: suporta assinatura via `apps/mobile/android/key.properties`
 
 ## Pré-requisitos
 
@@ -27,6 +29,7 @@ Antes de testar os fluxos:
 3. Abra o app no celular.
 4. Faça login no cliente.
 5. Permita notificações no Android.
+6. Se o teste for de release real, confirme que `apps/mobile/android/key.properties` aponta para a keystore certa.
 
 ## Fluxo 1: Agendamento ponta a ponta
 
@@ -257,6 +260,31 @@ Validar a fidelidade com Bronze, Prata, Ouro e recompensa especial opcional.
 - o cliente vê a escada Bronze, Prata e Ouro
 - ao existir serviço vinculado no Ouro, o app mostra esse benefício como recompensa especial
 - a fidelidade continua mostrando pontos, cashback e desconto progressivo normalmente
+
+## Go live minimo
+
+Antes de vender ou ligar trafego real, confira tambem:
+
+1. Painel:
+   - dominio final apontando para o Vercel
+   - `APP_URL` no Vercel igual ao dominio final
+   - dominios autorizados no Firebase Authentication
+   - `/dashboard/billing` mostrando `Stripe pronto para produção`
+   - `npm run verify:billing` retornando `PRONTO_PARA_VENDA`
+   - `npm run verify:operations` retornando `PRONTO_PARA_PILOTO` e mostrando agenda, base, push e conteúdo com dado real
+   - webhook do Stripe respondendo em `/api/stripe/webhook`
+   - Customer Portal do Stripe ativo para voltar em `/dashboard/billing`
+2. Supabase:
+   - migrations alinhadas com `supabase db push`
+   - secrets do push configurados
+   - Edge Functions `firebase-auth-bridge` e `send-vacancy-push` publicadas
+3. Mobile:
+   - `google-services.json` presente para Android
+   - keystore de release configurada
+   - APK/AAB gerado com `.env` de producao
+4. Operacao:
+   - pelo menos um salao de teste completo com servicos, equipe, agenda, beneficios e feed
+   - pelo menos dois clientes reais de teste para validar agendamento, notificacao e indicacao ponta a ponta
 
 ## Fluxos que merecem atenção extra
 

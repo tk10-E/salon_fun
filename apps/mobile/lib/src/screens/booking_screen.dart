@@ -27,6 +27,7 @@ class _BookingScreenState extends State<BookingScreen> {
   late DateTime _selectedDay;
   late Future<CachedView<DayAvailability>> _availabilityFuture;
   AvailableSlot? _selectedSlot;
+  bool _bookingPolicyAccepted = false;
   bool _isSubmitting = false;
 
   @override
@@ -74,18 +75,43 @@ class _BookingScreenState extends State<BookingScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      await widget.repository.createAppointment(
+      final appointmentId = await widget.repository.createAppointment(
         serviceId: widget.service.id,
         startAt: selectedSlot.startAt,
         preferredStaffMemberId: selectedSlot.staffMemberId,
+        bookingPolicyVersion:
+            _bookingPolicyAccepted &&
+                widget.profile.requiresBookingPolicyAcknowledgement
+            ? widget.profile.bookingPolicyVersion
+            : null,
       );
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Horário reservado com sucesso.')),
-      );
-      Navigator.of(context).pop(true);
+      var successMessage = widget.profile.bookingPolicyHasRequiredDeposit
+          ? 'Horario solicitado com sucesso. O salao vai acompanhar o sinal dessa reserva.'
+          : 'Horario reservado com sucesso.';
+
+      if (widget.profile.bookingPolicyUsesManagedPix) {
+        try {
+          await widget.repository.createManagedDepositCharge(
+            appointmentId: appointmentId,
+          );
+          successMessage =
+              'Horario solicitado com sucesso. O Pix do sinal ja foi preparado na sua agenda.';
+        } catch (_) {
+          successMessage =
+              'Horario solicitado com sucesso. O Pix do sinal ainda nao ficou pronto; abra a agenda e toque em Pagar sinal para tentar novamente.';
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      messenger.showSnackBar(SnackBar(content: Text(successMessage)));
+      navigator.pop(true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -128,12 +154,17 @@ class _BookingScreenState extends State<BookingScreen> {
               ),
               _ => _BookingBody(
                 service: widget.service,
+                profile: widget.profile,
                 selectedDay: _selectedDay,
                 nextDays: nextDays,
                 availabilityView: snapshot.data!,
                 selectedSlot: _selectedSlot,
+                bookingPolicyAccepted: _bookingPolicyAccepted,
                 isSubmitting: _isSubmitting,
                 onDaySelected: _changeDay,
+                onBookingPolicyAcceptedChanged: (value) {
+                  setState(() => _bookingPolicyAccepted = value);
+                },
                 onSlotSelected: (slot) {
                   setState(() => _selectedSlot = slot);
                 },
@@ -152,23 +183,29 @@ class _BookingScreenState extends State<BookingScreen> {
 class _BookingBody extends StatelessWidget {
   const _BookingBody({
     required this.service,
+    required this.profile,
     required this.selectedDay,
     required this.nextDays,
     required this.availabilityView,
     required this.selectedSlot,
+    required this.bookingPolicyAccepted,
     required this.isSubmitting,
     required this.onDaySelected,
+    required this.onBookingPolicyAcceptedChanged,
     required this.onSlotSelected,
     required this.onSubmit,
   });
 
   final ServiceItem service;
+  final CustomerProfile profile;
   final DateTime selectedDay;
   final List<DateTime> nextDays;
   final CachedView<DayAvailability> availabilityView;
   final AvailableSlot? selectedSlot;
+  final bool bookingPolicyAccepted;
   final bool isSubmitting;
   final ValueChanged<DateTime> onDaySelected;
+  final ValueChanged<bool> onBookingPolicyAcceptedChanged;
   final ValueChanged<AvailableSlot> onSlotSelected;
   final VoidCallback onSubmit;
 
@@ -258,6 +295,107 @@ class _BookingBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
+        if (profile.hasBookingPolicy) ...[
+          StaggerReveal(
+            delay: const Duration(milliseconds: 150),
+            child: PremiumCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionHeader(
+                    title: profile.bookingPolicyTitle ?? 'Reserva protegida',
+                    subtitle:
+                        'A reserva ja nasce com regra clara para o cliente e para a equipe.',
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    (profile.bookingPolicySummary ?? '').trim().isNotEmpty
+                        ? profile.bookingPolicySummary!
+                        : 'O salao definiu uma politica de reserva para proteger horarios disputados e reduzir no-show.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      StatusPill(
+                        label:
+                            'Cancelamento sem atrito ate ${profile.bookingPolicyCancellationWindowHours}h antes',
+                        icon: Icons.schedule_rounded,
+                      ),
+                      StatusPill(
+                        label: profile.bookingPolicyHasRequiredDeposit
+                            ? 'Sinal de ${formatCurrency(profile.bookingPolicyDepositAmount)} via ${profile.bookingPolicyDepositPaymentLabel}'
+                            : 'Sem sinal obrigatorio',
+                        icon: profile.bookingPolicyHasRequiredDeposit
+                            ? Icons.payments_outlined
+                            : Icons.verified_user_outlined,
+                      ),
+                      StatusPill(
+                        label: profile.bookingPolicyConfirmationRequired
+                            ? 'Confirmacao ${profile.bookingPolicyConfirmationLeadMinutes} min antes'
+                            : 'Sem confirmacao automatica',
+                        icon: Icons.mark_email_unread_outlined,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    profile.bookingPolicyAutoCancelUnconfirmed
+                        ? 'Sem resposta, a vaga pode ser liberada ${profile.bookingPolicyAutoCancelLeadMinutes} min antes do horario.'
+                        : 'O salao acompanha a confirmacao sem cancelar automaticamente por isso.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (profile.bookingPolicyHasRequiredDeposit) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      profile.bookingPolicyUsesManagedPix
+                          ? 'Depois da reserva, o app prepara um QR Pix automatico dessa cobrança e atualiza o sinal sozinho quando o pagamento entrar.'
+                          : profile.bookingPolicyUsesPix
+                          ? 'O app libera QR Pix, copia e cola e envio de comprovante na agenda para você pagar o sinal e avisar a equipe.'
+                          : profile.bookingPolicyUsesExternalCheckout
+                          ? 'Depois da reserva, o app abre o checkout externo configurado pelo salão para quitar o sinal.'
+                          : 'A equipe informa manualmente como receber o sinal desta reserva.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      profile.bookingPolicyAutoCancelPendingDeposit
+                          ? 'Se o sinal continuar pendente, a reserva pode ser cancelada automaticamente perto do horario.'
+                          : 'Se o sinal seguir pendente, o app lembra novamente ${profile.bookingPolicyDepositReminderLeadHours}h antes.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  if ((profile.bookingPolicyPaymentInstructions ?? '')
+                      .trim()
+                      .isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      profile.bookingPolicyPaymentInstructions!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  if (profile.requiresBookingPolicyAcknowledgement) ...[
+                    const SizedBox(height: 14),
+                    CheckboxListTile(
+                      value: bookingPolicyAccepted,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      onChanged: (value) =>
+                          onBookingPolicyAcceptedChanged(value ?? false),
+                      title: const Text('Li e aceito a politica desta reserva'),
+                      subtitle: const Text(
+                        'Isso registra no horario a regra vigente no momento da reserva.',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         StaggerReveal(
           delay: const Duration(milliseconds: 180),
           child: PremiumCard(
@@ -313,7 +451,12 @@ class _BookingBody extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         FilledButton(
-          onPressed: selectedSlot == null || isSubmitting || isOfflineSnapshot
+          onPressed:
+              selectedSlot == null ||
+                  isSubmitting ||
+                  isOfflineSnapshot ||
+                  (profile.requiresBookingPolicyAcknowledgement &&
+                      !bookingPolicyAccepted)
               ? null
               : onSubmit,
           child: Text(
@@ -321,6 +464,9 @@ class _BookingBody extends StatelessWidget {
                 ? 'Reservando...'
                 : isOfflineSnapshot
                 ? 'Conecte-se para reservar'
+                : profile.requiresBookingPolicyAcknowledgement &&
+                      !bookingPolicyAccepted
+                ? 'Aceite a politica para reservar'
                 : selectedSlot == null
                 ? 'Selecione um horário'
                 : 'Reservar ${formatTime(selectedSlot!.startAt)}',

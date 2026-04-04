@@ -1,4 +1,5 @@
 import java.util.Base64
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -43,6 +44,21 @@ val socialDefines = dartDefineMap()
 val facebookAppId = socialDefines["FACEBOOK_APP_ID"] ?: ""
 val facebookClientToken = socialDefines["FACEBOOK_CLIENT_TOKEN"] ?: ""
 val facebookScheme = if (facebookAppId.isBlank()) "fb000000000000000" else "fb$facebookAppId"
+val keyProperties = Properties()
+val keyPropertiesFile = rootProject.file("key.properties")
+
+if (keyPropertiesFile.exists()) {
+    keyPropertiesFile.inputStream().use(keyProperties::load)
+}
+
+fun keyProperty(name: String): String? = keyProperties.getProperty(name)?.trim()?.takeIf { it.isNotEmpty() }
+
+val releaseStoreFile = keyProperty("storeFile")
+val hasReleaseSigning =
+    releaseStoreFile != null &&
+    keyProperty("storePassword") != null &&
+    keyProperty("keyAlias") != null &&
+    keyProperty("keyPassword") != null
 
 android {
     namespace = "com.salonfun.salon_client"
@@ -60,7 +76,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.salonfun.salon_client"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -73,11 +88,29 @@ android {
         resValue("string", "fb_login_protocol_scheme", facebookScheme)
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile!!)
+                storePassword = keyProperty("storePassword")
+                keyAlias = keyProperty("keyAlias")
+                keyPassword = keyProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig =
+                if (hasReleaseSigning) {
+                    signingConfigs.getByName("release")
+                } else {
+                    logger.lifecycle(
+                        "key.properties not found or incomplete in android/. " +
+                            "Release builds will use the debug signing key until a production keystore is configured.",
+                    )
+                    signingConfigs.getByName("debug")
+                }
         }
     }
 }

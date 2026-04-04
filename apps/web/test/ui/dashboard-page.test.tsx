@@ -10,8 +10,16 @@ const { createClientMock, requireOwnerSalonMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: (props: { children?: ReactNode; href: string; className?: string }) =>
-    createElement("a", { href: props.href, className: props.className }, props.children),
+  default: (props: {
+    children?: ReactNode;
+    href: string;
+    className?: string;
+  }) =>
+    createElement(
+      "a",
+      { href: props.href, className: props.className },
+      props.children,
+    ),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -29,6 +37,7 @@ describe("dashboard page UI", () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-30T15:00:00.000Z"));
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_123");
 
     requireOwnerSalonMock.mockResolvedValue({
       salon: {
@@ -42,6 +51,7 @@ describe("dashboard page UI", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("renders the redesigned dashboard with agenda, finance, team, stock and strategy panels", async () => {
@@ -57,9 +67,58 @@ describe("dashboard page UI", () => {
 
         if (table === "salon_offers") {
           return {
-            select: vi.fn(() => ({
-              eq: vi.fn().mockResolvedValue({ count: 4, error: null }),
-            })),
+            select: vi.fn(
+              (
+                _columns?: string,
+                options?: { count?: string; head?: boolean },
+              ) => {
+                if (options?.head) {
+                  return {
+                    eq: vi.fn().mockResolvedValue({ count: 4, error: null }),
+                  };
+                }
+
+                return {
+                  eq: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                      order: vi.fn(() => ({
+                        order: vi.fn(() => ({
+                          limit: vi.fn().mockResolvedValue({
+                            data: [
+                              {
+                                id: "offer-1",
+                                kind: "membership",
+                                title: "Clube Glow Mensal",
+                                highlight_text:
+                                  "2 atendimentos por mes com valor fixo",
+                                price: 149.9,
+                                starts_on: "2026-03-25",
+                                ends_on: null,
+                                is_active: true,
+                                sort_order: 0,
+                              },
+                              {
+                                id: "offer-2",
+                                kind: "promotion",
+                                title: "Escova da Semana",
+                                highlight_text:
+                                  "Janela pensada para ocupar horarios ociosos",
+                                price: 89.9,
+                                starts_on: "2026-03-29",
+                                ends_on: "2026-04-05",
+                                is_active: true,
+                                sort_order: 1,
+                              },
+                            ],
+                            error: null,
+                          }),
+                        })),
+                      })),
+                    })),
+                  })),
+                };
+              },
+            ),
           };
         }
 
@@ -76,6 +135,16 @@ describe("dashboard page UI", () => {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 gte: vi.fn().mockResolvedValue({ count: 18, error: null }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "customer_push_tokens") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn().mockResolvedValue({ count: 9, error: null }),
               })),
             })),
           };
@@ -143,82 +212,123 @@ describe("dashboard page UI", () => {
 
         if (table === "appointments") {
           return {
-            select: vi.fn((columns: string, options?: { count?: string; head?: boolean }) => {
-              if (options?.head) {
-                return {
-                  eq: vi.fn(() => ({
-                    eq: vi.fn().mockResolvedValue({ count: 4, error: null }),
-                  })),
-                };
-              }
-
-              if (columns.includes("customers(name)")) {
-                return {
-                  eq: vi.fn(() => ({
-                    gte: vi.fn(() => ({
-                      lt: vi.fn(() => ({
-                        order: vi.fn(() => ({
-                          limit: vi.fn().mockResolvedValue({
-                            data: [
-                              {
-                                id: "appointment-1",
-                                date: "2026-03-30T12:00:00.000Z",
-                                status: "confirmed",
-                                customer_id: "customer-1",
-                                customers: { name: "Ana Paula" },
-                                services: { category: "Cabelo", name: "Corte feminino", price: 120 },
-                                staff_members: { name: "Camila" },
-                              },
-                              {
-                                id: "appointment-2",
-                                date: "2026-03-30T14:30:00.000Z",
-                                status: "pending",
-                                customer_id: "customer-2",
-                                customers: { name: "Carla Mendes" },
-                                services: { category: "Cabelo", name: "Escova premium", price: 90 },
-                                staff_members: { name: "Ricardo" },
-                              },
-                              {
-                                id: "appointment-3",
-                                date: "2026-03-31T13:00:00.000Z",
-                                status: "confirmed",
-                                customer_id: "customer-3",
-                                customers: { name: "Mariana" },
-                                services: { category: "Unhas", name: "Manicure", price: 70 },
-                                staff_members: { name: "Lorena" },
-                              },
-                            ],
-                            error: null,
-                          }),
-                        })),
-                      })),
+            select: vi.fn(
+              (
+                columns: string,
+                options?: { count?: string; head?: boolean },
+              ) => {
+                if (options?.head) {
+                  return {
+                    eq: vi.fn(() => ({
+                      eq: vi.fn().mockResolvedValue({ count: 4, error: null }),
                     })),
-                  })),
-                };
-              }
+                  };
+                }
 
-              if (columns === "customer_id, date, services(price)") {
-                return {
-                  eq: vi.fn(() => ({
+                if (columns.includes("customers(name)")) {
+                  return {
                     eq: vi.fn(() => ({
                       gte: vi.fn(() => ({
+                        lt: vi.fn(() => ({
+                          order: vi.fn(() => ({
+                            limit: vi.fn().mockResolvedValue({
+                              data: [
+                                {
+                                  id: "appointment-1",
+                                  date: "2026-03-30T12:00:00.000Z",
+                                  status: "confirmed",
+                                  customer_id: "customer-1",
+                                  customers: { name: "Ana Paula" },
+                                  services: {
+                                    category: "Cabelo",
+                                    name: "Corte feminino",
+                                    price: 120,
+                                  },
+                                  staff_members: { name: "Camila" },
+                                },
+                                {
+                                  id: "appointment-2",
+                                  date: "2026-03-30T14:30:00.000Z",
+                                  status: "pending",
+                                  customer_id: "customer-2",
+                                  customers: { name: "Carla Mendes" },
+                                  services: {
+                                    category: "Cabelo",
+                                    name: "Escova premium",
+                                    price: 90,
+                                  },
+                                  staff_members: { name: "Ricardo" },
+                                },
+                                {
+                                  id: "appointment-3",
+                                  date: "2026-03-31T13:00:00.000Z",
+                                  status: "confirmed",
+                                  customer_id: "customer-3",
+                                  customers: { name: "Mariana" },
+                                  services: {
+                                    category: "Unhas",
+                                    name: "Manicure",
+                                    price: 70,
+                                  },
+                                  staff_members: { name: "Lorena" },
+                                },
+                              ],
+                              error: null,
+                            }),
+                          })),
+                        })),
+                      })),
+                    })),
+                  };
+                }
+
+                if (columns === "customer_id, date, services(price)") {
+                  return {
+                    eq: vi.fn(() => ({
+                      eq: vi.fn(() => ({
+                        gte: vi.fn(() => ({
+                          order: vi.fn(() => ({
+                            limit: vi.fn().mockResolvedValue({
+                              data: [
+                                {
+                                  customer_id: "customer-1",
+                                  date: "2026-03-29T15:00:00.000Z",
+                                  services: { price: 120 },
+                                },
+                                {
+                                  customer_id: "customer-2",
+                                  date: "2026-03-28T16:00:00.000Z",
+                                  services: { price: 200 },
+                                },
+                                {
+                                  customer_id: "customer-1",
+                                  date: "2026-03-20T18:00:00.000Z",
+                                  services: { price: 150 },
+                                },
+                              ],
+                              error: null,
+                            }),
+                          })),
+                        })),
+                      })),
+                    })),
+                  };
+                }
+
+                if (columns === "date, services(price)") {
+                  return {
+                    eq: vi.fn(() => ({
+                      eq: vi.fn(() => ({
                         order: vi.fn(() => ({
                           limit: vi.fn().mockResolvedValue({
                             data: [
                               {
-                                customer_id: "customer-1",
-                                date: "2026-03-29T15:00:00.000Z",
-                                services: { price: 120 },
+                                date: "2026-03-30T14:30:00.000Z",
+                                services: { price: 250 },
                               },
                               {
-                                customer_id: "customer-2",
-                                date: "2026-03-28T16:00:00.000Z",
-                                services: { price: 200 },
-                              },
-                              {
-                                customer_id: "customer-1",
-                                date: "2026-03-20T18:00:00.000Z",
-                                services: { price: 150 },
+                                date: "2026-03-31T16:30:00.000Z",
+                                services: { price: 400 },
                               },
                             ],
                             error: null,
@@ -226,36 +336,12 @@ describe("dashboard page UI", () => {
                         })),
                       })),
                     })),
-                  })),
-                };
-              }
+                  };
+                }
 
-              if (columns === "date, services(price)") {
-                return {
-                  eq: vi.fn(() => ({
-                    eq: vi.fn(() => ({
-                      order: vi.fn(() => ({
-                        limit: vi.fn().mockResolvedValue({
-                          data: [
-                            {
-                              date: "2026-03-30T14:30:00.000Z",
-                              services: { price: 250 },
-                            },
-                            {
-                              date: "2026-03-31T16:30:00.000Z",
-                              services: { price: 400 },
-                            },
-                          ],
-                          error: null,
-                        }),
-                      })),
-                    })),
-                  })),
-                };
-              }
-
-              throw new Error(`Unexpected appointments select: ${columns}`);
-            }),
+                throw new Error(`Unexpected appointments select: ${columns}`);
+              },
+            ),
           };
         }
 
@@ -425,22 +511,58 @@ describe("dashboard page UI", () => {
     render(ui);
 
     expect(screen.getByText("Resumo atualizado.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Tudo o que o sistema ja opera em producao" })).toBeInTheDocument();
-    expect(screen.getByText("Instagram e mencoes")).toBeInTheDocument();
-    expect(screen.getByText("Agendamentos Hoje")).toBeInTheDocument();
-    expect(screen.getByText("Clientes Atendidos")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Agenda do Dia" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Studio Beleza começa pelo essencial: agenda, clientes e caixa.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Três movimentos claros para o salão agir sem se perder.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Quatro frentes para entender o sistema em menos de um minuto",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Operação do dia")).toBeInTheDocument();
+    expect(screen.getByText("Clientes pedindo reativação")).toBeInTheDocument();
+    expect(screen.getByText("Força percebida do app")).toBeInTheDocument();
+    expect(screen.getAllByText("Clubes e pacotes").length).toBeGreaterThan(0);
+    expect(screen.getByText(/5\/5 frentes visíveis/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Agenda do Dia" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Corte feminino")).toBeInTheDocument();
     expect(screen.getByText("Escova premium")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Resumo Financeiro" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Resumo Financeiro" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/R\$\s?650,00/).length).toBeGreaterThan(0);
     expect(screen.getByText("Pendências")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Top Profissionais" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Top Profissionais" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Camila")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Produtos em Falta" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Produtos em Falta" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Shampoo reconstrutor")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Funções avançadas que o sistema já tem" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Encaixes Inteligentes" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Funções avançadas que o sistema já tem",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Clubes, pacotes e campanhas",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Clube Glow Mensal").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: "Encaixes Inteligentes" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Luzes premium")).toBeInTheDocument();
     expect(screen.getByText("Marina")).toBeInTheDocument();
     expect(screen.getByText("Automacao ligada")).toBeInTheDocument();

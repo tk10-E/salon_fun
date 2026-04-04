@@ -19,7 +19,11 @@ const DASHBOARD_PATH = "/dashboard";
 
 type AppointmentStatus = "pending" | "confirmed" | "cancelled" | "completed";
 type MutableAppointmentStatus = "confirmed" | "cancelled" | "completed";
+type AppointmentDepositStatus = "pending" | "received" | "waived" | "refunded";
 type AppointmentContext = {
+  deposit_amount?: number | null;
+  deposit_paid_at?: string | null;
+  deposit_status?: string | null;
   id: string;
   customer_id: string;
   date: string;
@@ -57,6 +61,54 @@ function formatAppointmentStatusError(message: string) {
   return `Não foi possível atualizar o agendamento. ${message}`;
 }
 
+function formatAppointmentDepositError(message: string) {
+  if (message.includes("appointment_not_found")) {
+    return "Nao foi possivel localizar esse agendamento.";
+  }
+
+  if (message.includes("unauthorized")) {
+    return "Sua conta nao tem permissao para atualizar o sinal desse agendamento.";
+  }
+
+  return `Nao foi possivel atualizar o sinal. ${message}`;
+}
+
+function formatAppointmentMembershipError(message: string) {
+  if (message.includes("appointment_not_completed")) {
+    return "Conclua o atendimento antes de consumir uma sessão do pacote.";
+  }
+
+  if (message.includes("appointment_membership_already_consumed")) {
+    return "Esse atendimento já consumiu uma sessão de pacote.";
+  }
+
+  if (message.includes("membership_not_found")) {
+    return "Não foi possível localizar um pacote ativo compatível para esse atendimento.";
+  }
+
+  if (message.includes("membership_customer_mismatch")) {
+    return "O pacote selecionado pertence a outra cliente.";
+  }
+
+  if (message.includes("membership_service_mismatch")) {
+    return "O pacote selecionado não corresponde ao serviço desse atendimento.";
+  }
+
+  if (message.includes("membership_expired")) {
+    return "Esse pacote já expirou e não pode mais consumir sessões.";
+  }
+
+  if (message.includes("membership_no_sessions_remaining")) {
+    return "Esse pacote já usou todas as sessões disponíveis.";
+  }
+
+  if (message.includes("membership_redemption_not_found")) {
+    return "Esse atendimento não tem sessão de pacote ativa para estornar.";
+  }
+
+  return `Não foi possível atualizar o pacote agora. ${message}`;
+}
+
 async function clearAppointmentVacancyAlerts(params: {
   supabase: ReturnType<typeof createClient>;
   salonId: string;
@@ -64,7 +116,11 @@ async function clearAppointmentVacancyAlerts(params: {
 }) {
   const { supabase, salonId, appointmentId } = params;
 
-  await supabase.from("salon_vacancy_alerts").delete().eq("appointment_id", appointmentId).eq("salon_id", salonId);
+  await supabase
+    .from("salon_vacancy_alerts")
+    .delete()
+    .eq("appointment_id", appointmentId)
+    .eq("salon_id", salonId);
 }
 
 async function notifyCustomerAboutAppointmentStatus(params: {
@@ -75,14 +131,24 @@ async function notifyCustomerAboutAppointmentStatus(params: {
   cancellationReason: string;
   appointmentContext: AppointmentContext | null;
 }) {
-  const { supabase, salonId, appointmentId, status, cancellationReason, appointmentContext } = params;
+  const {
+    supabase,
+    salonId,
+    appointmentId,
+    status,
+    cancellationReason,
+    appointmentContext,
+  } = params;
 
   if (!appointmentContext?.customer_id) {
     return;
   }
 
-  const appointmentLabel = formatAppointmentDateTimeLabel(appointmentContext.date);
-  const serviceName = appointmentContext.services?.name?.trim() || "seu atendimento";
+  const appointmentLabel = formatAppointmentDateTimeLabel(
+    appointmentContext.date,
+  );
+  const serviceName =
+    appointmentContext.services?.name?.trim() || "seu atendimento";
   const staffName = appointmentContext.staff_members?.name?.trim();
 
   if (status === "confirmed") {
@@ -143,11 +209,19 @@ async function notifyCustomerAboutAppointmentStatus(params: {
 export async function updateAppointmentStatusActionImpl(formData: FormData) {
   const appointmentId = String(formData.get("appointmentId") ?? "");
   const requestedStatus = String(formData.get("status") ?? "");
-  const cancellationReason = String(formData.get("cancellationReason") ?? "").trim();
+  const membershipPackageId = String(
+    formData.get("membershipPackageId") ?? "",
+  ).trim();
+  const cancellationReason = String(
+    formData.get("cancellationReason") ?? "",
+  ).trim();
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
-  if (!appointmentId || !["confirmed", "cancelled", "completed"].includes(requestedStatus)) {
+  if (
+    !appointmentId ||
+    !["confirmed", "cancelled", "completed"].includes(requestedStatus)
+  ) {
     redirect(buildRedirectNotice(APPOINTMENTS_PATH, "Ação inválida.", "error"));
   }
 
@@ -155,7 +229,9 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
 
   const { data: appointmentContext } = await supabase
     .from("appointments")
-    .select("id, customer_id, date, ends_at, status, services(name), staff_members(name)")
+    .select(
+      "id, customer_id, date, ends_at, status, services(name), staff_members(name)",
+    )
     .eq("id", appointmentId)
     .eq("salon_id", salon.id)
     .maybeSingle<AppointmentContext>();
@@ -185,7 +261,9 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
         new Date(appointmentContext.ends_at) <= new Date() &&
         !completeErrorMessage.includes("appointment_not_finished") &&
         !completeErrorMessage.includes("appointment_already_completed") &&
-        !completeErrorMessage.includes("cancelled_appointment_cannot_be_completed") &&
+        !completeErrorMessage.includes(
+          "cancelled_appointment_cannot_be_completed",
+        ) &&
         !completeErrorMessage.includes("appointment_not_found") &&
         !completeErrorMessage.includes("unauthorized");
 
@@ -240,7 +318,44 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
   }
 
   if (error) {
-    redirect(buildRedirectNotice(APPOINTMENTS_PATH, formatAppointmentStatusError(error.message), "error"));
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        formatAppointmentStatusError(error.message),
+        "error",
+      ),
+    );
+  }
+
+  if (status === "completed" && membershipPackageId) {
+    const membershipResult = await supabase.rpc(
+      "consume_customer_membership_package",
+      {
+        appointment_uuid: appointmentId,
+        membership_uuid: membershipPackageId,
+        notes_input: null,
+      },
+    );
+
+    if (membershipResult.error) {
+      revalidatePath(DASHBOARD_PATH);
+      revalidatePath(APPOINTMENTS_PATH);
+      revalidatePath("/dashboard/customers");
+      revalidateCommercialPaths(
+        COMMERCIAL_LOYALTY_PATH,
+        COMMERCIAL_REFERRALS_PATH,
+        COMMERCIAL_AUTOMATIONS_PATH,
+      );
+      redirect(
+        buildRedirectNotice(
+          APPOINTMENTS_PATH,
+          `Atendimento concluído, mas o pacote não foi consumido. ${formatAppointmentMembershipError(
+            membershipResult.error.message,
+          )}`,
+          "info",
+        ),
+      );
+    }
   }
 
   await notifyCustomerAboutAppointmentStatus({
@@ -254,7 +369,11 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
 
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(APPOINTMENTS_PATH);
-  revalidateCommercialPaths(COMMERCIAL_LOYALTY_PATH, COMMERCIAL_REFERRALS_PATH, COMMERCIAL_AUTOMATIONS_PATH);
+  revalidateCommercialPaths(
+    COMMERCIAL_LOYALTY_PATH,
+    COMMERCIAL_REFERRALS_PATH,
+    COMMERCIAL_AUTOMATIONS_PATH,
+  );
   redirect(
     buildRedirectNotice(
       APPOINTMENTS_PATH,
@@ -263,6 +382,208 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
         : status === "completed"
           ? "Atendimento concluído com sucesso."
           : "Agendamento cancelado com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function consumeAppointmentMembershipActionImpl(
+  formData: FormData,
+) {
+  const appointmentId = String(formData.get("appointmentId") ?? "").trim();
+  const membershipPackageId = String(
+    formData.get("membershipPackageId") ?? "",
+  ).trim();
+
+  await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (!appointmentId) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        "Atendimento inválido para consumir pacote.",
+        "error",
+      ),
+    );
+  }
+
+  const consumeResult = await supabase.rpc(
+    "consume_customer_membership_package",
+    {
+      appointment_uuid: appointmentId,
+      membership_uuid: membershipPackageId || null,
+      notes_input: null,
+    },
+  );
+
+  if (consumeResult.error) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        formatAppointmentMembershipError(consumeResult.error.message),
+        "error",
+      ),
+    );
+  }
+
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(APPOINTMENTS_PATH);
+  revalidatePath("/dashboard/customers");
+  redirect(
+    buildRedirectNotice(
+      APPOINTMENTS_PATH,
+      "Sessão do pacote consumida com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function reverseAppointmentMembershipActionImpl(
+  formData: FormData,
+) {
+  const appointmentId = String(formData.get("appointmentId") ?? "").trim();
+
+  await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (!appointmentId) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        "Atendimento inválido para estornar a sessão.",
+        "error",
+      ),
+    );
+  }
+
+  const reverseResult = await supabase.rpc(
+    "reverse_customer_membership_package_consumption",
+    {
+      appointment_uuid: appointmentId,
+    },
+  );
+
+  if (reverseResult.error) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        formatAppointmentMembershipError(reverseResult.error.message),
+        "error",
+      ),
+    );
+  }
+
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(APPOINTMENTS_PATH);
+  revalidatePath("/dashboard/customers");
+  redirect(
+    buildRedirectNotice(
+      APPOINTMENTS_PATH,
+      "Sessão do pacote estornada com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function updateAppointmentDepositActionImpl(formData: FormData) {
+  const appointmentId = String(formData.get("appointmentId") ?? "");
+  const requestedDepositStatus = String(formData.get("depositStatus") ?? "");
+  const depositNotes = String(formData.get("depositNotes") ?? "").trim();
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (
+    !appointmentId ||
+    !["pending", "received", "waived", "refunded"].includes(
+      requestedDepositStatus,
+    )
+  ) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        "Acao de sinal invalida.",
+        "error",
+      ),
+    );
+  }
+
+  const depositStatus = requestedDepositStatus as AppointmentDepositStatus;
+  const { data: appointmentContext, error: appointmentError } = await supabase
+    .from("appointments")
+    .select("id, deposit_amount, deposit_paid_at, deposit_status")
+    .eq("id", appointmentId)
+    .eq("salon_id", salon.id)
+    .maybeSingle<AppointmentContext>();
+
+  if (appointmentError || !appointmentContext?.id) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        formatAppointmentDepositError(
+          appointmentError?.message ?? "appointment_not_found",
+        ),
+        "error",
+      ),
+    );
+  }
+
+  if (Number(appointmentContext.deposit_amount ?? 0) <= 0) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        "Esse agendamento nao possui sinal configurado.",
+        "error",
+      ),
+    );
+  }
+
+  const nextDepositPaidAt =
+    depositStatus === "received"
+      ? new Date().toISOString()
+      : depositStatus === "refunded"
+        ? (appointmentContext.deposit_paid_at ?? null)
+        : null;
+  const { error } = await supabase
+    .from("appointments")
+    .update({
+      deposit_status: depositStatus,
+      deposit_paid_at: nextDepositPaidAt,
+      deposit_notes: depositNotes || null,
+      ...(depositStatus === "pending"
+        ? {
+            deposit_reminder_sent_at: null,
+            deposit_customer_reported_paid_at: null,
+            deposit_customer_reported_paid_via: null,
+            deposit_customer_reported_reference: null,
+          }
+        : {}),
+    })
+    .eq("id", appointmentId)
+    .eq("salon_id", salon.id);
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        formatAppointmentDepositError(error.message),
+        "error",
+      ),
+    );
+  }
+
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(APPOINTMENTS_PATH);
+  redirect(
+    buildRedirectNotice(
+      APPOINTMENTS_PATH,
+      depositStatus === "received"
+        ? "Sinal marcado como recebido."
+        : depositStatus === "waived"
+          ? "Sinal dispensado nesse agendamento."
+          : depositStatus === "refunded"
+            ? "Sinal marcado como estornado."
+            : "Sinal voltou para pendente.",
       "success",
     ),
   );

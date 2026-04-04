@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import { getSalonBillingEntitlements } from "@/lib/billing";
 import { WEEKDAY_OPTIONS } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/server";
 
@@ -38,9 +39,28 @@ export async function createStaffMemberActionImpl(formData: FormData) {
   const requestedServiceIds = readStringValues(formData, "serviceIds");
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  const billing = await getSalonBillingEntitlements(salon.id);
 
   if (!name) {
     redirect(buildRedirectNotice(TEAM_PATH, "Informe o nome do profissional.", "error"));
+  }
+
+  if (billing.maxStaffMembers !== null) {
+    const { count } = await supabase
+      .from("staff_members")
+      .select("id", { count: "exact", head: true })
+      .eq("salon_id", salon.id)
+      .eq("is_active", true);
+
+    if ((count ?? 0) >= billing.maxStaffMembers) {
+      redirect(
+        buildRedirectNotice(
+          TEAM_PATH,
+          `Seu plano ${billing.currentPlan.displayName} permite até ${billing.maxStaffMembers} profissionais ativos. Faça upgrade no Billing para ampliar a equipe.`,
+          "error",
+        ),
+      );
+    }
   }
 
   const { data: services, error: servicesError } = await supabase

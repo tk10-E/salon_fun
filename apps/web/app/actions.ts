@@ -5,6 +5,7 @@ import {
   sendPasswordResetActionImpl,
   signOutActionImpl,
   signUpActionImpl,
+  updatePasswordActionImpl,
 } from "./_actions/auth";
 import {
   createSalonOfferActionImpl,
@@ -14,7 +15,19 @@ import {
   saveSalonReferralProgramActionImpl,
   updateSalonOfferActionImpl,
 } from "./_actions/commercial";
-import { updateAppointmentStatusActionImpl } from "./_actions/appointments";
+import {
+  cancelSalonSubscriptionActionImpl,
+  changeSalonPlanActionImpl,
+  resumeSalonSubscriptionActionImpl,
+  startStripeBillingPortalActionImpl,
+  startStripeCheckoutActionImpl,
+} from "./_actions/billing";
+import {
+  consumeAppointmentMembershipActionImpl,
+  reverseAppointmentMembershipActionImpl,
+  updateAppointmentDepositActionImpl,
+  updateAppointmentStatusActionImpl,
+} from "./_actions/appointments";
 import { createSalonActionImpl } from "./_actions/onboarding";
 import {
   createServiceActionImpl,
@@ -24,6 +37,7 @@ import {
 import { deleteSalonNotificationActionImpl } from "./_actions/notifications";
 import {
   regenerateSalonCodeActionImpl,
+  updateSalonBookingPolicyActionImpl,
   updateSalonBrandingActionImpl,
   updateSalonScheduleActionImpl,
 } from "./_actions/settings";
@@ -55,7 +69,13 @@ import {
   registerInventoryMovementActionImpl,
   saveInventoryProductActionImpl,
   saveStaffCommissionSettingsActionImpl,
+  updateCustomerProductOrderStatusActionImpl,
 } from "./_actions/operations";
+import {
+  assignCustomerMembershipPackageActionImpl,
+  saveOwnerCustomerProfileActionImpl,
+  sendCustomerNudgeActionImpl,
+} from "./_actions/customers";
 
 export async function signInAction(formData: FormData) {
   return signInActionImpl(formData);
@@ -75,6 +95,10 @@ export async function sendPasswordResetAction(formData: FormData) {
 
 export async function signOutAction() {
   return signOutActionImpl();
+}
+
+export async function updatePasswordAction(formData: FormData) {
+  return updatePasswordActionImpl(formData);
 }
 
 export async function createSalonAction(formData: FormData) {
@@ -117,6 +141,26 @@ export async function saveSalonGrowthAutomationAction(formData: FormData) {
   return saveSalonGrowthAutomationActionImpl(formData);
 }
 
+export async function changeSalonPlanAction(formData: FormData) {
+  return changeSalonPlanActionImpl(formData);
+}
+
+export async function cancelSalonSubscriptionAction() {
+  return cancelSalonSubscriptionActionImpl();
+}
+
+export async function resumeSalonSubscriptionAction() {
+  return resumeSalonSubscriptionActionImpl();
+}
+
+export async function startStripeCheckoutAction(formData: FormData) {
+  return startStripeCheckoutActionImpl(formData);
+}
+
+export async function startStripeBillingPortalAction() {
+  return startStripeBillingPortalActionImpl();
+}
+
 export async function deleteSalonNotificationAction(formData: FormData) {
   return deleteSalonNotificationActionImpl(formData);
 }
@@ -157,6 +201,32 @@ export async function updateAppointmentStatusAction(formData: FormData) {
   return updateAppointmentStatusActionImpl(formData);
 }
 
+export async function updateAppointmentDepositAction(formData: FormData) {
+  return updateAppointmentDepositActionImpl(formData);
+}
+
+export async function consumeAppointmentMembershipAction(formData: FormData) {
+  return consumeAppointmentMembershipActionImpl(formData);
+}
+
+export async function reverseAppointmentMembershipAction(formData: FormData) {
+  return reverseAppointmentMembershipActionImpl(formData);
+}
+
+export async function saveOwnerCustomerProfileAction(formData: FormData) {
+  return saveOwnerCustomerProfileActionImpl(formData);
+}
+
+export async function assignCustomerMembershipPackageAction(
+  formData: FormData,
+) {
+  return assignCustomerMembershipPackageActionImpl(formData);
+}
+
+export async function sendCustomerNudgeAction(formData: FormData) {
+  return sendCustomerNudgeActionImpl(formData);
+}
+
 export async function regenerateSalonCodeAction() {
   return regenerateSalonCodeActionImpl();
 }
@@ -167,6 +237,10 @@ export async function updateSalonBrandingAction(formData: FormData) {
 
 export async function updateSalonScheduleAction(formData: FormData) {
   return updateSalonScheduleActionImpl(formData);
+}
+
+export async function updateSalonBookingPolicyAction(formData: FormData) {
+  return updateSalonBookingPolicyActionImpl(formData);
 }
 
 export async function createSalonPostAction(formData: FormData) {
@@ -193,7 +267,9 @@ export async function syncInstagramActivityAction() {
   return syncInstagramActivityActionImpl();
 }
 
-export async function validateInstagramConnectionTokenAction(formData: FormData) {
+export async function validateInstagramConnectionTokenAction(
+  formData: FormData,
+) {
   return validateInstagramConnectionTokenActionImpl(formData);
 }
 
@@ -215,6 +291,10 @@ export async function saveStaffCommissionSettingsAction(formData: FormData) {
 
 export async function saveInventoryProductAction(formData: FormData) {
   return saveInventoryProductActionImpl(formData);
+}
+
+export async function updateCustomerProductOrderStatusAction(formData: FormData) {
+  return updateCustomerProductOrderStatusActionImpl(formData);
 }
 
 export async function registerInventoryMovementAction(formData: FormData) {

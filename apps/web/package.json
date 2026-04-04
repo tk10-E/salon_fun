@@ -7,15 +7,20 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify:billing": "node scripts/verify-stripe-go-live.mjs",
+    "verify:operations": "node scripts/verify-operations-readiness.mjs",
+    "verify:client": "node scripts/verify-client-facing-readiness.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
+    "firebase": "^12.11.0",
     "next": "^14.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "stripe": "^21.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

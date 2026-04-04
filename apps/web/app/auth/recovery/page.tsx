@@ -1,37 +1,133 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { FlashMessage } from "@/components/FlashMessage";
 import { createClient } from "@/lib/supabase/browser";
 
+type Notice = {
+  message: string;
+  tone: "success" | "error" | "info";
+};
+
+function readRecoveryParams() {
+  const url = new URL(window.location.href);
+  const searchParams = url.searchParams;
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+
+  return {
+    code: searchParams.get("code"),
+    errorCode: searchParams.get("error_code") ?? hashParams.get("error_code"),
+    errorDescription: searchParams.get("error_description") ?? hashParams.get("error_description"),
+    accessToken: hashParams.get("access_token"),
+    refreshToken: hashParams.get("refresh_token"),
+    type: hashParams.get("type"),
+  };
+}
+
 export default function PasswordRecoveryPage() {
-  const router = useRouter();
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
-  const [notice, setNotice] = useState<{ message: string; tone: "success" | "error" | "info" } | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
+    let cancelled = false;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
+    async function bootstrapRecovery() {
+      const { code, errorCode, errorDescription, accessToken, refreshToken, type } = readRecoveryParams();
+
+      if (errorCode || errorDescription) {
+        if (!cancelled) {
+          setNotice({
+            message: "O link de recuperação não é mais válido. Peça um novo e-mail para continuar.",
+            tone: "error",
+          });
+          setBootstrapping(false);
+        }
+        return;
+      }
+
+      if (type === "recovery" && accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (error) {
+          if (!cancelled) {
+            setNotice({
+              message: "Não foi possível preparar a redefinição da senha. Peça um novo link para continuar.",
+              tone: "error",
+            });
+            setBootstrapping(false);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setReady(true);
+          setBootstrapping(false);
+          window.history.replaceState({}, "", "/auth/recovery");
+        }
+        return;
+      }
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (error) {
+          if (!cancelled) {
+            setNotice({
+              message: "Não foi possível validar este link de recuperação. Peça um novo e-mail para continuar.",
+              tone: "error",
+            });
+            setBootstrapping(false);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setReady(true);
+          setBootstrapping(false);
+          window.history.replaceState({}, "", "/auth/recovery");
+        }
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!cancelled && session) {
         setReady(true);
       }
-    });
+
+      if (!cancelled) {
+        setBootstrapping(false);
+      }
+    }
+
+    bootstrapRecovery();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) {
+        return;
+      }
+
       if (event === "PASSWORD_RECOVERY" || session) {
         setReady(true);
+        setBootstrapping(false);
       }
     });
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
     };
   }, []);
@@ -82,8 +178,7 @@ export default function PasswordRecoveryPage() {
     });
 
     setTimeout(() => {
-      router.replace("/dashboard");
-      router.refresh();
+      window.location.assign("/dashboard");
     }, 800);
   }
 
@@ -163,7 +258,9 @@ export default function PasswordRecoveryPage() {
               ) : (
                 <div className="auth-recovery-state">
                   <p className="muted">
-                    Abra este endereço a partir do link enviado para o seu e-mail de recuperação.
+                    {bootstrapping
+                      ? "Preparando sua recuperação de senha..."
+                      : "Abra este endereço a partir do link mais recente enviado para o seu e-mail de recuperação."}
                   </p>
                 </div>
               )}

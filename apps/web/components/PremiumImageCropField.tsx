@@ -335,6 +335,7 @@ export function PremiumImageCropField({
             onPointerCancel={handlePointerUp}
           >
             {visiblePreview ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={visiblePreview}
                 alt={title}

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import {
   regenerateSalonCodeAction,
+  updateSalonBookingPolicyAction,
   updateSalonBrandingAction,
   updateSalonScheduleAction,
 } from "@/app/actions";
@@ -12,8 +13,11 @@ import { PremiumImageCropField } from "@/components/PremiumImageCropField";
 import { requireOwnerSalon } from "@/lib/auth";
 import { CLIENT_APP_IMAGE_VARIANT_SPECS } from "@/lib/clientAppImageVariants";
 import {
+  CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS,
   CLIENT_APP_BANNER_STYLE_OPTIONS,
   CLIENT_APP_BUTTON_STYLE_OPTIONS,
+  CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS,
+  CLIENT_APP_CAMPAIGN_TARGET_OPTIONS,
   CLIENT_APP_CARD_STYLE_OPTIONS,
   CLIENT_APP_HOME_MODULE_OPTIONS,
   CLIENT_APP_THEME_MODE_OPTIONS,
@@ -22,6 +26,9 @@ import {
   CLIENT_HOME_EMPHASIS_OPTIONS,
   getClientAppBannerStyleOption,
   getClientAppButtonStyleOption,
+  getClientAppCampaignAudienceOption,
+  getClientAppCampaignPriorityOption,
+  getClientAppCampaignTargetOption,
   getClientAppCardStyleOption,
   getClientAppThemeModeOption,
   getClientExperienceModelOption,
@@ -43,7 +50,7 @@ import {
   SALON_SEGMENT_OPTIONS,
 } from "@/lib/salonSegments";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/formatters";
+import { formatCurrency, formatDate } from "@/lib/formatters";
 
 type SettingsPageProps = {
   searchParams?: {
@@ -51,6 +58,28 @@ type SettingsPageProps = {
     tone?: string;
   };
 };
+
+function formatDateTimeLocalFieldValue(value: string | null) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const shortIsoMatch = normalized.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  if (shortIsoMatch) {
+    return shortIsoMatch[1];
+  }
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const localTime = new Date(
+    parsed.getTime() - parsed.getTimezoneOffset() * 60 * 1000,
+  );
+  return localTime.toISOString().slice(0, 16);
+}
 
 export default async function SettingsPage({
   searchParams,
@@ -139,6 +168,64 @@ export default async function SettingsPage({
   );
   const timezone = salon.timezone ?? "America/Sao_Paulo";
   const slotStepMinutes = salon.slot_step_minutes ?? 30;
+  const bookingPolicyEnabled = salon.booking_policy_enabled ?? false;
+  const bookingPolicyTitle = salon.booking_policy_title ?? "Reserva protegida";
+  const bookingPolicySummary = salon.booking_policy_summary ?? "";
+  const bookingPolicyCancellationWindowHours =
+    salon.booking_policy_cancellation_window_hours ?? 24;
+  const bookingPolicyConfirmationRequired =
+    salon.booking_policy_confirmation_required ?? true;
+  const bookingPolicyConfirmationLeadMinutes =
+    salon.booking_policy_confirmation_lead_minutes ?? 30;
+  const bookingPolicyAutoCancelUnconfirmed =
+    salon.booking_policy_auto_cancel_unconfirmed ?? true;
+  const bookingPolicyAutoCancelLeadMinutes =
+    salon.booking_policy_auto_cancel_lead_minutes ?? 10;
+  const bookingPolicyAutoCancelPendingDeposit =
+    salon.booking_policy_auto_cancel_pending_deposit ?? false;
+  const bookingPolicyDepositReminderLeadHours =
+    salon.booking_policy_deposit_reminder_lead_hours ?? 6;
+  const bookingPolicyPaymentMode =
+    salon.booking_policy_payment_mode ?? "manual";
+  const bookingPolicyAsaasEnvironment =
+    salon.booking_policy_asaas_environment ?? "sandbox";
+  const bookingPolicyAsaasApiKey = salon.booking_policy_asaas_api_key ?? "";
+  const bookingPolicyAsaasWebhookToken =
+    salon.booking_policy_asaas_webhook_token ?? "";
+  const bookingPolicyPixKey = salon.booking_policy_pix_key ?? "";
+  const bookingPolicyPixRecipientName =
+    salon.booking_policy_pix_recipient_name ?? "";
+  const bookingPolicyPixRecipientCity =
+    salon.booking_policy_pix_recipient_city ?? "";
+  const bookingPolicyExternalCheckoutUrl =
+    salon.booking_policy_external_checkout_url ?? "";
+  const bookingPolicyRequiresDeposit =
+    salon.booking_policy_requires_deposit ?? false;
+  const bookingPolicyDepositAmount =
+    salon.booking_policy_deposit_amount != null
+      ? Number(salon.booking_policy_deposit_amount)
+      : null;
+  const bookingPolicyPaymentInstructions =
+    salon.booking_policy_payment_instructions ?? "";
+  const bookingPolicyVersion =
+    salon.booking_policy_version ?? "2026-04-booking-policy-v1";
+  const bookingPolicyPaymentModeLabel =
+    bookingPolicyPaymentMode === "pix"
+      ? "Pix direto no app"
+      : bookingPolicyPaymentMode === "asaas_pix"
+        ? "Pix automatico via Asaas"
+        : bookingPolicyPaymentMode === "external_checkout"
+          ? "Checkout externo"
+          : "Operação manual";
+  const bookingPolicyPaymentModeDescription =
+    bookingPolicyPaymentMode === "pix"
+      ? "A cliente copia o Pix no app e avisa a equipe quando pagar."
+      : bookingPolicyPaymentMode === "asaas_pix"
+        ? "O sistema cria uma cobranca Pix por reserva e confirma o sinal automaticamente quando o Asaas avisar o webhook."
+        : bookingPolicyPaymentMode === "external_checkout"
+          ? "A cliente abre um checkout externo configurado pelo salão para concluir o sinal."
+          : "A equipe segue manualmente com a cobrança usando as orientações do salão.";
+  const bookingPolicyAsaasWebhookUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? ""}/functions/v1/asaas-webhook`;
   const logoUrl = salon.logo_path
     ? supabase.storage.from("salon-assets").getPublicUrl(salon.logo_path).data
         .publicUrl
@@ -183,17 +270,47 @@ export default async function SettingsPage({
     CLIENT_HOME_EMPHASIS_OPTIONS.find(
       (option) => option.value === resolvedHomeEmphasis,
     )?.label ?? emphasisOption.label;
-  const themeModeOption = getClientAppThemeModeOption(clientAppConfig.themeMode);
+  const themeModeOption = getClientAppThemeModeOption(
+    clientAppConfig.themeMode,
+  );
   const buttonStyleOption = getClientAppButtonStyleOption(
     clientAppConfig.buttonStyle,
   );
-  const cardStyleOption = getClientAppCardStyleOption(clientAppConfig.cardStyle);
+  const cardStyleOption = getClientAppCardStyleOption(
+    clientAppConfig.cardStyle,
+  );
   const bannerStyleOption = getClientAppBannerStyleOption(
     clientAppConfig.bannerStyle,
   );
   const selectedHomeModules = CLIENT_APP_HOME_MODULE_OPTIONS.filter((option) =>
     clientAppConfig.visibleHomeModules.includes(option.value),
   );
+  const centralCampaignSlots = Array.from({ length: 3 }, (_, index) => {
+    const existing = clientAppConfig.centralCampaigns[index];
+    return {
+      id: existing?.id ?? `campaign-${index + 1}`,
+      isActive: existing?.isActive ?? index == 0,
+      priority: existing?.priority ?? (index === 0 ? "high" : "medium"),
+      priorityOption: getClientAppCampaignPriorityOption(
+        existing?.priority ?? (index === 0 ? "high" : "medium"),
+      ),
+      startsAt: formatDateTimeLocalFieldValue(existing?.startsAt ?? null),
+      endsAt: formatDateTimeLocalFieldValue(existing?.endsAt ?? null),
+      audience: existing?.audience ?? "all",
+      audienceOption: getClientAppCampaignAudienceOption(
+        existing?.audience ?? "all",
+      ),
+      eyebrow: existing?.eyebrow ?? "",
+      title: existing?.title ?? "",
+      message: existing?.message ?? "",
+      campaignLabel: existing?.campaignLabel ?? "",
+      ctaLabel: existing?.ctaLabel ?? "",
+      ctaTarget: existing?.ctaTarget ?? "explore",
+      ctaTargetOption: getClientAppCampaignTargetOption(
+        existing?.ctaTarget ?? "explore",
+      ),
+    };
+  });
   const heroImageFocusX = clientAppConfig.heroImageFocusX ?? 50;
   const heroImageFocusY = clientAppConfig.heroImageFocusY ?? 50;
   const previewHeroImageUrl =
@@ -226,11 +343,11 @@ export default async function SettingsPage({
   const hasHeroImage = Boolean(previewHeroImageUrl);
   const hasGalleryCoverImage = Boolean(
     clientAppConfig.galleryCoverImageVariantUrl ??
-      clientAppConfig.galleryCoverImageUrl,
+    clientAppConfig.galleryCoverImageUrl,
   );
   const hasProfileCoverImage = Boolean(
     clientAppConfig.profileCoverImageVariantUrl ??
-      clientAppConfig.profileCoverImageUrl,
+    clientAppConfig.profileCoverImageUrl,
   );
   const brandCoverageCount = [
     Boolean(logoUrl),
@@ -282,7 +399,8 @@ export default async function SettingsPage({
         activePushTokensCount > 0
           ? `${recentPushTokensCount} ativos nos últimos 30 dias e ${recentNotificationsCount} avisos recentes no histórico.`
           : "Sem dispositivos ativos ainda. O app já está pronto para captar instalações e reativação.",
-      tone: activePushTokensCount > 0 ? ("success" as const) : ("warm" as const),
+      tone:
+        activePushTokensCount > 0 ? ("success" as const) : ("warm" as const),
     },
     {
       href: "/dashboard/instagram",
@@ -293,7 +411,8 @@ export default async function SettingsPage({
         instagramConnectionCount > 0
           ? "A conta já pode puxar menções, revisão e conteúdo para o app do cliente."
           : "Conecte Instagram/Facebook para liberar menções reais e mais repertório comercial.",
-      tone: instagramConnectionCount > 0 ? ("accent" as const) : ("soft" as const),
+      tone:
+        instagramConnectionCount > 0 ? ("accent" as const) : ("soft" as const),
     },
     {
       href: "/dashboard/settings#brand-identity",
@@ -448,7 +567,10 @@ export default async function SettingsPage({
                 <h3>{card.title}</h3>
                 <p>{card.note}</p>
               </div>
-              <Link href={card.href} className="dashboard-capability-card__link">
+              <Link
+                href={card.href}
+                className="dashboard-capability-card__link"
+              >
                 Abrir frente
               </Link>
             </article>
@@ -754,10 +876,10 @@ export default async function SettingsPage({
             </div>
 
             <div className="client-model-card">
-                <div className="client-model-card__preview">
-                  <div className="client-model-card__eyebrow">
-                    Modelo do app do cliente
-                  </div>
+              <div className="client-model-card__preview">
+                <div className="client-model-card__eyebrow">
+                  Modelo do app do cliente
+                </div>
                 <h3>
                   {clientAppConfig.welcomeHeadline ||
                     clientAppConfig.heroHeadline ||
@@ -814,7 +936,9 @@ export default async function SettingsPage({
                     />
                     <div>
                       <strong>Destaque</strong>
-                      <small>{clientAppConfig.accentColor ?? "Automático"}</small>
+                      <small>
+                        {clientAppConfig.accentColor ?? "Automático"}
+                      </small>
                     </div>
                   </div>
                 </div>
@@ -887,7 +1011,8 @@ export default async function SettingsPage({
                 <div>
                   <span className="eyebrow">Botões</span>
                   <p>
-                    {buttonStyleOption?.label ?? "Botões resolvidos pelo preset"}
+                    {buttonStyleOption?.label ??
+                      "Botões resolvidos pelo preset"}
                   </p>
                 </div>
                 <div>
@@ -1130,7 +1255,9 @@ export default async function SettingsPage({
 
               <div className="split-grid">
                 <div className="field">
-                  <label htmlFor="clientAppSecondaryColor">Cor secundária</label>
+                  <label htmlFor="clientAppSecondaryColor">
+                    Cor secundária
+                  </label>
                   <input
                     id="clientAppSecondaryColor"
                     name="clientAppSecondaryColor"
@@ -1144,9 +1271,7 @@ export default async function SettingsPage({
                 </div>
 
                 <div className="field">
-                  <label htmlFor="clientAppAccentColor">
-                    Cor de destaque
-                  </label>
+                  <label htmlFor="clientAppAccentColor">Cor de destaque</label>
                   <input
                     id="clientAppAccentColor"
                     name="clientAppAccentColor"
@@ -1209,6 +1334,271 @@ export default async function SettingsPage({
                 />
               </div>
 
+              <div
+                style={{
+                  padding: 18,
+                  borderRadius: 24,
+                  border: "1px solid #E3D5C7",
+                  background: "#FBF7F2",
+                  display: "grid",
+                  gap: 16,
+                }}
+              >
+                <div>
+                  <strong style={{ display: "block", color: "#2F231C" }}>
+                    Publicações da central do cliente
+                  </strong>
+                  <p className="muted" style={{ margin: "6px 0 0" }}>
+                    O salão pode publicar campanhas, avisos ou chamadas
+                    operacionais que aparecem com prioridade e CTA dentro do app
+                    cliente.
+                  </p>
+                </div>
+
+                <div style={{ display: "grid", gap: 14 }}>
+                  {centralCampaignSlots.map((campaign, index) => {
+                    const slot = index + 1;
+
+                    return (
+                      <section
+                        key={campaign.id}
+                        style={{
+                          padding: 18,
+                          borderRadius: 22,
+                          border: "1px solid #E3D5C7",
+                          background: "rgba(255,255,255,0.9)",
+                          display: "grid",
+                          gap: 14,
+                        }}
+                      >
+                        <input
+                          type="hidden"
+                          name={`clientAppCampaignId_${slot}`}
+                          defaultValue={campaign.id}
+                        />
+
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 12,
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div>
+                            <strong
+                              style={{ display: "block", color: "#2F231C" }}
+                            >
+                              Publicação {slot}
+                            </strong>
+                            <p className="muted" style={{ margin: "6px 0 0" }}>
+                              {campaign.isActive
+                                ? "Essa publicação já pode aparecer no app assim que você salvar."
+                                : "Deixe desligado para preparar a peça antes de publicar para a cliente."}
+                            </p>
+                          </div>
+
+                          <label
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 8,
+                              fontWeight: 700,
+                              color: "#2F231C",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              name={`clientAppCampaignIsActive_${slot}`}
+                              defaultChecked={campaign.isActive}
+                            />
+                            <span>Publicar no app</span>
+                          </label>
+                        </div>
+
+                        <div className="split-grid">
+                          <div className="field">
+                            <label
+                              htmlFor={`clientAppCampaignPriority_${slot}`}
+                            >
+                              Prioridade da publicacao {slot}
+                            </label>
+                            <select
+                              id={`clientAppCampaignPriority_${slot}`}
+                              name={`clientAppCampaignPriority_${slot}`}
+                              defaultValue={campaign.priority}
+                            >
+                              {CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS.map(
+                                (option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                            <small className="muted">
+                              {campaign.priorityOption.description}
+                            </small>
+                          </div>
+
+                          <div className="field">
+                            <label
+                              htmlFor={`clientAppCampaignAudience_${slot}`}
+                            >
+                              Publico da publicacao {slot}
+                            </label>
+                            <select
+                              id={`clientAppCampaignAudience_${slot}`}
+                              name={`clientAppCampaignAudience_${slot}`}
+                              defaultValue={campaign.audience}
+                            >
+                              {CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS.map(
+                                (option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                            <small className="muted">
+                              {campaign.audienceOption.description}
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="split-grid">
+                          <div className="field">
+                            <label
+                              htmlFor={`clientAppCampaignStartsAt_${slot}`}
+                            >
+                              Janela de inicio {slot}
+                            </label>
+                            <input
+                              id={`clientAppCampaignStartsAt_${slot}`}
+                              name={`clientAppCampaignStartsAt_${slot}`}
+                              type="datetime-local"
+                              defaultValue={campaign.startsAt}
+                            />
+                            <small className="muted">
+                              Deixe vazio para a publicação entrar no app assim
+                              que for ativada.
+                            </small>
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor={`clientAppCampaignEndsAt_${slot}`}>
+                              Janela de fim {slot}
+                            </label>
+                            <input
+                              id={`clientAppCampaignEndsAt_${slot}`}
+                              name={`clientAppCampaignEndsAt_${slot}`}
+                              type="datetime-local"
+                              defaultValue={campaign.endsAt}
+                            />
+                            <small className="muted">
+                              Preencha para a peça sair do app automaticamente
+                              após esse horário.
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="field">
+                          <label htmlFor={`clientAppCampaignCtaTarget_${slot}`}>
+                            Destino do CTA {slot}
+                          </label>
+                          <select
+                            id={`clientAppCampaignCtaTarget_${slot}`}
+                            name={`clientAppCampaignCtaTarget_${slot}`}
+                            defaultValue={campaign.ctaTarget}
+                          >
+                            {CLIENT_APP_CAMPAIGN_TARGET_OPTIONS.map(
+                              (option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                          <small className="muted">
+                            {campaign.ctaTargetOption.description}
+                          </small>
+                        </div>
+
+                        <div className="split-grid">
+                          <div className="field">
+                            <label htmlFor={`clientAppCampaignEyebrow_${slot}`}>
+                              Selo da publicacao {slot}
+                            </label>
+                            <input
+                              id={`clientAppCampaignEyebrow_${slot}`}
+                              name={`clientAppCampaignEyebrow_${slot}`}
+                              defaultValue={campaign.eyebrow}
+                              placeholder="Ex.: Agora no app"
+                            />
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor={`clientAppCampaignLabel_${slot}`}>
+                              Etiqueta comercial {slot}
+                            </label>
+                            <input
+                              id={`clientAppCampaignLabel_${slot}`}
+                              name={`clientAppCampaignLabel_${slot}`}
+                              defaultValue={campaign.campaignLabel}
+                              placeholder="Ex.: Retorno da semana"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="field">
+                          <label htmlFor={`clientAppCampaignTitle_${slot}`}>
+                            Titulo da publicacao {slot}
+                          </label>
+                          <input
+                            id={`clientAppCampaignTitle_${slot}`}
+                            name={`clientAppCampaignTitle_${slot}`}
+                            defaultValue={campaign.title}
+                            placeholder="Ex.: Volte essa semana e aproveite um encaixe premium."
+                          />
+                        </div>
+
+                        <div className="field">
+                          <label htmlFor={`clientAppCampaignMessage_${slot}`}>
+                            Mensagem da publicacao {slot}
+                          </label>
+                          <textarea
+                            id={`clientAppCampaignMessage_${slot}`}
+                            name={`clientAppCampaignMessage_${slot}`}
+                            defaultValue={campaign.message}
+                            rows={3}
+                            placeholder="Explique o que o salao quer comunicar e por que isso importa para a cliente agora."
+                          />
+                        </div>
+
+                        <div className="field">
+                          <label htmlFor={`clientAppCampaignCtaLabel_${slot}`}>
+                            Texto do CTA {slot}
+                          </label>
+                          <input
+                            id={`clientAppCampaignCtaLabel_${slot}`}
+                            name={`clientAppCampaignCtaLabel_${slot}`}
+                            defaultValue={campaign.ctaLabel}
+                            placeholder="Ex.: Reservar agora"
+                          />
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              </div>
+
               <PremiumImageCropField
                 title="Imagem hero principal"
                 description="Crop interativo para a home premium com foco, zoom e derivacoes automaticas para mobile, tablet e share."
@@ -1253,8 +1643,8 @@ export default async function SettingsPage({
                 defaultFocusY={clientAppConfig.galleryCoverImageFocusY}
                 defaultZoom={clientAppConfig.galleryCoverImageZoom}
                 currentAssetManagedInStorage={
-                  typeof clientAppConfig.rawConfig.galleryCoverImageSourcePath ===
-                    "string" ||
+                  typeof clientAppConfig.rawConfig
+                    .galleryCoverImageSourcePath === "string" ||
                   typeof clientAppConfig.rawConfig.galleryCoverImagePath ===
                     "string"
                 }
@@ -1359,6 +1749,68 @@ export default async function SettingsPage({
                     defaultValue={clientAppConfig.mapUrl ?? ""}
                     placeholder="https://maps.app.goo.gl/..."
                   />
+                </div>
+              </div>
+
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppPrivacyPolicyUrl">
+                    URL da política de privacidade
+                  </label>
+                  <input
+                    id="clientAppPrivacyPolicyUrl"
+                    name="clientAppPrivacyPolicyUrl"
+                    type="url"
+                    defaultValue={clientAppConfig.privacyPolicyUrl ?? ""}
+                    placeholder="https://seusalao.com/privacidade"
+                  />
+                  <small className="muted">
+                    Se deixar em branco, o app usa a versão institucional local
+                    com fallback para suporte.
+                  </small>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppTermsOfUseUrl">
+                    URL dos termos de uso
+                  </label>
+                  <input
+                    id="clientAppTermsOfUseUrl"
+                    name="clientAppTermsOfUseUrl"
+                    type="url"
+                    defaultValue={clientAppConfig.termsOfUseUrl ?? ""}
+                    placeholder="https://seusalao.com/termos"
+                  />
+                </div>
+              </div>
+
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="clientAppSupportUrl">URL de suporte</label>
+                  <input
+                    id="clientAppSupportUrl"
+                    name="clientAppSupportUrl"
+                    type="url"
+                    defaultValue={clientAppConfig.supportUrl ?? ""}
+                    placeholder="https://wa.me/... ou https://seusalao.com/suporte"
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="clientAppSupportEmail">
+                    E-mail de suporte
+                  </label>
+                  <input
+                    id="clientAppSupportEmail"
+                    name="clientAppSupportEmail"
+                    type="email"
+                    defaultValue={clientAppConfig.supportEmail ?? ""}
+                    placeholder="suporte@seusalao.com"
+                  />
+                  <small className="muted">
+                    Usado como fallback no app se a URL de suporte não for
+                    preenchida.
+                  </small>
                 </div>
               </div>
 
@@ -1529,6 +1981,404 @@ export default async function SettingsPage({
             <div className="inline-actions">
               <button type="submit" className="primary-button">
                 Salvar agenda
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="reserva-protegida" className="card content-card">
+        <div className="section-heading">
+          <div>
+            <h2>Reserva protegida</h2>
+            <p className="muted">
+              Transforme a agenda em operacao real: regras claras, sinal quando
+              fizer sentido e menos no-show improvisado no WhatsApp.
+            </p>
+          </div>
+        </div>
+
+        <div className="schedule-settings-grid" style={{ marginTop: 18 }}>
+          <div className="schedule-preview-card">
+            <div className="schedule-preview-head">
+              <span className="eyebrow">Como o cliente ve</span>
+              <h3>
+                {bookingPolicyEnabled
+                  ? bookingPolicyTitle
+                  : "Reserva sem politica ativa"}
+              </h3>
+              <p>
+                {bookingPolicyEnabled
+                  ? bookingPolicySummary ||
+                    "O cliente recebe a regra do salao antes de concluir a reserva e a equipe acompanha o sinal dentro da agenda."
+                  : "Ative essa camada para mostrar regras de cancelamento, orientar o sinal e proteger horarios de maior demanda."}
+              </p>
+            </div>
+
+            <div className="schedule-preview-meta">
+              <div>
+                <span className="eyebrow">Janela de cancelamento</span>
+                <p>{bookingPolicyCancellationWindowHours}h antes do horario</p>
+              </div>
+              <div>
+                <span className="eyebrow">Confirmacao</span>
+                <p>
+                  {bookingPolicyConfirmationRequired
+                    ? `${bookingPolicyConfirmationLeadMinutes} min antes`
+                    : "Nao automatica"}
+                </p>
+              </div>
+              <div>
+                <span className="eyebrow">Sinal</span>
+                <p>
+                  {bookingPolicyRequiresDeposit && bookingPolicyDepositAmount
+                    ? `${formatCurrency(bookingPolicyDepositAmount)} por reserva via ${bookingPolicyPaymentModeLabel.toLowerCase()}`
+                    : "Nao obrigatorio"}
+                </p>
+              </div>
+              <div>
+                <span className="eyebrow">Protecao automatica</span>
+                <p>
+                  {bookingPolicyAutoCancelUnconfirmed
+                    ? `Cancela ${bookingPolicyAutoCancelLeadMinutes} min antes sem confirmacao`
+                    : "Sem auto cancelamento por presenca"}
+                </p>
+              </div>
+            </div>
+
+            <p className="muted" style={{ marginTop: 16 }}>
+              {bookingPolicyRequiresDeposit
+                ? bookingPolicyAutoCancelPendingDeposit
+                  ? `Sinal pendente cancela automaticamente ${bookingPolicyAutoCancelLeadMinutes} min antes.`
+                  : `O app lembra do sinal ${bookingPolicyDepositReminderLeadHours}h antes, sem cancelar automaticamente por isso.`
+                : "Fluxo focado em confirmacao de presenca e organizacao da agenda."}
+            </p>
+
+            <p className="muted" style={{ marginTop: 8 }}>
+              {bookingPolicyRequiresDeposit
+                ? bookingPolicyPaymentModeDescription
+                : "Quando o sinal for ativado, esta camada define se a cobrança acontece por Pix, checkout ou operação manual."}
+            </p>
+
+            <p className="muted" style={{ marginTop: 16 }}>
+              Versao ativa: {bookingPolicyVersion}
+            </p>
+          </div>
+
+          <form action={updateSalonBookingPolicyAction} className="form-grid">
+            <div className="split-grid">
+              <div className="field">
+                <label htmlFor="bookingPolicyTitle">Titulo da politica</label>
+                <input
+                  id="bookingPolicyTitle"
+                  name="bookingPolicyTitle"
+                  defaultValue={bookingPolicyTitle}
+                  placeholder="Reserva protegida"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyCancellationWindowHours">
+                  Janela de cancelamento
+                </label>
+                <input
+                  id="bookingPolicyCancellationWindowHours"
+                  name="bookingPolicyCancellationWindowHours"
+                  type="number"
+                  min="0"
+                  max="168"
+                  step="1"
+                  defaultValue={String(bookingPolicyCancellationWindowHours)}
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="bookingPolicySummary">
+                Resumo para o cliente
+              </label>
+              <textarea
+                id="bookingPolicySummary"
+                name="bookingPolicySummary"
+                rows={4}
+                defaultValue={bookingPolicySummary}
+                placeholder="Explique quando a reserva fica garantida, como o sinal funciona e o que acontece em cancelamentos tardios."
+              />
+            </div>
+
+            <div className="split-grid">
+              <label className="toggle-pill">
+                <input
+                  type="checkbox"
+                  name="bookingPolicyEnabled"
+                  defaultChecked={bookingPolicyEnabled}
+                />
+                <span>Ativar politica de reserva</span>
+              </label>
+
+              <label className="toggle-pill">
+                <input
+                  type="checkbox"
+                  name="bookingPolicyRequiresDeposit"
+                  defaultChecked={bookingPolicyRequiresDeposit}
+                />
+                <span>Exigir sinal para segurar a vaga</span>
+              </label>
+            </div>
+
+            <div className="split-grid">
+              <div className="field">
+                <label htmlFor="bookingPolicyDepositAmount">
+                  Valor do sinal
+                </label>
+                <input
+                  id="bookingPolicyDepositAmount"
+                  name="bookingPolicyDepositAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  defaultValue={
+                    bookingPolicyDepositAmount == null
+                      ? ""
+                      : bookingPolicyDepositAmount.toFixed(2)
+                  }
+                  placeholder="0,00"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyPaymentMode">
+                  Modo de cobranca do sinal
+                </label>
+                <select
+                  id="bookingPolicyPaymentMode"
+                  name="bookingPolicyPaymentMode"
+                  defaultValue={bookingPolicyPaymentMode}
+                >
+                  <option value="manual">Manual pela equipe</option>
+                  <option value="pix">Pix direto no app</option>
+                  <option value="asaas_pix">Pix automatico (Asaas)</option>
+                  <option value="external_checkout">Checkout externo</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="bookingPolicyPaymentInstructions">
+                Orientacoes complementares
+              </label>
+              <textarea
+                id="bookingPolicyPaymentInstructions"
+                name="bookingPolicyPaymentInstructions"
+                rows={4}
+                defaultValue={bookingPolicyPaymentInstructions}
+                placeholder="Ex.: Depois do pagamento, toque em 'Ja paguei' no app para a equipe validar o sinal."
+              />
+            </div>
+
+            <div className="split-grid">
+              <div className="field">
+                <label htmlFor="bookingPolicyAsaasApiKey">
+                  Chave de API do Asaas
+                </label>
+                <input
+                  id="bookingPolicyAsaasApiKey"
+                  name="bookingPolicyAsaasApiKey"
+                  type="password"
+                  autoComplete="off"
+                  defaultValue={bookingPolicyAsaasApiKey}
+                  placeholder="$aact_..."
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyAsaasEnvironment">
+                  Ambiente do Asaas
+                </label>
+                <select
+                  id="bookingPolicyAsaasEnvironment"
+                  name="bookingPolicyAsaasEnvironment"
+                  defaultValue={bookingPolicyAsaasEnvironment}
+                >
+                  <option value="sandbox">Sandbox</option>
+                  <option value="production">Produção</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="split-grid">
+              <div className="field">
+                <label htmlFor="bookingPolicyAsaasWebhookToken">
+                  Token do webhook do Asaas
+                </label>
+                <input
+                  id="bookingPolicyAsaasWebhookToken"
+                  name="bookingPolicyAsaasWebhookToken"
+                  defaultValue={bookingPolicyAsaasWebhookToken}
+                  placeholder="Gerado automaticamente na primeira configuração"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyAsaasWebhookUrl">
+                  URL do webhook
+                </label>
+                <input
+                  id="bookingPolicyAsaasWebhookUrl"
+                  value={bookingPolicyAsaasWebhookUrl}
+                  readOnly
+                />
+              </div>
+            </div>
+
+            <div className="split-grid">
+              <div className="field">
+                <label htmlFor="bookingPolicyPixKey">Chave Pix do salao</label>
+                <input
+                  id="bookingPolicyPixKey"
+                  name="bookingPolicyPixKey"
+                  defaultValue={bookingPolicyPixKey}
+                  placeholder="email@studio.com ou chave aleatoria"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyExternalCheckoutUrl">
+                  URL do checkout externo
+                </label>
+                <input
+                  id="bookingPolicyExternalCheckoutUrl"
+                  name="bookingPolicyExternalCheckoutUrl"
+                  defaultValue={bookingPolicyExternalCheckoutUrl}
+                  placeholder="https://pay.exemplo.com/reserva-protegida"
+                />
+              </div>
+            </div>
+
+            <div className="split-grid">
+              <div className="field">
+                <label htmlFor="bookingPolicyPixRecipientName">
+                  Favorecido no Pix
+                </label>
+                <input
+                  id="bookingPolicyPixRecipientName"
+                  name="bookingPolicyPixRecipientName"
+                  defaultValue={bookingPolicyPixRecipientName}
+                  placeholder="Studio Centro"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyPixRecipientCity">
+                  Cidade do Pix
+                </label>
+                <input
+                  id="bookingPolicyPixRecipientCity"
+                  name="bookingPolicyPixRecipientCity"
+                  defaultValue={bookingPolicyPixRecipientCity}
+                  placeholder="SAO PAULO"
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <p className="muted">
+                Use <strong>Pix direto no app</strong> para copiar o codigo de
+                pagamento na hora. Use <strong>Pix automatico (Asaas)</strong>{" "}
+                para gerar uma cobranca por reserva com conciliacao automatica
+                via webhook. Use <strong>Checkout externo</strong> se o salao ja
+                cobra o sinal por um link pronto em Mercado Pago, Asaas ou outra
+                operacao.
+              </p>
+              <p className="muted">
+                No modo Asaas, configure a URL acima no painel do Asaas e cole o
+                mesmo token no campo de autenticacao do webhook para liberar a
+                confirmacao automatica do sinal.
+              </p>
+            </div>
+
+            <div className="field">
+              <label htmlFor="bookingPolicyConfirmationLeadMinutes">
+                Confirmacao de presenca
+              </label>
+              <div className="split-grid">
+                <label className="toggle-pill">
+                  <input
+                    type="checkbox"
+                    name="bookingPolicyConfirmationRequired"
+                    defaultChecked={bookingPolicyConfirmationRequired}
+                  />
+                  <span>Solicitar confirmacao perto do horario</span>
+                </label>
+
+                <input
+                  id="bookingPolicyConfirmationLeadMinutes"
+                  name="bookingPolicyConfirmationLeadMinutes"
+                  type="number"
+                  min="5"
+                  max="180"
+                  step="1"
+                  defaultValue={String(bookingPolicyConfirmationLeadMinutes)}
+                />
+              </div>
+            </div>
+
+            <div className="split-grid">
+              <label className="toggle-pill">
+                <input
+                  type="checkbox"
+                  name="bookingPolicyAutoCancelUnconfirmed"
+                  defaultChecked={bookingPolicyAutoCancelUnconfirmed}
+                />
+                <span>Cancelar automaticamente sem confirmacao</span>
+              </label>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyAutoCancelLeadMinutes">
+                  Minutos antes para auto cancelamento
+                </label>
+                <input
+                  id="bookingPolicyAutoCancelLeadMinutes"
+                  name="bookingPolicyAutoCancelLeadMinutes"
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  defaultValue={String(bookingPolicyAutoCancelLeadMinutes)}
+                />
+              </div>
+            </div>
+
+            <div className="split-grid">
+              <label className="toggle-pill">
+                <input
+                  type="checkbox"
+                  name="bookingPolicyAutoCancelPendingDeposit"
+                  defaultChecked={bookingPolicyAutoCancelPendingDeposit}
+                />
+                <span>Cancelar automaticamente por sinal pendente</span>
+              </label>
+
+              <div className="field">
+                <label htmlFor="bookingPolicyDepositReminderLeadHours">
+                  Horas antes para lembrar do sinal
+                </label>
+                <input
+                  id="bookingPolicyDepositReminderLeadHours"
+                  name="bookingPolicyDepositReminderLeadHours"
+                  type="number"
+                  min="0"
+                  max="72"
+                  step="1"
+                  defaultValue={String(bookingPolicyDepositReminderLeadHours)}
+                />
+              </div>
+            </div>
+
+            <div className="inline-actions">
+              <button type="submit" className="primary-button">
+                Salvar politica de reserva
               </button>
             </div>
           </form>

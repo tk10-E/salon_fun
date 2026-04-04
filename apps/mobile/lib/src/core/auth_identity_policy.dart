@@ -18,6 +18,14 @@ bool hasVerifiedEmailIdentity({
   return emailVerified && (email?.trim().isNotEmpty ?? false);
 }
 
+bool hasConfirmedSupabaseEmailIdentity({
+  required String? email,
+  required String? emailConfirmedAt,
+}) {
+  return (emailConfirmedAt?.trim().isNotEmpty ?? false) &&
+      (email?.trim().isNotEmpty ?? false);
+}
+
 String buildEmailVerificationRequiredMessage({
   required bool verificationEmailSent,
 }) {

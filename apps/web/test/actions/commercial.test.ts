@@ -6,8 +6,15 @@ import {
   TEST_REDIRECT_PREFIX,
 } from "@/test/server-action-test-helpers";
 
-const { createClientMock, redirectMock, revalidatePathMock, requireOwnerSalonMock } = vi.hoisted(() => ({
+const {
+  createClientMock,
+  getSalonBillingEntitlementsMock,
+  redirectMock,
+  revalidatePathMock,
+  requireOwnerSalonMock,
+} = vi.hoisted(() => ({
   createClientMock: vi.fn(),
+  getSalonBillingEntitlementsMock: vi.fn(),
   redirectMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
@@ -19,6 +26,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/auth", () => ({
   requireOwnerSalon: requireOwnerSalonMock,
+}));
+
+vi.mock("@/lib/billing", () => ({
+  getSalonBillingEntitlements: getSalonBillingEntitlementsMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -43,6 +54,10 @@ describe("commercial actions", () => {
     });
     requireOwnerSalonMock.mockResolvedValue({
       salon: { id: "salon-1" },
+    });
+    getSalonBillingEntitlementsMock.mockResolvedValue({
+      currentPlan: { displayName: "Growth" },
+      includesGrowthAutomation: true,
     });
   });
 
@@ -87,6 +102,9 @@ describe("commercial actions", () => {
       title: "Combo de inverno",
       description: "Corte + hidratação",
       highlight_text: "Combo especial da semana",
+      membership_service_id: null,
+      membership_sessions_included: null,
+      membership_validity_days: null,
       price: 129.9,
       starts_on: "2026-03-25",
       ends_on: "2026-03-31",
@@ -100,9 +118,14 @@ describe("commercial actions", () => {
       }),
     );
     expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
-      expect.arrayContaining(["/dashboard/benefits", "/dashboard/benefits/promotions"]),
+      expect.arrayContaining([
+        "/dashboard/benefits",
+        "/dashboard/benefits/promotions",
+      ]),
     );
-    expect(location).toBe("/dashboard/benefits/promotions?message=Oferta+salva+com+sucesso.&tone=success");
+    expect(location).toBe(
+      "/dashboard/benefits/promotions?message=Oferta+salva+com+sucesso.&tone=success",
+    );
   });
 
   it("rejects loyalty tiers that do not grow progressively", async () => {
@@ -130,7 +153,9 @@ describe("commercial actions", () => {
       redirectMock,
     );
 
-    expect(location).toBe("/dashboard/benefits/loyalty?message=As+visitas+m%C3%ADnimas+precisam+crescer+do+primeiro+n%C3%ADvel+at%C3%A9+o+VIP.&tone=error");
+    expect(location).toBe(
+      "/dashboard/benefits/loyalty?message=As+visitas+m%C3%ADnimas+precisam+crescer+do+primeiro+n%C3%ADvel+at%C3%A9+o+VIP.&tone=error",
+    );
   });
 
   it("saves loyalty with an optional VIP reward service", async () => {
@@ -193,7 +218,9 @@ describe("commercial actions", () => {
       }),
       { onConflict: "salon_id" },
     );
-    expect(location).toBe("/dashboard/benefits/loyalty?message=Programa+de+fidelidade+atualizado+com+sucesso.&tone=success");
+    expect(location).toBe(
+      "/dashboard/benefits/loyalty?message=Programa+de+fidelidade+atualizado+com+sucesso.&tone=success",
+    );
   });
 
   it("saves active growth automation and revalidates dashboard/notifications", async () => {
@@ -219,10 +246,12 @@ describe("commercial actions", () => {
           winbackInactiveDays: "30",
           winbackDiscountPercent: "15",
           winbackTitle: "Volte para o studio",
-          winbackBodyTemplate: "Sentimos sua falta. Temos uma condição especial para você voltar.",
+          winbackBodyTemplate:
+            "Sentimos sua falta. Temos uma condição especial para você voltar.",
           smartRebookWindowDays: "3",
           smartRebookTitle: "Hora de reagendar",
-          smartRebookBodyTemplate: "Seu melhor momento de retorno está chegando. Quer reservar?",
+          smartRebookBodyTemplate:
+            "Seu melhor momento de retorno está chegando. Quer reservar?",
         }),
       ),
       redirectMock,
@@ -235,11 +264,13 @@ describe("commercial actions", () => {
         winback_inactive_days: 30,
         winback_discount_percent: 15,
         winback_title: "Volte para o studio",
-        winback_body_template: "Sentimos sua falta. Temos uma condição especial para você voltar.",
+        winback_body_template:
+          "Sentimos sua falta. Temos uma condição especial para você voltar.",
         smart_rebook_is_active: true,
         smart_rebook_window_days: 3,
         smart_rebook_title: "Hora de reagendar",
-        smart_rebook_body_template: "Seu melhor momento de retorno está chegando. Quer reservar?",
+        smart_rebook_body_template:
+          "Seu melhor momento de retorno está chegando. Quer reservar?",
       },
       { onConflict: "salon_id" },
     );

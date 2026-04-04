@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const nextPath = sanitizeNextPath(requestUrl.searchParams.get("next"));
   const origin = resolveRequestOriginFromRequest(request);
+  const failedNotice =
+    nextPath === "/auth/recovery"
+      ? "Não foi possível validar o link de recuperação."
+      : "Não foi possível concluir o login com Google.";
 
   if (code) {
     const successResponse = NextResponse.redirect(`${origin}${nextPath}`);
@@ -45,6 +49,6 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.redirect(
-    `${origin}${buildRedirectNotice("/login", "Não foi possível concluir o login com Google.", "error")}`,
+    `${origin}${buildRedirectNotice("/login", failedNotice, "error")}`,
   );
 }

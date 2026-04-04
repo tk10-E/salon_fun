@@ -6,8 +6,15 @@ import {
   TEST_REDIRECT_PREFIX,
 } from "@/test/server-action-test-helpers";
 
-const { createClientMock, redirectMock, revalidatePathMock, requireOwnerSalonMock } = vi.hoisted(() => ({
+const {
+  createClientMock,
+  getSalonBillingEntitlementsMock,
+  redirectMock,
+  revalidatePathMock,
+  requireOwnerSalonMock,
+} = vi.hoisted(() => ({
   createClientMock: vi.fn(),
+  getSalonBillingEntitlementsMock: vi.fn(),
   redirectMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
@@ -19,6 +26,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/auth", () => ({
   requireOwnerSalon: requireOwnerSalonMock,
+}));
+
+vi.mock("@/lib/billing", () => ({
+  getSalonBillingEntitlements: getSalonBillingEntitlementsMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -40,16 +51,27 @@ describe("service actions", () => {
     requireOwnerSalonMock.mockResolvedValue({
       salon: { id: "salon-1" },
     });
+    getSalonBillingEntitlementsMock.mockResolvedValue({
+      currentPlan: { displayName: "Growth" },
+      maxServices: 80,
+    });
   });
 
   it("creates a service, notifies customers and revalidates dashboards", async () => {
     const insertService = vi.fn().mockResolvedValue({ error: null });
     const insertNotification = vi.fn().mockResolvedValue({ error: null });
+    const countServices = vi.fn().mockResolvedValue({ count: 4 });
+    const selectServices = vi.fn(() => ({
+      eq: countServices,
+    }));
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "services") {
-          return { insert: insertService };
+          return {
+            insert: insertService,
+            select: selectServices,
+          };
         }
 
         if (table === "salon_customer_notifications") {

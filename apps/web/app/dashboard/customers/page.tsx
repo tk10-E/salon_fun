@@ -1,17 +1,25 @@
 import Link from "next/link";
 
+import {
+  assignCustomerMembershipPackageAction,
+  saveOwnerCustomerProfileAction,
+  sendCustomerNudgeAction,
+} from "@/app/actions";
 import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
+import { FlashMessage } from "@/components/FlashMessage";
 import { requireOwnerSalon } from "@/lib/auth";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/formatters";
 import { createClient } from "@/lib/supabase/server";
 
 type CustomersPageProps = {
   searchParams?: {
+    message?: string;
     page?: string | string[];
     q?: string | string[];
     segment?: string | string[];
     sort?: string | string[];
+    tone?: string;
   };
 };
 
@@ -24,20 +32,30 @@ type LoyaltyTierSnapshot = {
 
 type CustomerDirectoryItem = {
   allergies?: string | null;
+  beauty_goals?: string | null;
   beauty_products?: string | null;
   cashback_balance: number | string;
   completed_visits: number;
+  consent_signed_at?: string | null;
+  consent_status?: "pending" | "signed" | "not_required" | null;
+  consent_version?: string | null;
+  contraindications?: string | null;
   created_at: string;
+  crm_label?: string | null;
   current_tier: LoyaltyTierSnapshot | null;
   id: string;
+  internal_notes?: string | null;
   last_reward_at: string | null;
+  last_assessment_at?: string | null;
   last_visit_at: string | null;
   name: string;
   next_appointment_at: string | null;
   pending_appointments: number;
+  phone?: string | null;
   points_balance: number;
   preferences?: string | null;
   referral_code: string | null;
+  technical_notes?: string | null;
   last_completed_service_name?: string | null;
   last_completed_staff_member_name?: string | null;
   last_completed_at?: string | null;
@@ -58,6 +76,31 @@ type CustomerDirectoryResponse = {
   page: number;
   page_size: number;
   items: CustomerDirectoryItem[];
+};
+
+type MembershipOfferOption = {
+  id: string;
+  title: string;
+  membership_service_id: string | null;
+  membership_sessions_included: number | null;
+  membership_validity_days: number | null;
+  price: number | string | null;
+};
+
+type CustomerMembershipRecord = {
+  created_at: string;
+  customer_id: string;
+  expires_at: string;
+  id: string;
+  notes: string | null;
+  price_snapshot: number | string | null;
+  service_id: string | null;
+  service_name_snapshot: string;
+  sessions_included: number;
+  sessions_used: number;
+  started_at: string;
+  status: "active" | "completed" | "expired" | "cancelled";
+  title: string;
 };
 
 const PAGE_SIZE = 15;
@@ -150,6 +193,70 @@ function normalizeText(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+function normalizeConsentStatus(value?: string | null) {
+  if (value === "pending" || value === "signed" || value === "not_required") {
+    return value;
+  }
+
+  return "not_required";
+}
+
+function normalizePhone(value?: string | null) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  return digits || null;
+}
+
+function formatPhone(value?: string | null) {
+  const digits = normalizePhone(value);
+
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+
+  return digits;
+}
+
+function buildWhatsAppHref(value?: string | null) {
+  const digits = normalizePhone(value);
+
+  if (!digits || digits.length < 10 || digits.length > 15) {
+    return null;
+  }
+
+  const withCountryCode = digits.length <= 11 ? `55${digits}` : digits;
+  return `https://wa.me/${withCountryCode}`;
+}
+
+function formatConsentStatus(value?: string | null) {
+  switch (normalizeConsentStatus(value)) {
+    case "pending":
+      return "Consentimento pendente";
+    case "signed":
+      return "Consentimento assinado";
+    default:
+      return "Sem termo exigido";
+  }
+}
+
+function getConsentTone(value?: string | null) {
+  switch (normalizeConsentStatus(value)) {
+    case "pending":
+      return "badge badge--pending";
+    case "signed":
+      return "badge badge--confirmed";
+    default:
+      return "badge badge--soft";
+  }
+}
+
 function toNumber(value: number | string | null | undefined) {
   return Number(value ?? 0);
 }
@@ -238,7 +345,8 @@ function compareCustomersByAttention(
     return vipDifference;
   }
 
-  const spentDifference = toNumber(right.total_spent) - toNumber(left.total_spent);
+  const spentDifference =
+    toNumber(right.total_spent) - toNumber(left.total_spent);
   if (spentDifference !== 0) {
     return spentDifference;
   }
@@ -284,12 +392,65 @@ function buildCustomerMomentumLabel(customer: CustomerDirectoryItem) {
   return `Entrou em ${formatDate(customer.created_at)}`;
 }
 
-export default async function CustomersPage({ searchParams }: CustomersPageProps) {
+function resolveCustomerMembershipStatus(
+  membership: CustomerMembershipRecord,
+  today: string,
+) {
+  if (membership.status === "cancelled") {
+    return "cancelled";
+  }
+
+  if (membership.sessions_used >= membership.sessions_included) {
+    return "completed";
+  }
+
+  if (membership.expires_at < today || membership.status === "expired") {
+    return "expired";
+  }
+
+  return "active";
+}
+
+function formatCustomerMembershipStatusLabel(
+  status: ReturnType<typeof resolveCustomerMembershipStatus>,
+) {
+  switch (status) {
+    case "completed":
+      return "Pacote concluído";
+    case "expired":
+      return "Pacote expirado";
+    case "cancelled":
+      return "Pacote cancelado";
+    default:
+      return "Pacote ativo";
+  }
+}
+
+function customerMembershipBadgeClass(
+  status: ReturnType<typeof resolveCustomerMembershipStatus>,
+) {
+  switch (status) {
+    case "completed":
+      return "badge badge--confirmed";
+    case "expired":
+      return "badge badge--cancelled";
+    case "cancelled":
+      return "badge badge--soft";
+    default:
+      return "badge badge--accent";
+  }
+}
+
+export default async function CustomersPage({
+  searchParams,
+}: CustomersPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
   const q = firstParam(searchParams?.q).trim();
-  const segment = normalizeSegment(firstParam(searchParams?.segment).trim() || "all");
+  const segment = normalizeSegment(
+    firstParam(searchParams?.segment).trim() || "all",
+  );
   const sort = normalizeSort(firstParam(searchParams?.sort).trim() || "recent");
   const requestedPage = parsePage(searchParams?.page);
 
@@ -322,7 +483,8 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
   const totalCount = directory.total_count ?? 0;
   const hasFilters = Boolean(q || segment !== "all" || sort !== "recent");
   const startItem = totalCount === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
-  const endItem = totalCount === 0 ? 0 : Math.min(safePage * PAGE_SIZE, totalCount);
+  const endItem =
+    totalCount === 0 ? 0 : Math.min(safePage * PAGE_SIZE, totalCount);
   const pageNumbers = Array.from(
     new Set(
       [safePage - 1, safePage, safePage + 1].filter(
@@ -331,12 +493,23 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
     ),
   );
   const customerIds = customers.map((customer) => customer.id);
+  const today = new Date().toISOString().slice(0, 10);
   const customerBeautyProfileById = new Map<
     string,
     {
       allergies: string | null;
+      beauty_goals: string | null;
       beauty_products: string | null;
+      consent_signed_at: string | null;
+      consent_status: "pending" | "signed" | "not_required";
+      consent_version: string | null;
+      contraindications: string | null;
+      crm_label: string | null;
+      internal_notes: string | null;
+      last_assessment_at: string | null;
+      phone: string | null;
       preferences: string | null;
+      technical_notes: string | null;
     }
   >();
   const latestCompletedHistoryByCustomerId = new Map<
@@ -347,44 +520,126 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
       last_completed_staff_member_name: string | null;
     }
   >();
+  const customerMembershipsByCustomerId = new Map<
+    string,
+    CustomerMembershipRecord[]
+  >();
+
+  const [operationalMembershipOffersResult, serviceCatalogResult] =
+    await Promise.all([
+      supabase
+        .from("salon_offers")
+        .select(
+          "id, title, membership_service_id, membership_sessions_included, membership_validity_days, price",
+        )
+        .eq("salon_id", salon.id)
+        .eq("kind", "membership")
+        .eq("is_active", true)
+        .not("membership_service_id", "is", null)
+        .not("membership_sessions_included", "is", null)
+        .not("membership_validity_days", "is", null)
+        .order("sort_order")
+        .order("created_at"),
+      supabase
+        .from("services")
+        .select("id, name, category")
+        .eq("salon_id", salon.id)
+        .order("sort_order")
+        .order("name"),
+    ]);
+
+  const operationalMembershipOffers = (operationalMembershipOffersResult.data ??
+    []) as MembershipOfferOption[];
+  const serviceNameById = new Map(
+    (
+      (serviceCatalogResult.data ?? []) as Array<{
+        category?: string | null;
+        id: string;
+        name: string;
+      }>
+    ).map((service) => [
+      service.id,
+      service.category ? `${service.category} • ${service.name}` : service.name,
+    ]),
+  );
 
   if (customerIds.length) {
-    const [beautyProfilesResult, completedAppointmentsResult] = await Promise.all([
+    const [
+      beautyProfilesResult,
+      completedAppointmentsResult,
+      membershipsResult,
+    ] = await Promise.all([
       supabase
         .from("customers")
-        .select("id, preferences, allergies, beauty_products")
+        .select(
+          "id, phone, preferences, allergies, beauty_products, crm_label, internal_notes, beauty_goals, contraindications, technical_notes, consent_status, consent_signed_at, consent_version, last_assessment_at",
+        )
         .in("id", customerIds),
       supabase
         .from("appointments")
-        .select("customer_id, date, completed_at, services(name), staff_members(name)")
+        .select(
+          "customer_id, date, completed_at, services(name), staff_members(name)",
+        )
         .eq("salon_id", salon.id)
         .eq("status", "completed")
         .in("customer_id", customerIds)
         .order("completed_at", { ascending: false, nullsFirst: false })
         .order("date", { ascending: false }),
+      supabase
+        .from("customer_memberships")
+        .select(
+          "id, customer_id, title, service_id, service_name_snapshot, price_snapshot, sessions_included, sessions_used, started_at, expires_at, status, notes, created_at",
+        )
+        .eq("salon_id", salon.id)
+        .in("customer_id", customerIds)
+        .order("created_at", { ascending: false }),
     ]);
 
     const beautyProfiles = (beautyProfilesResult.data ?? []) as Array<{
       allergies?: string | null;
+      beauty_goals?: string | null;
       beauty_products?: string | null;
+      consent_signed_at?: string | null;
+      consent_status?: "pending" | "signed" | "not_required" | null;
+      consent_version?: string | null;
+      contraindications?: string | null;
+      crm_label?: string | null;
       id: string;
+      internal_notes?: string | null;
+      last_assessment_at?: string | null;
+      phone?: string | null;
       preferences?: string | null;
+      technical_notes?: string | null;
     }>;
 
     for (const profile of beautyProfiles) {
       customerBeautyProfileById.set(profile.id, {
         allergies: normalizeText(profile.allergies),
+        beauty_goals: normalizeText(profile.beauty_goals),
         beauty_products: normalizeText(profile.beauty_products),
+        consent_signed_at: profile.consent_signed_at ?? null,
+        consent_status: normalizeConsentStatus(profile.consent_status),
+        consent_version: normalizeText(profile.consent_version),
+        contraindications: normalizeText(profile.contraindications),
+        crm_label: normalizeText(profile.crm_label),
+        internal_notes: normalizeText(profile.internal_notes),
+        last_assessment_at: profile.last_assessment_at ?? null,
+        phone: normalizePhone(profile.phone),
         preferences: normalizeText(profile.preferences),
+        technical_notes: normalizeText(profile.technical_notes),
       });
     }
 
-    const completedAppointments = (completedAppointmentsResult.data ?? []) as Array<{
+    const completedAppointments = (completedAppointmentsResult.data ??
+      []) as Array<{
       completed_at: string | null;
       customer_id: string;
       date: string;
       services: { name?: string | null } | { name?: string | null }[] | null;
-      staff_members: { name?: string | null } | { name?: string | null }[] | null;
+      staff_members:
+        | { name?: string | null }
+        | { name?: string | null }[]
+        | null;
     }>;
 
     for (const appointment of completedAppointments) {
@@ -402,6 +657,45 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
         ),
       });
     }
+
+    const memberships = (membershipsResult.data ??
+      []) as CustomerMembershipRecord[];
+    for (const membership of memberships) {
+      const currentMemberships =
+        customerMembershipsByCustomerId.get(membership.customer_id) ?? [];
+
+      currentMemberships.push(membership);
+      currentMemberships.sort((left, right) => {
+        const leftStatus = resolveCustomerMembershipStatus(left, today);
+        const rightStatus = resolveCustomerMembershipStatus(right, today);
+        const leftPriority =
+          leftStatus === "active"
+            ? 0
+            : leftStatus === "completed"
+              ? 1
+              : leftStatus === "expired"
+                ? 2
+                : 3;
+        const rightPriority =
+          rightStatus === "active"
+            ? 0
+            : rightStatus === "completed"
+              ? 1
+              : rightStatus === "expired"
+                ? 2
+                : 3;
+
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+
+        return toTimestamp(right.created_at) - toTimestamp(left.created_at);
+      });
+      customerMembershipsByCustomerId.set(
+        membership.customer_id,
+        currentMemberships,
+      );
+    }
   }
 
   const hydratedCustomers = customers.map((customer) => ({
@@ -412,7 +706,8 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
   const currentFocusLabel = getSegmentLabel(segment);
   const currentSortLabel = getSortLabel(sort);
   const topCustomerBySpend = [...hydratedCustomers].sort(
-    (left, right) => Number(right.total_spent ?? 0) - Number(left.total_spent ?? 0),
+    (left, right) =>
+      Number(right.total_spent ?? 0) - Number(left.total_spent ?? 0),
   )[0];
   const customersWithoutUpcoming = hydratedCustomers.filter(
     (customer) => customer.upcoming_appointments === 0,
@@ -443,7 +738,10 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
     .slice(0, 3);
   const firstReturnCandidates = [...customersWithoutUpcoming]
     .filter((customer) => customer.completed_visits <= 1)
-    .sort((left, right) => toTimestamp(right.created_at) - toTimestamp(left.created_at))
+    .sort(
+      (left, right) =>
+        toTimestamp(right.created_at) - toTimestamp(left.created_at),
+    )
     .slice(0, 3);
   const visibleRevenueAtRisk = customersWithoutUpcoming.reduce(
     (total, customer) => total + toNumber(customer.total_spent),
@@ -459,9 +757,14 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
   const freshRelationshipCount = customersWithoutUpcoming.filter(
     (customer) => customer.completed_visits <= 1,
   ).length;
+  const currentReturnPath = buildHref(searchParams, {});
 
   return (
     <div className="page-grid workspace-page customers-page">
+      {searchParams?.message ? (
+        <FlashMessage message={searchParams.message} tone={searchParams.tone} />
+      ) : null}
+
       <DashboardWorkspaceHero
         eyebrow="CRM do salão"
         title="Clientes, recorrência e valor vitalício em uma leitura só."
@@ -519,7 +822,11 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
         aside={
           <>
             <span className="workspace-panel__eyebrow">Leitura executiva</span>
-            <h3>{topCustomerBySpend ? `${topCustomerBySpend.name} puxa o maior gasto visível.` : "A carteira está pronta para ganhar densidade."}</h3>
+            <h3>
+              {topCustomerBySpend
+                ? `${topCustomerBySpend.name} puxa o maior gasto visível.`
+                : "A carteira está pronta para ganhar densidade."}
+            </h3>
             <p>
               {topCustomerBySpend
                 ? `${topCustomerBySpend.name} lidera o gasto concluído visível nesta base. Use esse bloco para decidir retenção, resgate de cliente e próximas campanhas.`
@@ -529,10 +836,15 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
         }
       />
 
-      <section className="customers-command-deck" aria-label="Cockpit de retenção">
+      <section
+        className="customers-command-deck"
+        aria-label="Cockpit de retenção"
+      >
         <article className="card insight-card customer-command-card customer-command-card--priority">
           <div className="customer-command-card__topline">
-            <span className="workspace-panel__eyebrow">Prioridade comercial</span>
+            <span className="workspace-panel__eyebrow">
+              Prioridade comercial
+            </span>
             <span className="customer-command-card__metric">
               {reactivationCandidates.length}
             </span>
@@ -574,12 +886,16 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               ))
             ) : (
               <p className="customer-command-card__empty">
-                Quando aparecer alguém importante sem retorno protegido, esta área sobe os nomes automaticamente.
+                Quando aparecer alguém importante sem retorno protegido, esta
+                área sobe os nomes automaticamente.
               </p>
             )}
           </div>
           <div className="insight-card__footer">
-            <Link href={buildHref(searchParams, { segment: "returning", page: 1 })} className="secondary-button">
+            <Link
+              href={buildHref(searchParams, { segment: "returning", page: 1 })}
+              className="secondary-button"
+            >
               Abrir recorrentes
             </Link>
           </div>
@@ -587,7 +903,9 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
 
         <article className="card insight-card customer-command-card customer-command-card--cashback">
           <div className="customer-command-card__topline">
-            <span className="workspace-panel__eyebrow">Saldo pronto para virar agenda</span>
+            <span className="workspace-panel__eyebrow">
+              Saldo pronto para virar agenda
+            </span>
             <span className="customer-command-card__metric">
               {formatCurrency(visibleCashbackBalance)}
             </span>
@@ -596,18 +914,21 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
             <div>
               <h2>Cashback esperando ação</h2>
               <p>
-                Clientes com saldo e sem próxima agenda costumam responder bem a rebook, resgate ou combo de retorno.
+                Clientes com saldo e sem próxima agenda costumam responder bem a
+                rebook, resgate ou combo de retorno.
               </p>
             </div>
           </div>
           <div className="customer-command-card__chips">
             <span className="badge badge--accent">
-              {cashbackRecoveryCandidates.length} nome{cashbackRecoveryCandidates.length === 1 ? "" : "s"} no topo
+              {cashbackRecoveryCandidates.length} nome
+              {cashbackRecoveryCandidates.length === 1 ? "" : "s"} no topo
             </span>
             <span className="badge badge--soft">
               {formatCurrency(
                 cashbackRecoveryCandidates.reduce(
-                  (total, customer) => total + toNumber(customer.cashback_balance),
+                  (total, customer) =>
+                    total + toNumber(customer.cashback_balance),
                   0,
                 ),
               )}{" "}
@@ -623,7 +944,10 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
                   className="customer-command-card__customer"
                 >
                   <strong>{customer.name}</strong>
-                  <span>{formatCurrency(toNumber(customer.cashback_balance))} em cashback</span>
+                  <span>
+                    {formatCurrency(toNumber(customer.cashback_balance))} em
+                    cashback
+                  </span>
                   <small>
                     {customer.next_appointment_at
                       ? `Próximo horário em ${formatDateTime(customer.next_appointment_at)}`
@@ -633,12 +957,16 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               ))
             ) : (
               <p className="customer-command-card__empty">
-                Nenhum saldo parado apareceu neste recorte. Bom sinal para uso do benefício ou para filtros mais específicos.
+                Nenhum saldo parado apareceu neste recorte. Bom sinal para uso
+                do benefício ou para filtros mais específicos.
               </p>
             )}
           </div>
           <div className="insight-card__footer">
-            <Link href={buildHref(searchParams, { segment: "cashback", page: 1 })} className="secondary-button">
+            <Link
+              href={buildHref(searchParams, { segment: "cashback", page: 1 })}
+              className="secondary-button"
+            >
               Ver clientes com cashback
             </Link>
           </div>
@@ -646,7 +974,9 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
 
         <article className="card insight-card customer-command-card customer-command-card--retention">
           <div className="customer-command-card__topline">
-            <span className="workspace-panel__eyebrow">Retenção já protegida</span>
+            <span className="workspace-panel__eyebrow">
+              Retenção já protegida
+            </span>
             <span className="customer-command-card__metric">
               {customersWithUpcoming.length}
             </span>
@@ -655,18 +985,23 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
             <div>
               <h2>Clientes com próxima visita encaminhada</h2>
               <p>
-                Este bloco mostra quem já está com o próximo passo travado na agenda e ajuda a enxergar recorrência protegida.
+                Este bloco mostra quem já está com o próximo passo travado na
+                agenda e ajuda a enxergar recorrência protegida.
               </p>
             </div>
           </div>
           <div className="customer-command-card__chips">
             <span className="badge badge--confirmed">
-              {protectedRecurringCustomers.filter((customer) => customer.current_tier?.is_vip)
-                .length}{" "}
+              {
+                protectedRecurringCustomers.filter(
+                  (customer) => customer.current_tier?.is_vip,
+                ).length
+              }{" "}
               VIP com retorno protegido
             </span>
             <span className="badge badge--soft">
-              {directory.overview.customers_with_upcoming_appointment ?? 0} na carteira com agenda futura
+              {directory.overview.customers_with_upcoming_appointment ?? 0} na
+              carteira com agenda futura
             </span>
           </div>
           <div className="customer-command-card__list">
@@ -688,12 +1023,16 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               ))
             ) : (
               <p className="customer-command-card__empty">
-                Ainda não há clientes com recorrência protegida nesta leitura. Esse é o bloco que cresce quando o rebook começa a funcionar.
+                Ainda não há clientes com recorrência protegida nesta leitura.
+                Esse é o bloco que cresce quando o rebook começa a funcionar.
               </p>
             )}
           </div>
           <div className="insight-card__footer">
-            <Link href={buildHref(searchParams, { segment: "upcoming", page: 1 })} className="secondary-button">
+            <Link
+              href={buildHref(searchParams, { segment: "upcoming", page: 1 })}
+              className="secondary-button"
+            >
               Abrir agenda futura
             </Link>
           </div>
@@ -701,7 +1040,9 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
 
         <article className="card insight-card customer-command-card customer-command-card--warmup">
           <div className="customer-command-card__topline">
-            <span className="workspace-panel__eyebrow">Construção de hábito</span>
+            <span className="workspace-panel__eyebrow">
+              Construção de hábito
+            </span>
             <span className="customer-command-card__metric">
               {freshRelationshipCount}
             </span>
@@ -710,16 +1051,20 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
             <div>
               <h2>Novos clientes pedindo segundo passo</h2>
               <p>
-                Quem ainda não travou a rotina precisa de acompanhamento cedo. Aqui ficam os nomes mais recentes sem próxima agenda.
+                Quem ainda não travou a rotina precisa de acompanhamento cedo.
+                Aqui ficam os nomes mais recentes sem próxima agenda.
               </p>
             </div>
           </div>
           <div className="customer-command-card__chips">
             <span className="badge badge--warm">
-              {firstReturnCandidates.length} prioridade{firstReturnCandidates.length === 1 ? "" : "s"} recente{firstReturnCandidates.length === 1 ? "" : "s"}
+              {firstReturnCandidates.length} prioridade
+              {firstReturnCandidates.length === 1 ? "" : "s"} recente
+              {firstReturnCandidates.length === 1 ? "" : "s"}
             </span>
             <span className="badge badge--soft">
-              {directory.overview.total_customers ?? 0} clientes visíveis no recorte
+              {directory.overview.total_customers ?? 0} clientes visíveis no
+              recorte
             </span>
           </div>
           <div className="customer-command-card__list">
@@ -741,12 +1086,16 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               ))
             ) : (
               <p className="customer-command-card__empty">
-                Quando novos clientes aparecerem sem segunda visita encaminhada, eles entram aqui para o salão agir cedo.
+                Quando novos clientes aparecerem sem segunda visita encaminhada,
+                eles entram aqui para o salão agir cedo.
               </p>
             )}
           </div>
           <div className="insight-card__footer">
-            <Link href={buildHref(searchParams, { segment: "new", page: 1 })} className="secondary-button">
+            <Link
+              href={buildHref(searchParams, { segment: "new", page: 1 })}
+              className="secondary-button"
+            >
               Ver novos clientes
             </Link>
           </div>
@@ -757,11 +1106,18 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
         <div className="section-heading">
           <div>
             <h2>Clientes</h2>
-            <p className="muted">Trate essa área como um CRM leve do salão: retenção, recorrência, cashback e agenda futura.</p>
+            <p className="muted">
+              Trate essa área como um CRM leve do salão: retenção, recorrência,
+              cashback e agenda futura.
+            </p>
           </div>
         </div>
 
-        <form method="get" className="services-toolbar" style={{ marginTop: 18 }}>
+        <form
+          method="get"
+          className="services-toolbar"
+          style={{ marginTop: 18 }}
+        >
           <div className="customers-toolbar__grid">
             <div className="field">
               <label htmlFor="customers-search">Buscar cliente</label>
@@ -775,7 +1131,11 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
 
             <div className="field">
               <label htmlFor="customers-segment">Segmento</label>
-              <select id="customers-segment" name="segment" defaultValue={segment}>
+              <select
+                id="customers-segment"
+                name="segment"
+                defaultValue={segment}
+              >
                 <option value="all">Todos</option>
                 <option value="vip">VIP</option>
                 <option value="cashback">Com cashback</option>
@@ -804,10 +1164,14 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               Filtrar clientes
             </button>
             <span className="services-toolbar__count">
-              {totalCount} {totalCount === 1 ? "cliente encontrado" : "clientes encontrados"}
+              {totalCount}{" "}
+              {totalCount === 1 ? "cliente encontrado" : "clientes encontrados"}
             </span>
             {hasFilters ? (
-              <a href="/dashboard/customers" className="secondary-button services-toolbar__clear">
+              <a
+                href="/dashboard/customers"
+                className="secondary-button services-toolbar__clear"
+              >
                 Limpar filtros
               </a>
             ) : null}
@@ -818,7 +1182,11 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
           {!customers.length ? (
             <EmptyStateCard
               eyebrow={hasFilters ? "Nenhum resultado" : "Sem clientes ainda"}
-              title={hasFilters ? "Nenhum cliente encontrado nesse recorte" : "Nenhum cliente vinculado"}
+              title={
+                hasFilters
+                  ? "Nenhum cliente encontrado nesse recorte"
+                  : "Nenhum cliente vinculado"
+              }
               description={
                 hasFilters
                   ? "Ajuste a busca, o segmento ou a ordenação para encontrar o perfil certo."
@@ -826,156 +1194,778 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
               }
             />
           ) : (
-            hydratedCustomers.map((customer) => (
-              <article key={customer.id} className="list-row customer-card">
-                <div className="customer-card__content">
-                  <div className="customer-card__header">
-                    <div className="customer-card__identity">
-                      <div className="list-row__content">
-                        <h3>{customer.name}</h3>
-                        <div className="customer-card__badges">
-                          {customer.current_tier ? (
-                            <span className={customer.current_tier.is_vip ? "badge badge--confirmed" : "badge badge--soft"}>
-                              {customer.current_tier.label}
-                            </span>
-                          ) : (
-                            <span className="badge badge--soft">Sem fidelidade ativa</span>
+            hydratedCustomers.map((customer) => {
+              const customerMemberships =
+                customerMembershipsByCustomerId.get(customer.id) ?? [];
+
+              return (
+                <article key={customer.id} className="list-row customer-card">
+                  <div className="customer-card__content">
+                    <div className="customer-card__header">
+                      <div className="customer-card__identity">
+                        <div className="list-row__content">
+                          <h3>{customer.name}</h3>
+                          <div className="customer-card__badges">
+                            {customer.current_tier ? (
+                              <span
+                                className={
+                                  customer.current_tier.is_vip
+                                    ? "badge badge--confirmed"
+                                    : "badge badge--soft"
+                                }
+                              >
+                                {customer.current_tier.label}
+                              </span>
+                            ) : (
+                              <span className="badge badge--soft">
+                                Sem fidelidade ativa
+                              </span>
+                            )}
+                            {customer.crm_label ? (
+                              <span className="badge badge--accent">
+                                {customer.crm_label}
+                              </span>
+                            ) : null}
+                            {customer.current_tier?.is_vip ? (
+                              <span className="badge badge--confirmed">
+                                VIP
+                              </span>
+                            ) : null}
+                            {customer.consent_status &&
+                            customer.consent_status !== "not_required" ? (
+                              <span
+                                className={getConsentTone(
+                                  customer.consent_status,
+                                )}
+                              >
+                                {formatConsentStatus(customer.consent_status)}
+                              </span>
+                            ) : null}
+                            {customer.referral_code ? (
+                              <span className="badge badge--pending">
+                                Código {customer.referral_code}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <p className="customer-card__summary">
+                          {buildCustomerRelationshipSummary(customer)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="customer-card__details">
+                      <div className="customer-detail-item">
+                        <span className="customer-detail-item__label">
+                          Entrou no salão
+                        </span>
+                        <strong>{formatDate(customer.created_at)}</strong>
+                      </div>
+                      <div className="customer-detail-item">
+                        <span className="customer-detail-item__label">
+                          Última visita
+                        </span>
+                        <strong>
+                          {customer.last_visit_at
+                            ? formatDateTime(customer.last_visit_at)
+                            : "Ainda não concluiu atendimento"}
+                        </strong>
+                      </div>
+                      <div className="customer-detail-item">
+                        <span className="customer-detail-item__label">
+                          Próximo horário
+                        </span>
+                        <strong>
+                          {customer.next_appointment_at
+                            ? formatDateTime(customer.next_appointment_at)
+                            : "Sem agendamento futuro"}
+                        </strong>
+                      </div>
+                      <div className="customer-detail-item">
+                        <span className="customer-detail-item__label">
+                          Agenda aberta
+                        </span>
+                        <strong>
+                          {customer.upcoming_appointments} futuro
+                          {customer.upcoming_appointments === 1 ? "" : "s"} •{" "}
+                          {customer.pending_appointments} pendente
+                          {customer.pending_appointments === 1 ? "" : "s"}
+                        </strong>
+                      </div>
+                      <div className="customer-detail-item">
+                        <span className="customer-detail-item__label">
+                          Contato
+                        </span>
+                        <strong>
+                          {formatPhone(customer.phone) ??
+                            "Telefone ainda não registrado"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="customer-card__metrics">
+                      <div className="customer-metric-tile">
+                        <span className="customer-detail-item__label">
+                          Visitas
+                        </span>
+                        <strong>{customer.completed_visits}</strong>
+                      </div>
+                      <div className="customer-metric-tile">
+                        <span className="customer-detail-item__label">
+                          Pontos
+                        </span>
+                        <strong>{customer.points_balance}</strong>
+                      </div>
+                      <div className="customer-metric-tile">
+                        <span className="customer-detail-item__label">
+                          Cashback
+                        </span>
+                        <strong>
+                          {formatCurrency(
+                            Number(customer.cashback_balance ?? 0),
                           )}
-                          {customer.current_tier?.is_vip ? <span className="badge badge--confirmed">VIP</span> : null}
-                          {customer.referral_code ? (
-                            <span className="badge badge--pending">Código {customer.referral_code}</span>
+                        </strong>
+                      </div>
+                      <div className="customer-metric-tile">
+                        <span className="customer-detail-item__label">
+                          Gasto concluído
+                        </span>
+                        <strong>
+                          {formatCurrency(Number(customer.total_spent ?? 0))}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="customer-card__actions">
+                      <Link
+                        href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}`}
+                        className="secondary-button"
+                      >
+                        Abrir agenda desse cliente
+                      </Link>
+                      {customer.upcoming_appointments > 0 ? (
+                        <Link
+                          href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}&status=confirmed`}
+                          className="secondary-button"
+                        >
+                          Ver próximos horários
+                        </Link>
+                      ) : null}
+                      {buildWhatsAppHref(customer.phone) ? (
+                        <a
+                          href={buildWhatsAppHref(customer.phone) ?? "#"}
+                          className="secondary-button"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Abrir WhatsApp
+                        </a>
+                      ) : null}
+                      {customer.upcoming_appointments === 0 ? (
+                        <form
+                          action={sendCustomerNudgeAction}
+                          style={{ display: "inline-flex" }}
+                        >
+                          <input
+                            type="hidden"
+                            name="customerId"
+                            value={customer.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="customerName"
+                            value={customer.name}
+                          />
+                          <input
+                            type="hidden"
+                            name="serviceName"
+                            value={customer.last_completed_service_name ?? ""}
+                          />
+                          <input
+                            type="hidden"
+                            name="tierLabel"
+                            value={customer.current_tier?.label ?? ""}
+                          />
+                          <input
+                            type="hidden"
+                            name="cashbackBalance"
+                            value={String(toNumber(customer.cashback_balance))}
+                          />
+                          <input
+                            type="hidden"
+                            name="isVip"
+                            value={
+                              customer.current_tier?.is_vip ? "true" : "false"
+                            }
+                          />
+                          <input
+                            type="hidden"
+                            name="returnPath"
+                            value={currentReturnPath}
+                          />
+                          <button type="submit" className="secondary-button">
+                            Enviar lembrete no app
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+
+                    {customer.preferences ||
+                    customer.allergies ||
+                    customer.beauty_goals ||
+                    customer.beauty_products ||
+                    customer.contraindications ||
+                    customer.internal_notes ||
+                    customer.last_assessment_at ||
+                    (customer.consent_status &&
+                      customer.consent_status !== "not_required") ||
+                    customer.technical_notes ||
+                    customer.last_completed_service_name ? (
+                      <div className="customer-card__section">
+                        <div className="customer-card__section-heading">
+                          <span className="eyebrow">
+                            Prontuário operacional
+                          </span>
+                          <small className="list-meta">
+                            Objetivo, restrições, técnica e consentimento em uma
+                            leitura rápida para cabelo, unhas, sobrancelha,
+                            corporal e demais frentes da estética.
+                          </small>
+                        </div>
+
+                        <div className="customer-card__beauty">
+                          {customer.last_completed_service_name ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Último resultado registrado
+                              </span>
+                              <strong>
+                                {customer.last_completed_service_name}
+                                {customer.last_completed_staff_member_name
+                                  ? ` • com ${customer.last_completed_staff_member_name}`
+                                  : ""}
+                                {customer.last_completed_at
+                                  ? ` • ${formatDateTime(customer.last_completed_at)}`
+                                  : ""}
+                              </strong>
+                            </div>
+                          ) : null}
+                          {customer.preferences ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Preferências
+                              </span>
+                              <strong>{customer.preferences}</strong>
+                            </div>
+                          ) : null}
+                          {customer.beauty_goals ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Objetivo / queixa principal
+                              </span>
+                              <strong>{customer.beauty_goals}</strong>
+                            </div>
+                          ) : null}
+                          {customer.beauty_products ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Produtos usados ou preferidos
+                              </span>
+                              <strong>{customer.beauty_products}</strong>
+                            </div>
+                          ) : null}
+                          {customer.allergies ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Alergias e cuidados
+                              </span>
+                              <strong>{customer.allergies}</strong>
+                            </div>
+                          ) : null}
+                          {customer.contraindications ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Contraindicações e restrições
+                              </span>
+                              <strong>{customer.contraindications}</strong>
+                            </div>
+                          ) : null}
+                          {customer.technical_notes ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Fórmula / protocolo atual
+                              </span>
+                              <strong>{customer.technical_notes}</strong>
+                            </div>
+                          ) : null}
+                          {customer.last_assessment_at ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Última avaliação
+                              </span>
+                              <strong>
+                                {formatDate(customer.last_assessment_at)}
+                              </strong>
+                            </div>
+                          ) : null}
+                          {customer.consent_status &&
+                          customer.consent_status !== "not_required" ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Consentimento
+                              </span>
+                              <strong>
+                                {formatConsentStatus(customer.consent_status)}
+                                {customer.consent_signed_at
+                                  ? ` • assinado em ${formatDateTime(customer.consent_signed_at)}`
+                                  : ""}
+                                {customer.consent_version
+                                  ? ` • ${customer.consent_version}`
+                                  : ""}
+                              </strong>
+                            </div>
+                          ) : null}
+                          {customer.internal_notes ? (
+                            <div className="customer-detail-item">
+                              <span className="customer-detail-item__label">
+                                Anotações internas do salão
+                              </span>
+                              <strong>{customer.internal_notes}</strong>
+                            </div>
                           ) : null}
                         </div>
                       </div>
-                      <p className="customer-card__summary">{buildCustomerRelationshipSummary(customer)}</p>
-                    </div>
-                  </div>
-
-                  <div className="customer-card__details">
-                    <div className="customer-detail-item">
-                      <span className="customer-detail-item__label">Entrou no salão</span>
-                      <strong>{formatDate(customer.created_at)}</strong>
-                    </div>
-                    <div className="customer-detail-item">
-                      <span className="customer-detail-item__label">Última visita</span>
-                      <strong>{customer.last_visit_at ? formatDateTime(customer.last_visit_at) : "Ainda não concluiu atendimento"}</strong>
-                    </div>
-                    <div className="customer-detail-item">
-                      <span className="customer-detail-item__label">Próximo horário</span>
-                      <strong>{customer.next_appointment_at ? formatDateTime(customer.next_appointment_at) : "Sem agendamento futuro"}</strong>
-                    </div>
-                    <div className="customer-detail-item">
-                      <span className="customer-detail-item__label">Agenda aberta</span>
-                      <strong>
-                        {customer.upcoming_appointments} futuro{customer.upcoming_appointments === 1 ? "" : "s"} •{" "}
-                        {customer.pending_appointments} pendente{customer.pending_appointments === 1 ? "" : "s"}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="customer-card__metrics">
-                    <div className="customer-metric-tile">
-                      <span className="customer-detail-item__label">Visitas</span>
-                      <strong>{customer.completed_visits}</strong>
-                    </div>
-                    <div className="customer-metric-tile">
-                      <span className="customer-detail-item__label">Pontos</span>
-                      <strong>{customer.points_balance}</strong>
-                    </div>
-                    <div className="customer-metric-tile">
-                      <span className="customer-detail-item__label">Cashback</span>
-                      <strong>{formatCurrency(Number(customer.cashback_balance ?? 0))}</strong>
-                    </div>
-                    <div className="customer-metric-tile">
-                      <span className="customer-detail-item__label">Gasto concluído</span>
-                      <strong>{formatCurrency(Number(customer.total_spent ?? 0))}</strong>
-                    </div>
-                  </div>
-
-                  <div className="customer-card__actions">
-                    <Link
-                      href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}`}
-                      className="secondary-button"
-                    >
-                      Abrir agenda desse cliente
-                    </Link>
-                    {customer.upcoming_appointments > 0 ? (
-                      <Link
-                        href={`/dashboard/appointments?q=${encodeURIComponent(customer.name)}&status=confirmed`}
-                        className="secondary-button"
-                      >
-                        Ver próximos horários
-                      </Link>
                     ) : null}
-                  </div>
 
-                  {customer.preferences ||
-                  customer.allergies ||
-                  customer.beauty_products ||
-                  customer.last_completed_service_name ? (
                     <div className="customer-card__section">
                       <div className="customer-card__section-heading">
-                        <span className="eyebrow">Prontuário rápido</span>
+                        <span className="eyebrow">CRM do salão</span>
                         <small className="list-meta">
-                          Último resultado, preferências e cuidados que ajudam o salão a manter consistência no próximo atendimento.
+                          Registre contexto comercial e dados de prontuário para
+                          a equipe trabalhar melhor nas próximas visitas.
                         </small>
                       </div>
 
-                      <div className="customer-card__beauty">
-                        {customer.last_completed_service_name ? (
-                          <div className="customer-detail-item">
-                            <span className="customer-detail-item__label">Último resultado registrado</span>
-                            <strong>
-                              {customer.last_completed_service_name}
-                              {customer.last_completed_staff_member_name
-                                ? ` • com ${customer.last_completed_staff_member_name}`
-                                : ""}
-                              {customer.last_completed_at
-                                ? ` • ${formatDateTime(customer.last_completed_at)}`
-                                : ""}
-                            </strong>
-                          </div>
-                        ) : null}
-                        {customer.preferences ? (
-                          <div className="customer-detail-item">
-                            <span className="customer-detail-item__label">Preferências</span>
-                            <strong>{customer.preferences}</strong>
-                          </div>
-                        ) : null}
-                        {customer.beauty_products ? (
-                          <div className="customer-detail-item">
-                            <span className="customer-detail-item__label">Produtos usados ou preferidos</span>
-                            <strong>{customer.beauty_products}</strong>
-                          </div>
-                        ) : null}
-                        {customer.allergies ? (
-                          <div className="customer-detail-item">
-                            <span className="customer-detail-item__label">Alergias e cuidados</span>
-                            <strong>{customer.allergies}</strong>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
+                      <form
+                        action={saveOwnerCustomerProfileAction}
+                        className="customer-card__crm-form"
+                      >
+                        <input
+                          type="hidden"
+                          name="customerId"
+                          value={customer.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="returnPath"
+                          value={currentReturnPath}
+                        />
 
-                  {customer.current_tier ? (
-                    <div className="customer-card__footer">
-                      <small className="list-meta">
-                        Desconto atual de {formatTierDiscount(customer.current_tier.discount_percent)}% para esse cliente
-                        {customer.last_reward_at ? ` • última recompensa em ${formatDateTime(customer.last_reward_at)}` : ""}.
-                      </small>
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 12,
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(220px, 1fr))",
+                          }}
+                        >
+                          <div className="field">
+                            <label htmlFor={`customer-phone-${customer.id}`}>
+                              Telefone / WhatsApp
+                            </label>
+                            <input
+                              id={`customer-phone-${customer.id}`}
+                              name="phone"
+                              placeholder="DDD + número"
+                              defaultValue={customer.phone ?? ""}
+                            />
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor={`customer-label-${customer.id}`}>
+                              Etiqueta interna
+                            </label>
+                            <input
+                              id={`customer-label-${customer.id}`}
+                              name="crmLabel"
+                              placeholder="Ex.: VIP de corte, noiva, alto ticket"
+                              defaultValue={customer.crm_label ?? ""}
+                            />
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor={`customer-consent-${customer.id}`}>
+                              Consentimento
+                            </label>
+                            <select
+                              id={`customer-consent-${customer.id}`}
+                              name="consentStatus"
+                              defaultValue={normalizeConsentStatus(
+                                customer.consent_status,
+                              )}
+                            >
+                              <option value="not_required">Nao exigido</option>
+                              <option value="pending">Pendente</option>
+                              <option value="signed">Assinado</option>
+                            </select>
+                          </div>
+
+                          <div className="field">
+                            <label
+                              htmlFor={`customer-assessment-${customer.id}`}
+                            >
+                              Ultima avaliacao
+                            </label>
+                            <input
+                              id={`customer-assessment-${customer.id}`}
+                              name="lastAssessmentAt"
+                              type="date"
+                              defaultValue={customer.last_assessment_at ?? ""}
+                            />
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 12,
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(220px, 1fr))",
+                            marginTop: 12,
+                          }}
+                        >
+                          <div className="field">
+                            <label
+                              htmlFor={`customer-preferences-${customer.id}`}
+                            >
+                              Preferências
+                            </label>
+                            <textarea
+                              id={`customer-preferences-${customer.id}`}
+                              name="preferences"
+                              rows={3}
+                              placeholder="Horário, acabamento, estilo, rotina..."
+                              defaultValue={customer.preferences ?? ""}
+                            />
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor={`customer-goals-${customer.id}`}>
+                              Objetivo / queixa principal
+                            </label>
+                            <textarea
+                              id={`customer-goals-${customer.id}`}
+                              name="beautyGoals"
+                              rows={3}
+                              placeholder="Resultado buscado, incomodo relatado ou prioridade da cliente"
+                              defaultValue={customer.beauty_goals ?? ""}
+                            />
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor={`customer-products-${customer.id}`}>
+                              Produtos usados ou preferidos
+                            </label>
+                            <textarea
+                              id={`customer-products-${customer.id}`}
+                              name="beautyProducts"
+                              rows={3}
+                              placeholder="Produtos, fórmulas ou linhas que funcionam bem"
+                              defaultValue={customer.beauty_products ?? ""}
+                            />
+                          </div>
+
+                          <div className="field">
+                            <label
+                              htmlFor={`customer-allergies-${customer.id}`}
+                            >
+                              Alergias e cuidados
+                            </label>
+                            <textarea
+                              id={`customer-allergies-${customer.id}`}
+                              name="allergies"
+                              rows={3}
+                              placeholder="Restrições, sensibilidade, observações de segurança"
+                              defaultValue={customer.allergies ?? ""}
+                            />
+                          </div>
+
+                          <div className="field">
+                            <label
+                              htmlFor={`customer-contraindications-${customer.id}`}
+                            >
+                              Contraindicações e restrições
+                            </label>
+                            <textarea
+                              id={`customer-contraindications-${customer.id}`}
+                              name="contraindications"
+                              rows={3}
+                              placeholder="Gestacao, sensibilidade, quimica, pos-procedimento, observacoes de seguranca"
+                              defaultValue={customer.contraindications ?? ""}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="field" style={{ marginTop: 12 }}>
+                          <label htmlFor={`customer-technical-${customer.id}`}>
+                            Fórmula / protocolo atual
+                          </label>
+                          <textarea
+                            id={`customer-technical-${customer.id}`}
+                            name="technicalNotes"
+                            rows={4}
+                            placeholder="Mistura, protocolo corporal, tecnica, tonalizacao, curvatura, combinacao de produtos..."
+                            defaultValue={customer.technical_notes ?? ""}
+                          />
+                        </div>
+
+                        <div className="field" style={{ marginTop: 12 }}>
+                          <label htmlFor={`customer-notes-${customer.id}`}>
+                            Anotações internas
+                          </label>
+                          <textarea
+                            id={`customer-notes-${customer.id}`}
+                            name="internalNotes"
+                            rows={4}
+                            placeholder="Contexto comercial, preferências da equipe, postura no atendimento, próxima sugestão..."
+                            defaultValue={customer.internal_notes ?? ""}
+                          />
+                        </div>
+
+                        <div
+                          className="customer-card__actions"
+                          style={{ marginTop: 14 }}
+                        >
+                          <button type="submit" className="secondary-button">
+                            Salvar CRM
+                          </button>
+                        </div>
+                      </form>
                     </div>
-                  ) : null}
-                </div>
-              </article>
-            ))
+
+                    <div className="customer-card__section">
+                      <div className="customer-card__section-heading">
+                        <span className="eyebrow">Pacotes ativos e saldo</span>
+                        <small className="list-meta">
+                          Clubes e pacotes operacionais aparecem aqui com
+                          sessões, validade e leitura pronta para a equipe.
+                        </small>
+                      </div>
+
+                      {customerMemberships.length > 0 ? (
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 12,
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(220px, 1fr))",
+                            marginBottom: 14,
+                          }}
+                        >
+                          {customerMemberships.map((membership) => {
+                            const membershipStatus =
+                              resolveCustomerMembershipStatus(
+                                membership,
+                                today,
+                              );
+                            const remainingSessions = Math.max(
+                              membership.sessions_included -
+                                membership.sessions_used,
+                              0,
+                            );
+
+                            return (
+                              <div
+                                key={membership.id}
+                                className="customer-detail-item"
+                                style={{ gap: 8 }}
+                              >
+                                <span
+                                  className={customerMembershipBadgeClass(
+                                    membershipStatus,
+                                  )}
+                                >
+                                  {formatCustomerMembershipStatusLabel(
+                                    membershipStatus,
+                                  )}
+                                </span>
+                                <strong>{membership.title}</strong>
+                                <small className="list-meta">
+                                  {membership.service_name_snapshot} •{" "}
+                                  {remainingSessions} restante
+                                  {remainingSessions === 1 ? "" : "s"} de{" "}
+                                  {membership.sessions_included}
+                                </small>
+                                <small className="list-meta">
+                                  Iniciado em{" "}
+                                  {formatDate(membership.started_at)} • válido
+                                  até {formatDate(membership.expires_at)}
+                                </small>
+                                {membership.price_snapshot != null ? (
+                                  <small className="list-meta">
+                                    Valor do pacote:{" "}
+                                    {formatCurrency(
+                                      Number(membership.price_snapshot),
+                                    )}
+                                  </small>
+                                ) : null}
+                                {membership.notes ? (
+                                  <small className="list-meta">
+                                    Observação: {membership.notes}
+                                  </small>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="muted list-description">
+                          Nenhum pacote operacional ativo para essa cliente por
+                          enquanto.
+                        </p>
+                      )}
+
+                      {operationalMembershipOffers.length > 0 ? (
+                        <form
+                          action={assignCustomerMembershipPackageAction}
+                          className="customer-card__crm-form"
+                        >
+                          <input
+                            type="hidden"
+                            name="customerId"
+                            value={customer.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="returnPath"
+                            value={currentReturnPath}
+                          />
+
+                          <div
+                            style={{
+                              display: "grid",
+                              gap: 12,
+                              gridTemplateColumns:
+                                "repeat(auto-fit, minmax(220px, 1fr))",
+                            }}
+                          >
+                            <div className="field">
+                              <label
+                                htmlFor={`customer-membership-${customer.id}`}
+                              >
+                                Ativar clube / pacote
+                              </label>
+                              <select
+                                id={`customer-membership-${customer.id}`}
+                                name="offerId"
+                                defaultValue=""
+                                required
+                              >
+                                <option value="">
+                                  Selecione um pacote pronto
+                                </option>
+                                {operationalMembershipOffers.map((offer) => {
+                                  const serviceLabel =
+                                    offer.membership_service_id
+                                      ? (serviceNameById.get(
+                                          offer.membership_service_id,
+                                        ) ?? "Serviço configurado")
+                                      : "Serviço configurado";
+                                  const sessionsLabel =
+                                    offer.membership_sessions_included === 1
+                                      ? "1 sessão"
+                                      : `${offer.membership_sessions_included} sessões`;
+                                  const validityLabel =
+                                    offer.membership_validity_days === 1
+                                      ? "1 dia"
+                                      : `${offer.membership_validity_days} dias`;
+
+                                  return (
+                                    <option key={offer.id} value={offer.id}>
+                                      {offer.title} • {serviceLabel} •{" "}
+                                      {sessionsLabel} • {validityLabel}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+
+                            <div className="field">
+                              <label
+                                htmlFor={`customer-membership-start-${customer.id}`}
+                              >
+                                Início do pacote
+                              </label>
+                              <input
+                                id={`customer-membership-start-${customer.id}`}
+                                name="startsOn"
+                                type="date"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="field" style={{ marginTop: 12 }}>
+                            <label
+                              htmlFor={`customer-membership-notes-${customer.id}`}
+                            >
+                              Observação operacional
+                            </label>
+                            <textarea
+                              id={`customer-membership-notes-${customer.id}`}
+                              name="notes"
+                              rows={3}
+                              placeholder="Ex.: pacote vendido na recepção, começar após a próxima visita, benefício para retorno..."
+                            />
+                          </div>
+
+                          <div
+                            className="customer-card__actions"
+                            style={{ marginTop: 14 }}
+                          >
+                            <button type="submit" className="secondary-button">
+                              Ativar pacote com saldo
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <p className="muted list-description">
+                          O comercial ainda não tem nenhum pacote operacional
+                          pronto. Configure serviço, sessões e validade em
+                          Clubes, pacotes e promoções.
+                        </p>
+                      )}
+                    </div>
+
+                    {customer.current_tier ? (
+                      <div className="customer-card__footer">
+                        <small className="list-meta">
+                          Desconto atual de{" "}
+                          {formatTierDiscount(
+                            customer.current_tier.discount_percent,
+                          )}
+                          % para esse cliente
+                          {customer.last_reward_at
+                            ? ` • última recompensa em ${formatDateTime(customer.last_reward_at)}`
+                            : ""}
+                          .
+                        </small>
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
 
         {totalPages > 1 ? (
-          <nav className="notifications-pagination" aria-label="Paginação dos clientes">
+          <nav
+            className="notifications-pagination"
+            aria-label="Paginação dos clientes"
+          >
             <div className="notifications-pagination__summary">
-              Exibindo de {startItem} até {endItem} de {totalCount}. Página {safePage} de {totalPages}.
+              Exibindo de {startItem} até {endItem} de {totalCount}. Página{" "}
+              {safePage} de {totalPages}.
             </div>
 
             <div className="notifications-pagination__links">

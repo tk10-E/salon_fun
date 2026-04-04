@@ -29,8 +29,16 @@ const {
 }));
 
 vi.mock("next/link", () => ({
-  default: (props: { children?: ReactNode; href: string; className?: string }) =>
-    createElement("a", { href: props.href, className: props.className }, props.children),
+  default: (props: {
+    children?: ReactNode;
+    href: string;
+    className?: string;
+  }) =>
+    createElement(
+      "a",
+      { href: props.href, className: props.className },
+      props.children,
+    ),
 }));
 
 vi.mock("@/app/actions", () => ({
@@ -51,7 +59,9 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/app/dashboard/benefits/_lib", async () => {
-  const actual = await vi.importActual<typeof import("@/app/dashboard/benefits/_lib")>("@/app/dashboard/benefits/_lib");
+  const actual = await vi.importActual<
+    typeof import("@/app/dashboard/benefits/_lib")
+  >("@/app/dashboard/benefits/_lib");
 
   return {
     ...actual,
@@ -84,6 +94,9 @@ describe("benefits subpages UI", () => {
             title: "Combo de inverno",
             description: "Corte com hidratação",
             highlight_text: "Cabelo completo da semana",
+            membership_service_id: null,
+            membership_sessions_included: null,
+            membership_validity_days: null,
             price: 129.9,
             starts_on: "2026-03-20",
             ends_on: "2026-03-31",
@@ -103,6 +116,9 @@ describe("benefits subpages UI", () => {
           title: "Combo de inverno",
           description: "Corte com hidratação",
           highlight_text: "Cabelo completo da semana",
+          membership_service_id: null,
+          membership_sessions_included: null,
+          membership_validity_days: null,
           price: 129.9,
           starts_on: "2026-03-20",
           ends_on: "2026-03-31",
@@ -110,6 +126,7 @@ describe("benefits subpages UI", () => {
           sort_order: 1,
         },
       ],
+      serviceOptions: [],
       today: "2026-03-22",
     });
 
@@ -126,19 +143,77 @@ describe("benefits subpages UI", () => {
     render(ui);
 
     expect(screen.getByText("Oferta salva com sucesso.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Promoções e planos" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Promoções e planos publicados" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Clubes, pacotes e promoções" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Clubes, pacotes e promoções publicados",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Buscar oferta")).toHaveValue("combo");
-    expect(screen.getByRole("button", { name: "Filtrar ofertas" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Limpar filtros" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Promoções" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Filtrar ofertas" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Limpar filtros" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Promoções" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Combo de inverno").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Valor divulgado:\s*R\$\s*129,90/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Salvar oferta" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remover oferta" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Nova promoção ou plano" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Ex.: Plano mensal de corte e barba")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Publicar oferta" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Valor divulgado:\s*R\$\s*129,90/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar oferta" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remover oferta" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Novo clube, pacote ou promoção" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Ex.: Clube mensal de corte e barba"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Publicar oferta" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders activation guidance when no promotions exist yet", async () => {
+    loadPromotionsPageDataMock.mockResolvedValue({
+      activeOffersCount: 0,
+      activeMembershipsCount: 0,
+      groupedOffers: {},
+      hasOfferFilters: false,
+      offerKindFilter: "",
+      offerQuery: "",
+      offerStateFilter: "",
+      offers: [],
+      serviceOptions: [],
+      today: "2026-03-22",
+    });
+
+    const ui = await PromotionsPage({});
+
+    render(ui);
+
+    expect(
+      screen.getByText("Nenhum clube, pacote ou promoção cadastrado"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Suba a primeira promoção que o cliente entenda em segundos",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Criar promoção agora" }),
+    ).toHaveAttribute("href", "#new-offer-panel");
+    expect(
+      screen.getByRole("link", { name: "Abrir feed do salão" }),
+    ).toHaveAttribute("href", "/dashboard/feed");
   });
 
   it("renders loyalty overview, leaderboard and loyalty program form", async () => {
@@ -204,18 +279,32 @@ describe("benefits subpages UI", () => {
     render(ui);
 
     expect(screen.getByText("Programa salvo.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Fidelidade e ranking" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Clube de fidelidade e ranking" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Fidelidade e ranking" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Clube de fidelidade e ranking" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Clientes ranqueados")).toBeInTheDocument();
     expect(screen.getByText("Cashback gerado")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Maria" })).toBeInTheDocument();
     expect(screen.getByText(/R\$\s*32,50/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Programa de fidelidade" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Pontos por visita concluída")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Programa de fidelidade" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Pontos por visita concluída"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Cashback (%)")).toBeInTheDocument();
-    expect(screen.getByLabelText("Serviço grátis no Ouro")).toHaveValue("service-1");
-    expect(screen.getByRole("option", { name: /Hidratação premium/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Salvar programa de fidelidade" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Serviço grátis no Ouro")).toHaveValue(
+      "service-1",
+    );
+    expect(
+      screen.getByRole("option", { name: /Hidratação premium/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar programa de fidelidade" }),
+    ).toBeInTheDocument();
   });
 
   it("renders referrals report, metrics and referral program form", async () => {
@@ -269,19 +358,37 @@ describe("benefits subpages UI", () => {
 
     render(ui);
 
-    expect(screen.getByText("Programa de indicação salvo.")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: "Programa de indicação" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Relatório de indicações" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Entrada pelo app a partir de")).toHaveValue("2026-03-01");
-    expect(screen.getByRole("button", { name: "Filtrar relatório" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Limpar filtros" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Programa de indicação salvo."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("heading", { name: "Programa de indicação" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: "Relatório de indicações" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Entrada pelo app a partir de")).toHaveValue(
+      "2026-03-01",
+    );
+    expect(
+      screen.getByRole("button", { name: "Filtrar relatório" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Limpar filtros" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Recompensas liberadas")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Julia" })).toBeInTheDocument();
     expect(screen.getByText("Maria")).toBeInTheDocument();
     expect(screen.getByText("MARIA10")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: "Programa de indicação" }).length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Benefício para quem indicou")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Salvar programa" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("heading", { name: "Programa de indicação" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByLabelText("Benefício para quem indicou"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar programa" }),
+    ).toBeInTheDocument();
   });
 
   it("renders automation overview, recent runs and automation settings form", async () => {
@@ -318,7 +425,8 @@ describe("benefits subpages UI", () => {
         winback_inactive_days: 30,
         winback_discount_percent: 10,
         winback_title: "Volte para o salão",
-        winback_body_template: "Já faz {inactive_days} dias desde seu último atendimento.",
+        winback_body_template:
+          "Já faz {inactive_days} dias desde seu último atendimento.",
         smart_rebook_is_active: true,
         smart_rebook_window_days: 4,
         smart_rebook_title: "Hora de reagendar",
@@ -334,16 +442,30 @@ describe("benefits subpages UI", () => {
     render(ui);
 
     expect(screen.getByText("Automação salva.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Automações comerciais" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Automação comercial inteligente" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Automações comerciais" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Automação comercial inteligente" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Clientes em risco")).toBeInTheDocument();
     expect(screen.getByText("Rebooks prontos")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { name: "Maria" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("heading", { name: "Maria" }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Hora de reagendar")).toBeInTheDocument();
     expect(screen.getByText("Volte para o salão")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Automação de recuperação" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Inatividade para acionar")).toBeInTheDocument();
-    expect(screen.getByLabelText("Título do push inteligente")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Salvar automação" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Automação de recuperação" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Inatividade para acionar"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Título do push inteligente"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar automação" }),
+    ).toBeInTheDocument();
   });
 });

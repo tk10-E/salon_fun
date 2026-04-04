@@ -3,7 +3,41 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
 
+function getCanonicalOrigin() {
+  const value = process.env.APP_URL?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return new URL(value).origin.replace(/\/+$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function shouldRedirectToCanonicalOrigin(request: NextRequest) {
+  if (process.env.VERCEL !== "1" || process.env.VERCEL_ENV !== "production") {
+    return false;
+  }
+
+  return request.method === "GET" || request.method === "HEAD";
+}
+
 export async function updateSession(request: NextRequest) {
+  const canonicalOrigin = getCanonicalOrigin();
+
+  if (canonicalOrigin && shouldRedirectToCanonicalOrigin(request)) {
+    const requestUrl = new URL(request.url);
+    const canonicalUrl = new URL(canonicalOrigin);
+
+    if (requestUrl.origin !== canonicalUrl.origin) {
+      requestUrl.protocol = canonicalUrl.protocol;
+      requestUrl.host = canonicalUrl.host;
+      return NextResponse.redirect(requestUrl, 307);
+    }
+  }
+
   let response = NextResponse.next({
     request,
   });

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import { getSalonBillingEntitlements } from "@/lib/billing";
 import { createClient } from "@/lib/supabase/server";
 
 import { buildRedirectNotice, queueCustomerNotification } from "./shared";
@@ -29,6 +30,7 @@ export async function createServiceActionImpl(formData: FormData) {
   const imageFile = readUploadedFile(formData, "image");
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  const billing = await getSalonBillingEntitlements(salon.id);
 
   if (
     !category ||
@@ -39,6 +41,23 @@ export async function createServiceActionImpl(formData: FormData) {
     sortOrder < 0
   ) {
     redirect(buildRedirectNotice(SERVICES_PATH, "Preencha todos os campos do serviço.", "error"));
+  }
+
+  if (billing.maxServices !== null) {
+    const { count } = await supabase
+      .from("services")
+      .select("id", { count: "exact", head: true })
+      .eq("salon_id", salon.id);
+
+    if ((count ?? 0) >= billing.maxServices) {
+      redirect(
+        buildRedirectNotice(
+          SERVICES_PATH,
+          `Seu plano ${billing.currentPlan.displayName} permite até ${billing.maxServices} serviços. Faça upgrade no Billing para continuar.`,
+          "error",
+        ),
+      );
+    }
   }
 
   let imagePath: string | null = null;

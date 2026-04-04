@@ -13,39 +13,131 @@ type NavItem = {
 
 type NavSection = {
   label: string;
+  description: string;
+  priority: "primary" | "secondary";
   items: NavItem[];
 };
 
 const navSections: NavSection[] = [
   {
-    label: "Operacao",
+    label: "Essencial",
+    description: "O que o salão usa para rodar o dia com clareza.",
+    priority: "primary",
     items: [
-      { href: "/dashboard", label: "Dashboard", description: "Visao geral", icon: "home" },
-      { href: "/dashboard/appointments", label: "Agenda", description: "Agendamentos", icon: "calendar" },
-      { href: "/dashboard/customers", label: "Clientes", description: "CRM do salao", icon: "users" },
-      { href: "/dashboard/services", label: "Serviços", description: "Catalogo e vitrine", icon: "sparkles" },
-      { href: "/dashboard/team", label: "Profissionais", description: "Equipe e escala", icon: "team" },
-      { href: "/dashboard/operations", label: "Operações", description: "Caixa e estoque", icon: "chart" },
+      {
+        href: "/dashboard",
+        label: "Hoje",
+        description: "Resumo do dia",
+        icon: "home",
+      },
+      {
+        href: "/dashboard/appointments",
+        label: "Agenda",
+        description: "Agendamentos",
+        icon: "calendar",
+      },
+      {
+        href: "/dashboard/customers",
+        label: "Clientes",
+        description: "CRM do salao",
+        icon: "users",
+      },
+      {
+        href: "/dashboard/team",
+        label: "Equipe",
+        description: "Profissionais e escala",
+        icon: "team",
+      },
+      {
+        href: "/dashboard/operations",
+        label: "Operação",
+        description: "Caixa e estoque",
+        icon: "chart",
+      },
     ],
   },
   {
     label: "Crescimento",
+    description: "Catálogo, marketing e prova social para vender mais.",
+    priority: "secondary",
     items: [
-      { href: "/dashboard/benefits", label: "Benefícios", description: "Promocoes e fidelidade", icon: "bolt" },
-      { href: "/dashboard/feed", label: "Feed", description: "Conteudo e comentarios", icon: "gallery" },
-      { href: "/dashboard/notifications", label: "Notificações", description: "Push e historico", icon: "bell" },
-      { href: "/dashboard/instagram", label: "Instagram", description: "Conexao e mencoes", icon: "instagram" },
+      {
+        href: "/dashboard/services",
+        label: "Serviços",
+        description: "Catalogo e vitrine",
+        icon: "sparkles",
+      },
+      {
+        href: "/dashboard/benefits",
+        label: "Benefícios",
+        description: "Promocoes e fidelidade",
+        icon: "bolt",
+      },
+      {
+        href: "/dashboard/feed",
+        label: "Feed",
+        description: "Conteudo e comentarios",
+        icon: "gallery",
+      },
+      {
+        href: "/dashboard/notifications",
+        label: "Notificações",
+        description: "Push e historico",
+        icon: "bell",
+      },
+      {
+        href: "/dashboard/instagram",
+        label: "Instagram",
+        description: "Conexao e mencoes",
+        icon: "instagram",
+      },
     ],
   },
   {
-    label: "Marca e App",
+    label: "Sistema",
+    description: "Cobrança, app do cliente e ajustes da operação.",
+    priority: "secondary",
     items: [
-      { href: "/dashboard/settings", label: "Ajustes", description: "App do cliente", icon: "gear" },
+      {
+        href: "/dashboard/billing",
+        label: "Billing",
+        description: "Planos e assinatura",
+        icon: "wallet",
+      },
+      {
+        href: "/dashboard/client-app",
+        label: "Cliente app",
+        description: "Central do cliente",
+        icon: "phone",
+      },
+      {
+        href: "/dashboard/settings",
+        label: "Ajustes",
+        description: "App do cliente",
+        icon: "gear",
+      },
     ],
   },
 ];
 
 const links = navSections.flatMap((section) => section.items);
+
+function isSectionActive(pathname: string, section: NavSection) {
+  return section.items.some((link) =>
+    link.href === "/dashboard"
+      ? pathname === link.href
+      : pathname === link.href || pathname.startsWith(`${link.href}/`),
+  );
+}
+
+function resolveInitialSectionState(pathname: string) {
+  return Object.fromEntries(
+    navSections.map((section) => [
+      section.label,
+      section.priority === "primary" || isSectionActive(pathname, section),
+    ]),
+  ) as Record<string, boolean>;
+}
 
 function NavIcon({ name }: { name: string }) {
   switch (name) {
@@ -139,6 +231,24 @@ function NavIcon({ name }: { name: string }) {
           />
         </svg>
       );
+    case "wallet":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M6.75 5.25h8.5A3.5 3.5 0 0 1 18.75 8.75V9H19a1.75 1.75 0 0 1 1.75 1.75v6.5A1.75 1.75 0 0 1 19 19H7A2.75 2.75 0 0 1 4.25 16.25v-8.5A2.5 2.5 0 0 1 6.75 5.25Zm0 1.5a1 1 0 0 0-1 1v.22c.39-.3.88-.47 1.41-.47h10.09v-.75a2 2 0 0 0-2-2h-8.5Zm12.5 3H7a1.25 1.25 0 0 0-1.25 1.25v5.25c0 .69.56 1.25 1.25 1.25h12.25v-7.75Zm-3.75 2.5a1.75 1.75 0 1 1 0 3.5a1.75 1.75 0 0 1 0-3.5Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "phone":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M8 3.25h8A2.75 2.75 0 0 1 18.75 6v12A2.75 2.75 0 0 1 16 20.75H8A2.75 2.75 0 0 1 5.25 18V6A2.75 2.75 0 0 1 8 3.25Zm0 1.5c-.69 0-1.25.56-1.25 1.25v12c0 .69.56 1.25 1.25 1.25h8c.69 0 1.25-.56 1.25-1.25V6c0-.69-.56-1.25-1.25-1.25H8Zm3 11.75h2a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5ZM9.75 7A.75.75 0 0 1 10.5 6.25h3a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 1 9.75 7Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
     case "home":
     default:
       return (
@@ -152,13 +262,54 @@ function NavIcon({ name }: { name: string }) {
   }
 }
 
-export function SidebarNav() {
+type SidebarNavProps = {
+  isWorkspaceLocked?: boolean;
+  allowedPathsWhenLocked?: readonly string[];
+};
+
+function matchesAllowedPath(pathname: string, allowedPaths: readonly string[]) {
+  return allowedPaths.some(
+    (allowedPath) =>
+      pathname === allowedPath || pathname.startsWith(`${allowedPath}/`),
+  );
+}
+
+export function SidebarNav({
+  isWorkspaceLocked = false,
+  allowedPathsWhenLocked = [],
+}: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<
+    Record<string, boolean>
+  >(() => resolveInitialSectionState(pathname));
 
   useEffect(() => {
     setPendingHref(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    setExpandedSections((previousState) => {
+      let didChange = false;
+      const nextState = { ...previousState };
+
+      for (const section of navSections) {
+        const shouldStayVisible =
+          section.priority === "primary" || isSectionActive(pathname, section);
+        if (shouldStayVisible && !nextState[section.label]) {
+          nextState[section.label] = true;
+          didChange = true;
+        }
+
+        if (!(section.label in nextState)) {
+          nextState[section.label] = shouldStayVisible;
+          didChange = true;
+        }
+      }
+
+      return didChange ? nextState : previousState;
+    });
   }, [pathname]);
 
   useEffect(() => {
@@ -180,7 +331,9 @@ export function SidebarNav() {
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
       frameId = window.requestAnimationFrame(prefetchLinks);
-      const idleId = window.requestIdleCallback(prefetchLinks, { timeout: 320 });
+      const idleId = window.requestIdleCallback(prefetchLinks, {
+        timeout: 320,
+      });
       return () => {
         cancelled = true;
         if (frameId !== null) {
@@ -220,57 +373,132 @@ export function SidebarNav() {
     router.prefetch(href);
   };
 
+  const toggleSection = (label: string) => {
+    setExpandedSections((previousState) => ({
+      ...previousState,
+      [label]: !previousState[label],
+    }));
+  };
+
   return (
     <nav className="sidebar-nav" aria-label="Navegação do painel">
       <div
-        className={pendingHref ? "sidebar-progress sidebar-progress--active" : "sidebar-progress"}
+        className={
+          pendingHref
+            ? "sidebar-progress sidebar-progress--active"
+            : "sidebar-progress"
+        }
         aria-hidden="true"
       />
       {navSections.map((section) => (
         <div key={section.label} className="sidebar-section">
-          <span className="sidebar-section__label">{section.label}</span>
+          <div className="sidebar-section__header">
+            <div className="sidebar-section__copy">
+              <span className="sidebar-section__label">{section.label}</span>
+              <p className="sidebar-section__description">
+                {section.description}
+              </p>
+            </div>
 
-          {section.items.map((link) => {
-            const isActive =
-              link.href === "/dashboard"
-                ? pathname === link.href
-                : pathname === link.href || pathname.startsWith(`${link.href}/`);
-            const isPending = pendingHref === link.href;
-
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={
-                  isActive
-                    ? "nav-link nav-link--active"
-                    : isPending
-                      ? "nav-link nav-link--pending"
-                      : "nav-link"
+            {section.priority === "secondary" ? (
+              <button
+                type="button"
+                className="sidebar-section__toggle"
+                aria-expanded={
+                  expandedSections[section.label] ? "true" : "false"
                 }
-                aria-current={isActive ? "page" : undefined}
-                aria-busy={isPending ? "true" : undefined}
-                data-pending={isPending ? "true" : "false"}
-                onMouseEnter={() => router.prefetch(link.href)}
-                onTouchStart={() => router.prefetch(link.href)}
-                onFocus={() => router.prefetch(link.href)}
-                onClick={(event) => handleLinkClick(event, link.href, isActive)}
+                onClick={() => toggleSection(section.label)}
               >
-                <span className="nav-link__content">
-                  <span className="nav-link__icon" aria-hidden="true">
-                    <NavIcon name={link.icon} />
-                  </span>
-
-                  <span className="nav-link__text">
-                    <strong>{link.label}</strong>
-                    <small>{link.description}</small>
-                  </span>
+                <span>
+                  {expandedSections[section.label] ? "Ocultar" : "Abrir"}
                 </span>
+                <strong>{section.items.length}</strong>
+              </button>
+            ) : null}
+          </div>
 
-                <span className="nav-link__pulse" aria-hidden="true" />
-              </Link>
-            );
-          })}
+          <div
+            className={
+              expandedSections[section.label]
+                ? "sidebar-section__body"
+                : "sidebar-section__body sidebar-section__body--collapsed"
+            }
+            hidden={!expandedSections[section.label]}
+          >
+            {section.items.map((link) => {
+              const isActive =
+                link.href === "/dashboard"
+                  ? pathname === link.href
+                  : pathname === link.href ||
+                    pathname.startsWith(`${link.href}/`);
+              const isPending = pendingHref === link.href;
+              const isDisabled =
+                isWorkspaceLocked &&
+                !matchesAllowedPath(link.href, allowedPathsWhenLocked);
+              const className = isActive
+                ? "nav-link nav-link--active"
+                : isPending
+                  ? "nav-link nav-link--pending"
+                  : "nav-link";
+              const mergedClassName = isDisabled
+                ? `${className} nav-link--disabled`
+                : className;
+
+              if (isDisabled) {
+                return (
+                  <span
+                    key={link.href}
+                    className={mergedClassName}
+                    aria-current={isActive ? "page" : undefined}
+                    aria-disabled="true"
+                  >
+                    <span className="nav-link__content">
+                      <span className="nav-link__icon" aria-hidden="true">
+                        <NavIcon name={link.icon} />
+                      </span>
+
+                      <span className="nav-link__text">
+                        <strong>{link.label}</strong>
+                        <small>{link.description}</small>
+                      </span>
+                    </span>
+
+                    <span className="nav-link__pulse" aria-hidden="true" />
+                  </span>
+                );
+              }
+
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={mergedClassName}
+                  aria-current={isActive ? "page" : undefined}
+                  aria-busy={isPending ? "true" : undefined}
+                  data-pending={isPending ? "true" : "false"}
+                  onMouseEnter={() => router.prefetch(link.href)}
+                  onTouchStart={() => router.prefetch(link.href)}
+                  onFocus={() => router.prefetch(link.href)}
+                  onClick={(event) =>
+                    handleLinkClick(event, link.href, isActive)
+                  }
+                >
+                  <span className="nav-link__content">
+                    <span className="nav-link__icon" aria-hidden="true">
+                      <NavIcon name={link.icon} />
+                    </span>
+
+                    <span className="nav-link__text">
+                      <strong>{link.label}</strong>
+                      <small>{link.description}</small>
+                    </span>
+                  </span>
+
+                  <span className="nav-link__pulse" aria-hidden="true" />
+                </Link>
+              );
+            })}
+          </div>
         </div>
       ))}
     </nav>

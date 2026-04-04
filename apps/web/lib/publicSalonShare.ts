@@ -1,5 +1,6 @@
 import { normalizeSalonClientAppConfig } from "@/lib/clientAppConfig";
 import { getSalonSegmentPreset } from "@/lib/salonSegments";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 type PublicSalonPreviewRow = {
@@ -161,10 +162,12 @@ async function resolvePublicSalonPreviewContext(joinCode: string) {
     return null;
   }
 
-  const supabase = createClient();
-  const previewRow =
-    (await loadJoinPreviewFromRpc(supabase, normalizedJoinCode)) ??
-    (await loadJoinPreviewFromTable(supabase, normalizedJoinCode));
+  const adminSupabase = tryCreateAdminPublicSalonClient();
+  const supabase = adminSupabase ?? createClient();
+  const previewRow = adminSupabase
+    ? await loadJoinPreviewFromAdminTable(adminSupabase, normalizedJoinCode)
+    : (await loadJoinPreviewFromRpc(supabase, normalizedJoinCode)) ??
+      (await loadJoinPreviewFromTable(supabase, normalizedJoinCode));
 
   if (!previewRow) {
     return null;
@@ -230,6 +233,39 @@ async function resolvePublicSalonPreviewContext(joinCode: string) {
   };
 }
 
+function tryCreateAdminPublicSalonClient() {
+  try {
+    return createAdminClient();
+  } catch {
+    return null;
+  }
+}
+
+async function loadJoinPreviewFromAdminTable(
+  supabase: ReturnType<typeof createAdminClient>,
+  joinCode: string,
+) {
+  const { data, error } = await supabase
+    .from("salons")
+    .select(
+      "id, name, tagline, brand_color, business_segment, whatsapp_phone, logo_path, client_app_config",
+    )
+    .eq("join_code", joinCode)
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error) {
+      console.error("Failed to load public join preview from admin table", {
+        joinCode,
+        error,
+      });
+    }
+    return null;
+  }
+
+  return data as PublicSalonPreviewRow;
+}
+
 async function loadJoinPreviewFromRpc(
   supabase: ReturnType<typeof createClient>,
   joinCode: string,
@@ -240,7 +276,11 @@ async function loadJoinPreviewFromRpc(
     });
 
     return coercePreviewRow(data);
-  } catch {
+  } catch (error) {
+    console.error("Failed to load public join preview from RPC", {
+      joinCode,
+      error,
+    });
     return null;
   }
 }
@@ -258,6 +298,12 @@ async function loadJoinPreviewFromTable(
     .maybeSingle();
 
   if (error || !data) {
+    if (error) {
+      console.error("Failed to load public join preview from table", {
+        joinCode,
+        error,
+      });
+    }
     return null;
   }
 

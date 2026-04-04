@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import { getSalonBillingEntitlements } from "@/lib/billing";
 import { createClient } from "@/lib/supabase/server";
 
 import {
@@ -49,6 +50,7 @@ function buildFeedUploadPath(salonId: string, file: File, fallbackExtension: str
 export async function createSalonPostActionImpl(formData: FormData) {
   const { salon, user } = await requireOwnerSalon();
   const supabase = createClient();
+  const billing = await getSalonBillingEntitlements(salon.id);
 
   const rawTitle = String(formData.get("title") ?? "").trim();
   const rawCaption = String(formData.get("caption") ?? "").trim();
@@ -69,6 +71,16 @@ export async function createSalonPostActionImpl(formData: FormData) {
 
   if (!postType) {
     redirect(buildRedirectNotice(FEED_PATH, "Selecione um formato válido para a publicação.", "error"));
+  }
+
+  if (postType === "reel" && !billing.includesFeedVideo) {
+    redirect(
+      buildRedirectNotice(
+        FEED_PATH,
+        `Vídeos curtos no feed estão disponíveis a partir do plano Growth. O seu plano atual é ${billing.currentPlan.displayName}.`,
+        "error",
+      ),
+    );
   }
 
   if (postType === "standard" && !imageFiles.length) {

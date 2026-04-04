@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import { getSalonBillingEntitlements } from "@/lib/billing";
 import { createClient } from "@/lib/supabase/server";
 
 import {
@@ -21,6 +22,26 @@ function normalizeDateInput(value: string) {
   }
 
   return value;
+}
+
+function normalizeOptionalId(value: FormDataEntryValue | null) {
+  const trimmed = String(value ?? "").trim();
+  return trimmed || null;
+}
+
+function normalizePositiveInteger(value: FormDataEntryValue | null) {
+  const trimmed = String(value ?? "").trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function formatDateLabel(value: string) {
@@ -52,12 +73,17 @@ function buildOfferNotification(args: {
       ? `${args.title} já está disponível no app do salão.`
       : `${args.title} foi atualizada. Confira os detalhes no app.`;
 
-  const startsHint = args.startsOn ? ` Válida a partir de ${formatDateLabel(args.startsOn)}.` : "";
+  const startsHint = args.startsOn
+    ? ` Válida a partir de ${formatDateLabel(args.startsOn)}.`
+    : "";
 
   return {
     title: notificationTitle,
     body: `${args.highlightText || defaultBody}${startsHint}`,
-    type: args.action === "created" ? `${typePrefix}_published` : `${typePrefix}_updated`,
+    type:
+      args.action === "created"
+        ? `${typePrefix}_published`
+        : `${typePrefix}_updated`,
   };
 }
 
@@ -66,6 +92,15 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const highlightText = String(formData.get("highlightText") ?? "").trim();
+  const membershipServiceId = normalizeOptionalId(
+    formData.get("membershipServiceId"),
+  );
+  const membershipSessionsIncluded = normalizePositiveInteger(
+    formData.get("membershipSessionsIncluded"),
+  );
+  const membershipValidityDays = normalizePositiveInteger(
+    formData.get("membershipValidityDays"),
+  );
   const priceValue = String(formData.get("price") ?? "").trim();
   const startsOnValue = String(formData.get("startsOn") ?? "").trim();
   const endsOnValue = String(formData.get("endsOn") ?? "").trim();
@@ -74,24 +109,77 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
-  if (!["promotion", "membership"].includes(kind) || !title || Number.isNaN(sortOrder) || sortOrder < 0) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Preencha os dados principais da oferta.", "error"));
+  if (
+    !["promotion", "membership"].includes(kind) ||
+    !title ||
+    Number.isNaN(sortOrder) ||
+    sortOrder < 0
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Preencha os dados principais da oferta.",
+        "error",
+      ),
+    );
   }
 
-  const normalizedStartsOn = startsOnValue ? normalizeDateInput(startsOnValue) : null;
+  const normalizedStartsOn = startsOnValue
+    ? normalizeDateInput(startsOnValue)
+    : null;
   const normalizedEndsOn = endsOnValue ? normalizeDateInput(endsOnValue) : null;
   const price = priceValue ? Number(priceValue) : null;
 
-  if ((startsOnValue && !normalizedStartsOn) || (endsOnValue && !normalizedEndsOn)) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Informe datas válidas para a vigência da oferta.", "error"));
+  if (
+    (startsOnValue && !normalizedStartsOn) ||
+    (endsOnValue && !normalizedEndsOn)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Informe datas válidas para a vigência da oferta.",
+        "error",
+      ),
+    );
   }
 
-  if (normalizedStartsOn && normalizedEndsOn && normalizedEndsOn < normalizedStartsOn) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "A data final precisa ser igual ou posterior à data inicial.", "error"));
+  if (
+    normalizedStartsOn &&
+    normalizedEndsOn &&
+    normalizedEndsOn < normalizedStartsOn
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "A data final precisa ser igual ou posterior à data inicial.",
+        "error",
+      ),
+    );
   }
 
   if (priceValue && (price === null || Number.isNaN(price) || price < 0)) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Informe um valor válido para a oferta.", "error"));
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Informe um valor válido para a oferta.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    kind === "membership" &&
+    (!membershipServiceId ||
+      membershipSessionsIncluded == null ||
+      membershipValidityDays == null)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Preencha serviço, sessões e validade para publicar um clube ou pacote operacional.",
+        "error",
+      ),
+    );
   }
 
   const { error } = await supabase.from("salon_offers").insert({
@@ -100,6 +188,11 @@ export async function createSalonOfferActionImpl(formData: FormData) {
     title,
     description: description || null,
     highlight_text: highlightText || null,
+    membership_service_id: kind === "membership" ? membershipServiceId : null,
+    membership_sessions_included:
+      kind === "membership" ? membershipSessionsIncluded : null,
+    membership_validity_days:
+      kind === "membership" ? membershipValidityDays : null,
     price,
     starts_on: normalizedStartsOn,
     ends_on: normalizedEndsOn,
@@ -108,7 +201,13 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   });
 
   if (error) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Não foi possível salvar a oferta.", "error"));
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Não foi possível salvar a oferta.",
+        "error",
+      ),
+    );
   }
 
   if (isActive) {
@@ -135,7 +234,13 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   }
 
   revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH);
-  redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Oferta salva com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      COMMERCIAL_PROMOTIONS_PATH,
+      "Oferta salva com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function updateSalonOfferActionImpl(formData: FormData) {
@@ -144,6 +249,15 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const highlightText = String(formData.get("highlightText") ?? "").trim();
+  const membershipServiceId = normalizeOptionalId(
+    formData.get("membershipServiceId"),
+  );
+  const membershipSessionsIncluded = normalizePositiveInteger(
+    formData.get("membershipSessionsIncluded"),
+  );
+  const membershipValidityDays = normalizePositiveInteger(
+    formData.get("membershipValidityDays"),
+  );
   const priceValue = String(formData.get("price") ?? "").trim();
   const startsOnValue = String(formData.get("startsOn") ?? "").trim();
   const endsOnValue = String(formData.get("endsOn") ?? "").trim();
@@ -152,24 +266,78 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
-  if (!offerId || !["promotion", "membership"].includes(kind) || !title || Number.isNaN(sortOrder) || sortOrder < 0) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Dados inválidos para atualizar a oferta.", "error"));
+  if (
+    !offerId ||
+    !["promotion", "membership"].includes(kind) ||
+    !title ||
+    Number.isNaN(sortOrder) ||
+    sortOrder < 0
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Dados inválidos para atualizar a oferta.",
+        "error",
+      ),
+    );
   }
 
-  const normalizedStartsOn = startsOnValue ? normalizeDateInput(startsOnValue) : null;
+  const normalizedStartsOn = startsOnValue
+    ? normalizeDateInput(startsOnValue)
+    : null;
   const normalizedEndsOn = endsOnValue ? normalizeDateInput(endsOnValue) : null;
   const price = priceValue ? Number(priceValue) : null;
 
-  if ((startsOnValue && !normalizedStartsOn) || (endsOnValue && !normalizedEndsOn)) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Informe datas válidas para a vigência da oferta.", "error"));
+  if (
+    (startsOnValue && !normalizedStartsOn) ||
+    (endsOnValue && !normalizedEndsOn)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Informe datas válidas para a vigência da oferta.",
+        "error",
+      ),
+    );
   }
 
-  if (normalizedStartsOn && normalizedEndsOn && normalizedEndsOn < normalizedStartsOn) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "A data final precisa ser igual ou posterior à data inicial.", "error"));
+  if (
+    normalizedStartsOn &&
+    normalizedEndsOn &&
+    normalizedEndsOn < normalizedStartsOn
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "A data final precisa ser igual ou posterior à data inicial.",
+        "error",
+      ),
+    );
   }
 
   if (priceValue && (price === null || Number.isNaN(price) || price < 0)) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Informe um valor válido para a oferta.", "error"));
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Informe um valor válido para a oferta.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    kind === "membership" &&
+    (!membershipServiceId ||
+      membershipSessionsIncluded == null ||
+      membershipValidityDays == null)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Preencha serviço, sessões e validade para atualizar esse clube ou pacote.",
+        "error",
+      ),
+    );
   }
 
   const { error } = await supabase
@@ -179,6 +347,11 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
       title,
       description: description || null,
       highlight_text: highlightText || null,
+      membership_service_id: kind === "membership" ? membershipServiceId : null,
+      membership_sessions_included:
+        kind === "membership" ? membershipSessionsIncluded : null,
+      membership_validity_days:
+        kind === "membership" ? membershipValidityDays : null,
       price,
       starts_on: normalizedStartsOn,
       ends_on: normalizedEndsOn,
@@ -189,7 +362,13 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
     .eq("salon_id", salon.id);
 
   if (error) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Não foi possível atualizar a oferta.", "error"));
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Não foi possível atualizar a oferta.",
+        "error",
+      ),
+    );
   }
 
   if (isActive) {
@@ -217,7 +396,13 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   }
 
   revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH);
-  redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Oferta atualizada com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      COMMERCIAL_PROMOTIONS_PATH,
+      "Oferta atualizada com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function deleteSalonOfferActionImpl(formData: FormData) {
@@ -226,32 +411,71 @@ export async function deleteSalonOfferActionImpl(formData: FormData) {
   const supabase = createClient();
 
   if (!offerId) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Oferta inválida.", "error"));
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Oferta inválida.",
+        "error",
+      ),
+    );
   }
 
-  const { error } = await supabase.from("salon_offers").delete().eq("id", offerId).eq("salon_id", salon.id);
+  const { error } = await supabase
+    .from("salon_offers")
+    .delete()
+    .eq("id", offerId)
+    .eq("salon_id", salon.id);
 
   if (error) {
-    redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Não foi possível remover a oferta.", "error"));
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_PROMOTIONS_PATH,
+        "Não foi possível remover a oferta.",
+        "error",
+      ),
+    );
   }
 
   revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH);
-  redirect(buildRedirectNotice(COMMERCIAL_PROMOTIONS_PATH, "Oferta removida com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      COMMERCIAL_PROMOTIONS_PATH,
+      "Oferta removida com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function saveSalonReferralProgramActionImpl(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
-  const rewardForReferrer = String(formData.get("rewardForReferrer") ?? "").trim();
-  const rewardForInvited = String(formData.get("rewardForInvited") ?? "").trim();
-  const requiredQualifiedReferrals = Number(formData.get("requiredQualifiedReferrals") ?? 10);
+  const rewardForReferrer = String(
+    formData.get("rewardForReferrer") ?? "",
+  ).trim();
+  const rewardForInvited = String(
+    formData.get("rewardForInvited") ?? "",
+  ).trim();
+  const requiredQualifiedReferrals = Number(
+    formData.get("requiredQualifiedReferrals") ?? 10,
+  );
   const rewardServiceId = String(formData.get("rewardServiceId") ?? "").trim();
   const isActive = formData.get("isActive") === "on";
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
-  if (!title || !rewardForReferrer || !Number.isInteger(requiredQualifiedReferrals) || requiredQualifiedReferrals < 1) {
-    redirect(buildRedirectNotice(COMMERCIAL_REFERRALS_PATH, "Preencha o título e o benefício principal da indicação.", "error"));
+  if (
+    !title ||
+    !rewardForReferrer ||
+    !Number.isInteger(requiredQualifiedReferrals) ||
+    requiredQualifiedReferrals < 1
+  ) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_REFERRALS_PATH,
+        "Preencha o título e o benefício principal da indicação.",
+        "error",
+      ),
+    );
   }
 
   if (rewardServiceId) {
@@ -263,7 +487,13 @@ export async function saveSalonReferralProgramActionImpl(formData: FormData) {
       .maybeSingle();
 
     if (!rewardService?.id) {
-      redirect(buildRedirectNotice(COMMERCIAL_REFERRALS_PATH, "Escolha um serviço válido do seu catálogo para a recompensa.", "error"));
+      redirect(
+        buildRedirectNotice(
+          COMMERCIAL_REFERRALS_PATH,
+          "Escolha um serviço válido do seu catálogo para a recompensa.",
+          "error",
+        ),
+      );
     }
   }
 
@@ -282,7 +512,13 @@ export async function saveSalonReferralProgramActionImpl(formData: FormData) {
   );
 
   if (error) {
-    redirect(buildRedirectNotice(COMMERCIAL_REFERRALS_PATH, "Não foi possível salvar o programa de indicação.", "error"));
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_REFERRALS_PATH,
+        "Não foi possível salvar o programa de indicação.",
+        "error",
+      ),
+    );
   }
 
   await supabase.rpc("reconcile_salon_referral_reward_unlocks", {
@@ -307,7 +543,13 @@ export async function saveSalonReferralProgramActionImpl(formData: FormData) {
   }
 
   revalidateCommercialPaths(COMMERCIAL_REFERRALS_PATH);
-  redirect(buildRedirectNotice(COMMERCIAL_REFERRALS_PATH, "Programa de indicação atualizado com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      COMMERCIAL_REFERRALS_PATH,
+      "Programa de indicação atualizado com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function saveSalonLoyaltyProgramActionImpl(formData: FormData) {
@@ -317,21 +559,37 @@ export async function saveSalonLoyaltyProgramActionImpl(formData: FormData) {
   const cashbackPercent = Number(formData.get("cashbackPercent") ?? 0);
   const tierOneName = String(formData.get("tierOneName") ?? "").trim();
   const tierOneMinVisits = Number(formData.get("tierOneMinVisits") ?? 0);
-  const tierOneDiscountPercent = Number(formData.get("tierOneDiscountPercent") ?? 0);
+  const tierOneDiscountPercent = Number(
+    formData.get("tierOneDiscountPercent") ?? 0,
+  );
   const tierTwoName = String(formData.get("tierTwoName") ?? "").trim();
   const tierTwoMinVisits = Number(formData.get("tierTwoMinVisits") ?? 0);
-  const tierTwoDiscountPercent = Number(formData.get("tierTwoDiscountPercent") ?? 0);
+  const tierTwoDiscountPercent = Number(
+    formData.get("tierTwoDiscountPercent") ?? 0,
+  );
   const vipTierName = String(formData.get("vipTierName") ?? "").trim();
   const vipMinVisits = Number(formData.get("vipMinVisits") ?? 0);
   const vipDiscountPercent = Number(formData.get("vipDiscountPercent") ?? 0);
-  const vipRewardServiceId = String(formData.get("vipRewardServiceId") ?? "").trim();
+  const vipRewardServiceId = String(
+    formData.get("vipRewardServiceId") ?? "",
+  ).trim();
   const isActive = formData.get("isActive") === "on";
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
   let vipRewardServiceName: string | null = null;
 
-  const integerFields = [pointsPerVisit, tierOneMinVisits, tierTwoMinVisits, vipMinVisits];
-  const percentFields = [cashbackPercent, tierOneDiscountPercent, tierTwoDiscountPercent, vipDiscountPercent];
+  const integerFields = [
+    pointsPerVisit,
+    tierOneMinVisits,
+    tierTwoMinVisits,
+    vipMinVisits,
+  ];
+  const percentFields = [
+    cashbackPercent,
+    tierOneDiscountPercent,
+    tierTwoDiscountPercent,
+    vipDiscountPercent,
+  ];
 
   if (
     !title ||
@@ -353,7 +611,11 @@ export async function saveSalonLoyaltyProgramActionImpl(formData: FormData) {
     );
   }
 
-  if (percentFields.some((value) => Number.isNaN(value) || value < 0 || value > 100)) {
+  if (
+    percentFields.some(
+      (value) => Number.isNaN(value) || value < 0 || value > 100,
+    )
+  ) {
     redirect(
       buildRedirectNotice(
         COMMERCIAL_LOYALTY_PATH,
@@ -363,7 +625,9 @@ export async function saveSalonLoyaltyProgramActionImpl(formData: FormData) {
     );
   }
 
-  if (!(tierOneMinVisits < tierTwoMinVisits && tierTwoMinVisits < vipMinVisits)) {
+  if (
+    !(tierOneMinVisits < tierTwoMinVisits && tierTwoMinVisits < vipMinVisits)
+  ) {
     redirect(
       buildRedirectNotice(
         COMMERCIAL_LOYALTY_PATH,
@@ -373,7 +637,12 @@ export async function saveSalonLoyaltyProgramActionImpl(formData: FormData) {
     );
   }
 
-  if (!(tierOneDiscountPercent <= tierTwoDiscountPercent && tierTwoDiscountPercent <= vipDiscountPercent)) {
+  if (
+    !(
+      tierOneDiscountPercent <= tierTwoDiscountPercent &&
+      tierTwoDiscountPercent <= vipDiscountPercent
+    )
+  ) {
     redirect(
       buildRedirectNotice(
         COMMERCIAL_LOYALTY_PATH,
@@ -452,23 +721,54 @@ export async function saveSalonLoyaltyProgramActionImpl(formData: FormData) {
   }
 
   revalidateCommercialPaths(COMMERCIAL_LOYALTY_PATH);
-  redirect(buildRedirectNotice(COMMERCIAL_LOYALTY_PATH, "Programa de fidelidade atualizado com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      COMMERCIAL_LOYALTY_PATH,
+      "Programa de fidelidade atualizado com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function saveSalonGrowthAutomationActionImpl(formData: FormData) {
   const isActive = formData.get("isActive") === "on";
   const smartRebookIsActive = formData.get("smartRebookIsActive") === "on";
   const winbackInactiveDays = Number(formData.get("winbackInactiveDays") ?? 0);
-  const winbackDiscountPercent = Number(formData.get("winbackDiscountPercent") ?? 0);
+  const winbackDiscountPercent = Number(
+    formData.get("winbackDiscountPercent") ?? 0,
+  );
   const winbackTitle = String(formData.get("winbackTitle") ?? "").trim();
-  const winbackBodyTemplate = String(formData.get("winbackBodyTemplate") ?? "").trim();
-  const smartRebookWindowDays = Number(formData.get("smartRebookWindowDays") ?? 0);
-  const smartRebookTitle = String(formData.get("smartRebookTitle") ?? "").trim();
-  const smartRebookBodyTemplate = String(formData.get("smartRebookBodyTemplate") ?? "").trim();
+  const winbackBodyTemplate = String(
+    formData.get("winbackBodyTemplate") ?? "",
+  ).trim();
+  const smartRebookWindowDays = Number(
+    formData.get("smartRebookWindowDays") ?? 0,
+  );
+  const smartRebookTitle = String(
+    formData.get("smartRebookTitle") ?? "",
+  ).trim();
+  const smartRebookBodyTemplate = String(
+    formData.get("smartRebookBodyTemplate") ?? "",
+  ).trim();
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  const billing = await getSalonBillingEntitlements(salon.id);
 
-  if (!Number.isInteger(winbackInactiveDays) || winbackInactiveDays < 7 || winbackInactiveDays > 365) {
+  if (!billing.includesGrowthAutomation) {
+    redirect(
+      buildRedirectNotice(
+        COMMERCIAL_AUTOMATIONS_PATH,
+        `Automações inteligentes estão disponíveis a partir do plano Growth. O seu plano atual é ${billing.currentPlan.displayName}.`,
+        "error",
+      ),
+    );
+  }
+
+  if (
+    !Number.isInteger(winbackInactiveDays) ||
+    winbackInactiveDays < 7 ||
+    winbackInactiveDays > 365
+  ) {
     redirect(
       buildRedirectNotice(
         COMMERCIAL_AUTOMATIONS_PATH,
@@ -478,7 +778,11 @@ export async function saveSalonGrowthAutomationActionImpl(formData: FormData) {
     );
   }
 
-  if (!Number.isInteger(winbackDiscountPercent) || winbackDiscountPercent < 0 || winbackDiscountPercent > 100) {
+  if (
+    !Number.isInteger(winbackDiscountPercent) ||
+    winbackDiscountPercent < 0 ||
+    winbackDiscountPercent > 100
+  ) {
     redirect(
       buildRedirectNotice(
         COMMERCIAL_AUTOMATIONS_PATH,
@@ -508,7 +812,11 @@ export async function saveSalonGrowthAutomationActionImpl(formData: FormData) {
     );
   }
 
-  if (!Number.isInteger(smartRebookWindowDays) || smartRebookWindowDays < 1 || smartRebookWindowDays > 14) {
+  if (
+    !Number.isInteger(smartRebookWindowDays) ||
+    smartRebookWindowDays < 1 ||
+    smartRebookWindowDays > 14
+  ) {
     redirect(
       buildRedirectNotice(
         COMMERCIAL_AUTOMATIONS_PATH,
@@ -538,21 +846,23 @@ export async function saveSalonGrowthAutomationActionImpl(formData: FormData) {
     );
   }
 
-  const { error } = await supabase.from("salon_growth_automation_settings").upsert(
-    {
-      salon_id: salon.id,
-      is_active: isActive,
-      winback_inactive_days: winbackInactiveDays,
-      winback_discount_percent: winbackDiscountPercent,
-      winback_title: winbackTitle,
-      winback_body_template: winbackBodyTemplate,
-      smart_rebook_is_active: smartRebookIsActive,
-      smart_rebook_window_days: smartRebookWindowDays,
-      smart_rebook_title: smartRebookTitle,
-      smart_rebook_body_template: smartRebookBodyTemplate,
-    },
-    { onConflict: "salon_id" },
-  );
+  const { error } = await supabase
+    .from("salon_growth_automation_settings")
+    .upsert(
+      {
+        salon_id: salon.id,
+        is_active: isActive,
+        winback_inactive_days: winbackInactiveDays,
+        winback_discount_percent: winbackDiscountPercent,
+        winback_title: winbackTitle,
+        winback_body_template: winbackBodyTemplate,
+        smart_rebook_is_active: smartRebookIsActive,
+        smart_rebook_window_days: smartRebookWindowDays,
+        smart_rebook_title: smartRebookTitle,
+        smart_rebook_body_template: smartRebookBodyTemplate,
+      },
+      { onConflict: "salon_id" },
+    );
 
   if (error) {
     redirect(

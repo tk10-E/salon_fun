@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/.next
+**/.dart_tool
+**/build
+/apps/mobile
+/supabase
+*.zip

@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import { PublicSalonAppCta } from "@/components/PublicSalonAppCta";
@@ -155,9 +156,11 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
           <div className="public-salon-copy">
             <div className="public-salon-brandline">
               {preview.logoUrl ? (
-                <img
+                <Image
                   src={preview.logoUrl}
                   alt={`Logo de ${preview.name}`}
+                  width={74}
+                  height={74}
                   className="public-salon-logo"
                 />
               ) : (

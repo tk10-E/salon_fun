@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -27,6 +28,7 @@ import { buildRedirectNotice } from "./shared";
 const SETTINGS_PATH = "/dashboard/settings";
 const DASHBOARD_PATH = "/dashboard";
 const CLIENT_APP_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const CLIENT_APP_CAMPAIGN_SLOT_COUNT = 3;
 
 function readUploadedFile(formData: FormData, field: string) {
   const entry = formData.get(field);
@@ -45,6 +47,15 @@ function normalizeOptionalHexColorInput(value: FormDataEntryValue | null) {
   }
 
   return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeOptionalDateTimeInput(value: FormDataEntryValue | null) {
+  const normalized = normalizeOptionalTextInput(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return Number.isNaN(Date.parse(normalized)) ? null : normalized;
 }
 
 function normalizeOptionalNumberInput(value: FormDataEntryValue | null) {
@@ -66,6 +77,87 @@ function normalizeOptionalIntegerInput(value: FormDataEntryValue | null) {
   return parsed;
 }
 
+function buildClientAppCampaignDrafts(formData: FormData) {
+  const campaigns: Array<{
+    id: string;
+    isActive: boolean;
+    priority: string;
+    startsAt: string | null;
+    endsAt: string | null;
+    audience: string;
+    eyebrow: string | null;
+    title: string;
+    message: string;
+    campaignLabel: string | null;
+    ctaLabel: string | null;
+    ctaTarget: string;
+  }> = [];
+
+  for (let slot = 1; slot <= CLIENT_APP_CAMPAIGN_SLOT_COUNT; slot += 1) {
+    const title = normalizeOptionalTextInput(
+      formData.get(`clientAppCampaignTitle_${slot}`),
+    );
+    const message = normalizeOptionalTextInput(
+      formData.get(`clientAppCampaignMessage_${slot}`),
+    );
+
+    if (!title || !message) {
+      continue;
+    }
+
+    campaigns.push({
+      id:
+        normalizeOptionalTextInput(
+          formData.get(`clientAppCampaignId_${slot}`),
+        ) ?? `campaign-${slot}`,
+      isActive: formData.get(`clientAppCampaignIsActive_${slot}`) === "on",
+      priority:
+        normalizeOptionalTextInput(
+          formData.get(`clientAppCampaignPriority_${slot}`),
+        ) ?? "medium",
+      startsAt: normalizeOptionalDateTimeInput(
+        formData.get(`clientAppCampaignStartsAt_${slot}`),
+      ),
+      endsAt: normalizeOptionalDateTimeInput(
+        formData.get(`clientAppCampaignEndsAt_${slot}`),
+      ),
+      audience:
+        normalizeOptionalTextInput(
+          formData.get(`clientAppCampaignAudience_${slot}`),
+        ) ?? "all",
+      eyebrow: normalizeOptionalTextInput(
+        formData.get(`clientAppCampaignEyebrow_${slot}`),
+      ),
+      title,
+      message,
+      campaignLabel: normalizeOptionalTextInput(
+        formData.get(`clientAppCampaignLabel_${slot}`),
+      ),
+      ctaLabel: normalizeOptionalTextInput(
+        formData.get(`clientAppCampaignCtaLabel_${slot}`),
+      ),
+      ctaTarget:
+        normalizeOptionalTextInput(
+          formData.get(`clientAppCampaignCtaTarget_${slot}`),
+        ) ?? "explore",
+    });
+  }
+
+  return campaigns;
+}
+
+function buildBookingPolicyVersionTag(now = new Date()) {
+  const iso = now
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "");
+  return `booking-policy-${iso}`;
+}
+
+function buildBookingWebhookToken() {
+  return `${randomUUID()}${randomUUID()}`.replace(/-/g, "");
+}
+
 function readRawConfigString(
   value: Record<string, unknown>,
   key: string,
@@ -79,13 +171,17 @@ async function removeSalonAssetsOrRedirect(
   paths: readonly (string | null | undefined)[],
   errorMessage: string,
 ) {
-  const uniquePaths = [...new Set(paths.filter((path): path is string => Boolean(path)))];
+  const uniquePaths = [
+    ...new Set(paths.filter((path): path is string => Boolean(path))),
+  ];
 
   if (uniquePaths.length === 0) {
     return;
   }
 
-  const { error } = await supabase.storage.from("salon-assets").remove(uniquePaths);
+  const { error } = await supabase.storage
+    .from("salon-assets")
+    .remove(uniquePaths);
 
   if (error) {
     redirect(buildRedirectNotice(SETTINGS_PATH, errorMessage, "error"));
@@ -97,7 +193,9 @@ async function downloadSalonAssetOrRedirect(
   path: string,
   errorMessage: string,
 ) {
-  const { data, error } = await supabase.storage.from("salon-assets").download(path);
+  const { data, error } = await supabase.storage
+    .from("salon-assets")
+    .download(path);
 
   if (error || !data) {
     redirect(buildRedirectNotice(SETTINGS_PATH, errorMessage, "error"));
@@ -116,16 +214,19 @@ async function uploadSalonAssetBytesOrRedirect(
   contentType: string,
   errorMessage: string,
 ) {
-  const { error } = await supabase.storage.from("salon-assets").upload(path, bytes, {
-    contentType,
-    upsert: true,
-  });
+  const { error } = await supabase.storage
+    .from("salon-assets")
+    .upload(path, bytes, {
+      contentType,
+      upsert: true,
+    });
 
   if (error) {
     redirect(buildRedirectNotice(SETTINGS_PATH, errorMessage, "error"));
   }
 
-  return supabase.storage.from("salon-assets").getPublicUrl(path).data.publicUrl;
+  return supabase.storage.from("salon-assets").getPublicUrl(path).data
+    .publicUrl;
 }
 
 type ResolvedClientAppImageAsset = {
@@ -189,7 +290,9 @@ async function resolveClientAppImageAssetOrRedirect(params: {
   const currentSourceInputUrl = currentSourceUrl ?? currentImageUrl;
   const storagePaths = getClientAppImageStoragePaths(salonId, assetKey);
   const cropChanged =
-    focusX !== currentFocusX || focusY !== currentFocusY || zoom !== currentZoom;
+    focusX !== currentFocusX ||
+    focusY !== currentFocusY ||
+    zoom !== currentZoom;
   const sourceChanged = incomingUrl !== currentSourceInputUrl;
 
   if (shouldRemove && !incomingFile && !incomingUrl) {
@@ -270,7 +373,9 @@ async function resolveClientAppImageAssetOrRedirect(params: {
       sourceContentType = downloadedAsset.contentType;
     } else if (currentSourceInputUrl) {
       try {
-        const remoteAsset = await fetchRemoteClientAppImage(currentSourceInputUrl);
+        const remoteAsset = await fetchRemoteClientAppImage(
+          currentSourceInputUrl,
+        );
         sourceBuffer = remoteAsset.buffer;
         sourceContentType = remoteAsset.contentType;
       } catch (error) {
@@ -295,7 +400,9 @@ async function resolveClientAppImageAssetOrRedirect(params: {
     };
   }
 
-  let processedAsset: Awaited<ReturnType<typeof generateClientAppImageVariants>>;
+  let processedAsset: Awaited<
+    ReturnType<typeof generateClientAppImageVariants>
+  >;
 
   try {
     processedAsset = await generateClientAppImageVariants({
@@ -350,7 +457,9 @@ async function resolveClientAppImageAssetOrRedirect(params: {
     [
       currentImagePath !== storagePaths.variantPath ? currentImagePath : null,
       currentSourcePath !== storagePaths.sourcePath ? currentSourcePath : null,
-      currentImagePath !== storagePaths.legacyPath ? null : storagePaths.legacyPath,
+      currentImagePath !== storagePaths.legacyPath
+        ? null
+        : storagePaths.legacyPath,
     ],
     removeErrorMessage,
   );
@@ -449,10 +558,12 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   const accentColorInput = String(formData.get("clientAppAccentColor") ?? "")
     .trim()
     .toUpperCase();
-  const ratingValueInput = String(formData.get("clientAppRatingValue") ?? "")
-    .trim();
-  const ratingCountInput = String(formData.get("clientAppRatingCount") ?? "")
-    .trim();
+  const ratingValueInput = String(
+    formData.get("clientAppRatingValue") ?? "",
+  ).trim();
+  const ratingCountInput = String(
+    formData.get("clientAppRatingCount") ?? "",
+  ).trim();
   const heroImageFocusXInput = String(
     formData.get("clientAppHeroImageFocusX") ?? "",
   ).trim();
@@ -517,11 +628,13 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   const heroImageZoom =
     normalizeOptionalNumberInput(formData.get("clientAppHeroImageZoom")) ?? 1;
   const galleryCoverImageZoom =
-    normalizeOptionalNumberInput(formData.get("clientAppGalleryCoverImageZoom")) ??
-    1;
+    normalizeOptionalNumberInput(
+      formData.get("clientAppGalleryCoverImageZoom"),
+    ) ?? 1;
   const profileCoverImageZoom =
-    normalizeOptionalNumberInput(formData.get("clientAppProfileCoverImageZoom")) ??
-    1;
+    normalizeOptionalNumberInput(
+      formData.get("clientAppProfileCoverImageZoom"),
+    ) ?? 1;
   const heroImageUrlInput = normalizeOptionalTextInput(
     formData.get("clientAppHeroImageUrl"),
   );
@@ -746,7 +859,9 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     supabase,
     salonId: salon.id,
     assetKey: "galleryCover",
-    incomingUrl: shouldRemoveGalleryCoverImage ? null : galleryCoverImageUrlInput,
+    incomingUrl: shouldRemoveGalleryCoverImage
+      ? null
+      : galleryCoverImageUrlInput,
     incomingFile: galleryCoverImageFile,
     shouldRemove: shouldRemoveGalleryCoverImage,
     focusX: galleryCoverImageFocusX,
@@ -772,7 +887,9 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     supabase,
     salonId: salon.id,
     assetKey: "profileCover",
-    incomingUrl: shouldRemoveProfileCoverImage ? null : profileCoverImageUrlInput,
+    incomingUrl: shouldRemoveProfileCoverImage
+      ? null
+      : profileCoverImageUrlInput,
     incomingFile: profileCoverImageFile,
     shouldRemove: shouldRemoveProfileCoverImage,
     focusX: profileCoverImageFocusX,
@@ -797,6 +914,7 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     sourceErrorMessage:
       "Não foi possível processar a capa institucional do perfil do salão.",
   });
+  const centralCampaigns = buildClientAppCampaignDrafts(formData);
 
   const clientAppConfigDraft = {
     rawConfig: currentClientAppConfig.rawConfig,
@@ -846,16 +964,14 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     heroImageSourceUrl: heroImageAsset.sourceUrl,
     galleryCoverImageUrl: galleryCoverImageAsset.imageUrl,
     galleryCoverImageVariantUrl: galleryCoverImageAsset.mobileVariantUrl,
-    galleryCoverImageTabletVariantUrl:
-      galleryCoverImageAsset.tabletVariantUrl,
+    galleryCoverImageTabletVariantUrl: galleryCoverImageAsset.tabletVariantUrl,
     galleryCoverImageShareVariantUrl: galleryCoverImageAsset.shareVariantUrl,
     galleryCoverImagePath: galleryCoverImageAsset.imagePath,
     galleryCoverImageSourcePath: galleryCoverImageAsset.sourcePath,
     galleryCoverImageSourceUrl: galleryCoverImageAsset.sourceUrl,
     profileCoverImageUrl: profileCoverImageAsset.imageUrl,
     profileCoverImageVariantUrl: profileCoverImageAsset.mobileVariantUrl,
-    profileCoverImageTabletVariantUrl:
-      profileCoverImageAsset.tabletVariantUrl,
+    profileCoverImageTabletVariantUrl: profileCoverImageAsset.tabletVariantUrl,
     profileCoverImageShareVariantUrl: profileCoverImageAsset.shareVariantUrl,
     profileCoverImagePath: profileCoverImageAsset.imagePath,
     profileCoverImageSourcePath: profileCoverImageAsset.sourcePath,
@@ -876,8 +992,19 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       formData.get("clientAppAddressLabel"),
     ),
     mapUrl: normalizeOptionalTextInput(formData.get("clientAppMapUrl")),
+    privacyPolicyUrl: normalizeOptionalTextInput(
+      formData.get("clientAppPrivacyPolicyUrl"),
+    ),
+    termsOfUseUrl: normalizeOptionalTextInput(
+      formData.get("clientAppTermsOfUseUrl"),
+    ),
+    supportUrl: normalizeOptionalTextInput(formData.get("clientAppSupportUrl")),
+    supportEmail: normalizeOptionalTextInput(
+      formData.get("clientAppSupportEmail"),
+    ),
     ratingValue,
     ratingCount,
+    centralCampaigns,
     visibleHomeModules: formData
       .getAll("clientAppVisibleHomeModules")
       .map((value) => String(value).trim())
@@ -1127,6 +1254,333 @@ export async function updateSalonScheduleActionImpl(formData: FormData) {
     buildRedirectNotice(
       SETTINGS_PATH,
       "Agenda online atualizada com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+
+  const bookingPolicyEnabled = formData.get("bookingPolicyEnabled") === "on";
+  const bookingPolicyRequiresDeposit =
+    formData.get("bookingPolicyRequiresDeposit") === "on";
+  const bookingPolicyTitle =
+    normalizeOptionalTextInput(formData.get("bookingPolicyTitle")) ??
+    "Reserva protegida";
+  const bookingPolicySummary = normalizeOptionalTextInput(
+    formData.get("bookingPolicySummary"),
+  );
+  const bookingPolicyPaymentInstructions = normalizeOptionalTextInput(
+    formData.get("bookingPolicyPaymentInstructions"),
+  );
+  const bookingPolicyConfirmationRequired =
+    formData.get("bookingPolicyConfirmationRequired") === "on";
+  const bookingPolicyConfirmationLeadMinutes =
+    normalizeOptionalIntegerInput(
+      formData.get("bookingPolicyConfirmationLeadMinutes"),
+    ) ?? 30;
+  const bookingPolicyAutoCancelUnconfirmed =
+    formData.get("bookingPolicyAutoCancelUnconfirmed") === "on";
+  const bookingPolicyAutoCancelLeadMinutes =
+    normalizeOptionalIntegerInput(
+      formData.get("bookingPolicyAutoCancelLeadMinutes"),
+    ) ?? 10;
+  const bookingPolicyAutoCancelPendingDeposit =
+    formData.get("bookingPolicyAutoCancelPendingDeposit") === "on";
+  const bookingPolicyDepositReminderLeadHours =
+    normalizeOptionalIntegerInput(
+      formData.get("bookingPolicyDepositReminderLeadHours"),
+    ) ?? 6;
+  const bookingPolicyPaymentModeInput = String(
+    formData.get("bookingPolicyPaymentMode") ?? "manual",
+  ).trim();
+  const bookingPolicyPaymentMode =
+    bookingPolicyPaymentModeInput === "pix" ||
+    bookingPolicyPaymentModeInput === "external_checkout" ||
+    bookingPolicyPaymentModeInput === "asaas_pix"
+      ? bookingPolicyPaymentModeInput
+      : "manual";
+  const bookingPolicyAsaasEnvironmentInput = String(
+    formData.get("bookingPolicyAsaasEnvironment") ?? "sandbox",
+  ).trim();
+  const bookingPolicyAsaasEnvironment =
+    bookingPolicyAsaasEnvironmentInput === "production"
+      ? "production"
+      : "sandbox";
+  const bookingPolicyAsaasApiKey = normalizeOptionalTextInput(
+    formData.get("bookingPolicyAsaasApiKey"),
+  );
+  const bookingPolicyAsaasWebhookTokenInput = normalizeOptionalTextInput(
+    formData.get("bookingPolicyAsaasWebhookToken"),
+  );
+  const bookingPolicyPixKey = normalizeOptionalTextInput(
+    formData.get("bookingPolicyPixKey"),
+  );
+  const bookingPolicyPixRecipientName = normalizeOptionalTextInput(
+    formData.get("bookingPolicyPixRecipientName"),
+  );
+  const bookingPolicyPixRecipientCity = normalizeOptionalTextInput(
+    formData.get("bookingPolicyPixRecipientCity"),
+  );
+  const bookingPolicyExternalCheckoutUrl = normalizeOptionalTextInput(
+    formData.get("bookingPolicyExternalCheckoutUrl"),
+  );
+  const bookingPolicyCancellationWindowHours =
+    normalizeOptionalIntegerInput(
+      formData.get("bookingPolicyCancellationWindowHours"),
+    ) ?? 24;
+  const bookingPolicyDepositAmount = normalizeOptionalNumberInput(
+    formData.get("bookingPolicyDepositAmount"),
+  );
+
+  if (
+    bookingPolicyCancellationWindowHours < 0 ||
+    bookingPolicyCancellationWindowHours > 168
+  ) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Defina uma janela de cancelamento entre 0 e 168 horas.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    bookingPolicyConfirmationLeadMinutes < 5 ||
+    bookingPolicyConfirmationLeadMinutes > 180
+  ) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Defina a confirmacao entre 5 e 180 minutos antes do horario.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    bookingPolicyAutoCancelLeadMinutes < 0 ||
+    bookingPolicyAutoCancelLeadMinutes > 60
+  ) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Defina o auto cancelamento entre 0 e 60 minutos antes do horario.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    bookingPolicyDepositReminderLeadHours < 0 ||
+    bookingPolicyDepositReminderLeadHours > 72
+  ) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Defina o lembrete de sinal entre 0 e 72 horas antes do horario.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    bookingPolicyEnabled &&
+    bookingPolicyRequiresDeposit &&
+    (bookingPolicyDepositAmount === null || bookingPolicyDepositAmount <= 0)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Informe um valor de sinal maior que zero para ativar a reserva protegida.",
+        "error",
+      ),
+    );
+  }
+
+  const effectiveRequiresDeposit = bookingPolicyEnabled
+    ? bookingPolicyRequiresDeposit
+    : false;
+  const effectiveDepositAmount = effectiveRequiresDeposit
+    ? bookingPolicyDepositAmount
+    : null;
+  const effectivePaymentMode = effectiveRequiresDeposit
+    ? bookingPolicyPaymentMode
+    : bookingPolicyPaymentMode;
+  const bookingPolicyAsaasWebhookToken =
+    bookingPolicyAsaasWebhookTokenInput ??
+    salon.booking_policy_asaas_webhook_token ??
+    (effectivePaymentMode === "asaas_pix" ? buildBookingWebhookToken() : null);
+  const effectiveAutoCancelUnconfirmed = bookingPolicyConfirmationRequired
+    ? bookingPolicyAutoCancelUnconfirmed
+    : false;
+  const effectiveAutoCancelPendingDeposit = effectiveRequiresDeposit
+    ? bookingPolicyAutoCancelPendingDeposit
+    : false;
+
+  if (effectiveRequiresDeposit && effectivePaymentMode === "pix") {
+    if (
+      !bookingPolicyPixKey ||
+      !bookingPolicyPixRecipientName ||
+      !bookingPolicyPixRecipientCity
+    ) {
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Preencha chave Pix, favorecido e cidade para cobrar o sinal direto no app.",
+          "error",
+        ),
+      );
+    }
+  }
+
+  if (
+    effectiveRequiresDeposit &&
+    effectivePaymentMode === "external_checkout"
+  ) {
+    if (!bookingPolicyExternalCheckoutUrl) {
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Informe a URL do checkout externo para cobrar o sinal.",
+          "error",
+        ),
+      );
+    }
+
+    try {
+      const parsedUrl = new URL(bookingPolicyExternalCheckoutUrl);
+      if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+        throw new Error("invalid_protocol");
+      }
+    } catch {
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Use uma URL valida de checkout externo com http ou https.",
+          "error",
+        ),
+      );
+    }
+  }
+
+  if (effectiveRequiresDeposit && effectivePaymentMode === "asaas_pix") {
+    if (!bookingPolicyAsaasApiKey) {
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Informe a chave de API do Asaas para gerar o Pix automatico do sinal.",
+          "error",
+        ),
+      );
+    }
+
+    if (!bookingPolicyAsaasWebhookToken) {
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Nao foi possivel preparar o token do webhook do Asaas.",
+          "error",
+        ),
+      );
+    }
+  }
+
+  const hasPolicyChanged =
+    (salon.booking_policy_enabled ?? false) !== bookingPolicyEnabled ||
+    (salon.booking_policy_title ?? "Reserva protegida") !==
+      bookingPolicyTitle ||
+    (salon.booking_policy_summary ?? null) !== bookingPolicySummary ||
+    (salon.booking_policy_cancellation_window_hours ?? 24) !==
+      bookingPolicyCancellationWindowHours ||
+    (salon.booking_policy_confirmation_required ?? true) !==
+      bookingPolicyConfirmationRequired ||
+    (salon.booking_policy_confirmation_lead_minutes ?? 30) !==
+      bookingPolicyConfirmationLeadMinutes ||
+    (salon.booking_policy_auto_cancel_unconfirmed ?? true) !==
+      effectiveAutoCancelUnconfirmed ||
+    (salon.booking_policy_auto_cancel_lead_minutes ?? 10) !==
+      bookingPolicyAutoCancelLeadMinutes ||
+    (salon.booking_policy_auto_cancel_pending_deposit ?? false) !==
+      effectiveAutoCancelPendingDeposit ||
+    (salon.booking_policy_deposit_reminder_lead_hours ?? 6) !==
+      bookingPolicyDepositReminderLeadHours ||
+    (salon.booking_policy_payment_mode ?? "manual") !== effectivePaymentMode ||
+    (salon.booking_policy_asaas_environment ?? "sandbox") !==
+      bookingPolicyAsaasEnvironment ||
+    (salon.booking_policy_asaas_api_key ?? null) !== bookingPolicyAsaasApiKey ||
+    (salon.booking_policy_asaas_webhook_token ?? null) !==
+      bookingPolicyAsaasWebhookToken ||
+    (salon.booking_policy_pix_key ?? null) !== bookingPolicyPixKey ||
+    (salon.booking_policy_pix_recipient_name ?? null) !==
+      bookingPolicyPixRecipientName ||
+    (salon.booking_policy_pix_recipient_city ?? null) !==
+      bookingPolicyPixRecipientCity ||
+    (salon.booking_policy_external_checkout_url ?? null) !==
+      bookingPolicyExternalCheckoutUrl ||
+    (salon.booking_policy_requires_deposit ?? false) !==
+      effectiveRequiresDeposit ||
+    Number(salon.booking_policy_deposit_amount ?? 0) !==
+      Number(effectiveDepositAmount ?? 0) ||
+    (salon.booking_policy_payment_instructions ?? null) !==
+      bookingPolicyPaymentInstructions;
+
+  const bookingPolicyVersion = hasPolicyChanged
+    ? buildBookingPolicyVersionTag()
+    : (salon.booking_policy_version ?? "2026-04-booking-policy-v1");
+
+  const { error } = await supabase
+    .from("salons")
+    .update({
+      booking_policy_enabled: bookingPolicyEnabled,
+      booking_policy_title: bookingPolicyTitle,
+      booking_policy_summary: bookingPolicySummary,
+      booking_policy_cancellation_window_hours:
+        bookingPolicyCancellationWindowHours,
+      booking_policy_confirmation_required: bookingPolicyConfirmationRequired,
+      booking_policy_confirmation_lead_minutes:
+        bookingPolicyConfirmationLeadMinutes,
+      booking_policy_auto_cancel_unconfirmed: effectiveAutoCancelUnconfirmed,
+      booking_policy_auto_cancel_lead_minutes:
+        bookingPolicyAutoCancelLeadMinutes,
+      booking_policy_auto_cancel_pending_deposit:
+        effectiveAutoCancelPendingDeposit,
+      booking_policy_deposit_reminder_lead_hours:
+        bookingPolicyDepositReminderLeadHours,
+      booking_policy_payment_mode: effectivePaymentMode,
+      booking_policy_asaas_environment: bookingPolicyAsaasEnvironment,
+      booking_policy_asaas_api_key: bookingPolicyAsaasApiKey,
+      booking_policy_asaas_webhook_token: bookingPolicyAsaasWebhookToken,
+      booking_policy_pix_key: bookingPolicyPixKey,
+      booking_policy_pix_recipient_name: bookingPolicyPixRecipientName,
+      booking_policy_pix_recipient_city: bookingPolicyPixRecipientCity,
+      booking_policy_external_checkout_url: bookingPolicyExternalCheckoutUrl,
+      booking_policy_requires_deposit: effectiveRequiresDeposit,
+      booking_policy_deposit_amount: effectiveDepositAmount,
+      booking_policy_payment_instructions: bookingPolicyPaymentInstructions,
+      booking_policy_version: bookingPolicyVersion,
+    })
+    .eq("id", salon.id);
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Nao foi possivel salvar a politica de reserva protegida.",
+        "error",
+      ),
+    );
+  }
+
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(SETTINGS_PATH);
+  redirect(
+    buildRedirectNotice(
+      SETTINGS_PATH,
+      "Politica de reserva protegida atualizada com sucesso.",
       "success",
     ),
   );

@@ -54,6 +54,7 @@ vi.mock("next/cache", () => ({
 
 import {
   regenerateSalonCodeActionImpl,
+  updateSalonBookingPolicyActionImpl,
   updateSalonBrandingActionImpl,
   updateSalonScheduleActionImpl,
 } from "@/app/_actions/settings";
@@ -88,6 +89,28 @@ describe("settings actions", () => {
     requireOwnerSalonMock.mockResolvedValue({
       salon: {
         id: "salon-1",
+        booking_policy_cancellation_window_hours: 24,
+        booking_policy_confirmation_lead_minutes: 30,
+        booking_policy_confirmation_required: true,
+        booking_policy_deposit_amount: 0,
+        booking_policy_deposit_reminder_lead_hours: 6,
+        booking_policy_enabled: false,
+        booking_policy_asaas_api_key: null,
+        booking_policy_asaas_environment: "sandbox",
+        booking_policy_asaas_webhook_token: null,
+        booking_policy_external_checkout_url: null,
+        booking_policy_auto_cancel_lead_minutes: 10,
+        booking_policy_auto_cancel_pending_deposit: false,
+        booking_policy_auto_cancel_unconfirmed: true,
+        booking_policy_payment_instructions: null,
+        booking_policy_payment_mode: "manual",
+        booking_policy_pix_key: null,
+        booking_policy_pix_recipient_city: null,
+        booking_policy_pix_recipient_name: null,
+        booking_policy_requires_deposit: false,
+        booking_policy_summary: null,
+        booking_policy_title: "Reserva protegida",
+        booking_policy_version: "booking-policy-20260403190000",
         logo_path: "logos/current.png",
       },
     });
@@ -290,9 +313,12 @@ describe("settings actions", () => {
           clientAppPromotionHeadline:
             "Combos, clube e produtos com assinatura da casa.",
           clientAppHeroImageUrl: "https://cdn.example.com/hero.jpg",
-          clientAppGalleryCoverImageUrl:
-            "https://cdn.example.com/gallery.jpg",
+          clientAppGalleryCoverImageUrl: "https://cdn.example.com/gallery.jpg",
           clientAppInstagramUrl: "https://instagram.com/barbeariaelite",
+          clientAppPrivacyPolicyUrl: "https://barbeariaelite.com/privacidade",
+          clientAppTermsOfUseUrl: "https://barbeariaelite.com/termos",
+          clientAppSupportUrl: "https://barbeariaelite.com/suporte",
+          clientAppSupportEmail: "suporte@barbeariaelite.com",
           clientAppAddressLabel: "Rua Augusta, 500 - São Paulo",
           clientAppMapUrl: "https://maps.example.com/barbearia",
           clientAppRatingValue: "4.9",
@@ -324,8 +350,7 @@ describe("settings actions", () => {
         welcomeHeadline: "Seu próximo trato começa aqui.",
         welcomeMessage:
           "Agenda rápida, profissionais fortes e uma vitrine com presença.",
-        promotionHeadline:
-          "Combos, clube e produtos com assinatura da casa.",
+        promotionHeadline: "Combos, clube e produtos com assinatura da casa.",
         heroImageUrl: "https://cdn.example.com/salon-1/client-app/hero/source",
         heroImageVariantUrl:
           "https://cdn.example.com/salon-1/client-app/hero/mobile.jpg",
@@ -345,8 +370,7 @@ describe("settings actions", () => {
         galleryCoverImageShareVariantUrl:
           "https://cdn.example.com/salon-1/client-app/gallery-cover/share.jpg",
         galleryCoverImagePath: "salon-1/client-app/gallery-cover/mobile.jpg",
-        galleryCoverImageSourcePath:
-          "salon-1/client-app/gallery-cover/source",
+        galleryCoverImageSourcePath: "salon-1/client-app/gallery-cover/source",
         galleryCoverImageSourceUrl: "https://cdn.example.com/gallery.jpg",
         heroImageFocusX: 50,
         heroImageFocusY: 50,
@@ -358,6 +382,10 @@ describe("settings actions", () => {
         profileCoverImageFocusY: 50,
         profileCoverImageZoom: 1,
         instagramUrl: "https://instagram.com/barbeariaelite",
+        privacyPolicyUrl: "https://barbeariaelite.com/privacidade",
+        termsOfUseUrl: "https://barbeariaelite.com/termos",
+        supportUrl: "https://barbeariaelite.com/suporte",
+        supportEmail: "suporte@barbeariaelite.com",
         addressLabel: "Rua Augusta, 500 - São Paulo",
         mapUrl: "https://maps.example.com/barbearia",
         ratingValue: 4.9,
@@ -377,6 +405,101 @@ describe("settings actions", () => {
       "/dashboard/settings?message=Identidade+do+sal%C3%A3o+atualizada+com+sucesso.&tone=success",
     );
     expect(upload).toHaveBeenCalledTimes(8);
+  });
+
+  it("publishes central campaigns for the client app with CTA targets", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const updateSalon = vi.fn(() => ({ eq }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table !== "salons") {
+          throw new Error(`Unexpected table ${table}`);
+        }
+
+        return {
+          update: updateSalon,
+        };
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(),
+          upload: vi.fn(),
+          getPublicUrl: vi.fn((path: string) => ({
+            data: { publicUrl: `https://cdn.example.com/${path}` },
+          })),
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      updateSalonBrandingActionImpl(
+        makeFormData({
+          name: "Studio Centro",
+          clientAppCampaignIsActive_1: "on",
+          clientAppCampaignPriority_1: "high",
+          clientAppCampaignAudience_1: "with_upcoming_appointment",
+          clientAppCampaignStartsAt_1: "2026-04-01T09:00",
+          clientAppCampaignEndsAt_1: "2026-04-07T20:00",
+          clientAppCampaignEyebrow_1: "Agora no app",
+          clientAppCampaignLabel_1: "Retorno da semana",
+          clientAppCampaignTitle_1: "Volte essa semana",
+          clientAppCampaignMessage_1:
+            "Uma publicacao operacional leva a cliente direto para reservar.",
+          clientAppCampaignCtaLabel_1: "Reservar agora",
+          clientAppCampaignCtaTarget_1: "explore",
+          clientAppCampaignPriority_2: "low",
+          clientAppCampaignAudience_2: "without_active_benefits",
+          clientAppCampaignTitle_2: "Fale com a equipe",
+          clientAppCampaignMessage_2:
+            "O salao tambem pode abrir o canal oficial direto da central.",
+          clientAppCampaignCtaTarget_2: "support",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_app_config: expect.objectContaining({
+          centralCampaigns: [
+            {
+              id: "campaign-1",
+              isActive: true,
+              priority: "high",
+              startsAt: "2026-04-01T09:00",
+              endsAt: "2026-04-07T20:00",
+              audience: "with_upcoming_appointment",
+              eyebrow: "Agora no app",
+              title: "Volte essa semana",
+              message:
+                "Uma publicacao operacional leva a cliente direto para reservar.",
+              campaignLabel: "Retorno da semana",
+              ctaLabel: "Reservar agora",
+              ctaTarget: "explore",
+            },
+            {
+              id: "campaign-2",
+              isActive: false,
+              priority: "low",
+              startsAt: null,
+              endsAt: null,
+              audience: "without_active_benefits",
+              eyebrow: null,
+              title: "Fale com a equipe",
+              message:
+                "O salao tambem pode abrir o canal oficial direto da central.",
+              campaignLabel: null,
+              ctaLabel: null,
+              ctaTarget: "support",
+            },
+          ],
+        }),
+      }),
+    );
+    expect(location).toBe(
+      "/dashboard/settings?message=Identidade+do+sal%C3%A3o+atualizada+com+sucesso.&tone=success",
+    );
   });
 
   it("uploads hero, gallery and profile assets to storage and saves their public URLs", async () => {
@@ -533,7 +656,8 @@ describe("settings actions", () => {
         client_app_config: expect.objectContaining({
           heroImagePath: "salon-1/client-app/hero/mobile.jpg",
           heroImageSourcePath: "salon-1/client-app/hero/source",
-          heroImageUrl: "https://cdn.example.com/salon-1/client-app/hero/source",
+          heroImageUrl:
+            "https://cdn.example.com/salon-1/client-app/hero/source",
           heroImageVariantUrl:
             "https://cdn.example.com/salon-1/client-app/hero/mobile.jpg",
           heroImageTabletVariantUrl:
@@ -634,6 +758,167 @@ describe("settings actions", () => {
     );
     expect(location).toBe(
       "/dashboard/settings?message=Agenda+online+atualizada+com+sucesso.&tone=success",
+    );
+  });
+
+  it("updates the protected booking policy and bumps the version when needed", async () => {
+    const updateSalon = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateSalonBookingPolicyActionImpl(
+        makeFormData({
+          bookingPolicyEnabled: "on",
+          bookingPolicyTitle: "Reserva protegida",
+          bookingPolicySummary: "Sinal para segurar horarios premium.",
+          bookingPolicyCancellationWindowHours: "12",
+          bookingPolicyConfirmationRequired: "on",
+          bookingPolicyConfirmationLeadMinutes: "25",
+          bookingPolicyAutoCancelUnconfirmed: "on",
+          bookingPolicyAutoCancelLeadMinutes: "10",
+          bookingPolicyAutoCancelPendingDeposit: "on",
+          bookingPolicyRequiresDeposit: "on",
+          bookingPolicyDepositAmount: "40",
+          bookingPolicyDepositReminderLeadHours: "8",
+          bookingPolicyPaymentMode: "pix",
+          bookingPolicyPixKey: "pix@studio.com",
+          bookingPolicyPixRecipientName: "Studio Glow",
+          bookingPolicyPixRecipientCity: "SAO PAULO",
+          bookingPolicyPaymentInstructions:
+            "Envie o Pix e o comprovante pelo WhatsApp.",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        booking_policy_enabled: true,
+        booking_policy_title: "Reserva protegida",
+        booking_policy_summary: "Sinal para segurar horarios premium.",
+        booking_policy_cancellation_window_hours: 12,
+        booking_policy_confirmation_required: true,
+        booking_policy_confirmation_lead_minutes: 25,
+        booking_policy_auto_cancel_unconfirmed: true,
+        booking_policy_auto_cancel_lead_minutes: 10,
+        booking_policy_auto_cancel_pending_deposit: true,
+        booking_policy_requires_deposit: true,
+        booking_policy_deposit_amount: 40,
+        booking_policy_deposit_reminder_lead_hours: 8,
+        booking_policy_payment_mode: "pix",
+        booking_policy_pix_key: "pix@studio.com",
+        booking_policy_pix_recipient_name: "Studio Glow",
+        booking_policy_pix_recipient_city: "SAO PAULO",
+        booking_policy_payment_instructions:
+          "Envie o Pix e o comprovante pelo WhatsApp.",
+      }),
+    );
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
+      expect.arrayContaining(["/dashboard", "/dashboard/settings"]),
+    );
+    expect(location).toBe(
+      "/dashboard/settings?message=Politica+de+reserva+protegida+atualizada+com+sucesso.&tone=success",
+    );
+  });
+
+  it("saves the managed Pix configuration for Asaas and generates a webhook token", async () => {
+    const updateSalon = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    await captureRedirect(
+      updateSalonBookingPolicyActionImpl(
+        makeFormData({
+          bookingPolicyEnabled: "on",
+          bookingPolicyRequiresDeposit: "on",
+          bookingPolicyDepositAmount: "55",
+          bookingPolicyPaymentMode: "asaas_pix",
+          bookingPolicyAsaasEnvironment: "production",
+          bookingPolicyAsaasApiKey: "\$aact_live_12345678901234567890",
+          bookingPolicyPaymentInstructions:
+            "O Pix confirma sozinho assim que o Asaas responder.",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        booking_policy_payment_mode: "asaas_pix",
+        booking_policy_asaas_environment: "production",
+        booking_policy_asaas_api_key: "\$aact_live_12345678901234567890",
+        booking_policy_payment_instructions:
+          "O Pix confirma sozinho assim que o Asaas responder.",
+        booking_policy_asaas_webhook_token:
+          expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+  });
+
+  it("normalizes auto-cancellation flags when confirmation or deposit are disabled", async () => {
+    const updateSalon = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    await captureRedirect(
+      updateSalonBookingPolicyActionImpl(
+        makeFormData({
+          bookingPolicyEnabled: "on",
+          bookingPolicyTitle: "Reserva protegida",
+          bookingPolicyCancellationWindowHours: "12",
+          bookingPolicyAutoCancelUnconfirmed: "on",
+          bookingPolicyAutoCancelLeadMinutes: "10",
+          bookingPolicyAutoCancelPendingDeposit: "on",
+          bookingPolicyDepositReminderLeadHours: "8",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        booking_policy_confirmation_required: false,
+        booking_policy_auto_cancel_unconfirmed: false,
+        booking_policy_requires_deposit: false,
+        booking_policy_auto_cancel_pending_deposit: false,
+      }),
     );
   });
 });

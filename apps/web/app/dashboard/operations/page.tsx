@@ -4,6 +4,7 @@ import {
   registerInventoryMovementAction,
   saveInventoryProductAction,
   saveStaffCommissionSettingsAction,
+  updateCustomerProductOrderStatusAction,
 } from "@/app/actions";
 import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
@@ -68,14 +69,18 @@ type InventoryProductRow = {
   id: string;
   name: string;
   brand: string | null;
+  description: string | null;
+  image_paths: string[];
   sku: string | null;
   unit: string;
   current_stock: number | string;
   minimum_stock: number | string;
   cost_price: number | string | null;
   retail_price: number | string | null;
+  max_purchase_quantity: number;
   is_active: boolean;
   updated_at: string;
+  image_urls?: string[];
 };
 
 type InventoryMovementRow = {
@@ -88,6 +93,35 @@ type InventoryMovementRow = {
   created_at: string;
   inventory_products: { name: string } | { name: string }[] | null;
   staff_members: { name: string } | { name: string }[] | null;
+};
+
+type StoreOrderItemRow = {
+  id: string;
+  product_name_snapshot: string;
+  product_brand_snapshot: string | null;
+  product_image_path: string | null;
+  unit_snapshot: string;
+  quantity: number | string;
+  unit_price_snapshot: number | string;
+  line_total_amount: number | string;
+  image_url?: string | null;
+};
+
+type StoreOrderRow = {
+  id: string;
+  order_number: number;
+  status: "pending" | "confirmed" | "ready" | "completed" | "cancelled";
+  total_items: number;
+  subtotal_amount: number | string;
+  notes: string | null;
+  cancellation_reason: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+  ready_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  customers: { name: string; phone: string | null } | { name: string; phone: string | null }[] | null;
+  customer_product_order_items: StoreOrderItemRow[] | null;
 };
 
 type StaffOption = {
@@ -127,11 +161,65 @@ function formatMovementLabel(value: InventoryMovementRow["movement_type"]) {
   }
 }
 
+function formatStoreOrderStatusLabel(value: StoreOrderRow["status"]) {
+  switch (value) {
+    case "confirmed":
+      return "Confirmado";
+    case "ready":
+      return "Pronto";
+    case "completed":
+      return "Concluído";
+    case "cancelled":
+      return "Cancelado";
+    default:
+      return "Novo";
+  }
+}
+
+function resolveStoreOrderBadgeClass(value: StoreOrderRow["status"]) {
+  switch (value) {
+    case "confirmed":
+      return "badge badge--confirmed";
+    case "ready":
+      return "badge badge--soft";
+    case "completed":
+      return "badge badge--confirmed";
+    case "cancelled":
+      return "badge badge--cancelled";
+    default:
+      return "badge badge--pending";
+  }
+}
+
+function buildInventoryProductImageUrls(
+  supabase: ReturnType<typeof createClient>,
+  imagePaths: string[] | null | undefined,
+) {
+  if (!Array.isArray(imagePaths)) {
+    return [];
+  }
+
+  return imagePaths
+    .filter((path): path is string => typeof path === "string" && path.trim().length > 0)
+    .map((path) => supabase.storage.from("inventory-products").getPublicUrl(path).data.publicUrl);
+}
+
+function buildInventoryProductImageUrl(
+  supabase: ReturnType<typeof createClient>,
+  imagePath: string | null | undefined,
+) {
+  if (!imagePath?.trim()) {
+    return null;
+  }
+
+  return supabase.storage.from("inventory-products").getPublicUrl(imagePath).data.publicUrl;
+}
+
 export default async function OperationsPage({ searchParams }: OperationsPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
-  const [operationsResult, inventoryProductsResult, inventoryMovementsResult, staffOptionsResult] =
+  const [operationsResult, inventoryProductsResult, storeOrdersResult, inventoryMovementsResult, staffOptionsResult] =
     await Promise.all([
       supabase.rpc("get_owner_operations_dashboard", {
         days_input: 7,
@@ -139,10 +227,20 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
       }),
       supabase
         .from("inventory_products")
-        .select("id, name, brand, sku, unit, current_stock, minimum_stock, cost_price, retail_price, is_active, updated_at")
+        .select(
+          "id, name, brand, description, image_paths, sku, unit, current_stock, minimum_stock, cost_price, retail_price, max_purchase_quantity, is_active, updated_at",
+        )
         .eq("salon_id", salon.id)
         .order("is_active", { ascending: false })
         .order("name"),
+      supabase
+        .from("customer_product_orders")
+        .select(
+          "id, order_number, status, total_items, subtotal_amount, notes, cancellation_reason, created_at, confirmed_at, ready_at, completed_at, cancelled_at, customers(name, phone), customer_product_order_items(id, product_name_snapshot, product_brand_snapshot, product_image_path, unit_snapshot, quantity, unit_price_snapshot, line_total_amount)",
+        )
+        .eq("salon_id", salon.id)
+        .order("created_at", { ascending: false })
+        .limit(12),
       supabase
         .from("inventory_movements")
         .select("id, movement_type, quantity, previous_stock, resulting_stock, reason, created_at, inventory_products(name), staff_members(name)")
@@ -171,21 +269,33 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
     top_staff: [],
     staff_agenda: [],
   }) as OperationsDashboardResponse;
-  const inventoryProducts = ((inventoryProductsResult.data ?? []) as InventoryProductRow[]).sort((left, right) => {
-    const leftLow = Number(left.current_stock) <= Number(left.minimum_stock);
-    const rightLow = Number(right.current_stock) <= Number(right.minimum_stock);
+  const inventoryProducts = ((inventoryProductsResult.data ?? []) as InventoryProductRow[])
+    .map((product) => ({
+      ...product,
+      image_urls: buildInventoryProductImageUrls(supabase, product.image_paths),
+    }))
+    .sort((left, right) => {
+      const leftLow = Number(left.current_stock) <= Number(left.minimum_stock);
+      const rightLow = Number(right.current_stock) <= Number(right.minimum_stock);
 
-    if (leftLow != rightLow) {
-      return leftLow ? -1 : 1;
-    }
+      if (leftLow != rightLow) {
+        return leftLow ? -1 : 1;
+      }
 
-    if (left.is_active !== right.is_active) {
-      return left.is_active ? -1 : 1;
-    }
+      if (left.is_active !== right.is_active) {
+        return left.is_active ? -1 : 1;
+      }
 
-    return left.name.localeCompare(right.name);
-  });
+      return left.name.localeCompare(right.name);
+    });
   const inventoryMovements = (inventoryMovementsResult.data ?? []) as InventoryMovementRow[];
+  const storeOrders = ((storeOrdersResult.data ?? []) as StoreOrderRow[]).map((order) => ({
+    ...order,
+    customer_product_order_items: (order.customer_product_order_items ?? []).map((item) => ({
+      ...item,
+      image_url: buildInventoryProductImageUrl(supabase, item.product_image_path),
+    })),
+  }));
   const staffOptions = ((staffOptionsResult.data ?? []) as StaffOption[]).filter((staffMember) => staffMember.is_active);
 
   return (
@@ -339,6 +449,201 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                     </div>
                   </article>
                 ))
+              )}
+            </div>
+          </section>
+
+          <section className="card content-card operations-card">
+            <div className="section-heading">
+              <div>
+                <h2>Pedidos da loja</h2>
+                <p className="muted">
+                  Tudo o que a cliente pediu pelo app aparece aqui com itens, total, status e ação operacional para o salão responder no ritmo certo.
+                </p>
+              </div>
+            </div>
+
+            <div className="row-list" style={{ marginTop: 18 }}>
+              {!storeOrders.length ? (
+                <EmptyStateCard
+                  eyebrow="Sem pedidos ainda"
+                  title="Quando a loja do app começar a vender, os pedidos aparecem aqui"
+                  description="Cada pedido registra itens, baixa estoque automaticamente e deixa o salão avançar status sem sair da operação."
+                />
+              ) : (
+                storeOrders.map((order) => {
+                  const customer = firstRelation(order.customers);
+                  const items = order.customer_product_order_items ?? [];
+                  const firstItem = items[0] ?? null;
+                  const orderMoment =
+                    order.cancelled_at ??
+                    order.completed_at ??
+                    order.ready_at ??
+                    order.confirmed_at ??
+                    order.created_at;
+
+                  return (
+                    <article key={order.id} className="list-row customer-card operations-row operations-record">
+                      <div className="customer-card__content">
+                        <div className="inventory-product-preview">
+                          <div className="inventory-product-preview__media">
+                            {firstItem?.image_url ? (
+                              <img src={firstItem.image_url} alt={firstItem.product_name_snapshot} />
+                            ) : (
+                              <div className="inventory-product-preview__placeholder">
+                                <span>Pedido</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="inventory-product-preview__content">
+                            <div className="customer-card__header">
+                              <div className="list-row__content">
+                                <h3>Pedido #{order.order_number}</h3>
+                                <div className="customer-card__badges">
+                                  <span className={resolveStoreOrderBadgeClass(order.status)}>
+                                    {formatStoreOrderStatusLabel(order.status)}
+                                  </span>
+                                  {customer?.name ? <span className="badge badge--soft">{customer.name}</span> : null}
+                                  <span className="badge badge--soft">{order.total_items} item{order.total_items === 1 ? "" : "s"}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <p className="inventory-product-preview__description">
+                              {items.length === 0
+                                ? "Pedido sem itens visíveis."
+                                : items.map((item) => item.product_name_snapshot).join(" • ")}
+                            </p>
+
+                            <div className="customer-card__metrics">
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Total</span>
+                                <strong>{formatCurrency(Number(order.subtotal_amount ?? 0))}</strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Cliente</span>
+                                <strong>{customer?.phone?.trim() || customer?.name || "Sem contato"}</strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Criado em</span>
+                                <strong>{formatDateTime(order.created_at)}</strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Última virada</span>
+                                <strong>{formatDateTime(orderMoment)}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {order.notes?.trim() ? (
+                          <p className="muted list-description" style={{ marginTop: 14 }}>
+                            Observação da cliente: {order.notes}
+                          </p>
+                        ) : null}
+
+                        {order.cancellation_reason?.trim() ? (
+                          <p className="muted list-description" style={{ marginTop: 10 }}>
+                            Motivo do cancelamento: {order.cancellation_reason}
+                          </p>
+                        ) : null}
+
+                        {!!items.length ? (
+                          <div className="row-list" style={{ marginTop: 16 }}>
+                            {items.map((item) => (
+                              <div key={item.id} className="list-row operations-row">
+                                <div className="inline-actions" style={{ alignItems: "center", gap: 12 }}>
+                                  <div
+                                    style={{
+                                      width: 56,
+                                      height: 56,
+                                      borderRadius: 16,
+                                      overflow: "hidden",
+                                      border: "1px solid var(--border-subtle)",
+                                      background: "var(--surface-muted)",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {item.image_url ? (
+                                      <img
+                                        src={item.image_url}
+                                        alt={item.product_name_snapshot}
+                                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                      />
+                                    ) : null}
+                                  </div>
+                                  <div className="list-row__content">
+                                    <h3>{item.product_name_snapshot}</h3>
+                                    <p className="muted list-description">
+                                      {(item.product_brand_snapshot ?? "Seleção da loja")} • {formatStock(item.quantity, item.unit_snapshot)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <strong>{formatCurrency(Number(item.line_total_amount ?? 0))}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {order.status !== "completed" && order.status !== "cancelled" ? (
+                          <div className="inline-actions" style={{ marginTop: 16, flexWrap: "wrap" }}>
+                            {order.status === "pending" ? (
+                              <form action={updateCustomerProductOrderStatusAction}>
+                                <input type="hidden" name="orderId" value={order.id} />
+                                <input type="hidden" name="status" value="confirmed" />
+                                <button type="submit" className="primary-button">
+                                  Confirmar pedido
+                                </button>
+                              </form>
+                            ) : null}
+                            {(order.status === "pending" || order.status === "confirmed") ? (
+                              <form action={updateCustomerProductOrderStatusAction}>
+                                <input type="hidden" name="orderId" value={order.id} />
+                                <input type="hidden" name="status" value="ready" />
+                                <button type="submit" className="secondary-button">
+                                  Marcar como pronto
+                                </button>
+                              </form>
+                            ) : null}
+                            {order.status === "ready" ? (
+                              <form action={updateCustomerProductOrderStatusAction}>
+                                <input type="hidden" name="orderId" value={order.id} />
+                                <input type="hidden" name="status" value="completed" />
+                                <button type="submit" className="primary-button">
+                                  Concluir entrega
+                                </button>
+                              </form>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {order.status !== "completed" && order.status !== "cancelled" ? (
+                          <form action={updateCustomerProductOrderStatusAction} className="form-grid" style={{ marginTop: 16 }}>
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="status" value="cancelled" />
+                            <div className="split-grid">
+                              <div className="field">
+                                <label htmlFor={`cancel-store-order-${order.id}`}>Cancelar pedido e devolver ao estoque</label>
+                                <input
+                                  id={`cancel-store-order-${order.id}`}
+                                  name="cancellationReason"
+                                  placeholder="Ex.: cliente desistiu, item indisponível, pagamento não seguido"
+                                  required
+                                />
+                              </div>
+                              <div className="inline-actions" style={{ alignItems: "flex-end" }}>
+                                <button type="submit" className="secondary-button">
+                                  Cancelar pedido
+                                </button>
+                              </div>
+                            </div>
+                          </form>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })
               )}
             </div>
           </section>
@@ -505,14 +810,19 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
           <section className="card content-card form-panel operations-card operations-form-panel">
             <div className="section-heading">
               <div>
-                <h2>Controle de estoque</h2>
+                <h2>Loja virtual e estoque</h2>
                 <p className="muted">
-                  Cadastre produtos, defina o mínimo e registre entradas, saídas e ajustes sem planilha paralela.
+                  Cadastre produtos com foto, descrição, limite por pedido e estoque para que o app do cliente funcione como vitrine de compra.
                 </p>
               </div>
             </div>
 
-            <form action={saveInventoryProductAction} className="form-grid" style={{ marginTop: 18 }}>
+            <form
+              action={saveInventoryProductAction}
+              className="form-grid"
+              style={{ marginTop: 18 }}
+              encType="multipart/form-data"
+            >
               <div className="field">
                 <label htmlFor="inventory-name">Produto</label>
                 <input id="inventory-name" name="name" placeholder="Ex.: Shampoo reconstrutor" required />
@@ -528,6 +838,16 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                   <label htmlFor="inventory-sku">SKU interno</label>
                   <input id="inventory-sku" name="sku" placeholder="Ex.: WELLA-001" />
                 </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="inventory-description">Descrição para a loja</label>
+                <textarea
+                  id="inventory-description"
+                  name="description"
+                  rows={4}
+                  placeholder="Explique benefícios, indicação de uso, fragrância, ativo principal e o motivo desse produto entrar na vitrine do salão."
+                />
               </div>
 
               <div className="split-grid">
@@ -554,18 +874,45 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                 </div>
               </div>
 
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="inventory-retail-price">Preço de venda</label>
+                  <input id="inventory-retail-price" name="retailPrice" type="number" min="0" step="0.01" placeholder="0,00" />
+                </div>
+                <div className="field">
+                  <label htmlFor="inventory-max-purchase-quantity">Limite por pedido no app</label>
+                  <input
+                    id="inventory-max-purchase-quantity"
+                    name="maxPurchaseQuantity"
+                    type="number"
+                    min="1"
+                    max="99"
+                    step="1"
+                    defaultValue="6"
+                    required
+                  />
+                </div>
+              </div>
+
               <div className="field">
-                <label htmlFor="inventory-retail-price">Preço de venda</label>
-                <input id="inventory-retail-price" name="retailPrice" type="number" min="0" step="0.01" placeholder="0,00" />
+                <label htmlFor="inventory-product-images">Fotos da vitrine</label>
+                <input
+                  id="inventory-product-images"
+                  name="productImages"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                />
+                <span className="list-meta">Até 6 fotos. A primeira vira capa da loja virtual no app do cliente.</span>
               </div>
 
               <label className="checkbox-field">
                 <input type="checkbox" name="isActive" defaultChecked />
-                Produto ativo no estoque do salão
+                Produto ativo e visível na loja do salão
               </label>
 
               <button type="submit" className="primary-button">
-                Adicionar produto ao estoque
+                Adicionar produto na loja
               </button>
             </form>
           </section>
@@ -575,7 +922,7 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
               <div>
                 <h2>Produtos e alertas</h2>
                 <p className="muted">
-                  Os itens em baixa aparecem primeiro para o dono agir rápido antes de travar o atendimento.
+                  O estoque continua monitorado, mas agora cada item também funciona como vitrine de loja para a cliente no app.
                 </p>
               </div>
             </div>
@@ -590,47 +937,71 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
               ) : (
                 inventoryProducts.map((product) => {
                   const isLowStock = Number(product.current_stock ?? 0) <= Number(product.minimum_stock ?? 0);
+                  const productDescription = product.description?.trim() || "Produto pronto para venda consultiva no app do salão.";
+                  const coverImageUrl = product.image_urls?.[0] ?? null;
+                  const galleryCount = product.image_urls?.length ?? 0;
 
                   return (
                     <article key={product.id} className="list-row customer-card operations-row operations-record">
                       <div className="customer-card__content">
-                        <div className="customer-card__header">
-                          <div className="list-row__content">
-                            <h3>{product.name}</h3>
-                            <div className="customer-card__badges">
-                              <span className={product.is_active ? "badge badge--confirmed" : "badge badge--cancelled"}>
-                                {product.is_active ? "Ativo" : "Pausado"}
-                              </span>
-                              {isLowStock ? <span className="badge badge--pending">Estoque em alerta</span> : null}
-                              {product.brand ? <span className="badge badge--soft">{product.brand}</span> : null}
+                        <div className="inventory-product-preview">
+                          <div className="inventory-product-preview__media">
+                            {coverImageUrl ? (
+                              <img src={coverImageUrl} alt={product.name} />
+                            ) : (
+                              <div className="inventory-product-preview__placeholder">
+                                <span>Loja</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="inventory-product-preview__content">
+                            <div className="customer-card__header">
+                              <div className="list-row__content">
+                                <h3>{product.name}</h3>
+                                <div className="customer-card__badges">
+                                  <span className={product.is_active ? "badge badge--confirmed" : "badge badge--cancelled"}>
+                                    {product.is_active ? "Ativo" : "Pausado"}
+                                  </span>
+                                  {isLowStock ? <span className="badge badge--pending">Estoque em alerta</span> : null}
+                                  {product.brand ? <span className="badge badge--soft">{product.brand}</span> : null}
+                                  <span className="badge badge--soft">
+                                    {galleryCount === 0 ? "Sem fotos" : `${galleryCount} foto${galleryCount === 1 ? "" : "s"}`}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <p className="inventory-product-preview__description">{productDescription}</p>
+
+                            <div className="customer-card__metrics">
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Disponível</span>
+                                <strong>{formatStock(product.current_stock, product.unit)}</strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Mínimo</span>
+                                <strong>{formatStock(product.minimum_stock, product.unit)}</strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Compra por pedido</span>
+                                <strong>Até {product.max_purchase_quantity}</strong>
+                              </div>
+                              <div className="customer-metric-tile">
+                                <span className="customer-detail-item__label">Venda</span>
+                                <strong>
+                                  {product.retail_price == null ? "Sem preço" : formatCurrency(Number(product.retail_price))}
+                                </strong>
+                              </div>
                             </div>
                           </div>
                         </div>
 
-                        <div className="customer-card__metrics">
-                          <div className="customer-metric-tile">
-                            <span className="customer-detail-item__label">Disponível</span>
-                            <strong>{formatStock(product.current_stock, product.unit)}</strong>
-                          </div>
-                          <div className="customer-metric-tile">
-                            <span className="customer-detail-item__label">Mínimo</span>
-                            <strong>{formatStock(product.minimum_stock, product.unit)}</strong>
-                          </div>
-                          <div className="customer-metric-tile">
-                            <span className="customer-detail-item__label">Custo</span>
-                            <strong>
-                              {product.cost_price == null ? "Sem custo" : formatCurrency(Number(product.cost_price))}
-                            </strong>
-                          </div>
-                          <div className="customer-metric-tile">
-                            <span className="customer-detail-item__label">Venda</span>
-                            <strong>
-                              {product.retail_price == null ? "Sem preço" : formatCurrency(Number(product.retail_price))}
-                            </strong>
-                          </div>
-                        </div>
-
-                        <form action={saveInventoryProductAction} className="form-grid">
+                        <form
+                          action={saveInventoryProductAction}
+                          className="form-grid inventory-product-form"
+                          encType="multipart/form-data"
+                        >
                           <input type="hidden" name="productId" value={product.id} />
 
                           <div className="split-grid">
@@ -642,6 +1013,16 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                               <label htmlFor={`product-brand-${product.id}`}>Marca</label>
                               <input id={`product-brand-${product.id}`} name="brand" defaultValue={product.brand ?? ""} />
                             </div>
+                          </div>
+
+                          <div className="field">
+                            <label htmlFor={`product-description-${product.id}`}>Descrição para a loja</label>
+                            <textarea
+                              id={`product-description-${product.id}`}
+                              name="description"
+                              rows={4}
+                              defaultValue={product.description ?? ""}
+                            />
                           </div>
 
                           <div className="split-grid">
@@ -707,14 +1088,42 @@ export default async function OperationsPage({ searchParams }: OperationsPagePro
                             </div>
                           </div>
 
+                          <div className="split-grid">
+                            <div className="field">
+                              <label htmlFor={`product-max-purchase-${product.id}`}>Limite por pedido no app</label>
+                              <input
+                                id={`product-max-purchase-${product.id}`}
+                                name="maxPurchaseQuantity"
+                                type="number"
+                                min="1"
+                                max="99"
+                                step="1"
+                                defaultValue={product.max_purchase_quantity}
+                                required
+                              />
+                            </div>
+
+                            <div className="field">
+                              <label htmlFor={`product-images-${product.id}`}>Atualizar fotos da loja</label>
+                              <input
+                                id={`product-images-${product.id}`}
+                                name="productImages"
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                multiple
+                              />
+                              <span className="list-meta">Ao enviar novas fotos, a galeria atual da loja é substituída.</span>
+                            </div>
+                          </div>
+
                           <label className="checkbox-field">
                             <input type="checkbox" name="isActive" defaultChecked={product.is_active} />
-                            Produto ativo
+                            Produto ativo e visível para a cliente
                           </label>
 
                           <div className="inline-actions">
                             <button type="submit" className="secondary-button">
-                              Salvar produto
+                              Salvar produto da loja
                             </button>
                             <span className="list-meta">Atualizado em {formatDateTime(product.updated_at)}</span>
                           </div>

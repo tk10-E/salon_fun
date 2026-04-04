@@ -49,8 +49,10 @@ export const CATEGORY_NOTIFICATION_TYPES = {
   growth: ["winback_offer", "smart_rebook_prompt"],
   appointment: [
     "appointment_confirmed",
+    "appointment_deposit_required",
     "appointment_reminder_1h",
     "appointment_confirmation_required",
+    "appointment_auto_cancelled_deposit_pending",
     "appointment_auto_cancelled_unconfirmed",
     "appointment_cancelled",
     "appointment_completed",
@@ -205,10 +207,14 @@ export function formatNotificationType(type: string) {
       return "Publicação no feed";
     case "appointment_confirmed":
       return "Agendamento confirmado";
+    case "appointment_deposit_required":
+      return "Sinal da reserva pendente";
     case "appointment_reminder_1h":
       return "Lembrete de 1 hora";
     case "appointment_confirmation_required":
       return "Confirmação de presença solicitada";
+    case "appointment_auto_cancelled_deposit_pending":
+      return "Horario liberado por sinal pendente";
     case "appointment_auto_cancelled_unconfirmed":
       return "Horário liberado por falta de confirmação";
     case "appointment_cancelled":

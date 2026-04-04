@@ -88,7 +88,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Se o e-mail existir no Firebase Auth, voce vai receber o link para redefinir a senha.',
+                      'Se o e-mail existir, voce vai receber o link para redefinir a senha. Depois, ao entrar novamente, o app sincroniza a sessao com o Supabase automaticamente.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 18),

@@ -25,6 +25,7 @@ import {
   badgeClassForLifecycle,
   formatLifecycleLabel,
   formatOfferKind,
+  formatOfferOperationalSummary,
   formatOfferPeriod,
   formatPercent,
   getOfferLifecycle,
@@ -98,7 +99,11 @@ export function CommercialPageIntro({
               <Link
                 key={route.href}
                 href={route.href}
-                className={isActive ? "commercial-nav__link commercial-nav__link--active" : "commercial-nav__link"}
+                className={
+                  isActive
+                    ? "commercial-nav__link commercial-nav__link--active"
+                    : "commercial-nav__link"
+                }
               >
                 {route.label}
               </Link>
@@ -110,8 +115,14 @@ export function CommercialPageIntro({
   );
 }
 
-export function CommercialOverviewPanel({ data }: { data: BenefitsOverviewData }) {
-  const automationActive = data.growthAutomationSettings.is_active || data.growthAutomationSettings.smart_rebook_is_active;
+export function CommercialOverviewPanel({
+  data,
+}: {
+  data: BenefitsOverviewData;
+}) {
+  const automationActive =
+    data.growthAutomationSettings.is_active ||
+    data.growthAutomationSettings.smart_rebook_is_active;
 
   return (
     <>
@@ -119,51 +130,85 @@ export function CommercialOverviewPanel({ data }: { data: BenefitsOverviewData }
         <article className="card metric-card metric-card--warm">
           <span className="eyebrow">Ofertas ativas</span>
           <p className="stat-value">{data.activeOffersCount}</p>
-          <p className="metric-note">Campanhas comerciais disponíveis agora no app do cliente.</p>
+          <p className="metric-note">
+            Campanhas comerciais disponíveis agora no app do cliente.
+          </p>
         </article>
         <article className="card metric-card metric-card--soft">
           <span className="eyebrow">Clientes VIP</span>
-          <p className="stat-value">{data.loyaltyOverview.vip_customers ?? 0}</p>
-          <p className="metric-note">Clientes que já atingiram o nível mais alto do programa.</p>
+          <p className="stat-value">
+            {data.loyaltyOverview.vip_customers ?? 0}
+          </p>
+          <p className="metric-note">
+            Clientes que já atingiram o nível mais alto do programa.
+          </p>
         </article>
         <article className="card metric-card metric-card--accent">
           <span className="eyebrow">Clientes em risco</span>
-          <p className="stat-value">{data.growthAutomationOverview.at_risk_customers ?? 0}</p>
-          <p className="metric-note">Sem próxima agenda e já entrando na zona de esfriamento.</p>
+          <p className="stat-value">
+            {data.growthAutomationOverview.at_risk_customers ?? 0}
+          </p>
+          <p className="metric-note">
+            Sem próxima agenda e já entrando na zona de esfriamento.
+          </p>
         </article>
         <article className="card metric-card metric-card--soft">
           <span className="eyebrow">Indicações validadas</span>
           <p className="stat-value">{data.qualifiedReferralsCount}</p>
-          <p className="metric-note">Clientes que vieram por indicação e já concluíram a primeira visita.</p>
+          <p className="metric-note">
+            Clientes que vieram por indicação e já concluíram a primeira visita.
+          </p>
         </article>
       </section>
 
       <section className="commercial-overview-grid">
         <article className="card content-card commercial-overview-card">
           <div className="inline-actions">
-            <span className="badge badge--pending">{data.activeOffersCount} ativas</span>
-            <span className="badge badge--soft">{data.activeMembershipsCount} planos mensais</span>
+            <span className="badge badge--pending">
+              {data.activeOffersCount} ativas
+            </span>
+            <span className="badge badge--soft">
+              {data.activeMembershipsCount} clubes ou pacotes
+            </span>
           </div>
-          <h3>Promoções e planos</h3>
+          <h3>Clubes, pacotes e promoções</h3>
           <p className="muted">
-            Catálogo separado para publicar campanhas sazonais e planos recorrentes sem misturar com fidelidade ou indicação.
+            Catálogo separado para publicar campanhas sazonais, combos e
+            recorrência sem misturar com fidelidade ou indicação.
           </p>
-          <small className="list-meta">Tudo o que estiver ativo aqui aparece no app do cliente com dados reais.</small>
-          <Link href="/dashboard/benefits/promotions" className="secondary-button">
-            Abrir promoções
+          <small className="list-meta">
+            Tudo o que estiver ativo aqui aparece no app do cliente com dados
+            reais.
+          </small>
+          <Link
+            href="/dashboard/benefits/promotions"
+            className="secondary-button"
+          >
+            Abrir comercial
           </Link>
         </article>
 
         <article className="card content-card commercial-overview-card">
           <div className="inline-actions">
-            <span className={data.loyaltyProgram?.is_active ? "badge badge--confirmed" : "badge badge--soft"}>
-              {data.loyaltyProgram?.is_active ? "Programa ativo" : "Programa pausado"}
+            <span
+              className={
+                data.loyaltyProgram?.is_active
+                  ? "badge badge--confirmed"
+                  : "badge badge--soft"
+              }
+            >
+              {data.loyaltyProgram?.is_active
+                ? "Programa ativo"
+                : "Programa pausado"}
             </span>
-            <span className="badge badge--pending">{data.loyaltyOverview.ranked_customers ?? 0} no ranking</span>
+            <span className="badge badge--pending">
+              {data.loyaltyOverview.ranked_customers ?? 0} no ranking
+            </span>
           </div>
           <h3>Fidelidade e ranking</h3>
           <p className="muted">
-            Pontos por visita, cashback e níveis gamificados como Bronze, Prata e Ouro com leitura clara para o dono do salão.
+            Pontos por visita, cashback e níveis gamificados como Bronze, Prata
+            e Ouro com leitura clara para o dono do salão.
           </p>
           <small className="list-meta">
             {data.loyaltyProgram
@@ -177,38 +222,69 @@ export function CommercialOverviewPanel({ data }: { data: BenefitsOverviewData }
 
         <article className="card content-card commercial-overview-card">
           <div className="inline-actions">
-            <span className={data.referralProgram?.is_active ? "badge badge--confirmed" : "badge badge--soft"}>
-              {data.referralProgram?.is_active ? "Indicação ativa" : "Indicação pausada"}
+            <span
+              className={
+                data.referralProgram?.is_active
+                  ? "badge badge--confirmed"
+                  : "badge badge--soft"
+              }
+            >
+              {data.referralProgram?.is_active
+                ? "Indicação ativa"
+                : "Indicação pausada"}
             </span>
-            <span className="badge badge--pending">{data.pendingReferralsCount} pendentes</span>
+            <span className="badge badge--pending">
+              {data.pendingReferralsCount} pendentes
+            </span>
           </div>
           <h3>Indicações</h3>
           <p className="muted">
-            Regra de indicação em uma tela própria, com relatório de entradas, pendências e validações concluídas.
+            Regra de indicação em uma tela própria, com relatório de entradas,
+            pendências e validações concluídas.
           </p>
           <small className="list-meta">
-            {data.referralProgram?.title ?? "Ative um programa para gerar aquisição orgânica dentro do app."}
+            {data.referralProgram?.title ??
+              "Ative um programa para gerar aquisição orgânica dentro do app."}
           </small>
-          <Link href="/dashboard/benefits/referrals" className="secondary-button">
+          <Link
+            href="/dashboard/benefits/referrals"
+            className="secondary-button"
+          >
             Abrir indicações
           </Link>
         </article>
 
         <article className="card content-card commercial-overview-card">
           <div className="inline-actions">
-            <span className={automationActive ? "badge badge--confirmed" : "badge badge--soft"}>
+            <span
+              className={
+                automationActive
+                  ? "badge badge--confirmed"
+                  : "badge badge--soft"
+              }
+            >
               {automationActive ? "Automação ligada" : "Automação pausada"}
             </span>
-            <span className="badge badge--pending">{data.growthAutomationOverview.recovered_customers_last_30d ?? 0} recuperados</span>
+            <span className="badge badge--pending">
+              {data.growthAutomationOverview.recovered_customers_last_30d ?? 0}{" "}
+              recuperados
+            </span>
           </div>
           <h3>Rebook e recuperação</h3>
           <p className="muted">
-            Rebook inteligente por hábito e winback para clientes perdidos, separados da vitrine comercial e do ranking.
+            Rebook inteligente por hábito e winback para clientes perdidos,
+            separados da vitrine comercial e do ranking.
           </p>
           <small className="list-meta">
-            Winback após {data.growthAutomationSettings.winback_inactive_days} dias e rebook até {data.growthAutomationSettings.smart_rebook_window_days} dias antes da janela ideal.
+            Winback após {data.growthAutomationSettings.winback_inactive_days}{" "}
+            dias e rebook até{" "}
+            {data.growthAutomationSettings.smart_rebook_window_days} dias antes
+            da janela ideal.
           </small>
-          <Link href="/dashboard/benefits/automations" className="secondary-button">
+          <Link
+            href="/dashboard/benefits/automations"
+            className="secondary-button"
+          >
             Abrir automações
           </Link>
         </article>
@@ -217,31 +293,52 @@ export function CommercialOverviewPanel({ data }: { data: BenefitsOverviewData }
   );
 }
 
-export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }) {
+export function PromotionsOverviewSection({
+  data,
+}: {
+  data: PromotionsPageData;
+}) {
+  const showActivationGuide = !data.hasOfferFilters && data.offers.length === 0;
+  const serviceOptions = data.serviceOptions ?? [];
+  const serviceNameById = new Map(
+    serviceOptions.map((service) => [service.id, service.name]),
+  );
+
   return (
     <>
       <section className="stats-grid">
         <article className="card metric-card metric-card--warm">
           <span className="eyebrow">Ofertas ativas</span>
           <p className="stat-value">{data.activeOffersCount}</p>
-          <p className="metric-note">Promoções e planos disponíveis hoje no app do cliente.</p>
+          <p className="metric-note">
+            Promoções, clubes e pacotes disponíveis hoje no app do cliente.
+          </p>
         </article>
         <article className="card metric-card metric-card--soft">
-          <span className="eyebrow">Planos mensais</span>
+          <span className="eyebrow">Clubes e pacotes</span>
           <p className="stat-value">{data.activeMembershipsCount}</p>
-          <p className="metric-note">Planos recorrentes ativos para gerar retorno previsível.</p>
+          <p className="metric-note">
+            Ofertas recorrentes ativas para gerar retorno previsível.
+          </p>
         </article>
       </section>
 
       <section className="card content-card">
         <div className="section-heading">
           <div>
-            <h2>Promoções e planos publicados</h2>
-            <p className="muted">Tudo o que estiver ativo aqui passa a aparecer no app do cliente com dados reais.</p>
+            <h2>Clubes, pacotes e promoções publicados</h2>
+            <p className="muted">
+              Tudo o que estiver ativo aqui passa a aparecer no app do cliente
+              com dados reais.
+            </p>
           </div>
         </div>
 
-        <form method="get" className="services-toolbar" style={{ marginTop: 18 }}>
+        <form
+          method="get"
+          className="services-toolbar"
+          style={{ marginTop: 18 }}
+        >
           <div className="services-toolbar__grid">
             <div className="field">
               <label htmlFor="offer-search">Buscar oferta</label>
@@ -255,10 +352,14 @@ export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }
 
             <div className="field">
               <label htmlFor="offer-kind-filter">Tipo</label>
-              <select id="offer-kind-filter" name="offerKind" defaultValue={data.offerKindFilter}>
+              <select
+                id="offer-kind-filter"
+                name="offerKind"
+                defaultValue={data.offerKindFilter}
+              >
                 <option value="">Todos</option>
                 <option value="promotion">Promoções</option>
-                <option value="membership">Planos mensais</option>
+                <option value="membership">Clubes e pacotes</option>
               </select>
             </div>
           </div>
@@ -266,7 +367,11 @@ export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }
           <div className="services-toolbar__grid">
             <div className="field">
               <label htmlFor="offer-state-filter">Situação</label>
-              <select id="offer-state-filter" name="offerState" defaultValue={data.offerStateFilter}>
+              <select
+                id="offer-state-filter"
+                name="offerState"
+                defaultValue={data.offerStateFilter}
+              >
                 <option value="">Todas</option>
                 <option value="active">Ativas</option>
                 <option value="scheduled">Agendadas</option>
@@ -278,7 +383,10 @@ export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }
             <div className="field">
               <label>Resumo do filtro</label>
               <div className="list-meta" style={{ paddingTop: 16 }}>
-                {data.offers.length} {data.offers.length === 1 ? "oferta encontrada" : "ofertas encontradas"}
+                {data.offers.length}{" "}
+                {data.offers.length === 1
+                  ? "oferta encontrada"
+                  : "ofertas encontradas"}
               </div>
             </div>
           </div>
@@ -288,7 +396,10 @@ export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }
               Filtrar ofertas
             </button>
             {data.hasOfferFilters ? (
-              <Link href="/dashboard/benefits/promotions" className="secondary-button services-toolbar__clear">
+              <Link
+                href="/dashboard/benefits/promotions"
+                className="secondary-button services-toolbar__clear"
+              >
                 Limpar filtros
               </Link>
             ) : null}
@@ -297,166 +408,440 @@ export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }
 
         <div className="row-list" style={{ marginTop: 16 }}>
           {!data.offers.length ? (
-            <EmptyStateCard
-              eyebrow={data.hasOfferFilters ? "Nenhum resultado" : "Sem ofertas ainda"}
-              title={data.hasOfferFilters ? "Nenhuma oferta encontrada nesse filtro" : "Nenhuma promoção ou plano mensal cadastrado"}
-              description={
-                data.hasOfferFilters
-                  ? "Ajuste a busca, o tipo ou a situação para encontrar a campanha certa."
-                  : "Crie a primeira oferta para publicar campanhas sazonais, combos ou planos recorrentes no app."
-              }
-            />
+            <>
+              <EmptyStateCard
+                eyebrow={
+                  data.hasOfferFilters
+                    ? "Nenhum resultado"
+                    : "Sem ofertas ainda"
+                }
+                title={
+                  data.hasOfferFilters
+                    ? "Nenhuma oferta encontrada nesse filtro"
+                    : "Nenhum clube, pacote ou promoção cadastrado"
+                }
+                description={
+                  data.hasOfferFilters
+                    ? "Ajuste a busca, o tipo ou a situação para encontrar a campanha certa."
+                    : "Crie a primeira oferta para publicar campanhas sazonais, combos ou clubes recorrentes no app."
+                }
+              />
+
+              {showActivationGuide ? (
+                <section className="commercial-overview-grid">
+                  <article className="card content-card commercial-overview-card">
+                    <div className="inline-actions">
+                      <span className="badge badge--pending">Comece aqui</span>
+                    </div>
+                    <h3>
+                      Suba a primeira promoção que o cliente entenda em segundos
+                    </h3>
+                    <p className="muted">
+                      Um título claro, uma chamada forte e uma vigência curta já
+                      transformam o app em vitrine comercial com senso de
+                      urgência.
+                    </p>
+                    <small className="list-meta">
+                      No app, a oferta aparece com destaque, período e contexto
+                      de campanha logo na jornada do cliente.
+                    </small>
+                    <a href="#new-offer-panel" className="secondary-button">
+                      Criar promoção agora
+                    </a>
+                  </article>
+
+                  <article className="card content-card commercial-overview-card">
+                    <div className="inline-actions">
+                      <span className="badge badge--soft">
+                        Receita recorrente
+                      </span>
+                    </div>
+                    <h3>
+                      Teste um clube ou pacote antes de abrir cobrança real
+                    </h3>
+                    <p className="muted">
+                      Mesmo com billing em modo teste, já vale publicar um clube
+                      para validar proposta, linguagem comercial e interesse do
+                      salão piloto.
+                    </p>
+                    <small className="list-meta">
+                      Use o mesmo painel para comparar campanha sazonal com
+                      percepção de valor recorrente.
+                    </small>
+                    <a href="#new-offer-panel" className="secondary-button">
+                      Criar clube ou pacote
+                    </a>
+                  </article>
+
+                  <article className="card content-card commercial-overview-card">
+                    <div className="inline-actions">
+                      <span className="badge badge--accent">
+                        Reforço visual
+                      </span>
+                    </div>
+                    <h3>
+                      Publique um post de apoio para dar prova social à campanha
+                    </h3>
+                    <p className="muted">
+                      Quando promoção e feed andam juntos, o cliente enxerga
+                      intenção comercial e repertório visual no mesmo app.
+                    </p>
+                    <small className="list-meta">
+                      Uma boa prática é subir a oferta aqui e, em seguida, criar
+                      um post no feed com resultado real do salão.
+                    </small>
+                    <Link href="/dashboard/feed" className="secondary-button">
+                      Abrir feed do salão
+                    </Link>
+                  </article>
+                </section>
+              ) : null}
+            </>
           ) : (
-            Object.entries(data.groupedOffers).map(([sectionTitle, sectionOffers]) => (
-              <section key={sectionTitle} className="service-category-section">
-                <div className="service-category-header">
-                  <div>
-                    <span className="eyebrow">Catálogo comercial</span>
-                    <h3>{sectionTitle}</h3>
+            Object.entries(data.groupedOffers).map(
+              ([sectionTitle, sectionOffers]) => (
+                <section
+                  key={sectionTitle}
+                  className="service-category-section"
+                >
+                  <div className="service-category-header">
+                    <div>
+                      <span className="eyebrow">Catálogo comercial</span>
+                      <h3>{sectionTitle}</h3>
+                    </div>
+                    <span className="list-meta">
+                      {sectionOffers.length}{" "}
+                      {sectionOffers.length === 1 ? "item" : "itens"}
+                    </span>
                   </div>
-                  <span className="list-meta">
-                    {sectionOffers.length} {sectionOffers.length === 1 ? "item" : "itens"}
-                  </span>
-                </div>
 
-                <div className="row-list">
-                  {sectionOffers.map((offer) => {
-                    const lifecycle = getOfferLifecycle(offer, data.today);
+                  <div className="row-list">
+                    {sectionOffers.map((offer) => {
+                      const lifecycle = getOfferLifecycle(offer, data.today);
 
-                    return (
-                      <article key={offer.id} className="list-row service-editor-card">
-                        <div className="service-editor-grid">
-                          <aside className="service-preview-panel">
-                            <div className="service-preview-placeholder" style={{ minHeight: 160 }}>
-                              <span className="eyebrow">{formatOfferKind(offer.kind)}</span>
-                              <strong>{offer.title}</strong>
-                              <span className="muted">
-                                {offer.highlight_text?.trim() || "Use este destaque para vender o benefício principal da oferta."}
-                              </span>
-                            </div>
+                      return (
+                        <article
+                          key={offer.id}
+                          className="list-row service-editor-card"
+                        >
+                          <div className="service-editor-grid">
+                            <aside className="service-preview-panel">
+                              <div
+                                className="service-preview-placeholder"
+                                style={{ minHeight: 160 }}
+                              >
+                                <span className="eyebrow">
+                                  {formatOfferKind(offer.kind)}
+                                </span>
+                                <strong>{offer.title}</strong>
+                                <span className="muted">
+                                  {offer.highlight_text?.trim() ||
+                                    "Use este destaque para vender o benefício principal da oferta."}
+                                </span>
+                              </div>
 
-                            <div className="service-preview-meta">
-                              <span className="list-meta">Ordem {offer.sort_order}</span>
-                              <h3>{offer.title}</h3>
-                              <small className="list-meta">{formatOfferPeriod(offer)}</small>
-                              <small className="list-meta">
-                                {offer.price != null ? `Valor divulgado: ${formatCurrency(Number(offer.price))}` : "Sem valor fixo"}
-                              </small>
-                              <span className={badgeClassForLifecycle(lifecycle)}>{formatLifecycleLabel(lifecycle)}</span>
-                              <small className="list-meta">{lifecycleHint(offer, lifecycle, data.today)}</small>
-                            </div>
-                          </aside>
+                              <div className="service-preview-meta">
+                                <span className="list-meta">
+                                  Ordem {offer.sort_order}
+                                </span>
+                                <h3>{offer.title}</h3>
+                                <small className="list-meta">
+                                  {formatOfferPeriod(offer)}
+                                </small>
+                                <small className="list-meta">
+                                  {offer.price != null
+                                    ? `Valor divulgado: ${formatCurrency(Number(offer.price))}`
+                                    : "Sem valor fixo"}
+                                </small>
+                                <small className="list-meta">
+                                  {formatOfferOperationalSummary(
+                                    offer,
+                                    offer.membership_service_id
+                                      ? (serviceNameById.get(
+                                          offer.membership_service_id,
+                                        ) ?? null)
+                                      : null,
+                                  )}
+                                </small>
+                                <span
+                                  className={badgeClassForLifecycle(lifecycle)}
+                                >
+                                  {formatLifecycleLabel(lifecycle)}
+                                </span>
+                                <small className="list-meta">
+                                  {lifecycleHint(offer, lifecycle, data.today)}
+                                </small>
+                              </div>
+                            </aside>
 
-                          <div className="list-row__content">
-                            <form action={updateSalonOfferAction} className="form-grid">
-                              <input type="hidden" name="offerId" value={offer.id} />
+                            <div className="list-row__content">
+                              <form
+                                action={updateSalonOfferAction}
+                                className="form-grid"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="offerId"
+                                  value={offer.id}
+                                />
 
-                              <div className="split-grid">
-                                <div className="field">
-                                  <label htmlFor={`offer-kind-${offer.id}`}>Tipo</label>
-                                  <select id={`offer-kind-${offer.id}`} name="kind" defaultValue={offer.kind}>
-                                    <option value="promotion">Promoção</option>
-                                    <option value="membership">Plano mensal</option>
-                                  </select>
+                                <div className="split-grid">
+                                  <div className="field">
+                                    <label htmlFor={`offer-kind-${offer.id}`}>
+                                      Tipo
+                                    </label>
+                                    <select
+                                      id={`offer-kind-${offer.id}`}
+                                      name="kind"
+                                      defaultValue={offer.kind}
+                                    >
+                                      <option value="promotion">
+                                        Promoção
+                                      </option>
+                                      <option value="membership">
+                                        Clube / pacote
+                                      </option>
+                                    </select>
+                                  </div>
+
+                                  <div className="field">
+                                    <label htmlFor={`offer-order-${offer.id}`}>
+                                      Ordem de exibição
+                                    </label>
+                                    <input
+                                      id={`offer-order-${offer.id}`}
+                                      name="sortOrder"
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      defaultValue={offer.sort_order}
+                                      required
+                                    />
+                                  </div>
                                 </div>
 
                                 <div className="field">
-                                  <label htmlFor={`offer-order-${offer.id}`}>Ordem de exibição</label>
+                                  <label htmlFor={`offer-title-${offer.id}`}>
+                                    Título
+                                  </label>
                                   <input
-                                    id={`offer-order-${offer.id}`}
-                                    name="sortOrder"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    defaultValue={offer.sort_order}
+                                    id={`offer-title-${offer.id}`}
+                                    name="title"
+                                    defaultValue={offer.title}
                                     required
                                   />
                                 </div>
-                              </div>
 
-                              <div className="field">
-                                <label htmlFor={`offer-title-${offer.id}`}>Título</label>
-                                <input id={`offer-title-${offer.id}`} name="title" defaultValue={offer.title} required />
-                              </div>
-
-                              <div className="field">
-                                <label htmlFor={`offer-highlight-${offer.id}`}>Chamada principal</label>
-                                <input
-                                  id={`offer-highlight-${offer.id}`}
-                                  name="highlightText"
-                                  defaultValue={offer.highlight_text ?? ""}
-                                  placeholder="Ex.: 2 cortes por mês com valor especial"
-                                />
-                              </div>
-
-                              <div className="field">
-                                <label htmlFor={`offer-description-${offer.id}`}>Descrição</label>
-                                <textarea
-                                  id={`offer-description-${offer.id}`}
-                                  name="description"
-                                  rows={4}
-                                  defaultValue={offer.description ?? ""}
-                                />
-                              </div>
-
-                              <div className="split-grid">
                                 <div className="field">
-                                  <label htmlFor={`offer-price-${offer.id}`}>Valor divulgado</label>
+                                  <label
+                                    htmlFor={`offer-highlight-${offer.id}`}
+                                  >
+                                    Chamada principal
+                                  </label>
                                   <input
-                                    id={`offer-price-${offer.id}`}
-                                    name="price"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    defaultValue={offer.price == null ? "" : Number(offer.price)}
-                                    placeholder="79.90"
+                                    id={`offer-highlight-${offer.id}`}
+                                    name="highlightText"
+                                    defaultValue={offer.highlight_text ?? ""}
+                                    placeholder="Ex.: 2 cortes por mês com valor especial"
                                   />
                                 </div>
 
                                 <div className="field">
-                                  <label htmlFor={`offer-active-${offer.id}`}>Status</label>
-                                  <label className="checkbox-field" style={{ marginTop: 10 }}>
-                                    <input id={`offer-active-${offer.id}`} type="checkbox" name="isActive" defaultChecked={offer.is_active} />
-                                    Publicar essa oferta no app do cliente
+                                  <label
+                                    htmlFor={`offer-description-${offer.id}`}
+                                  >
+                                    Descrição
                                   </label>
+                                  <textarea
+                                    id={`offer-description-${offer.id}`}
+                                    name="description"
+                                    rows={4}
+                                    defaultValue={offer.description ?? ""}
+                                  />
                                 </div>
-                              </div>
 
-                              <div className="split-grid">
-                                <div className="field">
-                                  <label htmlFor={`offer-start-${offer.id}`}>Válida a partir de</label>
-                                  <input id={`offer-start-${offer.id}`} name="startsOn" type="date" defaultValue={offer.starts_on ?? ""} />
+                                <div className="split-grid">
+                                  <div className="field">
+                                    <label htmlFor={`offer-price-${offer.id}`}>
+                                      Valor divulgado
+                                    </label>
+                                    <input
+                                      id={`offer-price-${offer.id}`}
+                                      name="price"
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      defaultValue={
+                                        offer.price == null
+                                          ? ""
+                                          : Number(offer.price)
+                                      }
+                                      placeholder="79.90"
+                                    />
+                                  </div>
+
+                                  <div className="field">
+                                    <label htmlFor={`offer-active-${offer.id}`}>
+                                      Status
+                                    </label>
+                                    <label
+                                      className="checkbox-field"
+                                      style={{ marginTop: 10 }}
+                                    >
+                                      <input
+                                        id={`offer-active-${offer.id}`}
+                                        type="checkbox"
+                                        name="isActive"
+                                        defaultChecked={offer.is_active}
+                                      />
+                                      Publicar essa oferta no app do cliente
+                                    </label>
+                                  </div>
                                 </div>
 
-                                <div className="field">
-                                  <label htmlFor={`offer-end-${offer.id}`}>Válida até</label>
-                                  <input id={`offer-end-${offer.id}`} name="endsOn" type="date" defaultValue={offer.ends_on ?? ""} />
+                                <div className="customer-card__section">
+                                  <div className="customer-card__section-heading">
+                                    <span className="eyebrow">
+                                      Pacote operacional
+                                    </span>
+                                    <small className="list-meta">
+                                      Preencha estes campos quando o item
+                                      precisar virar saldo real no cliente.
+                                      Promoções simples podem ficar em branco.
+                                    </small>
+                                  </div>
+
+                                  <div className="split-grid">
+                                    <div className="field">
+                                      <label
+                                        htmlFor={`offer-membership-service-${offer.id}`}
+                                      >
+                                        Serviço vinculado
+                                      </label>
+                                      <select
+                                        id={`offer-membership-service-${offer.id}`}
+                                        name="membershipServiceId"
+                                        defaultValue={
+                                          offer.membership_service_id ?? ""
+                                        }
+                                      >
+                                        <option value="">
+                                          Só vitrine comercial
+                                        </option>
+                                        {serviceOptions.map((service) => (
+                                          <option
+                                            key={service.id}
+                                            value={service.id}
+                                          >
+                                            {service.category
+                                              ? `${service.category} • ${service.name}`
+                                              : service.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    <div className="field">
+                                      <label
+                                        htmlFor={`offer-membership-sessions-${offer.id}`}
+                                      >
+                                        Sessões incluídas
+                                      </label>
+                                      <input
+                                        id={`offer-membership-sessions-${offer.id}`}
+                                        name="membershipSessionsIncluded"
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        defaultValue={
+                                          offer.membership_sessions_included ??
+                                          ""
+                                        }
+                                        placeholder="4"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="field">
+                                    <label
+                                      htmlFor={`offer-membership-validity-${offer.id}`}
+                                    >
+                                      Validade em dias
+                                    </label>
+                                    <input
+                                      id={`offer-membership-validity-${offer.id}`}
+                                      name="membershipValidityDays"
+                                      type="number"
+                                      min="1"
+                                      step="1"
+                                      defaultValue={
+                                        offer.membership_validity_days ?? ""
+                                      }
+                                      placeholder="30"
+                                    />
+                                  </div>
                                 </div>
-                              </div>
 
-                              <div className="inline-actions">
-                                <button type="submit" className="secondary-button">
-                                  Salvar oferta
-                                </button>
-                              </div>
-                            </form>
+                                <div className="split-grid">
+                                  <div className="field">
+                                    <label htmlFor={`offer-start-${offer.id}`}>
+                                      Válida a partir de
+                                    </label>
+                                    <input
+                                      id={`offer-start-${offer.id}`}
+                                      name="startsOn"
+                                      type="date"
+                                      defaultValue={offer.starts_on ?? ""}
+                                    />
+                                  </div>
 
-                            <div className="service-editor-footer">
-                              <form action={deleteSalonOfferAction}>
-                                <input type="hidden" name="offerId" value={offer.id} />
-                                <button type="submit" className="danger-button">
-                                  Remover oferta
-                                </button>
+                                  <div className="field">
+                                    <label htmlFor={`offer-end-${offer.id}`}>
+                                      Válida até
+                                    </label>
+                                    <input
+                                      id={`offer-end-${offer.id}`}
+                                      name="endsOn"
+                                      type="date"
+                                      defaultValue={offer.ends_on ?? ""}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="inline-actions">
+                                  <button
+                                    type="submit"
+                                    className="secondary-button"
+                                  >
+                                    Salvar oferta
+                                  </button>
+                                </div>
                               </form>
+
+                              <div className="service-editor-footer">
+                                <form action={deleteSalonOfferAction}>
+                                  <input
+                                    type="hidden"
+                                    name="offerId"
+                                    value={offer.id}
+                                  />
+                                  <button
+                                    type="submit"
+                                    className="danger-button"
+                                  >
+                                    Remover oferta
+                                  </button>
+                                </form>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            ))
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              ),
+            )
           )}
         </div>
       </section>
@@ -464,40 +849,68 @@ export function PromotionsOverviewSection({ data }: { data: PromotionsPageData }
   );
 }
 
-export function NewOfferPanel() {
+export function NewOfferPanel({
+  serviceOptions = [],
+}: {
+  serviceOptions?: PromotionsPageData["serviceOptions"];
+}) {
   return (
-    <section className="card content-card form-panel">
+    <section id="new-offer-panel" className="card content-card form-panel">
       <div className="section-heading">
         <div>
-          <h2>Nova promoção ou plano</h2>
-          <p className="muted">Publique campanhas sazonais ou um plano mensal recorrente para aparecer no app do cliente.</p>
+          <h2>Novo clube, pacote ou promoção</h2>
+          <p className="muted">
+            Publique campanhas sazonais, combos ou recorrência para aparecer no
+            app do cliente.
+          </p>
         </div>
       </div>
 
-      <form action={createSalonOfferAction} className="form-grid" style={{ marginTop: 18 }}>
+      <form
+        action={createSalonOfferAction}
+        className="form-grid"
+        style={{ marginTop: 18 }}
+      >
         <div className="split-grid">
           <div className="field">
             <label htmlFor="offer-kind">Tipo</label>
             <select id="offer-kind" name="kind" defaultValue="promotion">
               <option value="promotion">Promoção</option>
-              <option value="membership">Plano mensal</option>
+              <option value="membership">Clube / pacote</option>
             </select>
           </div>
 
           <div className="field">
             <label htmlFor="offer-order">Ordem de exibição</label>
-            <input id="offer-order" name="sortOrder" type="number" min="0" step="1" defaultValue="0" required />
+            <input
+              id="offer-order"
+              name="sortOrder"
+              type="number"
+              min="0"
+              step="1"
+              defaultValue="0"
+              required
+            />
           </div>
         </div>
 
         <div className="field">
           <label htmlFor="offer-title">Título</label>
-          <input id="offer-title" name="title" placeholder="Ex.: Plano mensal de corte e barba" required />
+          <input
+            id="offer-title"
+            name="title"
+            placeholder="Ex.: Clube mensal de corte e barba"
+            required
+          />
         </div>
 
         <div className="field">
           <label htmlFor="offer-highlight">Chamada principal</label>
-          <input id="offer-highlight" name="highlightText" placeholder="Ex.: 2 atendimentos por mês com valor fixo" />
+          <input
+            id="offer-highlight"
+            name="highlightText"
+            placeholder="Ex.: 2 atendimentos por mês com valor fixo"
+          />
         </div>
 
         <div className="field">
@@ -513,7 +926,14 @@ export function NewOfferPanel() {
         <div className="split-grid">
           <div className="field">
             <label htmlFor="offer-price">Valor divulgado</label>
-            <input id="offer-price" name="price" type="number" min="0" step="0.01" placeholder="79.90" />
+            <input
+              id="offer-price"
+              name="price"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="79.90"
+            />
           </div>
 
           <div className="field">
@@ -522,6 +942,64 @@ export function NewOfferPanel() {
               <input type="checkbox" name="isActive" defaultChecked />
               Publicar no app assim que salvar
             </label>
+          </div>
+        </div>
+
+        <div className="customer-card__section">
+          <div className="customer-card__section-heading">
+            <span className="eyebrow">Pacote operacional</span>
+            <small className="list-meta">
+              Só preencha quando o clube ou pacote precisar controlar saldo,
+              validade e consumo automático no atendimento.
+            </small>
+          </div>
+
+          <div className="split-grid">
+            <div className="field">
+              <label htmlFor="offer-membership-service">
+                Serviço vinculado
+              </label>
+              <select
+                id="offer-membership-service"
+                name="membershipServiceId"
+                defaultValue=""
+              >
+                <option value="">Só vitrine comercial</option>
+                {serviceOptions.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.category
+                      ? `${service.category} • ${service.name}`
+                      : service.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="offer-membership-sessions">
+                Sessões incluídas
+              </label>
+              <input
+                id="offer-membership-sessions"
+                name="membershipSessionsIncluded"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="4"
+              />
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="offer-membership-validity">Validade em dias</label>
+            <input
+              id="offer-membership-validity"
+              name="membershipValidityDays"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="30"
+            />
           </div>
         </div>
 
@@ -545,7 +1023,11 @@ export function NewOfferPanel() {
   );
 }
 
-export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) {
+export function ReferralsOverviewSection({
+  data,
+}: {
+  data: ReferralsPageData;
+}) {
   const referralGoal = data.referralProgram?.required_qualified_referrals ?? 10;
   const rewardLabel =
     data.referralProgram?.reward_service_name ??
@@ -559,28 +1041,49 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
           <div>
             <h2>Relatório de indicações</h2>
             <p className="muted">
-              Só conta quando a pessoa baixa o app, entra com o código, agenda e o salão conclui o primeiro atendimento.
+              Só conta quando a pessoa baixa o app, entra com o código, agenda e
+              o salão conclui o primeiro atendimento.
             </p>
           </div>
         </div>
 
-        <form method="get" className="services-toolbar" style={{ marginTop: 18 }}>
+        <form
+          method="get"
+          className="services-toolbar"
+          style={{ marginTop: 18 }}
+        >
           <div className="services-toolbar__grid">
             <div className="field">
-              <label htmlFor="referral-from">Entrada pelo app a partir de</label>
-              <input id="referral-from" name="referralFrom" type="date" defaultValue={data.referralFrom} />
+              <label htmlFor="referral-from">
+                Entrada pelo app a partir de
+              </label>
+              <input
+                id="referral-from"
+                name="referralFrom"
+                type="date"
+                defaultValue={data.referralFrom}
+              />
             </div>
 
             <div className="field">
               <label htmlFor="referral-to">Entrada pelo app até</label>
-              <input id="referral-to" name="referralTo" type="date" defaultValue={data.referralTo} />
+              <input
+                id="referral-to"
+                name="referralTo"
+                type="date"
+                defaultValue={data.referralTo}
+              />
             </div>
           </div>
 
           <div className="services-toolbar__grid">
             <div className="field">
               <label htmlFor="referral-status-filter">Status na lista</label>
-              <select id="referral-status-filter" name="referralStatus" defaultValue={data.referralStatusFilter}>
+              <select
+                id="referral-status-filter"
+                name="referralStatus"
+                defaultValue={data.referralStatusFilter}
+              >
                 <option value="">Todos</option>
                 <option value="pending">Pendentes</option>
                 <option value="qualified">Validadas</option>
@@ -590,7 +1093,10 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
             <div className="field">
               <label>Resumo do período</label>
               <div className="list-meta" style={{ paddingTop: 16 }}>
-                {data.referralEvents.length} {data.referralEvents.length === 1 ? "registro encontrado" : "registros encontrados"}
+                {data.referralEvents.length}{" "}
+                {data.referralEvents.length === 1
+                  ? "registro encontrado"
+                  : "registros encontrados"}
               </div>
             </div>
           </div>
@@ -600,7 +1106,10 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
               Filtrar relatório
             </button>
             {data.hasReferralFilters ? (
-              <Link href="/dashboard/benefits/referrals" className="secondary-button services-toolbar__clear">
+              <Link
+                href="/dashboard/benefits/referrals"
+                className="secondary-button services-toolbar__clear"
+              >
                 Limpar filtros
               </Link>
             ) : null}
@@ -611,24 +1120,32 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
           <article className="card metric-card metric-card--soft">
             <span className="eyebrow">Entradas no período</span>
             <p className="stat-value">{data.referralEventsBaseCount}</p>
-            <p className="metric-note">Pessoas que baixaram o app e entraram com indicação dentro do recorte.</p>
+            <p className="metric-note">
+              Pessoas que baixaram o app e entraram com indicação dentro do
+              recorte.
+            </p>
           </article>
           <article className="card metric-card metric-card--warm">
             <span className="eyebrow">Pendentes no período</span>
             <p className="stat-value">{data.pendingCountInPeriod}</p>
-            <p className="metric-note">Já entraram no app, mas ainda dependem da visita concluída no salão.</p>
+            <p className="metric-note">
+              Já entraram no app, mas ainda dependem da visita concluída no
+              salão.
+            </p>
           </article>
           <article className="card metric-card metric-card--accent">
             <span className="eyebrow">Validadas no período</span>
             <p className="stat-value">{data.periodQualifiedCount}</p>
-            <p className="metric-note">Concluídas e marcadas como atendidas dentro do recorte informado.</p>
+            <p className="metric-note">
+              Concluídas e marcadas como atendidas dentro do recorte informado.
+            </p>
           </article>
           <article className="card metric-card metric-card--soft">
             <span className="eyebrow">Recompensas liberadas</span>
             <p className="stat-value">{data.rewardUnlocksCount}</p>
             <p className="metric-note">
-              {data.availableRewardUnlocksCount} disponíveis agora. Regra atual: {referralGoal} validadas liberam 1{" "}
-              {rewardLabel}.
+              {data.availableRewardUnlocksCount} disponíveis agora. Regra atual:{" "}
+              {referralGoal} validadas liberam 1 {rewardLabel}.
             </p>
           </article>
         </div>
@@ -636,8 +1153,14 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
         <div className="row-list" style={{ marginTop: 16 }}>
           {!data.referralEvents.length ? (
             <EmptyStateCard
-              eyebrow={data.hasReferralFilters ? "Nenhum resultado" : "Sem indicações"}
-              title={data.hasReferralFilters ? "Nenhuma indicação encontrada nesse período" : "Nenhuma indicação registrada ainda"}
+              eyebrow={
+                data.hasReferralFilters ? "Nenhum resultado" : "Sem indicações"
+              }
+              title={
+                data.hasReferralFilters
+                  ? "Nenhuma indicação encontrada nesse período"
+                  : "Nenhuma indicação registrada ainda"
+              }
               description={
                 data.hasReferralFilters
                   ? "Ajuste as datas ou o status para localizar as indicações do recorte desejado."
@@ -649,47 +1172,68 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
               <article key={event.id} className="list-row referral-event-card">
                 <div className="list-row__content">
                   <div className="inline-actions" style={{ marginBottom: 4 }}>
-                    <span className="badge badge--soft">Indicação registrada</span>
+                    <span className="badge badge--soft">
+                      Indicação registrada
+                    </span>
                   </div>
                   <h3>{event.invited_name}</h3>
                   <p className="muted list-description">
-                    Registro completo da indicação, com origem, código usado e data de validação.
+                    Registro completo da indicação, com origem, código usado e
+                    data de validação.
                   </p>
 
                   <div className="referral-event-grid">
                     <div className="referral-event-item">
-                      <span className="referral-event-item__label">Cliente que indicou</span>
+                      <span className="referral-event-item__label">
+                        Cliente que indicou
+                      </span>
                       <strong>{event.referrer_name}</strong>
                     </div>
 
                     <div className="referral-event-item">
-                      <span className="referral-event-item__label">Cliente indicado</span>
+                      <span className="referral-event-item__label">
+                        Cliente indicado
+                      </span>
                       <strong>{event.invited_name}</strong>
                     </div>
 
                     <div className="referral-event-item">
-                      <span className="referral-event-item__label">Código usado</span>
+                      <span className="referral-event-item__label">
+                        Código usado
+                      </span>
                       <strong>{event.used_referral_code}</strong>
                     </div>
 
                     <div className="referral-event-item">
-                      <span className="referral-event-item__label">Entrou pelo app em</span>
+                      <span className="referral-event-item__label">
+                        Entrou pelo app em
+                      </span>
                       <strong>{formatDate(event.created_at)}</strong>
                     </div>
 
                     <div className="referral-event-item">
                       <span className="referral-event-item__label">Status</span>
-                      <strong>{event.status === "qualified" ? "Validada" : "Pendente"}</strong>
+                      <strong>
+                        {event.status === "qualified" ? "Validada" : "Pendente"}
+                      </strong>
                     </div>
 
                     <div className="referral-event-item">
-                      <span className="referral-event-item__label">Data da validação</span>
-                      <strong>{event.qualified_at ? formatDate(event.qualified_at) : "Ainda não validada"}</strong>
+                      <span className="referral-event-item__label">
+                        Data da validação
+                      </span>
+                      <strong>
+                        {event.qualified_at
+                          ? formatDate(event.qualified_at)
+                          : "Ainda não validada"}
+                      </strong>
                     </div>
                   </div>
                 </div>
                 <div className="list-row__aside">
-                  <span className={`badge ${event.status === "qualified" ? "badge--confirmed" : "badge--pending"}`}>
+                  <span
+                    className={`badge ${event.status === "qualified" ? "badge--confirmed" : "badge--pending"}`}
+                  >
                     {event.status === "qualified" ? "validada" : "pendente"}
                   </span>
                 </div>
@@ -704,7 +1248,8 @@ export function ReferralsOverviewSection({ data }: { data: ReferralsPageData }) 
 
 export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
   const selectedRewardServiceName = data.referralProgram?.reward_service_name;
-  const requiredQualifiedReferrals = data.referralProgram?.required_qualified_referrals ?? 10;
+  const requiredQualifiedReferrals =
+    data.referralProgram?.required_qualified_referrals ?? 10;
 
   return (
     <section className="card content-card form-panel">
@@ -712,7 +1257,8 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
         <div>
           <h2>Programa de indicação</h2>
           <p className="muted">
-            Configure uma regra auditável para o cliente não perder a recompensa e o salão saber exatamente quando ela foi liberada.
+            Configure uma regra auditável para o cliente não perder a recompensa
+            e o salão saber exatamente quando ela foi liberada.
           </p>
         </div>
       </div>
@@ -721,8 +1267,16 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
         <div className="list-row" style={{ marginTop: 18 }}>
           <div className="list-row__content">
             <div className="inline-actions" style={{ marginBottom: 8 }}>
-              <span className={data.referralProgram.is_active ? "badge badge--confirmed" : "badge badge--soft"}>
-                {data.referralProgram.is_active ? "Ativo no app do cliente" : "Salvo, mas inativo"}
+              <span
+                className={
+                  data.referralProgram.is_active
+                    ? "badge badge--confirmed"
+                    : "badge badge--soft"
+                }
+              >
+                {data.referralProgram.is_active
+                  ? "Ativo no app do cliente"
+                  : "Salvo, mas inativo"}
               </span>
             </div>
             <h3>{data.referralProgram.title}</h3>
@@ -732,22 +1286,40 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
                 : "O cliente verá esse programa na home do app com código próprio e acompanhamento das indicações."}
             </p>
             <small className="list-meta">
-              Regra atual: {requiredQualifiedReferrals} indicações validadas liberam 1{" "}
-              {selectedRewardServiceName ?? data.referralProgram.reward_for_referrer}.
+              Regra atual: {requiredQualifiedReferrals} indicações validadas
+              liberam 1{" "}
+              {selectedRewardServiceName ??
+                data.referralProgram.reward_for_referrer}
+              .
             </small>
-            <small className="list-meta">Descrição da recompensa: {data.referralProgram.reward_for_referrer}</small>
+            <small className="list-meta">
+              Descrição da recompensa:{" "}
+              {data.referralProgram.reward_for_referrer}
+            </small>
             {selectedRewardServiceName ? (
-              <small className="list-meta">Serviço vinculado: {selectedRewardServiceName}</small>
+              <small className="list-meta">
+                Serviço vinculado: {selectedRewardServiceName}
+              </small>
             ) : null}
             {data.referralProgram.reward_for_invited ? (
-              <small className="list-meta">Benefício para quem entra: {data.referralProgram.reward_for_invited}</small>
+              <small className="list-meta">
+                Benefício para quem entra:{" "}
+                {data.referralProgram.reward_for_invited}
+              </small>
             ) : null}
-            <small className="list-meta">Última atualização em {formatDateTime(data.referralProgram.updated_at)}</small>
+            <small className="list-meta">
+              Última atualização em{" "}
+              {formatDateTime(data.referralProgram.updated_at)}
+            </small>
           </div>
         </div>
       ) : null}
 
-      <form action={saveSalonReferralProgramAction} className="form-grid" style={{ marginTop: 18 }}>
+      <form
+        action={saveSalonReferralProgramAction}
+        className="form-grid"
+        style={{ marginTop: 18 }}
+      >
         <div className="field">
           <label htmlFor="referral-title">Título</label>
           <input
@@ -771,7 +1343,9 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
         </div>
 
         <div className="field">
-          <label htmlFor="reward-for-referrer">Benefício para quem indicou</label>
+          <label htmlFor="reward-for-referrer">
+            Benefício para quem indicou
+          </label>
           <input
             id="reward-for-referrer"
             name="rewardForReferrer"
@@ -783,7 +1357,9 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
 
         <div className="split-grid">
           <div className="field">
-            <label htmlFor="required-qualified-referrals">Indicações validadas para liberar a recompensa</label>
+            <label htmlFor="required-qualified-referrals">
+              Indicações validadas para liberar a recompensa
+            </label>
             <input
               id="required-qualified-referrals"
               name="requiredQualifiedReferrals"
@@ -798,11 +1374,17 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
 
           <div className="field">
             <label htmlFor="reward-service-id">Serviço da recompensa</label>
-            <select id="reward-service-id" name="rewardServiceId" defaultValue={data.referralProgram?.reward_service_id ?? ""}>
+            <select
+              id="reward-service-id"
+              name="rewardServiceId"
+              defaultValue={data.referralProgram?.reward_service_id ?? ""}
+            >
               <option value="">Usar apenas texto livre</option>
               {data.serviceOptions.map((service) => (
                 <option key={service.id} value={service.id}>
-                  {service.category ? `${service.category} • ${service.name}` : service.name}
+                  {service.category
+                    ? `${service.category} • ${service.name}`
+                    : service.name}
                 </option>
               ))}
             </select>
@@ -820,14 +1402,20 @@ export function ReferralProgramPanel({ data }: { data: ReferralsPageData }) {
         </div>
 
         <label className="checkbox-field">
-          <input type="checkbox" name="isActive" defaultChecked={data.referralProgram?.is_active ?? false} />
+          <input
+            type="checkbox"
+            name="isActive"
+            defaultChecked={data.referralProgram?.is_active ?? false}
+          />
           Ativar indicação no app do cliente
         </label>
 
         <small className="muted">
-          Quando ativo, cada cliente recebe um código próprio. A indicação só fica válida depois de baixar o app,
-          vincular ao salão, agendar e ter o atendimento marcado como concluído. A recompensa do cliente só é liberada
-          quando a meta configurada acima é atingida, e o sistema registra isso para o salão não perder controle.
+          Quando ativo, cada cliente recebe um código próprio. A indicação só
+          fica válida depois de baixar o app, vincular ao salão, agendar e ter o
+          atendimento marcado como concluído. A recompensa do cliente só é
+          liberada quando a meta configurada acima é atingida, e o sistema
+          registra isso para o salão não perder controle.
         </small>
 
         <button type="submit" className="primary-button">
@@ -844,7 +1432,10 @@ export function LoyaltyOverviewSection({ data }: { data: LoyaltyPageData }) {
       <div className="section-heading">
         <div>
           <h2>Clube de fidelidade e ranking</h2>
-          <p className="muted">Pontos por visita, cashback, ranking e escada gamificada de níveis atualizados a cada atendimento concluído.</p>
+          <p className="muted">
+            Pontos por visita, cashback, ranking e escada gamificada de níveis
+            atualizados a cada atendimento concluído.
+          </p>
         </div>
       </div>
 
@@ -853,8 +1444,16 @@ export function LoyaltyOverviewSection({ data }: { data: LoyaltyPageData }) {
           <div className="list-row" style={{ marginTop: 18 }}>
             <div className="list-row__content">
               <div className="inline-actions" style={{ marginBottom: 8 }}>
-                <span className={data.loyaltyProgram.is_active ? "badge badge--confirmed" : "badge badge--soft"}>
-                  {data.loyaltyProgram.is_active ? "Ativo no app do cliente" : "Salvo, mas inativo"}
+                <span
+                  className={
+                    data.loyaltyProgram.is_active
+                      ? "badge badge--confirmed"
+                      : "badge badge--soft"
+                  }
+                >
+                  {data.loyaltyProgram.is_active
+                    ? "Ativo no app do cliente"
+                    : "Salvo, mas inativo"}
                 </span>
               </div>
               <h3>{data.loyaltyProgram.title}</h3>
@@ -864,37 +1463,64 @@ export function LoyaltyOverviewSection({ data }: { data: LoyaltyPageData }) {
                   : "O cliente vê no app a pontuação acumulada, o cashback, o ranking dentro do salão e o próximo nível a ser desbloqueado."}
               </p>
               <small className="list-meta">
-                Cada visita concluída soma {data.loyaltyProgram.points_per_visit} pontos e {formatPercent(data.loyaltyProgram.cashback_percent)} de cashback.
+                Cada visita concluída soma{" "}
+                {data.loyaltyProgram.points_per_visit} pontos e{" "}
+                {formatPercent(data.loyaltyProgram.cashback_percent)} de
+                cashback.
               </small>
-          <small className="list-meta">
-            O nível máximo é {data.loyaltyProgram.vip_tier_name} com {formatPercent(data.loyaltyProgram.vip_discount_percent)} de desconto progressivo.
-          </small>
-          <small className="list-meta">
-            A leitura no app fica no formato de progressão: quanto falta para subir, quanto já acumulou e qual vantagem o próximo nível libera.
-          </small>
+              <small className="list-meta">
+                O nível máximo é {data.loyaltyProgram.vip_tier_name} com{" "}
+                {formatPercent(data.loyaltyProgram.vip_discount_percent)} de
+                desconto progressivo.
+              </small>
+              <small className="list-meta">
+                A leitura no app fica no formato de progressão: quanto falta
+                para subir, quanto já acumulou e qual vantagem o próximo nível
+                libera.
+              </small>
             </div>
           </div>
 
           <div className="stats-grid" style={{ marginTop: 16 }}>
             <article className="card metric-card metric-card--soft">
               <span className="eyebrow">Clientes ranqueados</span>
-              <p className="stat-value">{data.loyaltyOverview.ranked_customers ?? 0}</p>
-              <p className="metric-note">Clientes que já pontuaram e aparecem no ranking do salão.</p>
+              <p className="stat-value">
+                {data.loyaltyOverview.ranked_customers ?? 0}
+              </p>
+              <p className="metric-note">
+                Clientes que já pontuaram e aparecem no ranking do salão.
+              </p>
             </article>
             <article className="card metric-card metric-card--warm">
               <span className="eyebrow">Visitas bonificadas</span>
-              <p className="stat-value">{data.loyaltyOverview.total_completed_visits ?? 0}</p>
-              <p className="metric-note">Atendimentos concluídos que já geraram pontuação e cashback.</p>
+              <p className="stat-value">
+                {data.loyaltyOverview.total_completed_visits ?? 0}
+              </p>
+              <p className="metric-note">
+                Atendimentos concluídos que já geraram pontuação e cashback.
+              </p>
             </article>
             <article className="card metric-card metric-card--accent">
               <span className="eyebrow">Pontos distribuídos</span>
-              <p className="stat-value">{data.loyaltyOverview.total_points_earned ?? 0}</p>
-              <p className="metric-note">Total de pontos acumulados pelos clientes desde que o programa foi ligado.</p>
+              <p className="stat-value">
+                {data.loyaltyOverview.total_points_earned ?? 0}
+              </p>
+              <p className="metric-note">
+                Total de pontos acumulados pelos clientes desde que o programa
+                foi ligado.
+              </p>
             </article>
             <article className="card metric-card metric-card--soft">
               <span className="eyebrow">Cashback gerado</span>
-              <p className="stat-value">{formatCurrency(Number(data.loyaltyOverview.total_cashback_earned ?? 0))}</p>
-              <p className="metric-note">Crédito total já gerado para resgate futuro diretamente no salão.</p>
+              <p className="stat-value">
+                {formatCurrency(
+                  Number(data.loyaltyOverview.total_cashback_earned ?? 0),
+                )}
+              </p>
+              <p className="metric-note">
+                Crédito total já gerado para resgate futuro diretamente no
+                salão.
+              </p>
             </article>
           </div>
 
@@ -907,13 +1533,24 @@ export function LoyaltyOverviewSection({ data }: { data: LoyaltyPageData }) {
               />
             ) : (
               data.loyaltyLeaderboard.map((entry) => (
-                <article key={entry.customer_id} className="list-row service-editor-card">
+                <article
+                  key={entry.customer_id}
+                  className="list-row service-editor-card"
+                >
                   <div className="list-row__content">
                     <div className="inline-actions" style={{ marginBottom: 8 }}>
-                      <span className={entry.current_tier?.is_vip ? "badge badge--confirmed" : "badge badge--soft"}>
+                      <span
+                        className={
+                          entry.current_tier?.is_vip
+                            ? "badge badge--confirmed"
+                            : "badge badge--soft"
+                        }
+                      >
                         {entry.current_tier?.label ?? "Cliente do programa"}
                       </span>
-                      <span className="badge badge--pending">#{entry.rank_position}</span>
+                      <span className="badge badge--pending">
+                        #{entry.rank_position}
+                      </span>
                     </div>
                     <h3>{entry.customer_name}</h3>
                     <p className="muted list-description">
@@ -923,20 +1560,34 @@ export function LoyaltyOverviewSection({ data }: { data: LoyaltyPageData }) {
                     </p>
                     <div className="referral-event-grid">
                       <div className="referral-event-item">
-                        <span className="referral-event-item__label">Pontos</span>
+                        <span className="referral-event-item__label">
+                          Pontos
+                        </span>
                         <strong>{entry.points_balance}</strong>
                       </div>
                       <div className="referral-event-item">
-                        <span className="referral-event-item__label">Cashback</span>
-                        <strong>{formatCurrency(Number(entry.cashback_balance ?? 0))}</strong>
+                        <span className="referral-event-item__label">
+                          Cashback
+                        </span>
+                        <strong>
+                          {formatCurrency(Number(entry.cashback_balance ?? 0))}
+                        </strong>
                       </div>
                       <div className="referral-event-item">
-                        <span className="referral-event-item__label">Visitas validadas</span>
+                        <span className="referral-event-item__label">
+                          Visitas validadas
+                        </span>
                         <strong>{entry.completed_visits}</strong>
                       </div>
                       <div className="referral-event-item">
-                        <span className="referral-event-item__label">Último ganho</span>
-                        <strong>{entry.last_reward_at ? formatDateTime(entry.last_reward_at) : "Sem registro"}</strong>
+                        <span className="referral-event-item__label">
+                          Último ganho
+                        </span>
+                        <strong>
+                          {entry.last_reward_at
+                            ? formatDateTime(entry.last_reward_at)
+                            : "Sem registro"}
+                        </strong>
                       </div>
                     </div>
                   </div>
@@ -964,7 +1615,11 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
       <div className="section-heading">
         <div>
           <h2>Programa de fidelidade</h2>
-          <p className="muted">Transforme visita concluída em pontos, cashback, desconto progressivo, status VIP e recompensa opcional de serviço no app do cliente.</p>
+          <p className="muted">
+            Transforme visita concluída em pontos, cashback, desconto
+            progressivo, status VIP e recompensa opcional de serviço no app do
+            cliente.
+          </p>
         </div>
       </div>
 
@@ -972,8 +1627,16 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
         <div className="list-row" style={{ marginTop: 18 }}>
           <div className="list-row__content">
             <div className="inline-actions" style={{ marginBottom: 8 }}>
-              <span className={data.loyaltyProgram.is_active ? "badge badge--confirmed" : "badge badge--soft"}>
-                {data.loyaltyProgram.is_active ? "Programa ativo" : "Programa salvo, mas inativo"}
+              <span
+                className={
+                  data.loyaltyProgram.is_active
+                    ? "badge badge--confirmed"
+                    : "badge badge--soft"
+                }
+              >
+                {data.loyaltyProgram.is_active
+                  ? "Programa ativo"
+                  : "Programa salvo, mas inativo"}
               </span>
             </div>
             <h3>{data.loyaltyProgram.title}</h3>
@@ -983,22 +1646,35 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
                 : "Esse bloco aparece no app mostrando saldo, ranking, cashback e o próximo nível de fidelidade do cliente."}
             </p>
             <small className="list-meta">
-              Cada visita concluída: {data.loyaltyProgram.points_per_visit} pontos + {formatPercent(data.loyaltyProgram.cashback_percent)} de cashback.
+              Cada visita concluída: {data.loyaltyProgram.points_per_visit}{" "}
+              pontos + {formatPercent(data.loyaltyProgram.cashback_percent)} de
+              cashback.
             </small>
             <small className="list-meta">
-              VIP em {data.loyaltyProgram.vip_min_visits} visitas com {formatPercent(data.loyaltyProgram.vip_discount_percent)} de desconto.
+              VIP em {data.loyaltyProgram.vip_min_visits} visitas com{" "}
+              {formatPercent(data.loyaltyProgram.vip_discount_percent)} de
+              desconto.
             </small>
             {data.loyaltyProgram.vip_reward_service_name ? (
-              <small className="list-meta">Ao chegar no {data.loyaltyProgram.vip_tier_name}, o cliente também libera {data.loyaltyProgram.vip_reward_service_name} como benefício.</small>
+              <small className="list-meta">
+                Ao chegar no {data.loyaltyProgram.vip_tier_name}, o cliente
+                também libera {data.loyaltyProgram.vip_reward_service_name} como
+                benefício.
+              </small>
             ) : null}
             <small className="list-meta">
-              O ideal é manter a escada simples e memorável, como Bronze, Prata e Ouro.
+              O ideal é manter a escada simples e memorável, como Bronze, Prata
+              e Ouro.
             </small>
           </div>
         </div>
       ) : null}
 
-      <form action={saveSalonLoyaltyProgramAction} className="form-grid" style={{ marginTop: 18 }}>
+      <form
+        action={saveSalonLoyaltyProgramAction}
+        className="form-grid"
+        style={{ marginTop: 18 }}
+      >
         <div className="field">
           <label htmlFor="loyalty-title">Título</label>
           <input
@@ -1082,7 +1758,9 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
               min="0"
               max="100"
               step="0.5"
-              defaultValue={Number(data.loyaltyProgram?.tier_one_discount_percent ?? 5)}
+              defaultValue={Number(
+                data.loyaltyProgram?.tier_one_discount_percent ?? 5,
+              )}
               required
             />
           </div>
@@ -1120,7 +1798,9 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
               min="0"
               max="100"
               step="0.5"
-              defaultValue={Number(data.loyaltyProgram?.tier_two_discount_percent ?? 10)}
+              defaultValue={Number(
+                data.loyaltyProgram?.tier_two_discount_percent ?? 10,
+              )}
               required
             />
           </div>
@@ -1158,7 +1838,9 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
               min="0"
               max="100"
               step="0.5"
-              defaultValue={Number(data.loyaltyProgram?.vip_discount_percent ?? 15)}
+              defaultValue={Number(
+                data.loyaltyProgram?.vip_discount_percent ?? 15,
+              )}
               required
             />
           </div>
@@ -1166,7 +1848,11 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
 
         <div className="field">
           <label htmlFor="vip-reward-service">Serviço grátis no Ouro</label>
-          <select id="vip-reward-service" name="vipRewardServiceId" defaultValue={data.loyaltyProgram?.vip_reward_service_id ?? ""}>
+          <select
+            id="vip-reward-service"
+            name="vipRewardServiceId"
+            defaultValue={data.loyaltyProgram?.vip_reward_service_id ?? ""}
+          >
             <option value="">Sem recompensa extra de serviço</option>
             {data.serviceOptions.map((service) => (
               <option key={service.id} value={service.id}>
@@ -1176,17 +1862,24 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
             ))}
           </select>
           <small className="list-meta">
-            Opcional: quando o cliente chega no nível Ouro, o app passa a mostrar esse serviço como recompensa especial do programa.
+            Opcional: quando o cliente chega no nível Ouro, o app passa a
+            mostrar esse serviço como recompensa especial do programa.
           </small>
         </div>
 
         <label className="checkbox-field">
-          <input type="checkbox" name="isActive" defaultChecked={data.loyaltyProgram?.is_active ?? false} />
+          <input
+            type="checkbox"
+            name="isActive"
+            defaultChecked={data.loyaltyProgram?.is_active ?? false}
+          />
           Ativar fidelidade no app do cliente
         </label>
 
         <small className="muted">
-          O programa só pontua quando o atendimento é marcado como concluído no painel. O cliente vê ranking, cashback, desconto atual e quanto falta para o próximo nível, como em um app financeiro.
+          O programa só pontua quando o atendimento é marcado como concluído no
+          painel. O cliente vê ranking, cashback, desconto atual e quanto falta
+          para o próximo nível, como em um app financeiro.
         </small>
 
         <button type="submit" className="primary-button">
@@ -1197,13 +1890,20 @@ export function LoyaltyProgramPanel({ data }: { data: LoyaltyPageData }) {
   );
 }
 
-export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomationPageData }) {
+export function GrowthAutomationOverviewSection({
+  data,
+}: {
+  data: GrowthAutomationPageData;
+}) {
   return (
     <section className="card content-card">
       <div className="section-heading">
         <div>
           <h2>Automação comercial inteligente</h2>
-          <p className="muted">O sistema combina rebook por hábito e recuperação com incentivo para puxar retorno antes de virar horário perdido.</p>
+          <p className="muted">
+            O sistema combina rebook por hábito e recuperação com incentivo para
+            puxar retorno antes de virar horário perdido.
+          </p>
         </div>
       </div>
 
@@ -1211,18 +1911,33 @@ export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomati
         <article className="list-row">
           <div className="list-row__content">
             <div className="inline-actions" style={{ marginBottom: 8 }}>
-              <span className={data.growthAutomationSettings.smart_rebook_is_active ? "badge badge--confirmed" : "badge badge--soft"}>
-                {data.growthAutomationSettings.smart_rebook_is_active ? "Rebook ativo" : "Rebook pausado"}
+              <span
+                className={
+                  data.growthAutomationSettings.smart_rebook_is_active
+                    ? "badge badge--confirmed"
+                    : "badge badge--soft"
+                }
+              >
+                {data.growthAutomationSettings.smart_rebook_is_active
+                  ? "Rebook ativo"
+                  : "Rebook pausado"}
               </span>
-              <span className="badge badge--pending">Janela de {data.growthAutomationSettings.smart_rebook_window_days} dias</span>
+              <span className="badge badge--pending">
+                Janela de{" "}
+                {data.growthAutomationSettings.smart_rebook_window_days} dias
+              </span>
             </div>
             <h3>{data.growthAutomationSettings.smart_rebook_title}</h3>
-            <p className="muted list-description">{data.growthAutomationSettings.smart_rebook_body_template}</p>
+            <p className="muted list-description">
+              {data.growthAutomationSettings.smart_rebook_body_template}
+            </p>
             <small className="list-meta">
-              Clientes prontos para o próximo rebook: {data.growthAutomationOverview.smart_rebook_due_customers ?? 0}
+              Clientes prontos para o próximo rebook:{" "}
+              {data.growthAutomationOverview.smart_rebook_due_customers ?? 0}
             </small>
             <small className="list-meta">
-              Rebooks inteligentes enviados nos últimos 30 dias: {data.growthAutomationOverview.smart_rebooks_sent_last_30d ?? 0}
+              Rebooks inteligentes enviados nos últimos 30 dias:{" "}
+              {data.growthAutomationOverview.smart_rebooks_sent_last_30d ?? 0}
             </small>
           </div>
         </article>
@@ -1230,19 +1945,35 @@ export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomati
         <article className="list-row">
           <div className="list-row__content">
             <div className="inline-actions" style={{ marginBottom: 8 }}>
-              <span className={data.growthAutomationSettings.is_active ? "badge badge--confirmed" : "badge badge--soft"}>
-                {data.growthAutomationSettings.is_active ? "Winback ativo" : "Winback pausado"}
+              <span
+                className={
+                  data.growthAutomationSettings.is_active
+                    ? "badge badge--confirmed"
+                    : "badge badge--soft"
+                }
+              >
+                {data.growthAutomationSettings.is_active
+                  ? "Winback ativo"
+                  : "Winback pausado"}
               </span>
-              <span className="badge badge--pending">{data.growthAutomationSettings.winback_inactive_days} dias</span>
-              <span className="badge badge--completed">{data.growthAutomationSettings.winback_discount_percent}% OFF</span>
+              <span className="badge badge--pending">
+                {data.growthAutomationSettings.winback_inactive_days} dias
+              </span>
+              <span className="badge badge--completed">
+                {data.growthAutomationSettings.winback_discount_percent}% OFF
+              </span>
             </div>
             <h3>{data.growthAutomationSettings.winback_title}</h3>
-            <p className="muted list-description">{data.growthAutomationSettings.winback_body_template}</p>
+            <p className="muted list-description">
+              {data.growthAutomationSettings.winback_body_template}
+            </p>
             <small className="list-meta">
-              Clientes prontos para o winback agora: {data.growthAutomationOverview.due_now_customers ?? 0}
+              Clientes prontos para o winback agora:{" "}
+              {data.growthAutomationOverview.due_now_customers ?? 0}
             </small>
             <small className="list-meta">
-              Winbacks enviados nos últimos 30 dias: {data.growthAutomationOverview.winbacks_sent_last_30d ?? 0}
+              Winbacks enviados nos últimos 30 dias:{" "}
+              {data.growthAutomationOverview.winbacks_sent_last_30d ?? 0}
             </small>
             <small className="list-meta">
               Última alteração em{" "}
@@ -1257,18 +1988,32 @@ export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomati
       <div className="stats-grid" style={{ marginTop: 16 }}>
         <article className="card metric-card metric-card--warm">
           <span className="eyebrow">Clientes em risco</span>
-          <p className="stat-value">{data.growthAutomationOverview.at_risk_customers ?? 0}</p>
-          <p className="metric-note">Clientes sem próxima agenda que já entraram na zona de esfriamento.</p>
+          <p className="stat-value">
+            {data.growthAutomationOverview.at_risk_customers ?? 0}
+          </p>
+          <p className="metric-note">
+            Clientes sem próxima agenda que já entraram na zona de esfriamento.
+          </p>
         </article>
         <article className="card metric-card metric-card--soft">
           <span className="eyebrow">Rebooks prontos</span>
-          <p className="stat-value">{data.growthAutomationOverview.smart_rebook_due_customers ?? 0}</p>
-          <p className="metric-note">Clientes com hábito claro e janela ideal abrindo para reservar antes de esfriar.</p>
+          <p className="stat-value">
+            {data.growthAutomationOverview.smart_rebook_due_customers ?? 0}
+          </p>
+          <p className="metric-note">
+            Clientes com hábito claro e janela ideal abrindo para reservar antes
+            de esfriar.
+          </p>
         </article>
         <article className="card metric-card metric-card--accent">
           <span className="eyebrow">Recuperados em 30 dias</span>
-          <p className="stat-value">{data.growthAutomationOverview.recovered_customers_last_30d ?? 0}</p>
-          <p className="metric-note">Clientes que voltaram a marcar depois dos pushes automáticos mais recentes.</p>
+          <p className="stat-value">
+            {data.growthAutomationOverview.recovered_customers_last_30d ?? 0}
+          </p>
+          <p className="metric-note">
+            Clientes que voltaram a marcar depois dos pushes automáticos mais
+            recentes.
+          </p>
         </article>
       </div>
 
@@ -1284,11 +2029,19 @@ export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomati
             <article key={run.id} className="list-row referral-event-card">
               <div className="list-row__content">
                 <div className="inline-actions" style={{ marginBottom: 8 }}>
-                  <span className={run.recovered ? "badge badge--confirmed" : "badge badge--pending"}>
+                  <span
+                    className={
+                      run.recovered
+                        ? "badge badge--confirmed"
+                        : "badge badge--pending"
+                    }
+                  >
                     {run.recovered ? "Recuperado" : "Aguardando retorno"}
                   </span>
                   <span className="badge badge--soft">
-                    {run.automation_type === "smart_rebook_prompt" ? "Rebook inteligente" : `${run.discount_percent}% OFF`}
+                    {run.automation_type === "smart_rebook_prompt"
+                      ? "Rebook inteligente"
+                      : `${run.discount_percent}% OFF`}
                   </span>
                 </div>
                 <h3>{run.customer_name}</h3>
@@ -1299,13 +2052,17 @@ export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomati
                 </p>
                 <div className="referral-event-grid">
                   <div className="referral-event-item">
-                    <span className="referral-event-item__label">Enviado em</span>
+                    <span className="referral-event-item__label">
+                      Enviado em
+                    </span>
                     <strong>{formatDateTime(run.sent_at)}</strong>
                   </div>
 
                   <div className="referral-event-item">
                     <span className="referral-event-item__label">
-                      {run.automation_type === "smart_rebook_prompt" ? "Alvo" : "Oferta"}
+                      {run.automation_type === "smart_rebook_prompt"
+                        ? "Alvo"
+                        : "Oferta"}
                     </span>
                     <strong>
                       {run.automation_type === "smart_rebook_prompt"
@@ -1316,12 +2073,22 @@ export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomati
 
                   <div className="referral-event-item">
                     <span className="referral-event-item__label">Status</span>
-                    <strong>{run.recovered ? "Voltou a agendar" : "Sem novo agendamento ainda"}</strong>
+                    <strong>
+                      {run.recovered
+                        ? "Voltou a agendar"
+                        : "Sem novo agendamento ainda"}
+                    </strong>
                   </div>
 
                   <div className="referral-event-item">
-                    <span className="referral-event-item__label">Retorno detectado</span>
-                    <strong>{run.recovered_appointment_at ? formatDateTime(run.recovered_appointment_at) : "Ainda não"}</strong>
+                    <span className="referral-event-item__label">
+                      Retorno detectado
+                    </span>
+                    <strong>
+                      {run.recovered_appointment_at
+                        ? formatDateTime(run.recovered_appointment_at)
+                        : "Ainda não"}
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -1333,20 +2100,33 @@ export function GrowthAutomationOverviewSection({ data }: { data: GrowthAutomati
   );
 }
 
-export function GrowthAutomationPanel({ data }: { data: GrowthAutomationPageData }) {
+export function GrowthAutomationPanel({
+  data,
+}: {
+  data: GrowthAutomationPageData;
+}) {
   return (
     <section className="card content-card form-panel">
       <div className="section-heading">
         <div>
           <h2>Automação de recuperação</h2>
-          <p className="muted">Defina quando o salão considera um cliente perdido e qual incentivo o app vai usar para trazê-lo de volta.</p>
+          <p className="muted">
+            Defina quando o salão considera um cliente perdido e qual incentivo
+            o app vai usar para trazê-lo de volta.
+          </p>
         </div>
       </div>
 
-      <form action={saveSalonGrowthAutomationAction} className="form-grid" style={{ marginTop: 18 }}>
+      <form
+        action={saveSalonGrowthAutomationAction}
+        className="form-grid"
+        style={{ marginTop: 18 }}
+      >
         <div className="split-grid">
           <div className="field">
-            <label htmlFor="growth-inactive-days">Inatividade para acionar</label>
+            <label htmlFor="growth-inactive-days">
+              Inatividade para acionar
+            </label>
             <input
               id="growth-inactive-days"
               name="winbackInactiveDays"
@@ -1368,7 +2148,9 @@ export function GrowthAutomationPanel({ data }: { data: GrowthAutomationPageData
               min="0"
               max="100"
               step="1"
-              defaultValue={data.growthAutomationSettings.winback_discount_percent}
+              defaultValue={
+                data.growthAutomationSettings.winback_discount_percent
+              }
               required
             />
           </div>
@@ -1396,18 +2178,25 @@ export function GrowthAutomationPanel({ data }: { data: GrowthAutomationPageData
             required
           />
           <small className="muted">
-            Você pode usar {"{discount}"}, {"{inactive_days}"} e {"{service_name}"} para personalizar a mensagem.
+            Você pode usar {"{discount}"}, {"{inactive_days}"} e{" "}
+            {"{service_name}"} para personalizar a mensagem.
           </small>
         </div>
 
         <label className="checkbox-field">
-          <input type="checkbox" name="isActive" defaultChecked={data.growthAutomationSettings.is_active} />
+          <input
+            type="checkbox"
+            name="isActive"
+            defaultChecked={data.growthAutomationSettings.is_active}
+          />
           Ativar winback automático no app do cliente
         </label>
 
         <div className="split-grid">
           <div className="field">
-            <label htmlFor="smart-rebook-window-days">Janela do rebook inteligente</label>
+            <label htmlFor="smart-rebook-window-days">
+              Janela do rebook inteligente
+            </label>
             <input
               id="smart-rebook-window-days"
               name="smartRebookWindowDays"
@@ -1415,7 +2204,9 @@ export function GrowthAutomationPanel({ data }: { data: GrowthAutomationPageData
               min="1"
               max="14"
               step="1"
-              defaultValue={data.growthAutomationSettings.smart_rebook_window_days}
+              defaultValue={
+                data.growthAutomationSettings.smart_rebook_window_days
+              }
               required
             />
           </div>
@@ -1433,27 +2224,40 @@ export function GrowthAutomationPanel({ data }: { data: GrowthAutomationPageData
         </div>
 
         <div className="field">
-          <label htmlFor="smart-rebook-body">Mensagem de rebook inteligente</label>
+          <label htmlFor="smart-rebook-body">
+            Mensagem de rebook inteligente
+          </label>
           <textarea
             id="smart-rebook-body"
             name="smartRebookBodyTemplate"
             rows={5}
             maxLength={220}
-            defaultValue={data.growthAutomationSettings.smart_rebook_body_template}
+            defaultValue={
+              data.growthAutomationSettings.smart_rebook_body_template
+            }
             required
           />
           <small className="muted">
-            Você pode usar {"{service_name}"}, {"{habit_weekday}"}, {"{target_weekday}"}, {"{target_period}"}, {"{days_until_due}"} e {"{combo_service_name}"}.
+            Você pode usar {"{service_name}"}, {"{habit_weekday}"},{" "}
+            {"{target_weekday}"}, {"{target_period}"}, {"{days_until_due}"} e{" "}
+            {"{combo_service_name}"}.
           </small>
         </div>
 
         <label className="checkbox-field">
-          <input type="checkbox" name="smartRebookIsActive" defaultChecked={data.growthAutomationSettings.smart_rebook_is_active} />
+          <input
+            type="checkbox"
+            name="smartRebookIsActive"
+            defaultChecked={
+              data.growthAutomationSettings.smart_rebook_is_active
+            }
+          />
           Ativar rebook inteligente baseado no hábito do cliente
         </label>
 
         <small className="muted">
-          A mesma regra daqui alimenta o push remoto, o histórico gerencial do painel e as sugestões que aparecem no app do cliente.
+          A mesma regra daqui alimenta o push remoto, o histórico gerencial do
+          painel e as sugestões que aparecem no app do cliente.
         </small>
 
         <button type="submit" className="primary-button">

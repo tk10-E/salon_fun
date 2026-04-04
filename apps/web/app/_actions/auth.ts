@@ -9,6 +9,10 @@ function buildAppOrigin() {
   return buildRequestOrigin();
 }
 
+function normalizeEmailAddress(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 function buildEmailRedirectUrl() {
   const origin = buildAppOrigin();
   if (!origin) {
@@ -47,7 +51,7 @@ function buildGoogleCallbackUrl(nextPath = "/dashboard") {
 }
 
 export async function signInActionImpl(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = normalizeEmailAddress(formData.get("email"));
   const password = String(formData.get("password") ?? "");
   const supabase = createClient();
 
@@ -88,7 +92,7 @@ export async function signInWithGoogleActionImpl(formData: FormData) {
 }
 
 export async function signUpActionImpl(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = normalizeEmailAddress(formData.get("email"));
   const password = String(formData.get("password") ?? "");
   const passwordConfirmation = String(formData.get("passwordConfirmation") ?? "");
   const supabase = createClient();
@@ -126,7 +130,7 @@ export async function signUpActionImpl(formData: FormData) {
 }
 
 export async function sendPasswordResetActionImpl(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const email = normalizeEmailAddress(formData.get("email"));
   const supabase = createClient();
   const redirectTo = buildPasswordRecoveryUrl();
 
@@ -144,16 +148,56 @@ export async function sendPasswordResetActionImpl(formData: FormData) {
   );
 
   if (error) {
+    if (error.code === "over_email_send_rate_limit") {
+      redirect(
+        buildRedirectNotice(
+          "/login",
+          "Muitos pedidos de recuperação foram feitos em sequência. Aguarde alguns minutos e use o e-mail mais recente já enviado.",
+          "error",
+        ),
+      );
+    }
+
     redirect(buildRedirectNotice("/login", "Não foi possível enviar o e-mail de recuperação agora.", "error"));
   }
 
   redirect(
     buildRedirectNotice(
       "/login",
-      "Enviamos um link de recuperação para seu e-mail. Abra a mensagem para redefinir a senha.",
+      "Enviamos um link de recuperação para seu e-mail. Abra a mensagem mais recente para redefinir a senha.",
       "success",
     ),
   );
+}
+
+export async function updatePasswordActionImpl(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  const passwordConfirmation = String(formData.get("passwordConfirmation") ?? "");
+
+  if (password.length < 6) {
+    redirect(buildRedirectNotice("/auth/recovery", "Use uma senha com pelo menos 6 caracteres.", "error"));
+  }
+
+  if (password !== passwordConfirmation) {
+    redirect(buildRedirectNotice("/auth/recovery", "Confirme a mesma senha nos dois campos.", "error"));
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.auth.updateUser({
+    password,
+  });
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        "/auth/recovery",
+        "Não foi possível atualizar a senha agora. Tente abrir o link de recuperação novamente.",
+        "error",
+      ),
+    );
+  }
+
+  redirect(buildRedirectNotice("/login", "Senha atualizada com sucesso. Entre com sua nova senha.", "success"));
 }
 
 export async function signOutActionImpl() {

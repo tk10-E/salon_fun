@@ -57,9 +57,16 @@ describe("SidebarNav", () => {
   it("marca o link clicado como pendente imediatamente", () => {
     render(<SidebarNav />);
 
+    expect(
+      screen.getByText(/o que o salão usa para rodar o dia com clareza/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /abrir/i })[0]);
+
     expect(screen.getByRole("link", { name: /feed/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /notificações/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /ajustes/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /notificações/i }),
+    ).toBeInTheDocument();
 
     const servicesLink = screen.getByRole("link", { name: /serviços/i });
     fireEvent.click(servicesLink);
@@ -67,5 +74,9 @@ describe("SidebarNav", () => {
     expect(servicesLink).toHaveClass("nav-link--pending");
     expect(servicesLink).toHaveAttribute("aria-busy", "true");
     expect(prefetchMock).toHaveBeenCalledWith("/dashboard/services");
+
+    fireEvent.click(screen.getByRole("button", { name: /abrir/i }));
+    expect(screen.getByRole("link", { name: /cliente app/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ajustes/i })).toBeInTheDocument();
   });
 });
