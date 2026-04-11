@@ -12,6 +12,7 @@ export type InstagramFeedImportMention = {
   platform: MetaPlatform;
   source_type: "post_mention" | "story_mention" | "owned_post" | "comment_mention";
   media_type: InstagramMentionMediaType;
+  author_profile_picture_url: string | null;
   author_username: string | null;
   caption: string | null;
   permalink: string | null;
@@ -188,6 +189,7 @@ export async function importInstagramMentionIntoFeed(args: {
         instagram_mention_id: mention.id,
         external_platform: mention.platform,
         external_permalink: mention.permalink,
+        external_author_avatar_url: mention.author_profile_picture_url,
         external_author_username: mention.author_username,
         external_media_url: mention.media_url,
         external_thumbnail_url: mention.thumbnail_url,
@@ -248,7 +250,7 @@ export async function autoPublishInstagramMentions(args: {
   const { data, error } = await args.supabase
     .from("instagram_mentions")
     .select(
-      "id,salon_id,platform,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
+      "id,salon_id,platform,source_type,media_type,author_profile_picture_url,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
     )
     .eq("salon_id", args.salonId)
     .is("published_post_id", null)

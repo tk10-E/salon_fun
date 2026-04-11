@@ -3,6 +3,17 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const firebaseLookupEndpoint =
   "https://identitytoolkit.googleapis.com/v1/accounts:lookup";
 
+const allowedOriginsRaw = Deno.env.get("ALLOWED_BRIDGE_ORIGINS")?.trim();
+const ALLOWED_BRIDGE_ORIGINS = allowedOriginsRaw
+  ? allowedOriginsRaw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+  : null;
+
+// Prefer a staged/rotated key when present, otherwise fall back to the legacy name.
+const resolvedServiceRoleKey =
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY_NEW")?.trim() ||
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ||
+  null;
+
 type FirebaseLookupUser = {
   email?: string;
   emailVerified?: boolean;
@@ -104,7 +115,7 @@ async function findSupabaseUserByEmail(
   email: string,
 ) {
   const targetEmail = email.trim().toLowerCase();
-  var page = 1;
+  let page = 1;
 
   while (page <= 50) {
     const { data, error } = await adminClient.auth.admin.listUsers({
@@ -137,6 +148,15 @@ async function findSupabaseUserByEmail(
 
 Deno.serve(async (request) => {
   try {
+    const originHeader = request.headers.get("origin")?.trim() || "";
+
+    // If ALLOWED_BRIDGE_ORIGINS is configured, enforce it for all requests.
+    if (ALLOWED_BRIDGE_ORIGINS && ALLOWED_BRIDGE_ORIGINS.length > 0) {
+      if (!originHeader || !ALLOWED_BRIDGE_ORIGINS.includes(originHeader.toLowerCase())) {
+        return jsonResponse(request, { error: "origin_not_allowed" }, 403);
+      }
+    }
+
     if (request.method == "OPTIONS") {
       return new Response("ok", {
         headers: corsHeaders(request),
@@ -156,7 +176,8 @@ Deno.serve(async (request) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+    const serviceRoleKey = resolvedServiceRoleKey;
+
     if (
       supabaseUrl == null ||
       supabaseUrl.length == 0 ||

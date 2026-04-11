@@ -10,12 +10,16 @@ const { panelAuthClientMock, getAuthenticatedPanelEntryPathMock, redirectMock } 
 }));
 
 vi.mock("@/components/auth/PanelAuthClient", () => ({
-  PanelAuthClient: (props: { initialMessage?: string; initialTone?: string }) => {
+  PanelAuthClient: (props: {
+    initialMessage?: string;
+    initialTone?: string;
+    firebaseConfig: unknown;
+  }) => {
     panelAuthClientMock(props);
 
     return (
       <div>
-        <h3>Continuar com Google</h3>
+        <h3>Entrar no painel</h3>
         <label htmlFor="signin-email">E-mail</label>
         <input id="signin-email" />
         <label htmlFor="signin-password">Senha</label>
@@ -28,7 +32,8 @@ vi.mock("@/components/auth/PanelAuthClient", () => ({
         <input id="signup-password" />
         <label htmlFor="signup-password-confirmation">Confirmar senha</label>
         <input id="signup-password-confirmation" />
-        <button type="button">Continuar com Google</button>
+        <button type="button">Google</button>
+        <button type="button">Facebook</button>
         <button type="button">Acessar minha conta</button>
         <button type="button">Enviar link de recuperação</button>
         <button type="button">Começar agora</button>
@@ -36,6 +41,10 @@ vi.mock("@/components/auth/PanelAuthClient", () => ({
       </div>
     );
   },
+}));
+
+vi.mock("@/components/auth/FirebaseWebRuntimeConfig", () => ({
+  FirebaseWebRuntimeConfig: () => null,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -65,10 +74,10 @@ describe("login page UI", () => {
 
       expect(
         screen.getByRole("heading", {
-          name: "Seu salão mais organizado, mais claro e mais pronto para crescer.",
+          name: "Entrar no painel do salão",
         }),
       ).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Entre ou crie a conta do seu painel" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Use o login do salão" })).toBeInTheDocument();
       expect(screen.getByLabelText("E-mail", { selector: "#signin-email" })).toBeInTheDocument();
       expect(screen.getByLabelText("Senha", { selector: "#signin-password" })).toBeInTheDocument();
       expect(screen.getByLabelText("E-mail da conta", { selector: "#recovery-email" })).toBeInTheDocument();
@@ -77,8 +86,9 @@ describe("login page UI", () => {
       expect(
         screen.getByLabelText("Confirmar senha", { selector: "#signup-password-confirmation" }),
       ).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Continuar com Google" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Continuar com Google" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Entrar no painel" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Google" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Facebook" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Acessar minha conta" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Enviar link de recuperação" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Começar agora" })).toBeInTheDocument();
@@ -86,6 +96,7 @@ describe("login page UI", () => {
       expect(panelAuthClientMock).toHaveBeenCalledWith({
         initialMessage: "Conta criada com sucesso.",
         initialTone: "success",
+        firebaseConfig: null,
       });
     });
   });

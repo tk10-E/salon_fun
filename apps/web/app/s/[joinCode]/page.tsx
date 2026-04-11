@@ -35,6 +35,7 @@ export async function generateMetadata({
 
   const title = `${preview.name} | ${preview.segmentLabel}`;
   const description =
+    preview.heroHeadline ??
     preview.tagline ??
     preview.welcomeMessage ??
     preview.segmentDescription ??
@@ -72,7 +73,9 @@ export async function generateMetadata({
   };
 }
 
-export default async function PublicSalonPage({ params }: PublicSalonPageProps) {
+export default async function PublicSalonPage({
+  params,
+}: PublicSalonPageProps) {
   const landingData = await fetchPublicSalonLandingData(params.joinCode);
   if (!landingData) {
     notFound();
@@ -82,8 +85,12 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
 
   const whatsappUrl = buildWhatsAppUrl(preview.whatsappPhone);
   const deepLinkUrl = buildSalonJoinDeepLink(preview.joinCode);
-  const androidStoreUrl = readPublicUrlEnv("NEXT_PUBLIC_SALON_CLIENT_PLAY_STORE_URL");
-  const iosStoreUrl = readPublicUrlEnv("NEXT_PUBLIC_SALON_CLIENT_APP_STORE_URL");
+  const androidStoreUrl = readPublicUrlEnv(
+    "NEXT_PUBLIC_SALON_CLIENT_PLAY_STORE_URL",
+  );
+  const iosStoreUrl = readPublicUrlEnv(
+    "NEXT_PUBLIC_SALON_CLIENT_APP_STORE_URL",
+  );
   const pageStyle = {
     "--salon-accent": preview.brandColor,
   } as CSSProperties;
@@ -94,7 +101,8 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
       note: "A cliente cai direto na experiencia certa sem passar por ruido.",
     },
     {
-      label: preview.ratingValue != null ? "Confianca percebida" : "Camadas no app",
+      label:
+        preview.ratingValue != null ? "Confianca percebida" : "Camadas no app",
       value:
         preview.ratingValue != null
           ? `${preview.ratingValue.toFixed(1)} estrelas`
@@ -172,7 +180,8 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
               <div>
                 <p className="public-salon-eyebrow">{preview.name}</p>
                 <h1>
-                  {preview.welcomeHeadline ??
+                  {preview.heroHeadline ??
+                    preview.welcomeHeadline ??
                     preview.tagline ??
                     "Sua marca com presença premium em cada agendamento."}
                 </h1>
@@ -221,7 +230,10 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
 
             <div className="public-salon-presence-grid">
               {signatureCards.map((card) => (
-                <article key={card.label} className="public-salon-presence-card">
+                <article
+                  key={card.label}
+                  className="public-salon-presence-card"
+                >
                   <span>{card.label}</span>
                   <strong>{card.value}</strong>
                   <p>{card.note}</p>
@@ -277,11 +289,7 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
 
             <div className="public-salon-links">
               {preview.instagramUrl ? (
-                <a
-                  href={preview.instagramUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a href={preview.instagramUrl} target="_blank" rel="noreferrer">
                   Instagram
                 </a>
               ) : null}
@@ -315,7 +323,9 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
           <span className="public-salon-section-eyebrow">
             Vitrine comercial
           </span>
-          <h2>Mais do que uma página bonita: uma entrada premium para a marca.</h2>
+          <h2>
+            Mais do que uma página bonita: uma entrada premium para a marca.
+          </h2>
           <p>
             A vitrine pública reúne identidade, prova visual e direção comercial
             para o cliente descobrir o salão certo e entrar no app com mais
@@ -325,7 +335,9 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
 
         <div className="public-salon-experience-grid">
           <article className="public-salon-story-card">
-            <span className="public-salon-section-eyebrow">Como isso chega no celular</span>
+            <span className="public-salon-section-eyebrow">
+              Como isso chega no celular
+            </span>
             <h3>Uma landing que ja antecipa o app, e nao uma pagina solta.</h3>
             <p>
               A marca ganha uma entrada mais forte: prova visual, argumentos
@@ -340,7 +352,11 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
             </div>
 
             <div className="public-salon-story-spotlight">
-              <strong>{leadService ? "Servico protagonista da vitrine" : "Experiencia premium do salao"}</strong>
+              <strong>
+                {leadService
+                  ? "Servico protagonista da vitrine"
+                  : "Experiencia premium do salao"}
+              </strong>
               <p>
                 {leadService?.description ??
                   leadOffer?.description ??
@@ -350,7 +366,9 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
           </article>
 
           <article className="public-salon-story-card public-salon-story-card--journey">
-            <span className="public-salon-section-eyebrow">Jornada em 3 movimentos</span>
+            <span className="public-salon-section-eyebrow">
+              Jornada em 3 movimentos
+            </span>
             <h3>Descobrir, entrar e reservar com menos atrito.</h3>
             <div className="public-salon-story-step-list">
               {brandJourney.map((item) => (
@@ -468,9 +486,7 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
         {recentPosts.length > 0 ? (
           <section className="public-salon-content-section">
             <div className="public-salon-section-heading public-salon-section-heading--compact">
-              <span className="public-salon-section-eyebrow">
-                Prova visual
-              </span>
+              <span className="public-salon-section-eyebrow">Prova visual</span>
               <h3>Resultados recentes com leitura de social premium.</h3>
               <p>
                 Trabalhos reais ajudam o cliente a entender estilo, qualidade e
@@ -505,7 +521,9 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
                         "Conteúdo recente da marca para inspirar a próxima reserva."}
                     </p>
                     <div className="public-salon-gallery-meta">
-                      {post.serviceName ? <span>{post.serviceName}</span> : null}
+                      {post.serviceName ? (
+                        <span>{post.serviceName}</span>
+                      ) : null}
                       {post.staffLabel ? <span>{post.staffLabel}</span> : null}
                     </div>
                   </div>
@@ -526,9 +544,15 @@ export default async function PublicSalonPage({ params }: PublicSalonPageProps) 
           </div>
 
           <ol className="public-salon-step-list">
-            <li>Toque em abrir no app ou instale a versao oficial do cliente.</li>
-            <li>Entre com o codigo <strong>{preview.joinCode}</strong>.</li>
-            <li>Veja agenda, galeria, promocoes e identidade da marca no app.</li>
+            <li>
+              Toque em abrir no app ou instale a versao oficial do cliente.
+            </li>
+            <li>
+              Entre com o codigo <strong>{preview.joinCode}</strong>.
+            </li>
+            <li>
+              Veja agenda, galeria, promocoes e identidade da marca no app.
+            </li>
           </ol>
 
           <div className="public-salon-actions">
@@ -575,7 +599,11 @@ function buildSalonJoinDeepLink(joinCode: string) {
   return `salonfun://join?code=${encodeURIComponent(joinCode.trim().toUpperCase())}`;
 }
 
-function readPublicUrlEnv(name: "NEXT_PUBLIC_SALON_CLIENT_PLAY_STORE_URL" | "NEXT_PUBLIC_SALON_CLIENT_APP_STORE_URL") {
+function readPublicUrlEnv(
+  name:
+    | "NEXT_PUBLIC_SALON_CLIENT_PLAY_STORE_URL"
+    | "NEXT_PUBLIC_SALON_CLIENT_APP_STORE_URL",
+) {
   const value = process.env[name]?.trim();
   return value ? value : null;
 }

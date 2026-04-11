@@ -1,10 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { DashboardAccessGate } from "@/components/DashboardAccessGate";
+import { PanelResponseController } from "@/components/PanelResponseController";
 import { SidebarNav } from "@/components/SidebarNav";
 import { PanelSignOutButton } from "@/components/auth/PanelSignOutButton";
-import type { SalonBillingSnapshot } from "@/lib/billing";
+import { DashboardAccessGate } from "@/components/DashboardAccessGate";
+import { type SalonBillingSnapshot } from "@/lib/billing";
 
 type DashboardShellProps = {
   salonCode: string;
@@ -16,7 +17,7 @@ type DashboardShellProps = {
 
 function toDisplayName(value?: string | null) {
   if (!value) {
-    return "Gestao do salao";
+    return "Gestão do salão";
   }
 
   const cleaned = value
@@ -25,7 +26,7 @@ function toDisplayName(value?: string | null) {
     .trim();
 
   if (!cleaned) {
-    return "Gestao do salao";
+    return "Gestão do salão";
   }
 
   return cleaned
@@ -46,28 +47,6 @@ function getInitials(name: string) {
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join("");
-}
-
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M10.5 4.75a5.75 5.75 0 1 0 0 11.5a5.75 5.75 0 0 0 0-11.5Zm0-1.5a7.25 7.25 0 1 1 0 14.5a7.25 7.25 0 0 1 0-14.5Zm10.03 15.72l-4.18-4.18l1.06-1.06l4.18 4.18l-1.06 1.06Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M7.72 9.47a.75.75 0 0 1 1.06 0L12 12.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 0 1 0-1.06Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
 }
 
 function getBrandName(name: string) {
@@ -111,7 +90,7 @@ export function DashboardShell({
               <span className="eyebrow">Painel</span>
               <h1>{brandName}</h1>
               <small className="sidebar-brand__detail">
-                Tudo do salão em um lugar
+                Gestão central
               </small>
             </div>
           </div>
@@ -124,37 +103,25 @@ export function DashboardShell({
 
         <div className="sidebar-footer">
           <div className="sidebar-code-card">
-            <span className="eyebrow">Código do salão</span>
+            <span className="eyebrow">Código de entrada</span>
             <strong>{salonCode}</strong>
             <p className="muted">
-              Use esse código para conectar novas clientes ao app.
+              Use no app para conectar novas clientes.
             </p>
             <div className="sidebar-code-card__actions">
               <Link
                 href={`/s/${salonCode}`}
                 className="sidebar-code-card__link"
               >
-                Vitrine pública
+                Ver vitrine
               </Link>
               <Link
                 href="/dashboard/settings"
                 className="sidebar-code-card__link sidebar-code-card__link--ghost"
               >
-                App do cliente
+                Ajustar app
               </Link>
             </div>
-          </div>
-
-          <div className="sidebar-billing-card">
-            <span className="eyebrow">Assinatura</span>
-            <strong>
-              {billingSnapshot.currentPlan.displayName}{" "}
-              <small>{billingSnapshot.statusLabel}</small>
-            </strong>
-            <p className="muted">{billingSnapshot.statusDetail}</p>
-            <Link href="/dashboard/billing" className="sidebar-code-card__link">
-              Cobrança
-            </Link>
           </div>
 
           <PanelSignOutButton />
@@ -162,32 +129,10 @@ export function DashboardShell({
       </aside>
 
       <div className="content-area">
+        <PanelResponseController />
+
         <header className="page-header">
-          <form
-            action="/dashboard/appointments"
-            className="dashboard-search"
-            role="search"
-          >
-            <span className="dashboard-search__icon">
-              <SearchIcon />
-            </span>
-            <input
-              type="search"
-              name="q"
-              placeholder="Buscar no painel"
-              aria-label="Pesquisar no painel"
-            />
-          </form>
-
           <div className="page-header__actions">
-            <div className="page-header__status" aria-label="Status do painel">
-              <span className="page-header__status-dot" aria-hidden="true" />
-              <div className="page-header__status-copy">
-                <strong>Online</strong>
-                <span>Painel conectado</span>
-              </div>
-            </div>
-
             <div className="page-header__profile">
               <span className="page-header__avatar" aria-hidden="true">
                 {initials}
@@ -195,49 +140,28 @@ export function DashboardShell({
 
               <div className="page-header__profile-copy">
                 <strong>{ownerName}</strong>
-                <span>Gestão do salão</span>
+                <span>Gestão</span>
               </div>
             </div>
 
-            <Link
-              href="/dashboard/settings"
-              className="header-circle-button"
-              aria-label="Abrir ajustes do painel"
-            >
-              <ChevronIcon />
+            <Link href="/dashboard/settings" className="secondary-button">
+              Configurações
             </Link>
           </div>
         </header>
 
         <main
           id="dashboard-main-content"
-          className="dashboard-main"
+          className="dashboard-main dashboard-main--simple"
           tabIndex={-1}
         >
-          {billingSnapshot.shouldShowBanner &&
-          billingSnapshot.bannerTitle &&
-          billingSnapshot.bannerMessage ? (
-            <section
-              className={`dashboard-billing-banner dashboard-billing-banner--${billingSnapshot.bannerTone}`}
-              aria-label="Status da assinatura"
-            >
-              <div className="dashboard-billing-banner__copy">
-                <strong>{billingSnapshot.bannerTitle}</strong>
-                <p>{billingSnapshot.bannerMessage}</p>
-              </div>
-              <Link href="/dashboard/billing" className="secondary-button">
-                Abrir billing
-              </Link>
-            </section>
-          ) : null}
-
           <div className="dashboard-main__surface">
             {children}
             <DashboardAccessGate
               isLocked={billingSnapshot.isLocked}
               allowedPaths={billingSnapshot.allowedPathsWhenLocked}
-              title="Regularize sua assinatura para continuar operando"
-              description="O painel continua disponível para cobrança e ajustes, mas as áreas operacionais ficam bloqueadas até a assinatura voltar para ativa."
+              title="Algumas áreas do painel estão indisponíveis"
+              description="Use o início do painel e os ajustes do app enquanto o acesso operacional dessas áreas estiver pausado."
             />
           </div>
         </main>

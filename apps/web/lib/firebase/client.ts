@@ -1,12 +1,12 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { browserLocalPersistence, getAuth, setPersistence } from "firebase/auth";
 
-import { getFirebaseWebConfig } from "@/lib/firebase/config";
+import { getRuntimeFirebaseWebConfig } from "@/lib/firebase/runtimeConfig";
 
 let firebasePersistencePromise: Promise<void> | null = null;
 
 export function getFirebaseApp() {
-  const config = getFirebaseWebConfig();
+  const config = getRuntimeFirebaseWebConfig();
   if (config == null) {
     throw new Error("missing_firebase_web_config");
   }

@@ -76,6 +76,10 @@ export type SalonClientAppConfig = {
   experienceModel: ClientExperienceModel;
   visualStyle: ClientAppVisualStyle;
   homeEmphasis: ClientHomeEmphasis;
+  whiteLabelActive: boolean;
+  autoPilotEnabled: boolean;
+  appDisplayName: string | null;
+  customDomain: string | null;
   heroHeadline: string | null;
   heroSupportLine: string | null;
   primaryCtaLabel: string | null;
@@ -590,6 +594,10 @@ const DEFAULT_CLIENT_APP_CONFIG: SalonClientAppConfig = {
   experienceModel: "auto",
   visualStyle: "auto",
   homeEmphasis: "auto",
+  whiteLabelActive: false,
+  autoPilotEnabled: false,
+  appDisplayName: null,
+  customDomain: null,
   heroHeadline: null,
   heroSupportLine: null,
   primaryCtaLabel: null,
@@ -652,6 +660,10 @@ export function normalizeSalonClientAppConfig(
     homeEmphasis: isClientHomeEmphasis(raw.homeEmphasis)
       ? raw.homeEmphasis
       : DEFAULT_CLIENT_APP_CONFIG.homeEmphasis,
+    whiteLabelActive: raw.whiteLabelActive === true,
+    autoPilotEnabled: raw.autoPilotEnabled === true,
+    appDisplayName: normalizeNullableText(raw.appDisplayName),
+    customDomain: normalizeNullableDomain(raw.customDomain),
     heroHeadline: normalizeNullableText(raw.heroHeadline),
     heroSupportLine: normalizeNullableText(raw.heroSupportLine),
     primaryCtaLabel: normalizeNullableText(raw.primaryCtaLabel),
@@ -668,32 +680,32 @@ export function normalizeSalonClientAppConfig(
     welcomeHeadline: normalizeNullableText(raw.welcomeHeadline),
     welcomeMessage: normalizeNullableText(raw.welcomeMessage),
     promotionHeadline: normalizeNullableText(raw.promotionHeadline),
-    heroImageUrl: normalizeNullableText(raw.heroImageUrl),
-    heroImageVariantUrl: normalizeNullableText(raw.heroImageVariantUrl),
-    heroImageTabletVariantUrl: normalizeNullableText(
+    heroImageUrl: normalizeNullableUrl(raw.heroImageUrl),
+    heroImageVariantUrl: normalizeNullableUrl(raw.heroImageVariantUrl),
+    heroImageTabletVariantUrl: normalizeNullableUrl(
       raw.heroImageTabletVariantUrl,
     ),
-    heroImageShareVariantUrl: normalizeNullableText(
+    heroImageShareVariantUrl: normalizeNullableUrl(
       raw.heroImageShareVariantUrl,
     ),
-    galleryCoverImageUrl: normalizeNullableText(raw.galleryCoverImageUrl),
-    galleryCoverImageVariantUrl: normalizeNullableText(
+    galleryCoverImageUrl: normalizeNullableUrl(raw.galleryCoverImageUrl),
+    galleryCoverImageVariantUrl: normalizeNullableUrl(
       raw.galleryCoverImageVariantUrl,
     ),
-    galleryCoverImageTabletVariantUrl: normalizeNullableText(
+    galleryCoverImageTabletVariantUrl: normalizeNullableUrl(
       raw.galleryCoverImageTabletVariantUrl,
     ),
-    galleryCoverImageShareVariantUrl: normalizeNullableText(
+    galleryCoverImageShareVariantUrl: normalizeNullableUrl(
       raw.galleryCoverImageShareVariantUrl,
     ),
-    profileCoverImageUrl: normalizeNullableText(raw.profileCoverImageUrl),
-    profileCoverImageVariantUrl: normalizeNullableText(
+    profileCoverImageUrl: normalizeNullableUrl(raw.profileCoverImageUrl),
+    profileCoverImageVariantUrl: normalizeNullableUrl(
       raw.profileCoverImageVariantUrl,
     ),
-    profileCoverImageTabletVariantUrl: normalizeNullableText(
+    profileCoverImageTabletVariantUrl: normalizeNullableUrl(
       raw.profileCoverImageTabletVariantUrl,
     ),
-    profileCoverImageShareVariantUrl: normalizeNullableText(
+    profileCoverImageShareVariantUrl: normalizeNullableUrl(
       raw.profileCoverImageShareVariantUrl,
     ),
     heroImageFocusX:
@@ -741,13 +753,13 @@ export function normalizeSalonClientAppConfig(
         minimum: 1,
         maximum: 1.8,
       }) ?? DEFAULT_CLIENT_APP_CONFIG.profileCoverImageZoom,
-    instagramUrl: normalizeNullableText(raw.instagramUrl),
+    instagramUrl: normalizeNullableUrl(raw.instagramUrl),
     addressLabel: normalizeNullableText(raw.addressLabel),
-    mapUrl: normalizeNullableText(raw.mapUrl),
-    privacyPolicyUrl: normalizeNullableText(raw.privacyPolicyUrl),
-    termsOfUseUrl: normalizeNullableText(raw.termsOfUseUrl),
-    supportUrl: normalizeNullableText(raw.supportUrl),
-    supportEmail: normalizeNullableText(raw.supportEmail),
+    mapUrl: normalizeNullableUrl(raw.mapUrl),
+    privacyPolicyUrl: normalizeNullableUrl(raw.privacyPolicyUrl),
+    termsOfUseUrl: normalizeNullableUrl(raw.termsOfUseUrl),
+    supportUrl: normalizeNullableUrl(raw.supportUrl),
+    supportEmail: normalizeNullableEmail(raw.supportEmail),
     ratingValue: normalizeNullableNumber(raw.ratingValue, {
       minimum: 0,
       maximum: 5,
@@ -769,6 +781,10 @@ export function serializeSalonClientAppConfig(
   raw.experienceModel = value.experienceModel;
   raw.visualStyle = value.visualStyle;
   raw.homeEmphasis = value.homeEmphasis;
+  raw.whiteLabelActive = value.whiteLabelActive;
+  raw.autoPilotEnabled = value.autoPilotEnabled;
+  setNullableText(raw, "appDisplayName", value.appDisplayName);
+  setNullableText(raw, "customDomain", value.customDomain);
   raw.heroHeadline = value.heroHeadline;
   raw.heroSupportLine = value.heroSupportLine;
   raw.primaryCtaLabel = value.primaryCtaLabel;
@@ -1120,6 +1136,39 @@ function normalizeNullableText(value: Json | undefined) {
   return normalized ? normalized : null;
 }
 
+function normalizeNullableUrl(
+  value: Json | undefined,
+  protocols: readonly string[] = ["http:", "https:"],
+) {
+  const normalized = normalizeNullableText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    return protocols.includes(parsed.protocol) ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeNullableDomain(value: Json | undefined) {
+  const normalized = normalizeNullableText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const sanitized = normalized
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "")
+    .replace(/:\d+$/, "")
+    .replace(/^www\./, "");
+
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(sanitized) ? sanitized : null;
+}
+
 function normalizeNullableDateTimeText(value: Json | undefined) {
   const normalized = normalizeNullableText(value);
   if (!normalized) {
@@ -1136,6 +1185,15 @@ function normalizeNullableHexColor(value: Json | undefined) {
   }
 
   return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeNullableEmail(value: Json | undefined) {
+  const normalized = normalizeNullableText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(normalized) ? normalized : null;
 }
 
 function normalizeNullableNumber(

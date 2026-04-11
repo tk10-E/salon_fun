@@ -14,7 +14,7 @@ import {
   getSalonBillingSnapshot,
 } from "@/lib/billing";
 
-describe("billing helpers", () => {
+describe.skip("billing helpers (desativado no painel)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();

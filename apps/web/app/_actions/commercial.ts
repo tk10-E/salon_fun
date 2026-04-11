@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import {
   buildRedirectNotice,
+  COMMERCIAL_OVERVIEW_PATH,
   COMMERCIAL_AUTOMATIONS_PATH,
   COMMERCIAL_LOYALTY_PATH,
   COMMERCIAL_PROMOTIONS_PATH,
@@ -14,7 +15,14 @@ import {
   formatPercentLabel,
   queueCustomerNotification,
   revalidateCommercialPaths,
+  resolveDashboardReturnPath,
+  SUBSCRIPTIONS_PATH,
 } from "./shared";
+
+const COMMERCIAL_OFFER_PATHS = [
+  COMMERCIAL_PROMOTIONS_PATH,
+  SUBSCRIPTIONS_PATH,
+] as const;
 
 function normalizeDateInput(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -88,6 +96,11 @@ function buildOfferNotification(args: {
 }
 
 export async function createSalonOfferActionImpl(formData: FormData) {
+  const redirectPath = resolveDashboardReturnPath(
+    formData,
+    COMMERCIAL_PROMOTIONS_PATH,
+    COMMERCIAL_OFFER_PATHS,
+  );
   const kind = String(formData.get("kind") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
@@ -117,7 +130,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Preencha os dados principais da oferta.",
         "error",
       ),
@@ -136,7 +149,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Informe datas válidas para a vigência da oferta.",
         "error",
       ),
@@ -150,7 +163,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "A data final precisa ser igual ou posterior à data inicial.",
         "error",
       ),
@@ -160,7 +173,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   if (priceValue && (price === null || Number.isNaN(price) || price < 0)) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Informe um valor válido para a oferta.",
         "error",
       ),
@@ -175,7 +188,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Preencha serviço, sessões e validade para publicar um clube ou pacote operacional.",
         "error",
       ),
@@ -203,7 +216,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   if (error) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Não foi possível salvar a oferta.",
         "error",
       ),
@@ -233,17 +246,18 @@ export async function createSalonOfferActionImpl(formData: FormData) {
     });
   }
 
-  revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH);
+  revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH, SUBSCRIPTIONS_PATH);
   redirect(
-    buildRedirectNotice(
-      COMMERCIAL_PROMOTIONS_PATH,
-      "Oferta salva com sucesso.",
-      "success",
-    ),
+    buildRedirectNotice(redirectPath, "Oferta salva com sucesso.", "success"),
   );
 }
 
 export async function updateSalonOfferActionImpl(formData: FormData) {
+  const redirectPath = resolveDashboardReturnPath(
+    formData,
+    COMMERCIAL_PROMOTIONS_PATH,
+    COMMERCIAL_OFFER_PATHS,
+  );
   const offerId = String(formData.get("offerId") ?? "").trim();
   const kind = String(formData.get("kind") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
@@ -275,7 +289,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Dados inválidos para atualizar a oferta.",
         "error",
       ),
@@ -294,7 +308,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Informe datas válidas para a vigência da oferta.",
         "error",
       ),
@@ -308,7 +322,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "A data final precisa ser igual ou posterior à data inicial.",
         "error",
       ),
@@ -318,7 +332,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   if (priceValue && (price === null || Number.isNaN(price) || price < 0)) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Informe um valor válido para a oferta.",
         "error",
       ),
@@ -333,7 +347,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   ) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Preencha serviço, sessões e validade para atualizar esse clube ou pacote.",
         "error",
       ),
@@ -364,7 +378,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   if (error) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Não foi possível atualizar a oferta.",
         "error",
       ),
@@ -395,10 +409,10 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
     });
   }
 
-  revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH);
+  revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH, SUBSCRIPTIONS_PATH);
   redirect(
     buildRedirectNotice(
-      COMMERCIAL_PROMOTIONS_PATH,
+      redirectPath,
       "Oferta atualizada com sucesso.",
       "success",
     ),
@@ -406,18 +420,17 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
 }
 
 export async function deleteSalonOfferActionImpl(formData: FormData) {
+  const redirectPath = resolveDashboardReturnPath(
+    formData,
+    COMMERCIAL_PROMOTIONS_PATH,
+    COMMERCIAL_OFFER_PATHS,
+  );
   const offerId = String(formData.get("offerId") ?? "").trim();
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
   if (!offerId) {
-    redirect(
-      buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
-        "Oferta inválida.",
-        "error",
-      ),
-    );
+    redirect(buildRedirectNotice(redirectPath, "Oferta inválida.", "error"));
   }
 
   const { error } = await supabase
@@ -429,17 +442,17 @@ export async function deleteSalonOfferActionImpl(formData: FormData) {
   if (error) {
     redirect(
       buildRedirectNotice(
-        COMMERCIAL_PROMOTIONS_PATH,
+        redirectPath,
         "Não foi possível remover a oferta.",
         "error",
       ),
     );
   }
 
-  revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH);
+  revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH, SUBSCRIPTIONS_PATH);
   redirect(
     buildRedirectNotice(
-      COMMERCIAL_PROMOTIONS_PATH,
+      redirectPath,
       "Oferta removida com sucesso.",
       "success",
     ),
@@ -547,6 +560,54 @@ export async function saveSalonReferralProgramActionImpl(formData: FormData) {
     buildRedirectNotice(
       COMMERCIAL_REFERRALS_PATH,
       "Programa de indicação atualizado com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function markReferralRewardRedeemedActionImpl(formData: FormData) {
+  const redirectPath = resolveDashboardReturnPath(
+    formData,
+    COMMERCIAL_REFERRALS_PATH,
+    [COMMERCIAL_OVERVIEW_PATH, COMMERCIAL_REFERRALS_PATH],
+  );
+  const unlockId = String(formData.get("unlockId") ?? "").trim();
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (!unlockId) {
+    redirect(
+      buildRedirectNotice(redirectPath, "Recompensa inválida.", "error"),
+    );
+  }
+
+  const { data: rewardUnlock, error } = await supabase
+    .from("salon_referral_reward_unlocks")
+    .update({
+      redeemed_at: new Date().toISOString(),
+      status: "redeemed",
+    })
+    .eq("id", unlockId)
+    .eq("salon_id", salon.id)
+    .eq("status", "available")
+    .select("id")
+    .maybeSingle();
+
+  if (error || !rewardUnlock?.id) {
+    redirect(
+      buildRedirectNotice(
+        redirectPath,
+        "Não foi possível marcar a recompensa como entregue.",
+        "error",
+      ),
+    );
+  }
+
+  revalidateCommercialPaths(COMMERCIAL_REFERRALS_PATH);
+  redirect(
+    buildRedirectNotice(
+      redirectPath,
+      "Recompensa marcada como entregue.",
       "success",
     ),
   );

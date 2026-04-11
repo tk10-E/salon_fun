@@ -15,10 +15,10 @@ const withCache = typeof cache === "function"
 const getAuthenticatedUser = withCache(async () => {
   const supabase = createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  return user;
+  return session?.user ?? null;
 });
 
 export function buildRedirectPath(
@@ -60,7 +60,9 @@ export async function requireUser() {
   return { supabase: createClient(), user };
 }
 
-export const getOwnerSalon = withCache(async (userId: string) => {
+// Salon data changes often from server actions in the dashboard.
+// Keep this read uncached so redirects after "save" always render fresh data.
+export async function getOwnerSalon(userId: string) {
   const supabase = createClient();
   const { data } = await supabase
     .from("salons")
@@ -69,7 +71,7 @@ export const getOwnerSalon = withCache(async (userId: string) => {
     .maybeSingle();
 
   return data as Salon | null;
-});
+}
 
 export async function getAuthenticatedPanelEntryPath() {
   const user = await getAuthenticatedUser();

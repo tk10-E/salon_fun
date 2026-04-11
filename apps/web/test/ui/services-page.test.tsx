@@ -1,120 +1,48 @@
-// @vitest-environment jsdom
-
-import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const {
-  createClientMock,
-  createServiceActionMock,
-  deleteServiceActionMock,
-  requireOwnerSalonMock,
-  updateServiceCatalogActionMock,
-} = vi.hoisted(() => ({
-  createClientMock: vi.fn(),
-  createServiceActionMock: vi.fn(),
-  deleteServiceActionMock: vi.fn(),
-  requireOwnerSalonMock: vi.fn(),
-  updateServiceCatalogActionMock: vi.fn(),
+import {
+  captureRedirect,
+  TEST_REDIRECT_PREFIX,
+} from "../server-action-test-helpers";
+
+const { redirectMock } = vi.hoisted(() => ({
+  redirectMock: vi.fn(),
 }));
 
-vi.mock("next/image", () => ({
-  default: () => null,
-}));
-
-vi.mock("@/app/actions", () => ({
-  createServiceAction: createServiceActionMock,
-  updateServiceCatalogAction: updateServiceCatalogActionMock,
-  deleteServiceAction: deleteServiceActionMock,
-}));
-
-vi.mock("@/lib/auth", () => ({
-  requireOwnerSalon: requireOwnerSalonMock,
-}));
-
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: createClientMock,
+vi.mock("next/navigation", () => ({
+  redirect: redirectMock,
 }));
 
 import ServicesPage from "@/app/dashboard/services/page";
-
-function createServiceListQuery(data: unknown[]) {
-  const query = {
-    eq: vi.fn(() => query),
-    or: vi.fn(() => query),
-    order: vi.fn((field: string) => {
-      if (field === "name") {
-        return Promise.resolve({ data, error: null });
-      }
-
-      return query;
-    }),
-  };
-
-  return query;
-}
-
-function createCategoriesQuery(data: unknown[]) {
-  const query = {
-    eq: vi.fn(() => query),
-    order: vi.fn(() => Promise.resolve({ data, error: null })),
-  };
-
-  return query;
-}
+import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 
 describe("services page UI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    requireOwnerSalonMock.mockResolvedValue({
-      salon: { id: "salon-1" },
+    redirectMock.mockImplementation((location: string) => {
+      throw new Error(`${TEST_REDIRECT_PREFIX}${location}`);
     });
   });
 
-  it("renders the empty catalog state and the new service form", async () => {
-    const serviceListQuery = createServiceListQuery([]);
-    const categoriesQuery = createCategoriesQuery([]);
+  it("redireciona a rota legada para o catalogo de servicos da gestao", async () => {
+    const location = await captureRedirect(
+      Promise.resolve().then(() =>
+        ServicesPage({
+          searchParams: {
+            category: "Cabelo",
+            message: "Servico salvo com sucesso.",
+            tone: "success",
+          },
+        }),
+      ),
+      redirectMock,
+    );
 
-    createClientMock.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table !== "services") {
-          throw new Error(`Unexpected table ${table}`);
-        }
+    const url = new URL(`https://painel.example${location}`);
 
-        let serviceSelectCount = 0;
-
-        return {
-          select: vi.fn((selection: string) => {
-            serviceSelectCount += 1;
-
-            if (selection === "*") {
-              return serviceListQuery;
-            }
-
-            if (selection === "category") {
-              return categoriesQuery;
-            }
-
-            throw new Error(`Unexpected selection ${selection}`);
-          }),
-        };
-      }),
-      storage: {
-        from: vi.fn(),
-      },
-    });
-
-    const ui = await ServicesPage({
-      searchParams: { message: "Serviço salvo com sucesso.", tone: "success" },
-    });
-
-    render(ui);
-
-    expect(screen.getByRole("heading", { name: "Serviços cadastrados" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Buscar serviço")).toBeInTheDocument();
-    expect(screen.getByText("Nenhum serviço cadastrado")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Novo serviço" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Tipo do serviço", { selector: "#service-category" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Adicionar serviço" })).toBeInTheDocument();
-    expect(screen.getByText("Serviço salvo com sucesso.")).toBeInTheDocument();
+    expect(url.pathname).toBe(MANAGEMENT_ROUTES.services);
+    expect(url.searchParams.get("q")).toBe("Cabelo");
+    expect(url.searchParams.get("message")).toBe("Servico salvo com sucesso.");
+    expect(url.searchParams.get("tone")).toBe("success");
   });
 });

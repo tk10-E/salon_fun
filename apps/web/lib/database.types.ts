@@ -697,6 +697,7 @@ export type Database = {
           asaas_customer_id: string | null
           asaas_customer_synced_at: string | null
           auth_user_id: string
+          birth_date: string | null
           beauty_goals: string | null
           beauty_products: string | null
           consent_signed_at: string | null
@@ -721,6 +722,7 @@ export type Database = {
           asaas_customer_id?: string | null
           asaas_customer_synced_at?: string | null
           auth_user_id: string
+          birth_date?: string | null
           beauty_goals?: string | null
           beauty_products?: string | null
           consent_signed_at?: string | null
@@ -745,6 +747,7 @@ export type Database = {
           asaas_customer_id?: string | null
           asaas_customer_synced_at?: string | null
           auth_user_id?: string
+          birth_date?: string | null
           beauty_goals?: string | null
           beauty_products?: string | null
           consent_signed_at?: string | null
@@ -797,6 +800,7 @@ export type Database = {
           last_error: string | null
           last_sync_at: string | null
           last_webhook_at: string | null
+          profile_picture_url: string | null
           require_mention_approval: boolean
           salon_id: string
           updated_at: string
@@ -816,6 +820,7 @@ export type Database = {
           last_error?: string | null
           last_sync_at?: string | null
           last_webhook_at?: string | null
+          profile_picture_url?: string | null
           require_mention_approval?: boolean
           salon_id: string
           updated_at?: string
@@ -835,6 +840,7 @@ export type Database = {
           last_error?: string | null
           last_sync_at?: string | null
           last_webhook_at?: string | null
+          profile_picture_url?: string | null
           require_mention_approval?: boolean
           salon_id?: string
           updated_at?: string
@@ -853,6 +859,7 @@ export type Database = {
         Row: {
           approved_at: string | null
           approved_by_user_id: string | null
+          author_profile_picture_url: string | null
           author_username: string | null
           caption: string | null
           created_at: string
@@ -877,6 +884,7 @@ export type Database = {
         Insert: {
           approved_at?: string | null
           approved_by_user_id?: string | null
+          author_profile_picture_url?: string | null
           author_username?: string | null
           caption?: string | null
           created_at?: string
@@ -901,6 +909,7 @@ export type Database = {
         Update: {
           approved_at?: string | null
           approved_by_user_id?: string | null
+          author_profile_picture_url?: string | null
           author_username?: string | null
           caption?: string | null
           created_at?: string
@@ -1142,6 +1151,76 @@ export type Database = {
           },
           {
             foreignKeyName: "customer_product_orders_salon_id_fkey"
+            columns: ["salon_id"]
+            isOneToOne: false
+            referencedRelation: "salons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_inbound_messages: {
+        Row: {
+          appointment_id: string | null
+          created_at: string
+          customer_id: string | null
+          from_phone: string
+          handled_action: string | null
+          id: string
+          interpreted_intent: string | null
+          message_body: string | null
+          message_id: string
+          message_type: string
+          payload: Json
+          profile_name: string | null
+          salon_id: string | null
+        }
+        Insert: {
+          appointment_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          from_phone: string
+          handled_action?: string | null
+          id?: string
+          interpreted_intent?: string | null
+          message_body?: string | null
+          message_id: string
+          message_type?: string
+          payload?: Json
+          profile_name?: string | null
+          salon_id?: string | null
+        }
+        Update: {
+          appointment_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          from_phone?: string
+          handled_action?: string | null
+          id?: string
+          interpreted_intent?: string | null
+          message_body?: string | null
+          message_id?: string
+          message_type?: string
+          payload?: Json
+          profile_name?: string | null
+          salon_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_inbound_messages_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_inbound_messages_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_inbound_messages_salon_id_fkey"
             columns: ["salon_id"]
             isOneToOne: false
             referencedRelation: "salons"
@@ -1393,6 +1472,13 @@ export type Database = {
           payload: Json
           salon_id: string
           title: string
+          whatsapp_delivered_at: string | null
+          whatsapp_delivery_status: string | null
+          whatsapp_error: string | null
+          whatsapp_message_id: string | null
+          whatsapp_read_at: string | null
+          whatsapp_sent_at: string | null
+          whatsapp_status_at: string | null
         }
         Insert: {
           audience?: string
@@ -1404,6 +1490,13 @@ export type Database = {
           payload?: Json
           salon_id: string
           title: string
+          whatsapp_delivered_at?: string | null
+          whatsapp_delivery_status?: string | null
+          whatsapp_error?: string | null
+          whatsapp_message_id?: string | null
+          whatsapp_read_at?: string | null
+          whatsapp_sent_at?: string | null
+          whatsapp_status_at?: string | null
         }
         Update: {
           audience?: string
@@ -1415,6 +1508,13 @@ export type Database = {
           payload?: Json
           salon_id?: string
           title?: string
+          whatsapp_delivered_at?: string | null
+          whatsapp_delivery_status?: string | null
+          whatsapp_error?: string | null
+          whatsapp_message_id?: string | null
+          whatsapp_read_at?: string | null
+          whatsapp_sent_at?: string | null
+          whatsapp_status_at?: string | null
         }
         Relationships: [
           {
@@ -1751,6 +1851,7 @@ export type Database = {
           caption: string | null
           created_at: string
           created_by_user_id: string
+          external_author_avatar_url: string | null
           external_author_username: string | null
           external_media_url: string | null
           external_permalink: string | null
@@ -1771,6 +1872,7 @@ export type Database = {
           caption?: string | null
           created_at?: string
           created_by_user_id?: string
+          external_author_avatar_url?: string | null
           external_author_username?: string | null
           external_media_url?: string | null
           external_permalink?: string | null
@@ -1791,6 +1893,7 @@ export type Database = {
           caption?: string | null
           created_at?: string
           created_by_user_id?: string
+          external_author_avatar_url?: string | null
           external_author_username?: string | null
           external_media_url?: string | null
           external_permalink?: string | null
@@ -2234,6 +2337,9 @@ export type Database = {
           tagline: string | null
           timezone: string
           updated_at: string
+          whatsapp_dispatch_enabled: boolean
+          whatsapp_meta_business_account_id: string | null
+          whatsapp_meta_phone_number_id: string | null
           whatsapp_phone: string | null
         }
         Insert: {
@@ -2272,6 +2378,9 @@ export type Database = {
           tagline?: string | null
           timezone?: string
           updated_at?: string
+          whatsapp_dispatch_enabled?: boolean
+          whatsapp_meta_business_account_id?: string | null
+          whatsapp_meta_phone_number_id?: string | null
           whatsapp_phone?: string | null
         }
         Update: {
@@ -2310,6 +2419,9 @@ export type Database = {
           tagline?: string | null
           timezone?: string
           updated_at?: string
+          whatsapp_dispatch_enabled?: boolean
+          whatsapp_meta_business_account_id?: string | null
+          whatsapp_meta_phone_number_id?: string | null
           whatsapp_phone?: string | null
         }
         Relationships: []
@@ -3090,6 +3202,7 @@ export type Database = {
         }[]
       }
       get_salon_growth_automation_dashboard: { Args: never; Returns: Json }
+      get_salon_marketing_dashboard: { Args: never; Returns: Json }
       get_salon_join_preview: {
         Args: { input_join_code: string }
         Returns: {
@@ -3307,6 +3420,38 @@ export type Database = {
         Returns: Json
       }
       normalize_growth_text: { Args: { value: string }; Returns: string }
+      find_whatsapp_customer_context: {
+        Args: { phone_input: string }
+        Returns: {
+          appointment_date: string | null
+          appointment_id: string | null
+          appointment_status: string | null
+          customer_confirmation_requested_at: string | null
+          customer_id: string
+          customer_name: string
+          customer_presence_confirmed_at: string | null
+          salon_id: string
+          salon_name: string
+          service_name: string | null
+          staff_member_name: string | null
+        }[]
+      }
+      find_whatsapp_customer_context_for_salon: {
+        Args: { phone_input: string; salon_id_input?: string | null }
+        Returns: {
+          appointment_date: string | null
+          appointment_id: string | null
+          appointment_status: string | null
+          customer_confirmation_requested_at: string | null
+          customer_id: string
+          customer_name: string
+          customer_presence_confirmed_at: string | null
+          salon_id: string
+          salon_name: string
+          service_name: string | null
+          staff_member_name: string | null
+        }[]
+      }
       qualify_referral_from_completed_appointment: {
         Args: { appointment_uuid: string }
         Returns: undefined
@@ -3598,6 +3743,7 @@ export type Database = {
       update_owner_customer_profile: {
         Args: {
           allergies_input?: string
+          birth_date_input?: string
           beauty_goals_input?: string
           beauty_products_input?: string
           consent_status_input?: string
@@ -3615,6 +3761,7 @@ export type Database = {
           asaas_customer_id: string | null
           asaas_customer_synced_at: string | null
           auth_user_id: string
+          birth_date: string | null
           beauty_goals: string | null
           beauty_products: string | null
           consent_signed_at: string | null

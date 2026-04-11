@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createClientMock,
-  createSalonPostActionMock,
-  deleteSalonPostActionMock,
-  deleteSalonPostCommentActionMock,
+  createSalonPostActionPath,
+  deleteSalonPostActionPath,
+  deleteSalonPostCommentActionPath,
   requireOwnerSalonMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
-  createSalonPostActionMock: vi.fn(),
-  deleteSalonPostActionMock: vi.fn(),
-  deleteSalonPostCommentActionMock: vi.fn(),
+  createSalonPostActionPath: "/__test/create-salon-post",
+  deleteSalonPostActionPath: "/__test/delete-salon-post",
+  deleteSalonPostCommentActionPath: "/__test/delete-salon-post-comment",
   requireOwnerSalonMock: vi.fn(),
 }));
 
@@ -22,9 +22,9 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/app/actions", () => ({
-  createSalonPostAction: createSalonPostActionMock,
-  deleteSalonPostAction: deleteSalonPostActionMock,
-  deleteSalonPostCommentAction: deleteSalonPostCommentActionMock,
+  createSalonPostAction: createSalonPostActionPath,
+  deleteSalonPostAction: deleteSalonPostActionPath,
+  deleteSalonPostCommentAction: deleteSalonPostCommentActionPath,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -63,7 +63,7 @@ describe("feed page UI", () => {
     });
   });
 
-  it("renders published posts with gallery/comment stats and the composer form", async () => {
+  it("renders published posts with gallery stats and a compact composer flow", async () => {
     const postsQuery = createPostsQuery([
       {
         id: "post-1",
@@ -71,6 +71,7 @@ describe("feed page UI", () => {
         caption: "Resultado do dia com brilho intenso.",
         image_path: "cover.jpg",
         post_type: "before_after",
+        source_type: null,
         video_path: null,
         created_at: "2026-03-20T15:00:00.000Z",
         services: { id: "service-1", name: "Escova modelada" },
@@ -88,6 +89,23 @@ describe("feed page UI", () => {
             created_at: "2026-03-20T18:00:00.000Z",
           },
         ],
+      },
+      {
+        id: "post-2",
+        title: "Combo gloss com desconto",
+        caption: "Oferta da semana com vagas limitadas.",
+        image_path: "promo-cover.jpg",
+        post_type: "reel",
+        source_type: null,
+        video_path: "promo-reel.mp4",
+        created_at: "2026-03-19T15:00:00.000Z",
+        services: { id: "service-2", name: "Gloss express" },
+        staff_members: null,
+        salon_post_images: [
+          { id: "img-3", image_path: "promo-cover.jpg", sort_order: 0 },
+        ],
+        salon_post_likes: [],
+        salon_post_comments: [],
       },
     ]);
     const servicesQuery = createServicesQuery([
@@ -136,32 +154,60 @@ describe("feed page UI", () => {
 
     render(ui);
 
-    expect(screen.getByRole("heading", { name: "Feed do salão" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Vitrine simples de posts" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Publicação criada com sucesso.")).toBeInTheDocument();
+    expect(screen.getByText("2 publicações")).toBeInTheDocument();
+    expect(screen.getByText("1 transformações")).toBeInTheDocument();
+    expect(screen.getByText("1 promoções")).toBeInTheDocument();
+    expect(screen.getByText("1 vídeos curtos")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Escova glow" })).toBeInTheDocument();
-    expect(screen.getByText("Antes")).toBeInTheDocument();
-    expect(screen.getByText("Depois")).toBeInTheDocument();
     expect(screen.getAllByText("Antes e depois").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Assinado por/i)).toBeInTheDocument();
-    expect(screen.getByText("Talita")).toBeInTheDocument();
-    expect(screen.getAllByText("Escova modelada").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Transformação para gerar confiança e acelerar reserva\./),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Profissional: Talita • Colorista/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/2 curtidas • 1 comentários/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Combo gloss com desconto" })).toBeInTheDocument();
+    expect(screen.getAllByText("Promoção").length).toBeGreaterThan(0);
     expect(
       screen.getByText(
-        "Transformação que ajuda a cliente a imaginar o próprio resultado com mais confiança.",
+        /Vídeo curto com leitura promocional para girar agenda, pacote ou oferta\./,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("2 curtidas")).toBeInTheDocument();
-    expect(screen.getByText("1 comentários")).toBeInTheDocument();
     expect(screen.getByText("Maria")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Nova publicação" })).toBeInTheDocument();
     expect(
-      screen.getByText("O que mais faz a cliente salvar e agendar"),
+      screen.getByRole("link", { name: "Nova publicação" }),
+    ).toHaveAttribute("href", "#feed-new");
+    expect(
+      screen.getByRole("heading", { name: "Nova publicação", level: 2 }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Dicas rápidas")).toBeInTheDocument();
     expect(screen.getByLabelText("Formato do post")).toBeInTheDocument();
-    expect(screen.getByLabelText("Título da publicação")).toBeInTheDocument();
-    expect(screen.getByLabelText("Serviço vinculado")).toBeInTheDocument();
-    expect(screen.getByLabelText("Profissional em destaque")).toBeInTheDocument();
+    expect(screen.getByLabelText("Título")).toBeInTheDocument();
+    expect(screen.getByLabelText("Serviço")).toBeInTheDocument();
+    expect(screen.getByLabelText("Profissional")).toBeInTheDocument();
     expect(screen.getByLabelText("Vídeo curto")).toBeInTheDocument();
+    expect(screen.getByText("Capa forte e limpa")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Formato do post"), {
+      target: { value: "reel" },
+    });
+    expect(screen.getByText("1 capa + 1 video")).toBeInTheDocument();
+    expect(
+      screen.getByText("Vídeo curto pede 1 capa vertical e 1 arquivo de vídeo."),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Formato do post"), {
+      target: { value: "before_after" },
+    });
+    expect(screen.getByText("2 imagens em ordem")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "Envie exatamente 2 imagens. A primeira fica como Antes e a segunda como Depois.",
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Publicar no app" })).toBeInTheDocument();
   });
 });

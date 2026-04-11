@@ -294,6 +294,13 @@ describe("feed actions", () => {
         video_path: expect.stringMatching(/^salon-1\//),
       }),
     );
+    expect(insertGallery).toHaveBeenCalledWith([
+      {
+        post_id: "post-reel-1",
+        image_path: expect.stringMatching(/^salon-1\//),
+        sort_order: 0,
+      },
+    ]);
     expect(insertNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({

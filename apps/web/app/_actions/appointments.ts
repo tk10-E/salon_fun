@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { sanitizePhone, sendSalonWhatsAppTextMessage } from "@/lib/whatsapp";
 
 import {
   buildRedirectNotice,
@@ -26,12 +27,26 @@ type AppointmentContext = {
   deposit_status?: string | null;
   id: string;
   customer_id: string;
+  customers:
+    | {
+        name: string | null;
+        phone: string | null;
+        whatsapp_phone?: string | null;
+      }
+    | {
+        name: string | null;
+        phone: string | null;
+        whatsapp_phone?: string | null;
+      }[]
+    | null;
   date: string;
   ends_at: string;
   status: AppointmentStatus;
   services: { name: string | null } | null;
   staff_members: { name: string | null } | null;
 };
+
+type AppointmentWhatsAppMode = "confirmation" | "reminder" | "reschedule";
 
 function formatAppointmentStatusError(message: string) {
   if (message.includes("appointment_not_finished")) {
@@ -123,9 +138,77 @@ async function clearAppointmentVacancyAlerts(params: {
     .eq("salon_id", salonId);
 }
 
+function firstAppointmentRelation<T>(value: T | T[] | null | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+function buildAppointmentWhatsAppBody(params: {
+  appointmentContext: AppointmentContext;
+  mode: AppointmentWhatsAppMode;
+  salonName: string;
+}) {
+  const { appointmentContext, mode, salonName } = params;
+  const customer = firstAppointmentRelation(appointmentContext.customers);
+  const serviceName =
+    appointmentContext.services?.name?.trim() || "seu atendimento";
+  const staffName = appointmentContext.staff_members?.name?.trim();
+  const appointmentLabel = formatAppointmentDateTimeLabel(
+    appointmentContext.date,
+  );
+  const customerName = customer?.name?.trim() || "cliente";
+
+  if (mode === "confirmation") {
+    return staffName
+      ? `Oi ${customerName}, seu horario de ${serviceName} no ${salonName} foi confirmado para ${appointmentLabel} com ${staffName}. Se precisar reagendar, responda esta mensagem.`
+      : `Oi ${customerName}, seu horario de ${serviceName} no ${salonName} foi confirmado para ${appointmentLabel}. Se precisar reagendar, responda esta mensagem.`;
+  }
+
+  if (mode === "reminder") {
+    return staffName
+      ? `Lembrete do ${salonName}: ${serviceName} com ${staffName} em ${appointmentLabel}. Se precisar ajustar o horario, fale com a gente por aqui.`
+      : `Lembrete do ${salonName}: ${serviceName} em ${appointmentLabel}. Se precisar ajustar o horario, fale com a gente por aqui.`;
+  }
+
+  return staffName
+    ? `Oi ${customerName}, o ${salonName} separou novas opcoes para reagendar seu ${serviceName} com ${staffName}. Responda esta mensagem que continuamos por aqui.`
+    : `Oi ${customerName}, o ${salonName} separou novas opcoes para reagendar seu ${serviceName}. Responda esta mensagem que continuamos por aqui.`;
+}
+
+async function sendAppointmentWhatsApp(params: {
+  appointmentContext: AppointmentContext | null;
+  mode: AppointmentWhatsAppMode;
+  salonId: string;
+  salonName: string;
+}) {
+  const { appointmentContext, mode, salonId, salonName } = params;
+  const customer = firstAppointmentRelation(appointmentContext?.customers);
+  const targetPhone = sanitizePhone(
+    customer?.whatsapp_phone ?? customer?.phone ?? null,
+  );
+
+  if (!appointmentContext || !targetPhone) {
+    return { ok: false as const, reason: "missing_phone" as const };
+  }
+
+  return sendSalonWhatsAppTextMessage(
+    salonId,
+    targetPhone,
+    buildAppointmentWhatsAppBody({
+      appointmentContext,
+      mode,
+      salonName,
+    }),
+  );
+}
+
 async function notifyCustomerAboutAppointmentStatus(params: {
   supabase: ReturnType<typeof createClient>;
   salonId: string;
+  salonName: string;
   appointmentId: string;
   status: MutableAppointmentStatus;
   cancellationReason: string;
@@ -134,6 +217,7 @@ async function notifyCustomerAboutAppointmentStatus(params: {
   const {
     supabase,
     salonId,
+    salonName,
     appointmentId,
     status,
     cancellationReason,
@@ -167,6 +251,13 @@ async function notifyCustomerAboutAppointmentStatus(params: {
         appointmentId,
       },
     });
+
+    await sendAppointmentWhatsApp({
+      appointmentContext,
+      mode: "confirmation",
+      salonId,
+      salonName,
+    });
   }
 
   if (status === "cancelled") {
@@ -184,6 +275,13 @@ async function notifyCustomerAboutAppointmentStatus(params: {
         type: "appointment_cancelled",
         appointmentId,
       },
+    });
+
+    await sendAppointmentWhatsApp({
+      appointmentContext,
+      mode: "reschedule",
+      salonId,
+      salonName,
     });
   }
 
@@ -230,7 +328,7 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
   const { data: appointmentContext } = await supabase
     .from("appointments")
     .select(
-      "id, customer_id, date, ends_at, status, services(name), staff_members(name)",
+      "id, customer_id, date, ends_at, status, customers(name, phone), services(name), staff_members(name)",
     )
     .eq("id", appointmentId)
     .eq("salon_id", salon.id)
@@ -361,6 +459,7 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
   await notifyCustomerAboutAppointmentStatus({
     supabase,
     salonId: salon.id,
+    salonName: salon.name,
     appointmentId,
     status,
     cancellationReason,
@@ -382,6 +481,79 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
         : status === "completed"
           ? "Atendimento concluído com sucesso."
           : "Agendamento cancelado com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function sendAppointmentWhatsAppActionImpl(formData: FormData) {
+  const appointmentId = String(formData.get("appointmentId") ?? "").trim();
+  const requestedMode = String(formData.get("mode") ?? "").trim();
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (
+    !appointmentId ||
+    !["confirmation", "reminder", "reschedule"].includes(requestedMode)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        "Ação de WhatsApp inválida para esse atendimento.",
+        "error",
+      ),
+    );
+  }
+
+  const mode = requestedMode as AppointmentWhatsAppMode;
+  const { data: appointmentContext } = await supabase
+    .from("appointments")
+    .select(
+      "id, customer_id, date, ends_at, status, customers(name, phone), services(name), staff_members(name)",
+    )
+    .eq("id", appointmentId)
+    .eq("salon_id", salon.id)
+    .maybeSingle<AppointmentContext>();
+
+  if (!appointmentContext?.id) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        "Agendamento não encontrado para enviar WhatsApp.",
+        "error",
+      ),
+    );
+  }
+
+  const result = await sendAppointmentWhatsApp({
+    appointmentContext,
+    mode,
+    salonId: salon.id,
+    salonName: salon.name,
+  });
+
+  if (!result.ok) {
+    redirect(
+      buildRedirectNotice(
+        APPOINTMENTS_PATH,
+        result.reason === "missing_config"
+          ? "Configure o canal tecnico do WhatsApp deste salão antes de enviar mensagens automáticas."
+          : result.reason === "request_failed"
+            ? "O WhatsApp nao aceitou esse envio agora. Tente novamente em instantes."
+            : "Esse atendimento não tem telefone válido para WhatsApp no cadastro.",
+        "error",
+      ),
+    );
+  }
+
+  redirect(
+    buildRedirectNotice(
+      APPOINTMENTS_PATH,
+      mode === "confirmation"
+        ? "WhatsApp de confirmação enviado."
+        : mode === "reminder"
+          ? "WhatsApp de lembrete enviado."
+          : "WhatsApp de reagendamento enviado.",
       "success",
     ),
   );

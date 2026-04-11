@@ -2,16 +2,36 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
-import { BILLING_PATH, getSalonBillingSnapshot, type BillingInterval } from "@/lib/billing";
+import {
+  BILLING_DISABLED,
+  BILLING_PATH,
+  getSalonBillingWorkspaceSnapshot,
+  type BillingInterval,
+} from "@/lib/billing";
 import { buildAbsoluteUrl } from "@/lib/requestOrigin";
 import {
   getStripeBillingReadiness,
   getStripeClient,
+  getStripeOperationalStatus,
   resolveStripePriceId,
 } from "@/lib/stripeBilling";
 import { createClient } from "@/lib/supabase/server";
 
 import { buildRedirectNotice } from "./shared";
+
+function redirectIfBillingDisabled() {
+  if (BILLING_DISABLED) {
+    redirect(buildRedirectNotice("/dashboard", "Assinatura desativada no painel.", "info"));
+  }
+}
+
+function formatStripeIssues(issues: string[]) {
+  if (!issues.length) {
+    return "Finalize a configuração live do Stripe antes de continuar.";
+  }
+
+  return issues.join(" ");
+}
 
 function parseBillingInterval(value: string): BillingInterval | null {
   if (value === "monthly" || value === "yearly") {
@@ -52,7 +72,7 @@ async function ensureStripeCustomer(params: {
   const { salonId, salonName, ownerUserId, ownerEmail } = params;
   const stripe = getStripeClient();
   const supabase = createClient();
-  const billingSnapshot = await getSalonBillingSnapshot(salonId);
+  const billingSnapshot = await getSalonBillingWorkspaceSnapshot(salonId);
 
   if (
     billingSnapshot.subscription.paymentProvider === "stripe" &&
@@ -98,6 +118,7 @@ async function ensureStripeCustomer(params: {
 }
 
 export async function changeSalonPlanActionImpl(formData: FormData) {
+  redirectIfBillingDisabled();
   const requestedPlanId = String(formData.get("planId") ?? "").trim();
   const requestedInterval = parseBillingInterval(String(formData.get("billingInterval") ?? "").trim());
   const { salon } = await requireOwnerSalon();
@@ -153,6 +174,7 @@ export async function changeSalonPlanActionImpl(formData: FormData) {
 }
 
 export async function cancelSalonSubscriptionActionImpl() {
+  redirectIfBillingDisabled();
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
   const now = new Date().toISOString();
@@ -175,6 +197,7 @@ export async function cancelSalonSubscriptionActionImpl() {
 }
 
 export async function resumeSalonSubscriptionActionImpl() {
+  redirectIfBillingDisabled();
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 
@@ -229,6 +252,18 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
 
   if (!requestedPlanId || !requestedInterval) {
     redirect(buildRedirectNotice(BILLING_PATH, "Selecione um plano e um ciclo válidos.", "error"));
+  }
+
+  const operationalStatus = await getStripeOperationalStatus();
+
+  if (operationalStatus.mode !== "live" || !operationalStatus.webhookConfigured) {
+    redirect(
+      buildRedirectNotice(
+        BILLING_PATH,
+        formatStripeIssues(operationalStatus.issues),
+        "error",
+      ),
+    );
   }
 
   const { data: requestedPlan, error: requestedPlanError } = await supabase
@@ -308,7 +343,7 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
 export async function startStripeBillingPortalActionImpl() {
   const readiness = getStripeBillingReadiness();
   const { salon } = await requireOwnerSalon();
-  const billingSnapshot = await getSalonBillingSnapshot(salon.id);
+  const billingSnapshot = await getSalonBillingWorkspaceSnapshot(salon.id);
 
   if (!readiness.configured) {
     redirect(
@@ -328,6 +363,18 @@ export async function startStripeBillingPortalActionImpl() {
       buildRedirectNotice(
         BILLING_PATH,
         "Ainda não existe um cliente Stripe vinculado ao salão. Inicie um checkout primeiro.",
+        "error",
+      ),
+    );
+  }
+
+  const operationalStatus = await getStripeOperationalStatus();
+
+  if (operationalStatus.mode !== "live" || !operationalStatus.portalConfigured) {
+    redirect(
+      buildRedirectNotice(
+        BILLING_PATH,
+        formatStripeIssues(operationalStatus.issues),
         "error",
       ),
     );

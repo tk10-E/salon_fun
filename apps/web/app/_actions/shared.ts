@@ -11,6 +11,9 @@ export const COMMERCIAL_LOYALTY_PATH = "/dashboard/benefits/loyalty";
 export const COMMERCIAL_REFERRALS_PATH = "/dashboard/benefits/referrals";
 export const COMMERCIAL_AUTOMATIONS_PATH = "/dashboard/benefits/automations";
 export const OPERATIONS_PATH = "/dashboard/operations";
+export const INVENTORY_PATH = "/dashboard/inventory";
+export const SUBSCRIPTIONS_PATH = "/dashboard/subscriptions";
+export const FINANCE_PATH = "/dashboard/finance";
 
 export function buildRedirectNotice(path: string, message: string, tone: NoticeTone = "info") {
   const [pathname, currentQuery = ""] = path.split("?", 2);
@@ -20,6 +23,20 @@ export function buildRedirectNotice(path: string, message: string, tone: NoticeT
   params.set("tone", tone);
 
   return `${pathname}?${params.toString()}`;
+}
+
+export function resolveDashboardReturnPath(
+  formData: FormData,
+  fallbackPath: string,
+  allowedPaths: readonly string[],
+) {
+  const returnPath = String(formData.get("returnPath") ?? "").trim();
+
+  if (!returnPath) {
+    return fallbackPath;
+  }
+
+  return allowedPaths.includes(returnPath) ? returnPath : fallbackPath;
 }
 
 export function revalidateCommercialPaths(...paths: string[]) {
@@ -140,6 +157,138 @@ export function buildFeedPostNotification(args: {
       serviceId: args.serviceId,
       serviceName: args.serviceName,
       staffMemberName: args.staffMemberName ?? null,
+    },
+  };
+}
+
+export function buildStaffAvailabilityNotification(args: {
+  action: "created" | "reactivated";
+  staffMemberName: string;
+  staffRole?: string | null;
+}) {
+  const roleLabel = args.staffRole?.trim() || null;
+  const title =
+    args.action === "created"
+      ? "Novo profissional no salão"
+      : "Equipe atualizada no salão";
+  const body =
+    args.action === "created"
+      ? roleLabel
+        ? `${args.staffMemberName} entrou para a equipe como ${roleLabel} e já pode aparecer nos agendamentos do app.`
+        : `${args.staffMemberName} entrou para a equipe e já pode aparecer nos agendamentos do app.`
+      : roleLabel
+        ? `${args.staffMemberName} voltou para a agenda do salão como ${roleLabel}. Confira os horários no app.`
+        : `${args.staffMemberName} voltou para a agenda do salão. Confira os horários no app.`;
+  const type =
+    args.action === "created" ? "staff_published" : "staff_reactivated";
+
+  return {
+    title,
+    body,
+    type,
+    payload: {
+      type,
+      ctaTarget: "appointments",
+      staffMemberName: args.staffMemberName,
+      staffRole: roleLabel,
+    },
+  };
+}
+
+export function buildServiceCatalogNotification(args: {
+  action: "published" | "updated";
+  serviceName: string;
+  category?: string | null;
+  serviceId?: string | null;
+}) {
+  const categoryLabel = args.category?.trim() || null;
+  const type =
+    args.action === "published" ? "service_published" : "service_updated";
+
+  return {
+    title:
+      args.action === "published"
+        ? "Novo serviço disponível no app"
+        : "Serviço atualizado no app",
+    body:
+      args.action === "published"
+        ? categoryLabel
+          ? `${args.serviceName} entrou no catálogo de ${categoryLabel} e já pode ser agendado pelo app.`
+          : `${args.serviceName} entrou no catálogo e já pode ser agendado pelo app.`
+        : categoryLabel
+          ? `${args.serviceName} foi atualizado em ${categoryLabel}. Confira preço, duração e detalhes no app.`
+          : `${args.serviceName} foi atualizado. Confira preço, duração e detalhes no app.`,
+    type,
+    payload: {
+      type,
+      ctaTarget: "explore",
+      serviceId: args.serviceId ?? null,
+      serviceName: args.serviceName,
+      category: categoryLabel,
+    },
+  };
+}
+
+export function buildStoreProductNotification(args: {
+  action: "published" | "updated";
+  productName: string;
+  brand?: string | null;
+}) {
+  const brandLabel = args.brand?.trim() || null;
+  const type =
+    args.action === "published"
+      ? "store_product_published"
+      : "store_product_updated";
+
+  return {
+    title:
+      args.action === "published"
+        ? "Novo produto na loja do salão"
+        : "Loja do salão atualizada",
+    body:
+      args.action === "published"
+        ? brandLabel
+          ? `${args.productName} da ${brandLabel} já está disponível na vitrine do app.`
+          : `${args.productName} já está disponível na vitrine do app.`
+        : brandLabel
+          ? `${args.productName} da ${brandLabel} recebeu novidades na loja do salão.`
+          : `${args.productName} recebeu novidades na loja do salão.`,
+    type,
+    payload: {
+      type,
+      ctaTarget: "explore",
+      productName: args.productName,
+      brand: brandLabel,
+    },
+  };
+}
+
+export function buildClientAppRefreshNotification(args: {
+  changedAreas: string[];
+}) {
+  const normalizedAreas = [...new Set(args.changedAreas.filter(Boolean))];
+  const type = "client_app_updated";
+  const labelByArea = new Map<string, string>([
+    ["identidade", "identidade visual"],
+    ["vitrine", "vitrine do app"],
+    ["campanhas", "campanhas e destaques"],
+    ["informacoes", "informações do salão"],
+  ]);
+  const areaLabels = normalizedAreas.map((area) => labelByArea.get(area) ?? area);
+
+  const body =
+    areaLabels.length <= 1
+      ? `O salão atualizou ${areaLabels[0] ?? "o app"}. Confira as novidades no app.`
+      : `O salão atualizou ${areaLabels.slice(0, -1).join(", ")} e ${areaLabels.at(-1)}. Confira as novidades no app.`;
+
+  return {
+    title: "Novidades no app do salão",
+    body,
+    type,
+    payload: {
+      type,
+      ctaTarget: "explore",
+      changedAreas: normalizedAreas.join(","),
     },
   };
 }

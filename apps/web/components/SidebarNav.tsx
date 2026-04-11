@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { MouseEvent, useEffect, useState } from "react";
+import { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+
+import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 
 type NavItem = {
   href: string;
@@ -11,112 +13,153 @@ type NavItem = {
   icon: string;
 };
 
-type NavSection = {
+type NavGroup = {
   label: string;
-  description: string;
   items: NavItem[];
 };
 
-const navSections: NavSection[] = [
+const primaryNav: NavItem[] = [
   {
-    label: "Operação diária",
-    description: "Agenda, clientes, equipe e rotina do salão.",
-    items: [
-      {
-        href: "/dashboard",
-        label: "Painel",
-        description: "Visão geral",
-        icon: "home",
-      },
-      {
-        href: "/dashboard/appointments",
-        label: "Agenda",
-        description: "Horários e status",
-        icon: "calendar",
-      },
-      {
-        href: "/dashboard/customers",
-        label: "Clientes",
-        description: "CRM e histórico",
-        icon: "users",
-      },
-      {
-        href: "/dashboard/team",
-        label: "Equipe",
-        description: "Profissionais",
-        icon: "team",
-      },
-      {
-        href: "/dashboard/operations",
-        label: "Loja e estoque",
-        description: "Pedidos e caixa",
-        icon: "chart",
-      },
-    ],
+    href: "/dashboard",
+    label: "Início",
+    description: "Resumo do salão",
+    icon: "home",
   },
   {
-    label: "Vendas e marketing",
-    description: "Tudo o que vende e fortalece o app da cliente.",
+    href: MANAGEMENT_ROUTES.appointments,
+    label: "Agenda",
+    description: "Horários e status",
+    icon: "calendar",
+  },
+  {
+    href: MANAGEMENT_ROUTES.clients,
+    label: "Clientes",
+    description: "Cadastro e retorno",
+    icon: "users",
+  },
+  {
+    href: MANAGEMENT_ROUTES.services,
+    label: "Serviços",
+    description: "Catálogo e preços",
+    icon: "sparkles",
+  },
+  {
+    href: MANAGEMENT_ROUTES.professionals,
+    label: "Equipe",
+    description: "Profissionais e agenda",
+    icon: "team",
+  },
+  {
+    href: "/dashboard/settings",
+    label: "Configurações",
+    description: "Marca e operação",
+    icon: "gear",
+  },
+];
+
+const extraNavGroups: NavGroup[] = [
+  {
+    label: "Comunicação e vitrine",
     items: [
       {
-        href: "/dashboard/services",
-        label: "Serviços",
-        description: "Catálogo",
-        icon: "sparkles",
-      },
-      {
         href: "/dashboard/benefits",
-        label: "Benefícios",
-        description: "Promoções e fidelidade",
+        label: "Campanhas",
+        description: "Ofertas",
         icon: "bolt",
       },
       {
         href: "/dashboard/feed",
         label: "Feed",
-        description: "Publicações",
+        description: "Conteúdo",
         icon: "gallery",
       },
       {
         href: "/dashboard/instagram",
         label: "Instagram",
-        description: "Conexão e menções",
+        description: "Integração",
         icon: "instagram",
       },
       {
         href: "/dashboard/notifications",
-        label: "Notificações",
-        description: "Push e histórico",
+        label: "Lembretes",
+        description: "Push e avisos",
         icon: "bell",
+      },
+      {
+        href: "/dashboard/client-app",
+        label: "Vitrine do app",
+        description: "App do cliente",
+        icon: "phone",
       },
     ],
   },
   {
-    label: "Configuração",
-    description: "App, cobrança e ajustes do painel.",
+    label: "Operação e caixa",
     items: [
       {
-        href: "/dashboard/client-app",
-        label: "App do cliente",
-        description: "Experiência mobile",
-        icon: "phone",
+        href: MANAGEMENT_ROUTES.categories,
+        label: "Categorias",
+        description: "Organização",
+        icon: "box",
+      },
+      {
+        href: MANAGEMENT_ROUTES.payments,
+        label: "Recebimentos",
+        description: "Pagamentos",
+        icon: "receipt",
+      },
+      {
+        href: MANAGEMENT_ROUTES.commissions,
+        label: "Repasse",
+        description: "Comissões",
+        icon: "chart",
+      },
+      {
+        href: "/dashboard/operations",
+        label: "Operações",
+        description: "Avançado",
+        icon: "chart",
+      },
+      {
+        href: "/dashboard/operations/comandas",
+        label: "Comandas",
+        description: "Atendimento",
+        icon: "receipt",
+      },
+      {
+        href: "/dashboard/inventory",
+        label: "Estoque",
+        description: "Produtos",
+        icon: "box",
+      },
+      {
+        href: "/dashboard/finance",
+        label: "Caixa",
+        description: "Financeiro",
+        icon: "chart",
+      },
+    ],
+  },
+  {
+    label: "Plano e conta",
+    items: [
+      {
+        href: "/dashboard/subscriptions",
+        label: "Assinaturas",
+        description: "Planos",
+        icon: "crown",
       },
       {
         href: "/dashboard/billing",
-        label: "Cobrança",
-        description: "Plano e assinatura",
+        label: "Conta",
+        description: "Cobrança",
         icon: "wallet",
-      },
-      {
-        href: "/dashboard/settings",
-        label: "Ajustes",
-        description: "Configurações gerais",
-        icon: "gear",
       },
     ],
   },
 ];
 
-const links = navSections.flatMap((section) => section.items);
+const extraNav = extraNavGroups.flatMap((group) => group.items);
 
 function NavIcon({ name }: { name: string }) {
   switch (name) {
@@ -174,6 +217,15 @@ function NavIcon({ name }: { name: string }) {
           />
         </svg>
       );
+    case "receipt":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M7 4.25a.75.75 0 0 0-.75.75v14.19a.25.25 0 0 0 .4.2l1.84-1.38a.75.75 0 0 1 .88 0l1.84 1.38a.75.75 0 0 0 .88 0l1.84-1.38a.75.75 0 0 1 .88 0l1.84 1.38a.25.25 0 0 0 .4-.2V5A.75.75 0 0 0 17 4.25H7Zm0-1.5h10A2.25 2.25 0 0 1 19.25 5v14.19c0 1-.87 1.56-1.7 1.56c-.35 0-.7-.1-1-.32l-1.35-1.01l-1.35 1.02c-.6.45-1.4.45-2 0l-1.35-1.02l-1.35 1.02c-.3.22-.65.32-1 .32c-.83 0-1.7-.56-1.7-1.56V5A2.25 2.25 0 0 1 7 2.75Zm2.75 4a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-4.5Zm0 3.5a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-4.5Zm0 3.5a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
     case "gallery":
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -197,6 +249,24 @@ function NavIcon({ name }: { name: string }) {
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M8 4.25h8A3.75 3.75 0 0 1 19.75 8v8A3.75 3.75 0 0 1 16 19.75H8A3.75 3.75 0 0 1 4.25 16V8A3.75 3.75 0 0 1 8 4.25Zm0 1.5A2.25 2.25 0 0 0 5.75 8v8A2.25 2.25 0 0 0 8 18.25h8A2.25 2.25 0 0 0 18.25 16V8A2.25 2.25 0 0 0 16 5.75H8Zm4 2.5A3.75 3.75 0 1 1 8.25 12A3.75 3.75 0 0 1 12 8.25Zm0 1.5A2.25 2.25 0 1 0 14.25 12A2.25 2.25 0 0 0 12 9.75Zm4.13-2.13a.88.88 0 1 1 0 1.76a.88.88 0 0 1 0-1.76Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "box":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M11.62 3.47a.75.75 0 0 1 .76 0l7 4A.75.75 0 0 1 19.75 8v8a.75.75 0 0 1-.37.65l-7 4a.75.75 0 0 1-.76 0l-7-4A.75.75 0 0 1 4.25 16V8a.75.75 0 0 1 .37-.65l7-4ZM6.5 8.43v7.14l5 2.86v-7.14l-5-2.86Zm6.5 10 5-2.86V8.43l-5 2.86v7.14Zm-.75-8.44L17.48 7 12 3.87 6.52 7l5.73 2.99Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "crown":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M5.1 6.42a1.35 1.35 0 1 1 0 2.7a1.35 1.35 0 0 1 0-2.7Zm13.8 0a1.35 1.35 0 1 1 0 2.7a1.35 1.35 0 0 1 0-2.7ZM12 4.25a1.5 1.5 0 1 1 0 3a1.5 1.5 0 0 1 0-3Zm-7.04 5.3a.75.75 0 0 1 .94.18l3.3 4.05l2.1-6.02a.75.75 0 0 1 1.42 0l2.1 6.02l3.3-4.05a.75.75 0 0 1 1.33.6l-1.44 7.25a.75.75 0 0 1-.73.6H6.72a.75.75 0 0 1-.73-.6L4.55 10.33a.75.75 0 0 1 .4-.78ZM7.33 16.68h9.34l.96-4.82l-2.8 3.43a.75.75 0 0 1-1.3-.2L12 10.88l-1.53 4.21a.75.75 0 0 1-1.3.2l-2.8-3.43l.96 4.82Z"
             fill="currentColor"
           />
         </svg>
@@ -259,51 +329,101 @@ export function SidebarNav({
 }: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const prefetchedHrefsRef = useRef<Set<string>>(new Set());
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [showExtras, setShowExtras] = useState<boolean>(true);
 
   useEffect(() => {
     setPendingHref(null);
   }, [pathname]);
 
   useEffect(() => {
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-    let frameId: number | null = null;
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("salonfun:simple-nav");
+    if (stored === "collapsed") {
+      setShowExtras(false);
+    }
+  }, []);
 
-    const prefetchLinks = () => {
-      if (cancelled) {
-        return;
-      }
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      "salonfun:simple-nav",
+      showExtras ? "expanded" : "collapsed",
+    );
+  }, [showExtras]);
 
-      for (const link of links) {
-        if (link.href !== pathname) {
-          router.prefetch(link.href);
-        }
-      }
-    };
-
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      frameId = window.requestAnimationFrame(prefetchLinks);
-      const idleId = window.requestIdleCallback(prefetchLinks, {
-        timeout: 320,
-      });
-      return () => {
-        cancelled = true;
-        if (frameId !== null) {
-          window.cancelAnimationFrame(frameId);
-        }
-        window.cancelIdleCallback(idleId);
-      };
+  const prefetchRoute = useCallback((href: string) => {
+    if (href === pathname || prefetchedHrefsRef.current.has(href)) {
+      return;
     }
 
-    timeoutId = globalThis.setTimeout(prefetchLinks, 80);
-    return () => {
-      cancelled = true;
-      if (timeoutId !== null) {
-        globalThis.clearTimeout(timeoutId);
-      }
-    };
+    prefetchedHrefsRef.current.add(href);
+    router.prefetch(href);
   }, [pathname, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const likelyRoutes = (() => {
+      if (pathname.startsWith("/dashboard/gestao")) {
+        return [
+          "/dashboard",
+          MANAGEMENT_ROUTES.appointments,
+          MANAGEMENT_ROUTES.clients,
+          MANAGEMENT_ROUTES.services,
+        ];
+      }
+
+      if (pathname.startsWith("/dashboard/benefits")) {
+        return [
+          "/dashboard/benefits",
+          "/dashboard/benefits/promotions",
+          "/dashboard/benefits/referrals",
+          "/dashboard/client-app",
+        ];
+      }
+
+      if (pathname.startsWith("/dashboard/operations")) {
+        return [
+          "/dashboard/operations",
+          "/dashboard/operations/comandas",
+          "/dashboard/inventory",
+          "/dashboard/finance",
+        ];
+      }
+
+      return [
+        "/dashboard",
+        MANAGEMENT_ROUTES.appointments,
+        MANAGEMENT_ROUTES.clients,
+        "/dashboard/feed",
+      ];
+    })().filter((href, index, collection) => {
+      return href !== pathname && collection.indexOf(href) === index;
+    });
+
+    const schedulePrefetch = () => {
+      likelyRoutes.forEach((href) => prefetchRoute(href));
+    };
+
+    const supportsIdleCallback =
+      typeof window.requestIdleCallback === "function" &&
+      typeof window.cancelIdleCallback === "function";
+
+    if (supportsIdleCallback) {
+      const handle = window.requestIdleCallback(() => schedulePrefetch(), {
+        timeout: 1200,
+      });
+
+      return () => window.cancelIdleCallback(handle);
+    }
+
+    const timeout = window.setTimeout(schedulePrefetch, 650);
+    return () => window.clearTimeout(timeout);
+  }, [pathname, prefetchRoute, router]);
 
   const handleLinkClick = (
     event: MouseEvent<HTMLAnchorElement>,
@@ -323,7 +443,81 @@ export function SidebarNav({
     }
 
     setPendingHref(href);
-    router.prefetch(href);
+    prefetchRoute(href);
+  };
+
+  const renderNavItem = (link: NavItem, options?: { compact?: boolean }) => {
+    const isActive =
+      link.href === "/dashboard"
+        ? pathname === link.href
+        : pathname === link.href || pathname.startsWith(`${link.href}/`);
+    const isPending = pendingHref === link.href;
+    const isDisabled =
+      isWorkspaceLocked &&
+      !matchesAllowedPath(link.href, allowedPathsWhenLocked);
+    const className = isActive
+      ? "nav-link nav-link--active"
+      : isPending
+        ? "nav-link nav-link--pending"
+        : "nav-link";
+    const classNameWithVariant = options?.compact
+      ? `${className} nav-link--compact`
+      : className;
+    const mergedClassName = isDisabled
+      ? `${classNameWithVariant} nav-link--disabled`
+      : classNameWithVariant;
+
+    if (isDisabled) {
+      return (
+        <span
+          key={link.href}
+          className={mergedClassName}
+          aria-current={isActive ? "page" : undefined}
+          aria-disabled="true"
+        >
+          <span className="nav-link__content">
+            <span className="nav-link__icon" aria-hidden="true">
+              <NavIcon name={link.icon} />
+            </span>
+
+            <span className="nav-link__text">
+              <strong>{link.label}</strong>
+              <small>{link.description}</small>
+            </span>
+          </span>
+
+          <span className="nav-link__pulse" aria-hidden="true" />
+        </span>
+      );
+    }
+
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        className={mergedClassName}
+        aria-current={isActive ? "page" : undefined}
+        aria-busy={isPending ? "true" : undefined}
+        data-pending={isPending ? "true" : "false"}
+        onMouseEnter={() => prefetchRoute(link.href)}
+        onTouchStart={() => prefetchRoute(link.href)}
+        onFocus={() => prefetchRoute(link.href)}
+        onClick={(event) => handleLinkClick(event, link.href, isActive)}
+      >
+        <span className="nav-link__content">
+          <span className="nav-link__icon" aria-hidden="true">
+            <NavIcon name={link.icon} />
+          </span>
+
+          <span className="nav-link__text">
+            <strong>{link.label}</strong>
+            <small>{link.description}</small>
+          </span>
+        </span>
+
+        <span className="nav-link__pulse" aria-hidden="true" />
+      </Link>
+    );
   };
 
   return (
@@ -336,94 +530,65 @@ export function SidebarNav({
         }
         aria-hidden="true"
       />
-      {navSections.map((section) => (
-        <div key={section.label} className="sidebar-section">
-          <div className="sidebar-section__header">
-            <div className="sidebar-section__copy">
-              <span className="sidebar-section__label">{section.label}</span>
-              <p className="sidebar-section__description">
-                {section.description}
-              </p>
-            </div>
+      <div className="sidebar-section">
+        <div className="sidebar-section__header">
+          <div className="sidebar-section__copy">
+            <span className="sidebar-section__label">Dia a dia do salão</span>
+            <p className="sidebar-section__description">
+              Acesso rápido ao que move atendimento, agenda e operação.
+            </p>
           </div>
-
-          <div className="sidebar-section__body">
-            {section.items.map((link) => {
-              const isActive =
-                link.href === "/dashboard"
-                  ? pathname === link.href
-                  : pathname === link.href ||
-                    pathname.startsWith(`${link.href}/`);
-              const isPending = pendingHref === link.href;
-              const isDisabled =
-                isWorkspaceLocked &&
-                !matchesAllowedPath(link.href, allowedPathsWhenLocked);
-              const className = isActive
-                ? "nav-link nav-link--active"
-                : isPending
-                  ? "nav-link nav-link--pending"
-                  : "nav-link";
-              const mergedClassName = isDisabled
-                ? `${className} nav-link--disabled`
-                : className;
-
-              if (isDisabled) {
-                return (
-                  <span
-                    key={link.href}
-                    className={mergedClassName}
-                    aria-current={isActive ? "page" : undefined}
-                    aria-disabled="true"
-                  >
-                    <span className="nav-link__content">
-                      <span className="nav-link__icon" aria-hidden="true">
-                        <NavIcon name={link.icon} />
-                      </span>
-
-                      <span className="nav-link__text">
-                        <strong>{link.label}</strong>
-                        <small>{link.description}</small>
-                      </span>
-                    </span>
-
-                    <span className="nav-link__pulse" aria-hidden="true" />
-                  </span>
-                );
-              }
-
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={mergedClassName}
-                  aria-current={isActive ? "page" : undefined}
-                  aria-busy={isPending ? "true" : undefined}
-                  data-pending={isPending ? "true" : "false"}
-                  onMouseEnter={() => router.prefetch(link.href)}
-                  onTouchStart={() => router.prefetch(link.href)}
-                  onFocus={() => router.prefetch(link.href)}
-                  onClick={(event) =>
-                    handleLinkClick(event, link.href, isActive)
-                  }
-                >
-                  <span className="nav-link__content">
-                    <span className="nav-link__icon" aria-hidden="true">
-                      <NavIcon name={link.icon} />
-                    </span>
-
-                    <span className="nav-link__text">
-                      <strong>{link.label}</strong>
-                      <small>{link.description}</small>
-                    </span>
-                  </span>
-
-                  <span className="nav-link__pulse" aria-hidden="true" />
-                </Link>
-              );
-            })}
-          </div>
+          <span className="sidebar-section__count" aria-hidden="true">
+            {primaryNav.length}
+          </span>
         </div>
-      ))}
+
+        <div className="sidebar-section__body">
+          {primaryNav.map((link) => renderNavItem(link))}
+        </div>
+      </div>
+
+      <div className="sidebar-section sidebar-section--secondary">
+        <div className="sidebar-section__header">
+          <div className="sidebar-section__copy">
+            <span className="sidebar-section__label">Mais ferramentas</span>
+            <p className="sidebar-section__description">
+              Áreas de apoio para crescer, operar e cobrar melhor.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="sidebar-section__toggle"
+            onClick={() => setShowExtras((value) => !value)}
+            aria-expanded={showExtras}
+          >
+            <span>{showExtras ? "Recolher" : "Expandir"}</span>
+            <strong>{extraNav.length}</strong>
+          </button>
+        </div>
+
+        {showExtras ? (
+          <div className="sidebar-section__body sidebar-section__body--stacked">
+            {extraNavGroups.map((group) => (
+              <div key={group.label} className="sidebar-nav-group">
+                <div className="sidebar-nav-group__header">
+                  <span className="sidebar-nav-group__label">{group.label}</span>
+                  <span className="sidebar-nav-group__count" aria-hidden="true">
+                    {group.items.length}
+                  </span>
+                </div>
+
+                <div className="sidebar-nav-group__body">
+                  {group.items.map((link) =>
+                    renderNavItem(link, { compact: true }),
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </nav>
   );
 }

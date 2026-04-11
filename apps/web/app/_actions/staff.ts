@@ -6,7 +6,11 @@ import { getSalonBillingEntitlements } from "@/lib/billing";
 import { WEEKDAY_OPTIONS } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/server";
 
-import { buildRedirectNotice } from "./shared";
+import {
+  buildRedirectNotice,
+  buildStaffAvailabilityNotification,
+  queueCustomerNotification,
+} from "./shared";
 
 const TEAM_PATH = "/dashboard/team";
 const APPOINTMENTS_PATH = "/dashboard/appointments";
@@ -107,6 +111,20 @@ export async function createStaffMemberActionImpl(formData: FormData) {
     }
   }
 
+  const notification = buildStaffAvailabilityNotification({
+    action: "created",
+    staffMemberName: name,
+    staffRole: role || null,
+  });
+  await queueCustomerNotification({
+    supabase,
+    salonId: salon.id,
+    notificationType: notification.type,
+    title: notification.title,
+    body: notification.body,
+    payload: notification.payload,
+  });
+
   revalidatePath(TEAM_PATH);
   revalidatePath(SERVICES_PATH);
   redirect(buildRedirectNotice(TEAM_PATH, "Profissional adicionado com sucesso.", "success"));
@@ -122,12 +140,19 @@ export async function updateStaffMemberAssignmentsActionImpl(formData: FormData)
     redirect(buildRedirectNotice(TEAM_PATH, "Profissional inválido.", "error"));
   }
 
-  const { data: staffMember, error: staffError } = await supabase
+  const staffLookupResult = await supabase
     .from("staff_members")
-    .select("id")
+    .select("id, name, role, is_active")
     .eq("id", staffMemberId)
     .eq("salon_id", salon.id)
     .maybeSingle();
+  const staffMember = staffLookupResult.data as {
+    id: string;
+    name: string;
+    role: string | null;
+    is_active: boolean;
+  } | null;
+  const staffError = staffLookupResult.error;
 
   if (staffError || !staffMember) {
     redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
@@ -185,7 +210,7 @@ export async function updateStaffBusinessHoursActionImpl(formData: FormData) {
 
   const { data: staffMember, error: staffError } = await supabase
     .from("staff_members")
-    .select("id")
+    .select("id, name, role, is_active")
     .eq("id", staffMemberId)
     .eq("salon_id", salon.id)
     .maybeSingle();
@@ -263,12 +288,19 @@ export async function toggleStaffMemberStatusActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(TEAM_PATH, "Profissional inválido.", "error"));
   }
 
-  const { data: staffMember, error: staffError } = await supabase
+  const staffLookupResult = await supabase
     .from("staff_members")
-    .select("id")
+    .select("id, name, role, is_active")
     .eq("id", staffMemberId)
     .eq("salon_id", salon.id)
     .maybeSingle();
+  const staffMember = staffLookupResult.data as {
+    id: string;
+    name: string;
+    role: string | null;
+    is_active: boolean;
+  } | null;
+  const staffError = staffLookupResult.error;
 
   if (staffError || !staffMember) {
     redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
@@ -300,6 +332,22 @@ export async function toggleStaffMemberStatusActionImpl(formData: FormData) {
           })),
         );
       }
+    }
+
+    if (!staffMember.is_active) {
+      const notification = buildStaffAvailabilityNotification({
+        action: "reactivated",
+        staffMemberName: staffMember.name,
+        staffRole: staffMember.role,
+      });
+      await queueCustomerNotification({
+        supabase,
+        salonId: salon.id,
+        notificationType: notification.type,
+        title: notification.title,
+        body: notification.body,
+        payload: notification.payload,
+      });
     }
   }
 

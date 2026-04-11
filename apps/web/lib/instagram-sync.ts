@@ -27,6 +27,7 @@ export type InstagramConnectionSyncRecord = {
   salon_id: string;
   instagram_user_id: string;
   instagram_username: string;
+  profile_picture_url: string | null;
   facebook_page_id: string | null;
   facebook_page_name: string | null;
   facebook_page_access_token_ciphertext: string | null;
@@ -52,6 +53,12 @@ type MetaMediaNode = {
   username: string | null;
 };
 
+export type InstagramMetaProfile = {
+  id: string;
+  username: string | null;
+  profilePictureUrl: string | null;
+};
+
 type FacebookAttachmentMediaSummary = {
   mediaUrl: string | null;
   thumbnailUrl: string | null;
@@ -65,6 +72,44 @@ function normalizeNonEmptyString(value: unknown): string | null {
 
   const normalized = value.trim();
   return normalized.length ? normalized : null;
+}
+
+function extractMetaErrorMessage(value: unknown) {
+  const rawMessage =
+    value instanceof Error ? value.message : normalizeNonEmptyString(String(value));
+
+  if (!rawMessage) {
+    return "A Meta nao retornou detalhes do erro.";
+  }
+
+  try {
+    const payload = JSON.parse(rawMessage) as {
+      error?: {
+        message?: unknown;
+      };
+    };
+    const apiMessage = normalizeNonEmptyString(payload?.error?.message);
+
+    if (apiMessage) {
+      return apiMessage;
+    }
+  } catch {}
+
+  return rawMessage.replace(/\s+/g, " ").trim();
+}
+
+function buildFacebookFeedWarning(value: unknown) {
+  const detail = extractMetaErrorMessage(value);
+  const normalizedDetail = detail.toLowerCase();
+
+  if (
+    normalizedDetail.includes("pages_read_engagement") ||
+    normalizedDetail.includes("page public content access")
+  ) {
+    return "O Instagram segue funcionando normalmente. So a leitura das publicacoes da pagina do salao esta limitada neste momento.";
+  }
+
+  return "Nao foi possivel atualizar as publicacoes da pagina do salao agora.";
 }
 
 function sha256Hex(value: string) {
@@ -103,7 +148,9 @@ function isMetaMediaNode(value: MetaMediaNode | null): value is MetaMediaNode {
   return value !== null;
 }
 
-function collectFacebookAttachmentNodes(value: unknown): Array<Record<string, unknown>> {
+function collectFacebookAttachmentNodes(
+  value: unknown,
+): Array<Record<string, unknown>> {
   if (!value || typeof value !== "object") {
     return [];
   }
@@ -123,7 +170,9 @@ function collectFacebookAttachmentNodes(value: unknown): Array<Record<string, un
   return [...directNodes, ...nestedNodes];
 }
 
-function summarizeFacebookAttachments(value: unknown): FacebookAttachmentMediaSummary {
+function summarizeFacebookAttachments(
+  value: unknown,
+): FacebookAttachmentMediaSummary {
   const attachmentNodes = collectFacebookAttachmentNodes(value);
   let fallbackImageUrl: string | null = null;
   let fallbackThumbnailUrl: string | null = null;
@@ -176,7 +225,9 @@ function summarizeFacebookAttachments(value: unknown): FacebookAttachmentMediaSu
   };
 }
 
-function mapInstagramMediaNode(node: Record<string, unknown>): MetaMediaNode | null {
+function mapInstagramMediaNode(
+  node: Record<string, unknown>,
+): MetaMediaNode | null {
   const id = normalizeNonEmptyString(node.id);
 
   if (!id) {
@@ -196,7 +247,9 @@ function mapInstagramMediaNode(node: Record<string, unknown>): MetaMediaNode | n
   };
 }
 
-function mapFacebookPostNode(node: Record<string, unknown>): MetaMediaNode | null {
+function mapFacebookPostNode(
+  node: Record<string, unknown>,
+): MetaMediaNode | null {
   const id = normalizeNonEmptyString(node.id);
 
   if (!id) {
@@ -207,7 +260,8 @@ function mapFacebookPostNode(node: Record<string, unknown>): MetaMediaNode | nul
   const attachmentSummary = summarizeFacebookAttachments(node.attachments);
   const fallbackPreview = normalizeNonEmptyString(node.full_picture);
   const mediaUrl = attachmentSummary.mediaUrl ?? fallbackPreview;
-  const thumbnailUrl = attachmentSummary.thumbnailUrl ?? fallbackPreview ?? mediaUrl;
+  const thumbnailUrl =
+    attachmentSummary.thumbnailUrl ?? fallbackPreview ?? mediaUrl;
 
   return {
     platform: "facebook",
@@ -216,7 +270,9 @@ function mapFacebookPostNode(node: Record<string, unknown>): MetaMediaNode | nul
       normalizeNonEmptyString(node.message) ||
       normalizeNonEmptyString(node.story),
     media_type:
-      attachmentSummary.mediaType === "unknown" && mediaUrl ? "image" : attachmentSummary.mediaType,
+      attachmentSummary.mediaType === "unknown" && mediaUrl
+        ? "image"
+        : attachmentSummary.mediaType,
     media_url: mediaUrl,
     thumbnail_url: thumbnailUrl,
     permalink: normalizeNonEmptyString(node.permalink_url),
@@ -227,10 +283,7 @@ function mapFacebookPostNode(node: Record<string, unknown>): MetaMediaNode | nul
   };
 }
 
-function isFacebookMentionNode(
-  node: Record<string, unknown>,
-  pageId: string,
-) {
+function isFacebookMentionNode(node: Record<string, unknown>, pageId: string) {
   const fromNode = (node.from ?? {}) as Record<string, unknown>;
   const authorId = normalizeNonEmptyString(fromNode.id);
 
@@ -312,6 +365,10 @@ async function upsertMetaMedia(args: {
       (item.platform === "instagram"
         ? args.connection.instagram_username
         : args.connection.facebook_page_name),
+    author_profile_picture_url:
+      item.platform === "instagram" && args.sourceType === "owned_post"
+        ? args.connection.profile_picture_url
+        : null,
     caption: item.caption,
     permalink: item.permalink,
     media_url: item.media_url,
@@ -325,22 +382,25 @@ async function upsertMetaMedia(args: {
   }
 
   const dedupeKeys = baseRows.map((row) => row.dedupe_key);
-  const { data: existingMentions, error: existingMentionsError } = await args.supabase
-    .from("instagram_mentions")
-    .select("dedupe_key,moderation_status,published_post_id")
-    .eq("salon_id", args.connection.salon_id)
-    .in("dedupe_key", dedupeKeys);
+  const { data: existingMentions, error: existingMentionsError } =
+    await args.supabase
+      .from("instagram_mentions")
+      .select("dedupe_key,moderation_status,published_post_id")
+      .eq("salon_id", args.connection.salon_id)
+      .in("dedupe_key", dedupeKeys);
 
   if (existingMentionsError) {
     throw existingMentionsError;
   }
 
   const existingMentionsByKey = new Map(
-    ((existingMentions ?? []) as Array<{
-      dedupe_key: string;
-      moderation_status: "pending" | "approved" | "rejected" | "published";
-      published_post_id: string | null;
-    }>).map((mention) => [mention.dedupe_key, mention]),
+    (
+      (existingMentions ?? []) as Array<{
+        dedupe_key: string;
+        moderation_status: "pending" | "approved" | "rejected" | "published";
+        published_post_id: string | null;
+      }>
+    ).map((mention) => [mention.dedupe_key, mention]),
   );
 
   const rows = baseRows.map((row) => {
@@ -373,11 +433,41 @@ export async function loadMetaAccounts(accessToken: string) {
   const rows = await fetchGraphCollection({
     path: "me/accounts",
     accessToken,
-    fields: "id,name,access_token,instagram_business_account{id,username}",
+    fields:
+      "id,name,access_token,instagram_business_account{id,username,profile_picture_url}",
     limit: 25,
   });
 
   return rows as InstagramMetaPageAccount[];
+}
+
+export async function loadMetaInstagramProfile(args: {
+  accessToken: string;
+  instagramUserId: string;
+}) {
+  const url = new URL(
+    `${graphApiBaseUrl}/${args.instagramUserId.replace(/^\/+/, "")}`,
+  );
+  url.searchParams.set("fields", "id,username,profile_picture_url");
+  url.searchParams.set("access_token", args.accessToken);
+
+  const response = await fetch(url, { method: "GET" });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as Record<string, unknown>;
+  const id = normalizeNonEmptyString(payload.id);
+
+  if (!id) {
+    throw new Error("A Meta nao retornou um perfil valido do Instagram.");
+  }
+
+  return {
+    id,
+    username: normalizeNonEmptyString(payload.username),
+    profilePictureUrl: normalizeNonEmptyString(payload.profile_picture_url),
+  } satisfies InstagramMetaProfile;
 }
 
 export async function loadMetaPageAccessToken(args: {
@@ -385,7 +475,9 @@ export async function loadMetaPageAccessToken(args: {
   pageId: string;
 }) {
   const rows = await loadMetaAccounts(args.userAccessToken);
-  const matchingPage = rows.find((row) => normalizeNonEmptyString(row.id) === args.pageId);
+  const matchingPage = rows.find(
+    (row) => normalizeNonEmptyString(row.id) === args.pageId,
+  );
 
   return normalizeNonEmptyString(matchingPage?.access_token);
 }
@@ -420,12 +512,75 @@ export async function syncInstagramActivity(args: {
   const accessToken = decryptInstagramAccessToken(
     args.connection.access_token_ciphertext,
   );
-  const facebookAccessToken = args.connection.facebook_page_access_token_ciphertext
+  let connection = args.connection;
+  const facebookAccessToken = args.connection
+    .facebook_page_access_token_ciphertext
     ? decryptInstagramAccessToken(
         args.connection.facebook_page_access_token_ciphertext,
       )
     : accessToken;
   const warnings: string[] = [];
+  let resolvedProfilePictureUrl = normalizeNonEmptyString(
+    connection.profile_picture_url,
+  );
+
+  if ((connection.profile_picture_url ?? "").trim().length === 0) {
+    try {
+      const instagramProfile = await loadMetaInstagramProfile({
+        accessToken,
+        instagramUserId: connection.instagram_user_id,
+      });
+      const resolvedUsername =
+        instagramProfile.username?.replace(/^@/, "") ??
+        connection.instagram_username;
+      resolvedProfilePictureUrl = instagramProfile.profilePictureUrl;
+
+      if (
+        resolvedUsername !== connection.instagram_username ||
+        resolvedProfilePictureUrl !== connection.profile_picture_url
+      ) {
+        await args.supabase
+          .from("instagram_connections")
+          .update({
+            instagram_username: resolvedUsername,
+            profile_picture_url: resolvedProfilePictureUrl,
+            last_error: null,
+          })
+          .eq("id", connection.id);
+
+        connection = {
+          ...connection,
+          instagram_username: resolvedUsername,
+          profile_picture_url: resolvedProfilePictureUrl,
+        };
+      }
+    } catch (error) {
+      warnings.push(
+        `Nao foi possivel atualizar a foto do perfil do Instagram: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  if ((resolvedProfilePictureUrl ?? "").trim().length > 0) {
+    await args.supabase
+      .from("instagram_mentions")
+      .update({
+        author_profile_picture_url: resolvedProfilePictureUrl,
+      })
+      .eq("instagram_connection_id", connection.id)
+      .eq("source_type", "owned_post");
+
+    await args.supabase
+      .from("salon_posts")
+      .update({
+        external_author_avatar_url: resolvedProfilePictureUrl,
+      })
+      .eq("salon_id", connection.salon_id)
+      .eq("source_type", "instagram_owned_post")
+      .eq("external_platform", "instagram");
+  }
 
   const [
     ownedPostsResult,
@@ -457,16 +612,12 @@ export async function syncInstagramActivity(args: {
 
   const instagramOwnedPosts =
     ownedPostsResult.status === "fulfilled"
-      ? ownedPostsResult.value.map(mapInstagramMediaNode).filter(isMetaMediaNode)
+      ? ownedPostsResult.value
+          .map(mapInstagramMediaNode)
+          .filter(isMetaMediaNode)
       : [];
   if (ownedPostsResult.status === "rejected") {
-    warnings.push(
-      `Nao foi possivel sincronizar os posts do Instagram: ${
-        ownedPostsResult.reason instanceof Error
-          ? ownedPostsResult.reason.message
-          : String(ownedPostsResult.reason)
-      }`,
-    );
+    warnings.push("Nao foi possivel atualizar os posts do Instagram agora.");
   }
 
   const instagramMentions =
@@ -474,56 +625,42 @@ export async function syncInstagramActivity(args: {
       ? mentionsResult.value.map(mapInstagramMediaNode).filter(isMetaMediaNode)
       : [];
   if (mentionsResult.status === "rejected") {
-    warnings.push(
-      `Nao foi possivel sincronizar as marcacoes recentes do Instagram: ${
-        mentionsResult.reason instanceof Error
-          ? mentionsResult.reason.message
-          : String(mentionsResult.reason)
-      }`,
-    );
+    warnings.push("Nao foi possivel atualizar as marcacoes recentes do Instagram agora.");
   }
 
   const facebookOwnedPosts =
     facebookOwnedPostsResult.status === "fulfilled"
-      ? facebookOwnedPostsResult.value.map(mapFacebookPostNode).filter(isMetaMediaNode)
+      ? facebookOwnedPostsResult.value
+          .map(mapFacebookPostNode)
+          .filter(isMetaMediaNode)
       : [];
   if (facebookOwnedPostsResult.status === "rejected") {
-    warnings.push(
-      `Nao foi possivel sincronizar os posts da pagina do Facebook: ${
-        facebookOwnedPostsResult.reason instanceof Error
-          ? facebookOwnedPostsResult.reason.message
-          : String(facebookOwnedPostsResult.reason)
-      }`,
-    );
+    warnings.push("Nao foi possivel atualizar as publicacoes da pagina do salao agora.");
   }
 
   const facebookMentions =
     facebookTaggedPostsResult.status === "fulfilled"
       ? facebookTaggedPostsResult.value
-          .filter((item) => isFacebookMentionNode(item, args.connection.facebook_page_id ?? ""))
+          .filter((item) =>
+            isFacebookMentionNode(item, args.connection.facebook_page_id ?? ""),
+          )
           .map(mapFacebookPostNode)
           .filter(isMetaMediaNode)
       : [];
   if (facebookTaggedPostsResult.status === "rejected") {
-    warnings.push(
-      `Nao foi possivel sincronizar o feed da pagina no Facebook: ${
-        facebookTaggedPostsResult.reason instanceof Error
-          ? facebookTaggedPostsResult.reason.message
-          : String(facebookTaggedPostsResult.reason)
-      }`,
-    );
+    warnings.push(buildFacebookFeedWarning(facebookTaggedPostsResult.reason));
   }
 
   const ownedPostsUpserted =
     (await upsertMetaMedia({
       supabase: args.supabase,
-      connection: args.connection,
+      connection,
       items: instagramOwnedPosts,
       sourceType: "owned_post",
     })) +
     (await upsertMetaMedia({
       supabase: args.supabase,
-      connection: args.connection,
+      connection,
       items: facebookOwnedPosts,
       sourceType: "owned_post",
     }));
@@ -531,13 +668,13 @@ export async function syncInstagramActivity(args: {
   const mentionsUpserted =
     (await upsertMetaMedia({
       supabase: args.supabase,
-      connection: args.connection,
+      connection,
       items: instagramMentions,
       sourceType: "post_mention",
     })) +
     (await upsertMetaMedia({
       supabase: args.supabase,
-      connection: args.connection,
+      connection,
       items: facebookMentions,
       sourceType: "post_mention",
     }));

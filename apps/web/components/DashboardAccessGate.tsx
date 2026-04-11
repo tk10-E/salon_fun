@@ -29,12 +29,12 @@ export function DashboardAccessGate({
   return (
     <div className="dashboard-access-overlay" role="alert" aria-live="polite">
       <div className="dashboard-access-overlay__card">
-        <span className="eyebrow">Acesso premium bloqueado</span>
+        <span className="eyebrow">Área indisponível</span>
         <h2>{title}</h2>
         <p>{description}</p>
         <div className="dashboard-access-overlay__actions">
-          <Link href="/dashboard/billing" className="primary-button">
-            Regularizar assinatura
+          <Link href="/dashboard" className="primary-button">
+            Voltar ao início
           </Link>
           <Link href="/dashboard/settings" className="secondary-button">
             Abrir ajustes do app

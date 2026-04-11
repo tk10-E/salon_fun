@@ -1,7 +1,7 @@
 type EmptyStateCardProps = {
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
 };
 
 export function EmptyStateCard({
@@ -15,7 +15,7 @@ export function EmptyStateCard({
       <div className="empty-state__content">
         <span className="eyebrow">{eyebrow}</span>
         <h3>{title}</h3>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
     </div>
   );

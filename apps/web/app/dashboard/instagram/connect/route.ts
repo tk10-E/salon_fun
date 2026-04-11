@@ -61,9 +61,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return redirectToInstagramDashboard(
       request,
-      error instanceof Error
-        ? error.message
-        : "Nao foi possivel iniciar a conexao automatica com a Meta.",
+      error instanceof Error && error.message.trim().length > 0
+        ? "Nao foi possivel abrir a conexao do Instagram agora."
+        : "Nao foi possivel abrir a conexao do Instagram agora.",
       "error",
     );
   }

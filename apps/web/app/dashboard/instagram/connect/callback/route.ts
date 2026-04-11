@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
   if (errorReason || errorDescription) {
     return redirectToInstagramDashboard(
       request,
-      errorDescription ?? "A Meta cancelou a conexao automatica com o Instagram.",
+      "A conexao do Instagram foi cancelada antes de concluir.",
       "error",
     );
   }
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
     if (!code) {
       return redirectToInstagramDashboard(
         request,
-        "A Meta nao devolveu o codigo necessario para concluir a conexao.",
+        "Nao foi possivel concluir a conexao do Instagram agora.",
         "error",
       );
     }
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
     const { data: existingConnection } = await supabase
       .from("instagram_connections")
       .select(
-        "id,facebook_page_id,instagram_user_id,instagram_username,facebook_page_access_token_ciphertext,auto_publish_owned_posts,require_mention_approval,import_story_mentions",
+        "id,facebook_page_id,instagram_user_id,instagram_username,profile_picture_url,facebook_page_access_token_ciphertext,auto_publish_owned_posts,require_mention_approval,import_story_mentions",
       )
       .eq("salon_id", salon.id)
       .maybeSingle();
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
     if (!selectedAccount?.instagram_business_account?.id || !selectedAccount.instagram_business_account.username) {
       return redirectToInstagramDashboard(
         request,
-        "A Meta nao retornou uma pagina com Instagram profissional pronto para esse salao.",
+        "A conta escolhida nao trouxe um Instagram profissional valido para esse salao.",
         "error",
       );
     }
@@ -182,14 +182,12 @@ export async function GET(request: NextRequest) {
         });
       } catch (error) {
         connectionWarnings.push(
-          error instanceof Error
-            ? `Nao foi possivel ativar a assinatura automatica das menções na Meta: ${error.message}`
-            : "Nao foi possivel ativar a assinatura automatica das menções na Meta.",
+          "A conta foi conectada, mas novas marcacoes podem demorar um pouco para aparecer.",
         );
       }
     } else if (selectedAccount.id) {
       connectionWarnings.push(
-        "A Meta conectou a conta, mas nao devolveu um Page Access Token para a pagina do Facebook. O Instagram segue ativo e o Facebook pode ficar limitado ate uma nova autorizacao.",
+        "A conta foi conectada, mas a pagina do salao ainda nao liberou tudo o que falta para trazer o conteudo completo.",
       );
     }
 
@@ -202,6 +200,10 @@ export async function GET(request: NextRequest) {
         facebook_page_name: selectedAccount.name ?? null,
         facebook_page_access_token_ciphertext: encryptedPageAccessToken,
         access_token_ciphertext: encryptedAccessToken,
+        profile_picture_url:
+          selectedAccount.instagram_business_account.profile_picture_url ??
+          existingConnection?.profile_picture_url ??
+          null,
         connection_status: "active",
         auto_publish_owned_posts: existingConnection?.auto_publish_owned_posts ?? false,
         require_mention_approval: existingConnection?.require_mention_approval ?? true,
@@ -212,14 +214,14 @@ export async function GET(request: NextRequest) {
       { onConflict: "salon_id" },
     )
       .select(
-        "id,salon_id,instagram_user_id,instagram_username,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+        "id,salon_id,instagram_user_id,instagram_username,profile_picture_url,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
       )
       .single();
 
     if (error || !savedConnection) {
       return redirectToInstagramDashboard(
         request,
-        "Nao foi possivel salvar a conexao automatica com a Meta no painel.",
+        "Nao foi possivel salvar a conexao do Instagram.",
         "error",
       );
     }
@@ -259,9 +261,7 @@ export async function GET(request: NextRequest) {
       }
     } catch (error) {
       connectionWarnings.push(
-        error instanceof Error
-          ? `A sincronizacao inicial do Instagram falhou: ${error.message}`
-          : "A sincronizacao inicial do Instagram falhou.",
+        "A conta foi conectada, mas a primeira atualizacao nao terminou agora.",
       );
 
       await supabase
@@ -277,23 +277,21 @@ export async function GET(request: NextRequest) {
     return redirectToInstagramDashboard(
       request,
       connectionWarnings.length
-        ? "Instagram conectado. Se algo ainda nao aparecer, use o botao de sincronizacao no painel."
-        : "Instagram conectado com a Meta e salvo automaticamente no painel.",
+        ? "Instagram conectado. Se algo ainda nao aparecer, toque em Atualizar agora."
+        : "Instagram conectado com sucesso.",
       connectionWarnings.length ? "info" : "success",
     );
   } catch (error) {
     const message =
       error instanceof Error && error.message === "missing_instagram_oauth_state"
-        ? "A conexao com a Meta voltou sem o estado de seguranca esperado."
+        ? "A conexao expirou antes de terminar. Inicie novamente pelo painel."
         : error instanceof Error && error.message === "mismatched_instagram_oauth_state"
-          ? "A conexao com a Meta voltou com um estado diferente do esperado. Tente iniciar novamente pelo painel."
+          ? "A conexao mudou no meio do processo. Tente novamente pelo painel."
           : error instanceof Error && error.message === "expired_instagram_oauth_state"
-            ? "A tentativa de conexao com a Meta expirou. Inicie novamente pelo painel."
+            ? "A tentativa de conexao expirou. Inicie novamente."
             : error instanceof Error && error.message === "invalid_instagram_oauth_state"
-              ? "A Meta devolveu um estado invalido para a conexao automatica."
-              : error instanceof Error
-                ? error.message
-                : "Nao foi possivel concluir a conexao automatica com a Meta.";
+              ? "A conexao voltou com dados invalidos. Tente novamente."
+              : "Nao foi possivel concluir a conexao do Instagram agora.";
 
     return redirectToInstagramDashboard(
       request,

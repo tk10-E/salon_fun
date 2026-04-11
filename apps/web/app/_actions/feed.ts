@@ -6,7 +6,17 @@ import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { getSalonBillingEntitlements } from "@/lib/billing";
+import {
+  FEED_STANDARD_MAX_IMAGES,
+  isFeedComposerPostType,
+  type FeedComposerPostType,
+} from "@/lib/feedComposerConfig";
+import {
+  MEDIA_UPLOAD_PRESETS,
+  formatPresetMegabytes,
+} from "@/lib/mediaUploadPresets";
 import { createClient } from "@/lib/supabase/server";
+import { optimizeUploadedImage } from "@/lib/uploadedImageOptimization";
 
 import {
   buildFeedPostNotification,
@@ -15,10 +25,8 @@ import {
 } from "./shared";
 
 const FEED_PATH = "/dashboard/feed";
-const FEED_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const FEED_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
-
-type FeedPostType = "standard" | "before_after" | "reel";
+const FEED_IMAGE_PRESET = MEDIA_UPLOAD_PRESETS.feed;
 
 function readUploadedFiles(formData: FormData, field: string) {
   return formData
@@ -31,19 +39,11 @@ function readUploadedFile(formData: FormData, field: string) {
   return entry instanceof File && entry.size > 0 ? entry : null;
 }
 
-function parseFeedPostType(value: string): FeedPostType | null {
-  if (value === "before_after" || value === "reel" || value === "standard") {
-    return value;
-  }
-
-  return null;
+function parseFeedPostType(value: string): FeedComposerPostType | null {
+  return isFeedComposerPostType(value) ? value : null;
 }
 
-function buildFeedUploadPath(salonId: string, file: File, fallbackExtension: string) {
-  const extension = file.name.includes(".")
-    ? file.name.split(".").pop()?.toLowerCase() ?? fallbackExtension
-    : fallbackExtension;
-
+function buildFeedUploadPath(salonId: string, extension: string) {
   return `${salonId}/${randomUUID()}.${extension}`;
 }
 
@@ -87,8 +87,14 @@ export async function createSalonPostActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(FEED_PATH, "Selecione pelo menos uma imagem para publicar.", "error"));
   }
 
-  if (postType === "standard" && imageFiles.length > 5) {
-    redirect(buildRedirectNotice(FEED_PATH, "Envie no máximo 5 imagens por publicação.", "error"));
+  if (postType === "standard" && imageFiles.length > FEED_STANDARD_MAX_IMAGES) {
+    redirect(
+      buildRedirectNotice(
+        FEED_PATH,
+        `Envie no maximo ${FEED_STANDARD_MAX_IMAGES} imagens por publicacao.`,
+        "error",
+      ),
+    );
   }
 
   if (postType === "before_after" && imageFiles.length !== 2) {
@@ -112,8 +118,16 @@ export async function createSalonPostActionImpl(formData: FormData) {
       redirect(buildRedirectNotice(FEED_PATH, "Envie apenas imagens válidas para o feed.", "error"));
     }
 
-    if (imageFile.size > FEED_IMAGE_MAX_BYTES) {
-      redirect(buildRedirectNotice(FEED_PATH, "Cada imagem deve ter no máximo 4 MB.", "error"));
+    if (imageFile.size > FEED_IMAGE_PRESET.maxInputBytes) {
+      redirect(
+        buildRedirectNotice(
+          FEED_PATH,
+          `Cada imagem deve ter no maximo ${formatPresetMegabytes(
+            FEED_IMAGE_PRESET.maxInputBytes,
+          )} MB.`,
+          "error",
+        ),
+      );
     }
   }
 
@@ -164,30 +178,47 @@ export async function createSalonPostActionImpl(formData: FormData) {
     staffMemberName = staffMember.name;
   }
 
-  const uploadedPaths: string[] = [];
+  const uploadedImagePaths: string[] = [];
+  const uploadedAssetPaths: string[] = [];
   let videoPath: string | null = null;
 
   for (const imageFile of imageFiles) {
-    const uploadPath = buildFeedUploadPath(salon.id, imageFile, "jpg");
-    const bytes = Buffer.from(await imageFile.arrayBuffer());
+    let optimizedImage;
 
-    const { error: uploadError } = await supabase.storage.from("salon-posts").upload(uploadPath, bytes, {
-      contentType: imageFile.type,
-      upsert: false,
-    });
+    try {
+      optimizedImage = await optimizeUploadedImage(imageFile, "feed");
+    } catch {
+      redirect(
+        buildRedirectNotice(
+          FEED_PATH,
+          "Nao foi possivel processar uma das imagens do post.",
+          "error",
+        ),
+      );
+    }
+
+    const uploadPath = buildFeedUploadPath(salon.id, optimizedImage.extension);
+
+    const { error: uploadError } = await supabase.storage
+      .from("salon-posts")
+      .upload(uploadPath, optimizedImage.buffer, {
+        contentType: optimizedImage.contentType,
+        upsert: false,
+      });
 
     if (uploadError) {
-      if (uploadedPaths.length) {
-        await supabase.storage.from("salon-posts").remove(uploadedPaths);
+      if (uploadedAssetPaths.length) {
+        await supabase.storage.from("salon-posts").remove(uploadedAssetPaths);
       }
       redirect(buildRedirectNotice(FEED_PATH, "Não foi possível enviar as imagens do post.", "error"));
     }
 
-    uploadedPaths.push(uploadPath);
+    uploadedImagePaths.push(uploadPath);
+    uploadedAssetPaths.push(uploadPath);
   }
 
   if (videoFile) {
-    const uploadPath = buildFeedUploadPath(salon.id, videoFile, "mp4");
+    const uploadPath = buildFeedUploadPath(salon.id, "mp4");
     const bytes = Buffer.from(await videoFile.arrayBuffer());
     const { error: uploadError } = await supabase.storage.from("salon-posts").upload(uploadPath, bytes, {
       contentType: videoFile.type,
@@ -195,14 +226,14 @@ export async function createSalonPostActionImpl(formData: FormData) {
     });
 
     if (uploadError) {
-      if (uploadedPaths.length) {
-        await supabase.storage.from("salon-posts").remove(uploadedPaths);
+      if (uploadedAssetPaths.length) {
+        await supabase.storage.from("salon-posts").remove(uploadedAssetPaths);
       }
       redirect(buildRedirectNotice(FEED_PATH, "Não foi possível enviar o vídeo do post.", "error"));
     }
 
     videoPath = uploadPath;
-    uploadedPaths.push(uploadPath);
+    uploadedAssetPaths.push(uploadPath);
   }
 
   const { data: createdPost, error } = await supabase
@@ -211,7 +242,7 @@ export async function createSalonPostActionImpl(formData: FormData) {
       salon_id: salon.id,
       title: rawTitle,
       caption: rawCaption || null,
-      image_path: uploadedPaths[0],
+      image_path: uploadedImagePaths[0],
       post_type: postType,
       service_id: serviceId,
       staff_member_id: staffMemberId,
@@ -222,11 +253,11 @@ export async function createSalonPostActionImpl(formData: FormData) {
     .single();
 
   if (error || !createdPost) {
-    await supabase.storage.from("salon-posts").remove(uploadedPaths);
+    await supabase.storage.from("salon-posts").remove(uploadedAssetPaths);
     redirect(buildRedirectNotice(FEED_PATH, "Não foi possível criar a publicação.", "error"));
   }
 
-  const galleryRows = uploadedPaths.map((path, index) => ({
+  const galleryRows = uploadedImagePaths.map((path, index) => ({
     post_id: createdPost.id,
     image_path: path,
     sort_order: index,
@@ -236,13 +267,13 @@ export async function createSalonPostActionImpl(formData: FormData) {
 
   if (galleryError) {
     await supabase.from("salon_posts").delete().eq("id", createdPost.id);
-    await supabase.storage.from("salon-posts").remove(uploadedPaths);
+    await supabase.storage.from("salon-posts").remove(uploadedAssetPaths);
     redirect(buildRedirectNotice(FEED_PATH, "Não foi possível salvar a galeria do post.", "error"));
   }
 
   const postImageUrl = supabase.storage
     .from("salon-posts")
-    .getPublicUrl(uploadedPaths[0]).data.publicUrl;
+    .getPublicUrl(uploadedImagePaths[0]).data.publicUrl;
   const postVideoUrl = videoPath
     ? supabase.storage.from("salon-posts").getPublicUrl(videoPath).data.publicUrl
     : null;

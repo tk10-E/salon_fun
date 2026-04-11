@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+
 import { expect } from "vitest";
 
 export const TEST_REDIRECT_PREFIX = "TEST_REDIRECT:";
@@ -40,8 +42,20 @@ export function makeFormData(entries: Record<string, FormValue>) {
   return formData;
 }
 
-export function makeImageFile(name: string, contents = "image-bytes", type = "image/jpeg") {
-  return new File([contents], name, { type });
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9p1+tH0AAAAASUVORK5CYII=";
+
+export function makeImageFile(
+  name: string,
+  contents: BlobPart = "image-bytes",
+  type = "image/jpeg",
+) {
+  const payload =
+    contents === "image-bytes"
+      ? Buffer.from(TINY_PNG_BASE64, "base64")
+      : contents;
+
+  return new File([payload], name, { type });
 }
 
 export function makeVideoFile(name: string, contents = "video-bytes", type = "video/mp4") {

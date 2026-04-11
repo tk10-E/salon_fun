@@ -6,18 +6,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createClientMock,
-  regenerateSalonCodeActionMock,
+  regenerateSalonCodeActionPath,
   requireOwnerSalonMock,
-  updateSalonBookingPolicyActionMock,
-  updateSalonBrandingActionMock,
-  updateSalonScheduleActionMock,
+  updateSalonBookingPolicyActionPath,
+  updateSalonBrandingActionPath,
+  updateSalonScheduleActionPath,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
-  regenerateSalonCodeActionMock: vi.fn(),
+  regenerateSalonCodeActionPath: "/__test/regenerate-salon-code",
   requireOwnerSalonMock: vi.fn(),
-  updateSalonBookingPolicyActionMock: vi.fn(),
-  updateSalonBrandingActionMock: vi.fn(),
-  updateSalonScheduleActionMock: vi.fn(),
+  updateSalonBookingPolicyActionPath: "/__test/update-booking-policy",
+  updateSalonBrandingActionPath: "/__test/update-branding",
+  updateSalonScheduleActionPath: "/__test/update-schedule",
 }));
 
 vi.mock("next/image", () => ({
@@ -38,10 +38,10 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/app/actions", () => ({
-  regenerateSalonCodeAction: regenerateSalonCodeActionMock,
-  updateSalonBookingPolicyAction: updateSalonBookingPolicyActionMock,
-  updateSalonBrandingAction: updateSalonBrandingActionMock,
-  updateSalonScheduleAction: updateSalonScheduleActionMock,
+  regenerateSalonCodeAction: regenerateSalonCodeActionPath,
+  updateSalonBookingPolicyAction: updateSalonBookingPolicyActionPath,
+  updateSalonBrandingAction: updateSalonBrandingActionPath,
+  updateSalonScheduleAction: updateSalonScheduleActionPath,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -91,6 +91,37 @@ describe("settings page UI", () => {
         timezone: "America/Sao_Paulo",
         slot_step_minutes: 30,
         logo_path: null,
+        client_app_config: {
+          heroHeadline: "Seu melhor visual começa aqui",
+          experienceModel: "beauty_signature",
+          customDomain: "app.studiocentro.com.br",
+          welcomeHeadline: "Studio Centro no seu bolso",
+          welcomeMessage: "Agenda, loja e feed com leitura rápida.",
+          homeEmphasis: "services",
+          heroSupportLine: "Tudo alinhado com a identidade do salão.",
+          primaryCtaLabel: "Agendar agora",
+          visualStyle: "soft_editorial",
+          themeMode: "light",
+          buttonStyle: "rounded",
+          cardStyle: "floating",
+          bannerStyle: "editorial",
+          whiteLabelActive: true,
+          autoPilotEnabled: true,
+          instagramUrl: "https://instagram.com/studiocentro",
+          supportEmail: "oi@studiocentro.com",
+          visibleHomeModules: ["shortcuts", "gallery", "products"],
+          centralCampaigns: [
+            {
+              id: "campaign-1",
+              isActive: true,
+              priority: "high",
+              audience: "all",
+              title: "Volte essa semana",
+              message: "Uma campanha operacional já pronta para a home.",
+              ctaTarget: "explore",
+            },
+          ],
+        },
         created_at: "2026-03-01T12:00:00.000Z",
         join_code: "ABCD1234",
       },
@@ -98,105 +129,6 @@ describe("settings page UI", () => {
   });
 
   it("renders branding, online schedule and join code forms", async () => {
-    const businessHoursOrder = vi.fn().mockResolvedValue({
-      data: [
-        {
-          weekday: 1,
-          is_open: true,
-          opens_at: "09:00:00",
-          closes_at: "18:00:00",
-        },
-        {
-          weekday: 2,
-          is_open: true,
-          opens_at: "09:00:00",
-          closes_at: "18:00:00",
-        },
-      ],
-      error: null,
-    });
-
-    createClientMock.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === "salon_business_hours") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                order: businessHoursOrder,
-              })),
-            })),
-          };
-        }
-
-        if (table === "services") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn().mockResolvedValue({ count: 18, error: null }),
-            })),
-          };
-        }
-
-        if (table === "salon_posts") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn().mockResolvedValue({ count: 6, error: null }),
-            })),
-          };
-        }
-
-        if (table === "salon_offers") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn().mockResolvedValue({ count: 3, error: null }),
-              })),
-            })),
-          };
-        }
-
-        if (table === "salon_customer_notifications") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                gte: vi.fn().mockResolvedValue({ count: 14, error: null }),
-              })),
-            })),
-          };
-        }
-
-        if (table === "customer_push_tokens") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  count: 11,
-                  error: null,
-                  gte: vi.fn().mockResolvedValue({ count: 8, error: null }),
-                })),
-              })),
-            })),
-          };
-        }
-
-        if (table === "instagram_connections") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
-            })),
-          };
-        }
-
-        throw new Error(`Unexpected table ${table}`);
-      }),
-      storage: {
-        from: vi.fn(() => ({
-          getPublicUrl: vi.fn((path: string) => ({
-            data: { publicUrl: `https://cdn.example.com/${path}` },
-          })),
-        })),
-      },
-    });
-
     const ui = await SettingsPage({
       searchParams: { message: "Configurações salvas.", tone: "success" },
     });
@@ -205,60 +137,58 @@ describe("settings page UI", () => {
 
     expect(screen.getByText("Configurações salvas.")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", {
-        name: "O que já está pronto para vender, operar e distribuir",
-      }),
+      screen.getByRole("heading", { name: "Studio Centro", level: 1 }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Push e comunicação")).toBeInTheDocument();
-    expect(screen.getByText("Instagram e menções")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Publico da publicacao 1"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Janela de inicio 1")).toBeInTheDocument();
-    expect(screen.getByLabelText("Janela de fim 1")).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("link", { name: "Abrir vitrine pública" })
-        .every((link) => link.getAttribute("href") === "/s/ABCD1234"),
+        .every(
+          (link) =>
+            link.getAttribute("href") === "https://app.studiocentro.com.br",
+        ),
     ).toBe(true);
-    expect(screen.getByRole("link", { name: "Push e avisos" })).toHaveAttribute(
-      "href",
-      "/dashboard/notifications",
-    );
     expect(
       screen.getByRole("heading", { name: "Identidade do salão" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Preview do app")).toBeInTheDocument();
     expect(screen.getByLabelText("Nome do salão")).toBeInTheDocument();
     expect(screen.getByLabelText("Segmento do salão")).toBeInTheDocument();
-    expect(screen.getByLabelText("Cor principal")).toBeInTheDocument();
-    expect(screen.getByLabelText("Modelo da experiência")).toBeInTheDocument();
-    expect(screen.getByLabelText("Tema do app do cliente")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nome exibido no app")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Endereço da vitrine/)).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Headline premium da home"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Titulo da publicacao 1")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Mensagem da publicacao 1"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Destino do CTA 1")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Imagem hero principal por arquivo"),
+      screen.getByLabelText(/WhatsApp público do salão/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Imagem da galeria por arquivo"),
+      screen.queryByText("Configuração técnica da plataforma"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Headline principal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Título de boas-vindas")).toBeInTheDocument();
+    expect(screen.getByLabelText("Modelo de experiência")).toBeInTheDocument();
+    expect(screen.getByLabelText("CTA principal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ênfase da home")).toBeInTheDocument();
+    expect(screen.getByLabelText("Estilo visual")).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "White-label ativo" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Capa institucional do perfil por arquivo"),
+      screen.getByRole("checkbox", {
+        name: "Piloto automático comercial ativo",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Foco horizontal").length).toBeGreaterThan(
-      2,
-    );
-    expect(screen.getByText("Módulos visíveis na home")).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Zoom da imagem").length).toBeGreaterThan(
-      2,
-    );
     expect(screen.getByLabelText("Instagram do salão")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Política de privacidade"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Campanhas da central" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Título").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Destino do CTA").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Atalhos de serviços" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Cor principal")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Salvar identidade" }),
     ).toBeInTheDocument();
@@ -266,42 +196,48 @@ describe("settings page UI", () => {
       screen.getByRole("heading", { name: "Agenda online" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Fuso horário")).toBeInTheDocument();
-    expect(screen.getByLabelText("Intervalo da agenda")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Intervalo entre horários"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Salvar agenda" }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("heading", { name: "Reserva protegida" }).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Titulo da politica")).toBeInTheDocument();
-    expect(screen.getByLabelText("Resumo para o cliente")).toBeInTheDocument();
-    expect(screen.getByLabelText("Valor do sinal")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Modo de cobranca do sinal"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Chave de API do Asaas")).toBeInTheDocument();
-    expect(screen.getByLabelText("Ambiente do Asaas")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Token do webhook do Asaas"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("URL do webhook")).toBeInTheDocument();
-    expect(screen.getByLabelText("Chave Pix do salao")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("URL do checkout externo"),
+      screen.getByRole("heading", { name: "Política de reserva" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Confirmacao de presenca"),
+      screen.getByRole("checkbox", { name: "Ativar política de reserva" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Título da política")).toBeInTheDocument();
+    expect(screen.getByLabelText("Resumo da política")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Janela de cancelamento (horas)"),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Minutos antes para auto cancelamento"),
+      screen.getByLabelText("Confirmação antes do horário (minutos)"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Salvar politica de reserva" }),
+      screen.getByRole("checkbox", { name: "Cobrar sinal no agendamento" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Forma de pagamento do sinal"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Chave Pix")).toBeInTheDocument();
+    expect(screen.getByLabelText("Link de pagamento")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Chave de integração do Asaas"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Instruções de pagamento"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Valor do sinal/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar política" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Código para clientes" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("ABCD1234").length).toBeGreaterThan(1);
+    expect(screen.getByText("ABCD1234")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Gerar novo código" }),
     ).toBeInTheDocument();

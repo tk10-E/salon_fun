@@ -42,11 +42,17 @@ export const CATEGORY_NOTIFICATION_TYPES = {
     "promotion_updated",
     "membership_published",
     "membership_updated",
+    "birthday_campaign",
     "loyalty_program_updated",
     "loyalty_tier_unlocked",
     "loyalty_vip_unlocked",
   ],
-  growth: ["winback_offer", "smart_rebook_prompt"],
+  growth: [
+    "winback_offer",
+    "smart_rebook_prompt",
+    "haircut_rebook_reminder",
+    "manual_reactivation",
+  ],
   appointment: [
     "appointment_confirmed",
     "appointment_deposit_required",
@@ -183,6 +189,8 @@ export function formatNotificationType(type: string) {
       return "Plano mensal publicado";
     case "membership_updated":
       return "Plano mensal atualizado";
+    case "birthday_campaign":
+      return "Campanha de aniversário";
     case "loyalty_program_updated":
       return "Programa de fidelidade atualizado";
     case "loyalty_tier_unlocked":
@@ -193,6 +201,10 @@ export function formatNotificationType(type: string) {
       return "Recuperação de cliente";
     case "smart_rebook_prompt":
       return "Reagendamento inteligente";
+    case "haircut_rebook_reminder":
+      return "Lembrete de retorno para corte";
+    case "manual_reactivation":
+      return "Reativação manual";
     case "referral_program_updated":
       return "Programa de indicação atualizado";
     case "referral_qualified":
@@ -203,6 +215,16 @@ export function formatNotificationType(type: string) {
       return "Serviço publicado";
     case "service_updated":
       return "Serviço atualizado";
+    case "staff_published":
+      return "Novo profissional";
+    case "staff_reactivated":
+      return "Profissional reativado";
+    case "store_product_published":
+      return "Produto publicado na loja";
+    case "store_product_updated":
+      return "Produto atualizado na loja";
+    case "client_app_updated":
+      return "App do salão atualizado";
     case "feed_post_published":
       return "Publicação no feed";
     case "appointment_confirmed":

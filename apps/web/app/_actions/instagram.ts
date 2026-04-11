@@ -24,6 +24,7 @@ type InstagramMentionRecord = {
   platform: "instagram" | "facebook";
   source_type: "post_mention" | "story_mention" | "owned_post" | "comment_mention";
   media_type: "image" | "video" | "carousel" | "story" | "unknown";
+  author_profile_picture_url: string | null;
   author_username: string | null;
   caption: string | null;
   permalink: string | null;
@@ -47,7 +48,7 @@ async function loadMentionForOwner(salonId: string, mentionId: string) {
   const { data, error } = await supabase
     .from("instagram_mentions")
     .select(
-      "id,salon_id,platform,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
+      "id,salon_id,platform,source_type,media_type,author_profile_picture_url,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
     )
     .eq("id", mentionId)
     .eq("salon_id", salonId)
@@ -65,13 +66,13 @@ async function loadInstagramConnectionForOwner(salonId: string) {
   const { data, error } = await supabase
     .from("instagram_connections")
     .select(
-      "id,salon_id,instagram_user_id,instagram_username,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+      "id,salon_id,instagram_user_id,instagram_username,profile_picture_url,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
     )
     .eq("salon_id", salonId)
     .maybeSingle();
 
   if (error || !data) {
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Conecte o Instagram do salao antes de sincronizar.", "error"));
+    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Conecte o Instagram do salao antes de atualizar.", "error"));
   }
 
   return data as InstagramConnectionSyncRecord;
@@ -91,7 +92,7 @@ export async function saveInstagramConnectionActionImpl(formData: FormData) {
 
   const { data: existingConnection } = await supabase
     .from("instagram_connections")
-    .select("id, access_token_ciphertext, facebook_page_name, facebook_page_access_token_ciphertext")
+    .select("id, access_token_ciphertext, facebook_page_name, facebook_page_access_token_ciphertext, profile_picture_url")
     .eq("salon_id", salon.id)
     .maybeSingle();
 
@@ -100,7 +101,7 @@ export async function saveInstagramConnectionActionImpl(formData: FormData) {
   }
 
   if (!accessToken && !existingConnection?.access_token_ciphertext) {
-    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Informe um access token da conta para receber menções via API.", "error"));
+    redirect(buildRedirectNotice(INSTAGRAM_PATH, "Conclua a conexao do Instagram para comecar a receber marcacoes.", "error"));
   }
 
   const accessTokenCiphertext = accessToken
@@ -118,6 +119,7 @@ export async function saveInstagramConnectionActionImpl(formData: FormData) {
         facebook_page_name: existingConnection?.facebook_page_name ?? null,
         facebook_page_access_token_ciphertext:
           existingConnection?.facebook_page_access_token_ciphertext ?? null,
+        profile_picture_url: existingConnection?.profile_picture_url ?? null,
         access_token_ciphertext: accessTokenCiphertext,
         connection_status: "active",
         auto_publish_owned_posts: autoPublishOwnedPosts,
@@ -217,19 +219,16 @@ export async function syncInstagramActivityActionImpl() {
     }
 
     if (combinedWarnings.length) {
-      noticeMessage = `Sincronizacao concluida com alertas. ${importedItems} item(ns) atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`;
+      noticeMessage = `Atualizacao concluida com avisos. ${importedItems} item(ns) atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`;
       noticeTone = "info";
     } else {
       noticeMessage =
         importedItems > 0
-          ? `Sincronizacao concluida. ${importedItems} item(ns) da Meta foram atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`
-          : "Sincronizacao concluida. Nenhum conteudo novo da Meta foi encontrado agora.";
+          ? `Atualizacao concluida. ${importedItems} item(ns) foram atualizados e ${autoPublishResult.publishedCount} publicado(s) no feed.`
+          : "Atualizacao concluida. Nenhum conteudo novo foi encontrado agora.";
     }
   } catch (error) {
-    const detail =
-      error instanceof Error
-        ? error.message
-        : "Nao foi possivel sincronizar Instagram e Facebook agora.";
+    const detail = "Nao foi possivel atualizar o Instagram agora.";
     await supabase
       .from("instagram_connections")
       .update({
@@ -380,7 +379,7 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
         })
         .eq("id", connection.id);
 
-      return redirect(buildRedirectNotice(INSTAGRAM_PATH, "O token não pôde ser validado na API da Meta.", "error"));
+      return redirect(buildRedirectNotice(INSTAGRAM_PATH, "Nao foi possivel confirmar a conexao do Instagram.", "error"));
     }
 
     const payload = await response.json();
@@ -482,12 +481,12 @@ export async function validateInstagramConnectionTokenActionImpl(formData: FormD
     return redirect(
       buildRedirectNotice(
         INSTAGRAM_PATH,
-        error instanceof Error ? error.message : "Não foi possível validar o token do Instagram.",
+        "Nao foi possivel confirmar a conexao do Instagram.",
         "error",
       ),
     );
   }
 
   revalidatePath(INSTAGRAM_PATH);
-  redirect(buildRedirectNotice(INSTAGRAM_PATH, "Token validado com sucesso na API da Meta.", "success"));
+  redirect(buildRedirectNotice(INSTAGRAM_PATH, "Conexao verificada com sucesso.", "success"));
 }

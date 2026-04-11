@@ -13,10 +13,17 @@ vi.mock("next/link", () => ({
     children?: ReactNode;
     href: string;
     className?: string;
+    target?: string;
+    rel?: string;
   }) =>
     createElement(
       "a",
-      { href: props.href, className: props.className },
+      {
+        href: props.href,
+        className: props.className,
+        target: props.target,
+        rel: props.rel,
+      },
       props.children,
     ),
 }));
@@ -102,6 +109,17 @@ describe("client app page UI", () => {
       activePushTokensCount: 14,
       recentPushTokensCount: 9,
       instagramConnectionCount: 1,
+      commercialDataHealth: {
+        loyaltyDashboardReady: true,
+        growthAutomationDashboardReady: true,
+        marketingDashboardReady: true,
+        hasFallbackData: false,
+        warnings: [],
+      },
+      whiteLabelActive: false,
+      autoPilotEnabled: false,
+      appDisplayName: null,
+      customDomain: null,
       growthAutomationSettings: {
         is_active: true,
         winback_inactive_days: 35,
@@ -172,42 +190,128 @@ describe("client app page UI", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "O app da cliente agora pode ser orquestrado como um canal vivo do salão.",
+        name: "Vitrine do app para a cliente",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Publicar prova social" }),
+      screen.queryByRole("button", { name: "Abrir feed" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Publicar prova social" }),
+      screen.getByRole("link", { name: "Abrir feed" }),
     ).toHaveAttribute("href", "/dashboard/feed");
     expect(
-      screen.getByRole("heading", { name: "Orquestrar o que a cliente vê" }),
+      screen.getByRole("heading", { name: "Ações rápidas" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Clubes, pacotes e promoções" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "O que já está chegando para a cliente",
+        name: "Central ao vivo",
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("Campanha flash liberada")).toBeInTheDocument();
     expect(screen.getByText("Morena iluminada glow")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Estrutura que sustenta o app cliente",
+        name: "Status da vitrine",
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("Volte essa semana")).toBeInTheDocument();
-    expect(screen.getByText(/Quem já tem agenda/)).toBeInTheDocument();
-    expect(screen.getByText("No ar agora")).toBeInTheDocument();
+    expect(screen.getByText("14 clientes com app")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Ver página pública" }),
+      screen.getByRole("link", { name: "Ver app público" }),
     ).toHaveAttribute("href", "/s/studio-solar");
     expect(
-      screen.getByRole("heading", { name: "Próximos ganhos de impacto" }),
+      screen.getByRole("heading", { name: "Próximos ganhos rápidos" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("4/6 sinais prontos")).toBeInTheDocument();
+    expect(screen.getByText("4/6 marca pronta")).toBeInTheDocument();
+  });
+
+  it("respects the custom domain and surfaces data warnings when the commercial block is not real", async () => {
+    loadClientAppHubDataMock.mockResolvedValue({
+      salonName: "Studio Solar",
+      publicSalonPath: "https://app.studiosolar.com.br",
+      experienceModelLabel: "Beauty Signature",
+      visualStyleLabel: "Glow assinatura",
+      homeEmphasisLabel: "Serviços e agendamento",
+      welcomeHeadline: "Sua próxima visita começa aqui.",
+      heroHeadline: "Resultado com cara de marca viva.",
+      primaryCtaLabel: "Reservar agora",
+      promotionHeadline: "Campanhas da semana",
+      brandCoverageCount: 5,
+      brandSignals: [],
+      centralCampaigns: [],
+      servicesCount: 12,
+      postsCount: 3,
+      activeOffersCount: 1,
+      activeMembershipsCount: 1,
+      recentNotificationsCount: 2,
+      activePushTokensCount: 4,
+      recentPushTokensCount: 3,
+      instagramConnectionCount: 1,
+      commercialDataHealth: {
+        loyaltyDashboardReady: true,
+        growthAutomationDashboardReady: false,
+        marketingDashboardReady: true,
+        hasFallbackData: true,
+        warnings: [
+          "Automacoes do app nao responderam agora. Revise o bloco de automacoes antes de confiar nos numeros.",
+        ],
+      },
+      whiteLabelActive: true,
+      autoPilotEnabled: true,
+      appDisplayName: "Studio Solar App",
+      customDomain: "app.studiosolar.com.br",
+      growthAutomationSettings: {
+        is_active: false,
+        winback_inactive_days: 35,
+        winback_discount_percent: 10,
+        winback_title: "Volte para o Studio Solar",
+        winback_body_template: "Template winback",
+        smart_rebook_is_active: false,
+        smart_rebook_window_days: 5,
+        smart_rebook_title: "Hora de reagendar",
+        smart_rebook_body_template: "Template rebook",
+        updated_at: "2026-04-01T12:00:00.000Z",
+      },
+      growthAutomationOverview: {
+        at_risk_customers: 0,
+        due_now_customers: 0,
+        smart_rebook_due_customers: 0,
+        winbacks_sent_last_30d: 0,
+        smart_rebooks_sent_last_30d: 0,
+        recovered_customers_last_30d: 0,
+      },
+      loyaltyOverview: {
+        ranked_customers: 25,
+        vip_customers: 6,
+        total_completed_visits: 180,
+        total_points_earned: 920,
+        total_cashback_earned: 420,
+      },
+      referralProgramActive: true,
+      referralProgramTitle: "Indique o Studio Solar",
+      qualifiedReferralsCount: 5,
+      pendingReferralsCount: 2,
+      recentNotifications: [],
+      recentPosts: [],
+    });
+
+    const ui = await ClientAppPage({});
+
+    render(ui);
+
+    expect(screen.getByText("Dados em atualização")).toBeInTheDocument();
+    expect(
+      screen.getByText("Alguns dados do app estão sendo atualizados"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Ver app público" }),
+    ).toHaveAttribute("href", "https://app.studiosolar.com.br");
+    expect(
+      screen.getByRole("link", { name: "Ver app público" }),
+    ).toHaveAttribute("target", "_blank");
+    expect(screen.getByText("Dados indisponíveis")).toBeInTheDocument();
   });
 });

@@ -276,8 +276,6 @@ function buildAppointmentProviderUpdate(params: {
     deposit_status: nextDepositStatus,
     deposit_paid_at: nextDepositStatus === "received"
       ? paidAt ?? appointment.deposit_paid_at ?? new Date().toISOString()
-      : nextDepositStatus === "refunded"
-      ? appointment.deposit_paid_at
       : appointment.deposit_paid_at,
   };
 }

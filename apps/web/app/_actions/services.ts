@@ -6,18 +6,66 @@ import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { getSalonBillingEntitlements } from "@/lib/billing";
+import {
+  MEDIA_UPLOAD_PRESETS,
+  formatPresetMegabytes,
+} from "@/lib/mediaUploadPresets";
 import { createClient } from "@/lib/supabase/server";
+import { optimizeUploadedImage } from "@/lib/uploadedImageOptimization";
 
-import { buildRedirectNotice, queueCustomerNotification } from "./shared";
+import {
+  buildRedirectNotice,
+  buildServiceCatalogNotification,
+  queueCustomerNotification,
+} from "./shared";
 
 const SERVICES_PATH = "/dashboard/services";
 const DASHBOARD_PATH = "/dashboard";
 const TEAM_PATH = "/dashboard/team";
 const FEED_PATH = "/dashboard/feed";
+const SERVICE_IMAGE_PRESET = MEDIA_UPLOAD_PRESETS.service;
 
 function readUploadedFile(formData: FormData, field: string) {
   const entry = formData.get(field);
   return entry instanceof File && entry.size > 0 ? entry : null;
+}
+
+function buildServiceImagePath(salonId: string, fileId: string, extension: string) {
+  return `${salonId}/services/${fileId}.${extension}`;
+}
+
+async function ensureServiceCategoryId(args: {
+  salonId: string;
+  categoryName: string;
+  supabase: ReturnType<typeof createClient>;
+}) {
+  const normalizedCategory = args.categoryName.trim();
+  const categoriesTable = (args.supabase as any).from("service_categories");
+  const existingResult = await categoriesTable
+    .select("id")
+    .eq("salon_id", args.salonId)
+    .ilike("name", normalizedCategory)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingResult.data?.id) {
+    return existingResult.data.id as string;
+  }
+
+  const insertResult = await categoriesTable
+    .insert({
+      salon_id: args.salonId,
+      name: normalizedCategory,
+      is_active: true,
+    })
+    .select("id")
+    .single();
+
+  if (!insertResult.data?.id) {
+    throw new Error("service_category_sync_failed");
+  }
+
+  return insertResult.data.id as string;
 }
 
 export async function createServiceActionImpl(formData: FormData) {
@@ -61,32 +109,73 @@ export async function createServiceActionImpl(formData: FormData) {
   }
 
   let imagePath: string | null = null;
+  let categoryId = "";
 
   if (imageFile) {
     if (!imageFile.type.startsWith("image/")) {
       redirect(buildRedirectNotice(SERVICES_PATH, "Envie uma imagem válida para o serviço.", "error"));
     }
 
-    if (imageFile.size > 2 * 1024 * 1024) {
-      redirect(buildRedirectNotice(SERVICES_PATH, "A foto do serviço deve ter no máximo 2 MB.", "error"));
+    if (imageFile.size > SERVICE_IMAGE_PRESET.maxInputBytes) {
+      redirect(
+        buildRedirectNotice(
+          SERVICES_PATH,
+          `A foto do servico deve ter no maximo ${formatPresetMegabytes(
+            SERVICE_IMAGE_PRESET.maxInputBytes,
+          )} MB.`,
+          "error",
+        ),
+      );
     }
 
-    const bytes = Buffer.from(await imageFile.arrayBuffer());
-    imagePath = `${salon.id}/services/${randomUUID()}`;
+    let optimizedImage;
 
-    const { error: uploadError } = await supabase.storage.from("salon-assets").upload(imagePath, bytes, {
-      contentType: imageFile.type,
-      upsert: true,
-    });
+    try {
+      optimizedImage = await optimizeUploadedImage(imageFile, "service");
+    } catch {
+      redirect(
+        buildRedirectNotice(
+          SERVICES_PATH,
+          "Nao foi possivel processar a foto do servico.",
+          "error",
+        ),
+      );
+    }
+
+    imagePath = buildServiceImagePath(
+      salon.id,
+      randomUUID(),
+      optimizedImage.extension,
+    );
+
+    const { error: uploadError } = await supabase.storage
+      .from("salon-assets")
+      .upload(imagePath, optimizedImage.buffer, {
+        contentType: optimizedImage.contentType,
+        upsert: true,
+      });
 
     if (uploadError) {
       redirect(buildRedirectNotice(SERVICES_PATH, "Não foi possível enviar a foto do serviço.", "error"));
     }
   }
 
-  const { error } = await supabase.from("services").insert({
+  try {
+    categoryId = await ensureServiceCategoryId({
+      salonId: salon.id,
+      categoryName: category,
+      supabase,
+    });
+  } catch {
+    if (imagePath) {
+      await supabase.storage.from("salon-assets").remove([imagePath]).catch(() => undefined);
+    }
+    redirect(buildRedirectNotice(SERVICES_PATH, "Não foi possível preparar a categoria desse serviço.", "error"));
+  }
+
+  const { error } = await (supabase as any).from("services").insert({
     salon_id: salon.id,
-    category,
+    service_category_id: categoryId,
     name,
     description: description || null,
     price,
@@ -102,17 +191,18 @@ export async function createServiceActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(SERVICES_PATH, "Não foi possível salvar o serviço.", "error"));
   }
 
+  const notification = buildServiceCatalogNotification({
+    action: "published",
+    serviceName: name,
+    category,
+  });
   await queueCustomerNotification({
     supabase,
     salonId: salon.id,
-    notificationType: "service_published",
-    title: "Novo serviço disponível no app",
-    body: `${name} agora aparece no app do salão para novos agendamentos.`,
-    payload: {
-      type: "service_published",
-      serviceName: name,
-      category,
-    },
+    notificationType: notification.type,
+    title: notification.title,
+    body: notification.body,
+    payload: notification.payload,
   });
 
   revalidatePath(DASHBOARD_PATH);
@@ -158,6 +248,7 @@ export async function updateServiceCatalogActionImpl(formData: FormData) {
   }
 
   let imagePath = service.image_path ?? null;
+  let categoryId = "";
 
   if (removeImage && imagePath && !imageFile) {
     const { error: removeError } = await supabase.storage.from("salon-assets").remove([imagePath]);
@@ -174,16 +265,43 @@ export async function updateServiceCatalogActionImpl(formData: FormData) {
       redirect(buildRedirectNotice(SERVICES_PATH, "Envie uma imagem válida para o serviço.", "error"));
     }
 
-    if (imageFile.size > 2 * 1024 * 1024) {
-      redirect(buildRedirectNotice(SERVICES_PATH, "A foto do serviço deve ter no máximo 2 MB.", "error"));
+    if (imageFile.size > SERVICE_IMAGE_PRESET.maxInputBytes) {
+      redirect(
+        buildRedirectNotice(
+          SERVICES_PATH,
+          `A foto do servico deve ter no maximo ${formatPresetMegabytes(
+            SERVICE_IMAGE_PRESET.maxInputBytes,
+          )} MB.`,
+          "error",
+        ),
+      );
     }
 
-    const bytes = Buffer.from(await imageFile.arrayBuffer());
-    const uploadPath = `${salon.id}/services/${service.id}`;
-    const { error: uploadError } = await supabase.storage.from("salon-assets").upload(uploadPath, bytes, {
-      contentType: imageFile.type,
-      upsert: true,
-    });
+    let optimizedImage;
+
+    try {
+      optimizedImage = await optimizeUploadedImage(imageFile, "service");
+    } catch {
+      redirect(
+        buildRedirectNotice(
+          SERVICES_PATH,
+          "Nao foi possivel processar a foto do servico.",
+          "error",
+        ),
+      );
+    }
+
+    const uploadPath = buildServiceImagePath(
+      salon.id,
+      service.id,
+      optimizedImage.extension,
+    );
+    const { error: uploadError } = await supabase.storage
+      .from("salon-assets")
+      .upload(uploadPath, optimizedImage.buffer, {
+        contentType: optimizedImage.contentType,
+        upsert: true,
+      });
 
     if (uploadError) {
       redirect(buildRedirectNotice(SERVICES_PATH, "Não foi possível atualizar a foto do serviço.", "error"));
@@ -192,10 +310,20 @@ export async function updateServiceCatalogActionImpl(formData: FormData) {
     imagePath = uploadPath;
   }
 
-  const { error } = await supabase
+  try {
+    categoryId = await ensureServiceCategoryId({
+      salonId: salon.id,
+      categoryName: category,
+      supabase,
+    });
+  } catch {
+    redirect(buildRedirectNotice(SERVICES_PATH, "Não foi possível preparar a categoria desse serviço.", "error"));
+  }
+
+  const { error } = await (supabase as any)
     .from("services")
     .update({
-      category,
+      service_category_id: categoryId,
       name,
       description: description || null,
       price,
@@ -210,18 +338,19 @@ export async function updateServiceCatalogActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(SERVICES_PATH, "Não foi possível atualizar o serviço.", "error"));
   }
 
+  const notification = buildServiceCatalogNotification({
+    action: "updated",
+    serviceId: service.id,
+    serviceName: name,
+    category,
+  });
   await queueCustomerNotification({
     supabase,
     salonId: salon.id,
-    notificationType: "service_updated",
-    title: "Serviço atualizado no app",
-    body: `${name} foi ajustado pelo salão. Confira preço, duração e detalhes atualizados.`,
-    payload: {
-      type: "service_updated",
-      serviceId: service.id,
-      serviceName: name,
-      category,
-    },
+    notificationType: notification.type,
+    title: notification.title,
+    body: notification.body,
+    payload: notification.payload,
   });
 
   if (imageFile && service.image_path && service.image_path !== imagePath) {

@@ -62,7 +62,27 @@ describe("service actions", () => {
     const insertNotification = vi.fn().mockResolvedValue({ error: null });
     const countServices = vi.fn().mockResolvedValue({ count: 4 });
     const selectServices = vi.fn(() => ({
-      eq: countServices,
+      eq: vi.fn(() => countServices()),
+    }));
+    const maybeSingleCategory = vi.fn().mockResolvedValue({
+      data: null,
+      error: null,
+    });
+    const selectCategory = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        ilike: vi.fn(() => ({
+          limit: vi.fn(() => ({
+            maybeSingle: maybeSingleCategory,
+          })),
+        })),
+      })),
+    }));
+    const insertCategory = vi.fn(() => ({
+      select: vi.fn(() => ({
+        single: vi.fn().mockResolvedValue({
+          data: { id: "category-1" },
+        }),
+      })),
     }));
 
     createClientMock.mockReturnValue({
@@ -76,6 +96,13 @@ describe("service actions", () => {
 
         if (table === "salon_customer_notifications") {
           return { insert: insertNotification };
+        }
+
+        if (table === "service_categories") {
+          return {
+            select: selectCategory,
+            insert: insertCategory,
+          };
         }
 
         throw new Error(`Unexpected table ${table}`);
@@ -101,7 +128,7 @@ describe("service actions", () => {
 
     expect(insertService).toHaveBeenCalledWith({
       salon_id: "salon-1",
-      category: "hair",
+      service_category_id: "category-1",
       name: "Corte premium",
       description: "Com lavagem",
       price: 90,

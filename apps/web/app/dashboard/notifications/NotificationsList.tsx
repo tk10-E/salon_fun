@@ -96,12 +96,8 @@ export function NotificationsList({
                 dispatchSnapshot.sent_count != null || dispatchSnapshot.failed_count != null
                   ? ` • enviados ${dispatchSnapshot.sent_count ?? 0} • falhas ${dispatchSnapshot.failed_count ?? 0}`
                   : ""
-              }${
-                dispatchSnapshot.response_status != null
-                  ? ` • resposta ${dispatchSnapshot.response_status}`
-                  : ""
               }`
-            : "Ainda sem snapshot de despacho para esse aviso.";
+            : "O envio desse aviso ainda está sendo processado.";
           const destinationLabel =
             notification.audience === "single_customer"
               ? customerName ?? "Cliente específico"
@@ -154,13 +150,13 @@ export function NotificationsList({
 
                   <div className="notification-log-card__meta-grid">
                     <div className="notification-log-card__meta-item">
-                      <span className="notification-log-card__meta-label">Tipo interno</span>
+                      <span className="notification-log-card__meta-label">Tipo do aviso</span>
                       <strong>{formatNotificationType(notification.notification_type)}</strong>
-                      <p>Classificação operacional usada para organizar o histórico do salão.</p>
+                      <p>Ajuda a entender rapidamente o objetivo desse disparo.</p>
                     </div>
 
                     <div className="notification-log-card__meta-item">
-                      <span className="notification-log-card__meta-label">Auditoria push</span>
+                      <span className="notification-log-card__meta-label">Resultado do envio</span>
                       <strong>{formatDispatchStatus(dispatchSnapshot?.status)}</strong>
                       <p>{dispatchLabel}</p>
                     </div>
@@ -180,13 +176,13 @@ export function NotificationsList({
                         dispatchSnapshot?.error_detail ? " notification-log-card__meta-item--danger" : ""
                       }`}
                     >
-                      <span className="notification-log-card__meta-label">Último retorno</span>
+                      <span className="notification-log-card__meta-label">Observação</span>
                       <strong>
-                        {dispatchSnapshot?.error_detail ? "Falha registrada" : "Fluxo sem erro crítico"}
+                        {dispatchSnapshot?.error_detail ? "Vale revisar este aviso" : "Sem alerta relevante"}
                       </strong>
                       <p>
                         {dispatchSnapshot?.error_detail ??
-                          "Nenhum erro detalhado foi registrado no snapshot mais recente desse aviso."}
+                          "Nao houve nenhum alerta relevante no envio mais recente desse aviso."}
                       </p>
                     </div>
                   </div>

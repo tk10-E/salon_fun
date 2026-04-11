@@ -34,10 +34,11 @@ describe("public salon page", () => {
         brandColor: "#C56B43",
         businessSegment: "beauty_salon",
         whatsappPhone: "5511999999999",
+        heroHeadline: "Entre no salão certo com uma experiência premium.",
         logoUrl: null,
         heroImageUrl: "https://cdn.example.com/hero.jpg",
         shareImageUrl: "https://cdn.example.com/share.jpg",
-        welcomeHeadline: "Entre no salão certo com uma experiência premium.",
+        welcomeHeadline: "Studio Centro no seu bolso.",
         welcomeMessage:
           "Serviços, promoções e prova visual organizados para converter melhor.",
         promotionHeadline: "Pacotes ativos com linguagem de marca.",

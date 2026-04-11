@@ -42,6 +42,7 @@ vi.mock("next/cache", () => ({
 
 import {
   createSalonOfferActionImpl,
+  markReferralRewardRedeemedActionImpl,
   saveSalonGrowthAutomationActionImpl,
   saveSalonLoyaltyProgramActionImpl,
 } from "@/app/_actions/commercial";
@@ -220,6 +221,68 @@ describe("commercial actions", () => {
     );
     expect(location).toBe(
       "/dashboard/benefits/loyalty?message=Programa+de+fidelidade+atualizado+com+sucesso.&tone=success",
+    );
+  });
+
+  it("marks an available referral reward as redeemed", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: "unlock-1" },
+      error: null,
+    });
+    const select = vi.fn(() => ({
+      maybeSingle,
+    }));
+    const statusFilter = vi.fn(() => ({
+      select,
+    }));
+    const salonFilter = vi.fn(() => ({
+      eq: statusFilter,
+    }));
+    const idFilter = vi.fn(() => ({
+      eq: salonFilter,
+    }));
+    const updateUnlock = vi.fn(() => ({
+      eq: idFilter,
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table !== "salon_referral_reward_unlocks") {
+          throw new Error(`Unexpected table ${table}`);
+        }
+
+        return {
+          update: updateUnlock,
+        };
+      }),
+    });
+
+    const location = await captureRedirect(
+      markReferralRewardRedeemedActionImpl(
+        makeFormData({
+          returnPath: "/dashboard/benefits/referrals",
+          unlockId: "unlock-1",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateUnlock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "redeemed",
+      }),
+    );
+    expect(idFilter).toHaveBeenCalledWith("id", "unlock-1");
+    expect(salonFilter).toHaveBeenCalledWith("salon_id", "salon-1");
+    expect(statusFilter).toHaveBeenCalledWith("status", "available");
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
+      expect.arrayContaining([
+        "/dashboard/benefits",
+        "/dashboard/benefits/referrals",
+      ]),
+    );
+    expect(location).toBe(
+      "/dashboard/benefits/referrals?message=Recompensa+marcada+como+entregue.&tone=success",
     );
   });
 

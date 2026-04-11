@@ -8,15 +8,21 @@ const {
   createClientMock,
   registerInventoryMovementActionPath,
   requireOwnerSalonMock,
+  runSalonAutoPilotActionPath,
+  saveSalonMonthlyTargetsActionPath,
   saveInventoryProductActionPath,
   saveStaffCommissionSettingsActionPath,
+  sendCustomerReactivationActionPath,
   updateCustomerProductOrderStatusActionPath,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   registerInventoryMovementActionPath: "/__test/register-inventory-movement",
   requireOwnerSalonMock: vi.fn(),
+  runSalonAutoPilotActionPath: "/__test/run-salon-auto-pilot",
+  saveSalonMonthlyTargetsActionPath: "/__test/save-salon-monthly-targets",
   saveInventoryProductActionPath: "/__test/save-inventory-product",
   saveStaffCommissionSettingsActionPath: "/__test/save-staff-commission",
+  sendCustomerReactivationActionPath: "/__test/send-customer-reactivation",
   updateCustomerProductOrderStatusActionPath:
     "/__test/update-store-order-status",
 }));
@@ -36,8 +42,11 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/app/actions", () => ({
   registerInventoryMovementAction: registerInventoryMovementActionPath,
+  runSalonAutoPilotAction: runSalonAutoPilotActionPath,
+  saveSalonMonthlyTargetsAction: saveSalonMonthlyTargetsActionPath,
   saveInventoryProductAction: saveInventoryProductActionPath,
   saveStaffCommissionSettingsAction: saveStaffCommissionSettingsActionPath,
+  sendCustomerReactivationAction: sendCustomerReactivationActionPath,
   updateCustomerProductOrderStatusAction:
     updateCustomerProductOrderStatusActionPath,
 }));
@@ -56,11 +65,16 @@ describe("operations page UI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireOwnerSalonMock.mockResolvedValue({
-      salon: { id: "salon-1" },
+      salon: {
+        id: "salon-1",
+        client_app_config: {
+          autoPilotEnabled: true,
+        },
+      },
     });
   });
 
-  it("renders revenue, staff performance, commissions and inventory controls", async () => {
+  it("separates salon operations from the virtual store with compact store management", async () => {
     const storageFrom = vi.fn(() => ({
       getPublicUrl: vi.fn((path: string) => ({
         data: { publicUrl: `https://cdn.example.com/${path}` },
@@ -132,30 +146,20 @@ describe("operations page UI", () => {
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                order: vi.fn(() => ({
-                  order: vi.fn().mockResolvedValue({
-                    data: [
-                      {
-                        id: "product-1",
-                        name: "Shampoo reconstrutor",
-                        brand: "Wella",
-                        description:
-                          "Shampoo de reconstrução com vitrine visual para a cliente.",
-                        image_paths: ["salon-1/product-1.webp"],
-                        sku: "WEL-01",
-                        unit: "un",
-                        current_stock: 1,
-                        minimum_stock: 2,
-                        cost_price: 24.9,
-                        retail_price: 44.9,
-                        max_purchase_quantity: 4,
-                        is_active: true,
-                        updated_at: "2026-03-22T12:00:00.000Z",
-                      },
-                    ],
-                    error: null,
-                  }),
-                })),
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    {
+                      id: "product-1",
+                      name: "Shampoo reconstrutor",
+                      image_paths: ["salon-1/product-1.webp"],
+                      unit: "un",
+                      current_stock: 1,
+                      minimum_stock: 2,
+                      retail_price: 44.9,
+                    },
+                  ],
+                  error: null,
+                }),
               })),
             })),
           };
@@ -231,6 +235,87 @@ describe("operations page UI", () => {
           };
         }
 
+        if (table === "appointments") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                gte: vi.fn(() => ({
+                  order: vi.fn(() => ({
+                    limit: vi.fn().mockResolvedValue({
+                      data: [
+                        {
+                          id: "appointment-1",
+                          date: "2026-04-04T10:00:00.000Z",
+                          status: "completed",
+                          customers: { id: "customer-1", name: "Ana" },
+                          services: {
+                            id: "service-1",
+                            name: "Escova",
+                            price: 95,
+                          },
+                        },
+                        {
+                          id: "appointment-2",
+                          date: "2026-04-01T10:00:00.000Z",
+                          status: "confirmed",
+                          customers: { id: "customer-2", name: "Bianca" },
+                          services: {
+                            id: "service-2",
+                            name: "Coloracao",
+                            price: 180,
+                          },
+                        },
+                        {
+                          id: "appointment-3",
+                          date: "2026-02-01T10:00:00.000Z",
+                          status: "cancelled",
+                          customers: { id: "customer-1", name: "Ana" },
+                          services: {
+                            id: "service-1",
+                            name: "Escova",
+                            price: 95,
+                          },
+                        },
+                      ],
+                      error: null,
+                    }),
+                  })),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "customers") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                order: vi.fn(() => ({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [
+                      {
+                        id: "customer-1",
+                        name: "Ana",
+                        created_at: "2026-01-02T10:00:00.000Z",
+                        phone: "11988887777",
+                        whatsapp_phone: "5511988887777",
+                      },
+                      {
+                        id: "customer-2",
+                        name: "Bianca",
+                        created_at: "2026-03-20T10:00:00.000Z",
+                        phone: "11977776666",
+                        whatsapp_phone: "5511977776666",
+                      },
+                    ],
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+
         if (table === "staff_members") {
           return {
             select: vi.fn(() => ({
@@ -245,6 +330,21 @@ describe("operations page UI", () => {
                   ],
                   error: null,
                 }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_monthly_targets") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: null,
+                    error: null,
+                  }),
+                })),
               })),
             })),
           };
@@ -265,12 +365,37 @@ describe("operations page UI", () => {
 
     expect(screen.getByText("Operação atualizada.")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Resumo financeiro" }),
+      screen.getByRole("heading", {
+        name: "Visão executiva das operações do salão",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Faturamento 7 dias/)).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Desempenho da equipe" }),
+      screen.getByRole("heading", { name: "Metas do mês" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Leitura rápida do mês" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Clientes que pedem atenção" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Equipe em foco" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Pedidos da loja" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Produtos em alerta" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Movimentos recentes" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Atualizar prioridades agora" })).toBeInTheDocument();
+    expect(screen.getByText("Sugestões automáticas ativas")).toBeInTheDocument();
+    expect(screen.getAllByText(/Ticket médio/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Serviço e cliente destaque")).toBeInTheDocument();
+    expect(screen.getByText("Clientes para reativar agora")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar pelo painel" })).toBeInTheDocument();
     expect(
       screen.getAllByRole("heading", { name: "Ana" }).length,
     ).toBeGreaterThan(0);
@@ -280,41 +405,14 @@ describe("operations page UI", () => {
       screen.getAllByRole("button", { name: "Salvar comissão" }).length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", { name: "Novo produto" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "Salvar produto" }).length,
+      screen.getAllByText("Shampoo reconstrutor").length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText("Fotos da vitrine")).toBeInTheDocument();
-    expect(screen.getAllByText("Limite por pedido").length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("heading", { name: "Produtos" }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Shampoo reconstrutor").length).toBeGreaterThan(
-      0,
-    );
-    expect(
-      screen.getAllByText(
-        "Shampoo de reconstrução com vitrine visual para a cliente.",
-      ).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText("Estoque em alerta").length).toBeGreaterThan(0);
-    expect(screen.getByText("Até 4")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Pedidos" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Pedido #204")).toBeInTheDocument();
+    expect(screen.getByText("#204")).toBeInTheDocument();
     expect(
       screen.getByText(/Separar para retirada na recepcao/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Confirmar pedido" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Registrar movimento" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Movimentos" }),
+      screen.getByRole("button", { name: "Confirmar" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Uso no atendimento")).toBeInTheDocument();
   });

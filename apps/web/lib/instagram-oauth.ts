@@ -25,6 +25,7 @@ export type InstagramMetaPageAccount = {
   instagram_business_account?: {
     id?: string;
     username?: string;
+    profile_picture_url?: string;
   } | null;
 };
 

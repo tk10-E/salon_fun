@@ -23,7 +23,11 @@ import {
 import { normalizeSalonBusinessSegment } from "@/lib/salonSegments";
 import { createClient } from "@/lib/supabase/server";
 
-import { buildRedirectNotice } from "./shared";
+import {
+  buildClientAppRefreshNotification,
+  buildRedirectNotice,
+  queueCustomerNotification,
+} from "./shared";
 
 const SETTINGS_PATH = "/dashboard/settings";
 const DASHBOARD_PATH = "/dashboard";
@@ -40,6 +44,22 @@ function normalizeOptionalTextInput(value: FormDataEntryValue | null) {
   return normalized || null;
 }
 
+function normalizeOptionalDomainInput(value: FormDataEntryValue | null) {
+  const normalized = normalizeOptionalTextInput(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const sanitized = normalized
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "")
+    .replace(/:\d+$/, "")
+    .replace(/^www\./, "");
+
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(sanitized) ? sanitized : null;
+}
+
 function normalizeOptionalHexColorInput(value: FormDataEntryValue | null) {
   const normalized = normalizeOptionalTextInput(value)?.toUpperCase() ?? null;
   if (!normalized) {
@@ -47,6 +67,32 @@ function normalizeOptionalHexColorInput(value: FormDataEntryValue | null) {
   }
 
   return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : null;
+}
+
+function normalizeOptionalUrlInput(
+  value: FormDataEntryValue | null,
+  protocols: readonly string[] = ["http:", "https:"],
+) {
+  const normalized = normalizeOptionalTextInput(value);
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    return protocols.includes(parsed.protocol) ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeOptionalEmailInput(value: FormDataEntryValue | null) {
+  const normalized = normalizeOptionalTextInput(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(normalized) ? normalized : null;
 }
 
 function normalizeOptionalDateTimeInput(value: FormDataEntryValue | null) {
@@ -488,6 +534,10 @@ function normalizeBusinessTimeInput(value: string) {
   return `${value}:00`;
 }
 
+function stringifyComparison(value: unknown) {
+  return JSON.stringify(value ?? null);
+}
+
 export async function regenerateSalonCodeActionImpl() {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
@@ -521,6 +571,8 @@ export async function regenerateSalonCodeActionImpl() {
 
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
+  revalidatePath("/dashboard/client-app");
+  revalidatePath(`/s/${salon.join_code}`);
   redirect(
     buildRedirectNotice(
       SETTINGS_PATH,
@@ -540,6 +592,17 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     .trim()
     .toUpperCase();
   const rawWhatsapp = String(formData.get("whatsappPhone") ?? "").trim();
+  const rawDispatchPhoneNumberId = formData.has("whatsappMetaPhoneNumberId")
+    ? String(formData.get("whatsappMetaPhoneNumberId") ?? "").trim()
+    : String(salon.whatsapp_meta_phone_number_id ?? "").trim();
+  const rawDispatchBusinessAccountId = formData.has(
+    "whatsappMetaBusinessAccountId",
+  )
+    ? String(formData.get("whatsappMetaBusinessAccountId") ?? "").trim()
+    : String(salon.whatsapp_meta_business_account_id ?? "").trim();
+  const whatsappDispatchEnabled = formData.has("whatsappDispatchEnabled")
+    ? formData.get("whatsappDispatchEnabled") === "on"
+    : (salon.whatsapp_dispatch_enabled ?? false);
   const businessSegment = normalizeSalonBusinessSegment(
     String(formData.get("businessSegment") ?? ""),
   );
@@ -915,6 +978,107 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       "Não foi possível processar a capa institucional do perfil do salão.",
   });
   const centralCampaigns = buildClientAppCampaignDrafts(formData);
+  const appDisplayName = normalizeOptionalTextInput(
+    formData.get("clientAppAppDisplayName"),
+  );
+  const customDomainInput = String(
+    formData.get("clientAppCustomDomain") ?? "",
+  ).trim();
+  const customDomain = normalizeOptionalDomainInput(
+    formData.get("clientAppCustomDomain"),
+  );
+  const instagramUrlInput = normalizeOptionalTextInput(
+    formData.get("clientAppInstagramUrl"),
+  );
+  const instagramUrl = normalizeOptionalUrlInput(
+    formData.get("clientAppInstagramUrl"),
+  );
+  const mapUrlInput = normalizeOptionalTextInput(
+    formData.get("clientAppMapUrl"),
+  );
+  const mapUrl = normalizeOptionalUrlInput(formData.get("clientAppMapUrl"));
+  const privacyPolicyUrlInput = normalizeOptionalTextInput(
+    formData.get("clientAppPrivacyPolicyUrl"),
+  );
+  const privacyPolicyUrl = normalizeOptionalUrlInput(
+    formData.get("clientAppPrivacyPolicyUrl"),
+  );
+  const termsOfUseUrlInput = normalizeOptionalTextInput(
+    formData.get("clientAppTermsOfUseUrl"),
+  );
+  const termsOfUseUrl = normalizeOptionalUrlInput(
+    formData.get("clientAppTermsOfUseUrl"),
+  );
+  const supportUrlInput = normalizeOptionalTextInput(
+    formData.get("clientAppSupportUrl"),
+  );
+  const supportUrl = normalizeOptionalUrlInput(
+    formData.get("clientAppSupportUrl"),
+  );
+  const supportEmailInput = normalizeOptionalTextInput(
+    formData.get("clientAppSupportEmail"),
+  );
+  const supportEmail = normalizeOptionalEmailInput(
+    formData.get("clientAppSupportEmail"),
+  );
+  const whiteLabelActive = formData.has("clientAppWhiteLabelActive")
+    ? formData.get("clientAppWhiteLabelActive") === "on"
+    : currentClientAppConfig.whiteLabelActive;
+  const autoPilotEnabled = formData.has("clientAppAutoPilotEnabled")
+    ? formData.get("clientAppAutoPilotEnabled") === "on"
+    : currentClientAppConfig.autoPilotEnabled;
+
+  if (customDomainInput && !customDomain) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Informe um endereço válido para o app do salão, sem caminho extra.",
+        "error",
+      ),
+    );
+  }
+
+  for (const [input, value, message] of [
+    [
+      instagramUrlInput,
+      instagramUrl,
+      "Use uma URL válida para o Instagram do salão com http ou https.",
+    ] as const,
+    [
+      mapUrlInput,
+      mapUrl,
+      "Use uma URL válida de mapa com http ou https.",
+    ] as const,
+    [
+      privacyPolicyUrlInput,
+      privacyPolicyUrl,
+      "Use uma URL válida para a política de privacidade com http ou https.",
+    ] as const,
+    [
+      termsOfUseUrlInput,
+      termsOfUseUrl,
+      "Use uma URL válida para os termos de uso com http ou https.",
+    ] as const,
+    [
+      supportUrlInput,
+      supportUrl,
+      "Use uma URL válida para o suporte com http ou https.",
+    ] as const,
+  ]) {
+    if (input && !value) {
+      redirect(buildRedirectNotice(SETTINGS_PATH, message, "error"));
+    }
+  }
+
+  if (supportEmailInput && !supportEmail) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Use um e-mail de suporte válido para o app do cliente.",
+        "error",
+      ),
+    );
+  }
 
   const clientAppConfigDraft = {
     rawConfig: currentClientAppConfig.rawConfig,
@@ -985,23 +1149,19 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     profileCoverImageFocusX,
     profileCoverImageFocusY,
     profileCoverImageZoom,
-    instagramUrl: normalizeOptionalTextInput(
-      formData.get("clientAppInstagramUrl"),
-    ),
+    instagramUrl,
     addressLabel: normalizeOptionalTextInput(
       formData.get("clientAppAddressLabel"),
     ),
-    mapUrl: normalizeOptionalTextInput(formData.get("clientAppMapUrl")),
-    privacyPolicyUrl: normalizeOptionalTextInput(
-      formData.get("clientAppPrivacyPolicyUrl"),
-    ),
-    termsOfUseUrl: normalizeOptionalTextInput(
-      formData.get("clientAppTermsOfUseUrl"),
-    ),
-    supportUrl: normalizeOptionalTextInput(formData.get("clientAppSupportUrl")),
-    supportEmail: normalizeOptionalTextInput(
-      formData.get("clientAppSupportEmail"),
-    ),
+    mapUrl,
+    privacyPolicyUrl,
+    termsOfUseUrl,
+    supportUrl,
+    supportEmail,
+    appDisplayName,
+    customDomain,
+    whiteLabelActive,
+    autoPilotEnabled,
     ratingValue,
     ratingCount,
     centralCampaigns,
@@ -1026,6 +1186,11 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     ? rawBrandColor
     : "#C56B43";
   const whatsappDigits = rawWhatsapp.replace(/\D/g, "");
+  const dispatchPhoneNumberId = rawDispatchPhoneNumberId.replace(/\D/g, "");
+  const dispatchBusinessAccountId = rawDispatchBusinessAccountId.replace(
+    /\D/g,
+    "",
+  );
 
   if (
     rawWhatsapp &&
@@ -1035,6 +1200,33 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       buildRedirectNotice(
         SETTINGS_PATH,
         "Informe um WhatsApp válido com DDD e código do país, se necessário.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    rawDispatchPhoneNumberId &&
+    (dispatchPhoneNumberId.length < 8 || dispatchPhoneNumberId.length > 32)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Informe um Phone Number ID válido da Meta para o canal técnico do WhatsApp.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    rawDispatchBusinessAccountId &&
+    (dispatchBusinessAccountId.length < 8 ||
+      dispatchBusinessAccountId.length > 32)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Informe um WhatsApp Business Account ID válido da Meta.",
         "error",
       ),
     );
@@ -1102,6 +1294,115 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     logoPath = uploadPath;
   }
 
+  const currentIdentitySnapshot = {
+    name: salon.name ?? null,
+    tagline: salon.tagline ?? null,
+    brandColor: salon.brand_color ?? null,
+    businessSegment: salon.business_segment ?? null,
+  };
+  const nextIdentitySnapshot = {
+    name: rawName,
+    tagline: rawTagline || null,
+    brandColor,
+    businessSegment,
+  };
+  const identityChanged =
+    stringifyComparison(currentIdentitySnapshot) !==
+      stringifyComparison(nextIdentitySnapshot) ||
+    Boolean(logoFile) ||
+    (salon.logo_path ?? null) !== logoPath;
+
+  const currentExperienceSnapshot = {
+    experienceModel: currentClientAppConfig.experienceModel,
+    visualStyle: currentClientAppConfig.visualStyle,
+    homeEmphasis: currentClientAppConfig.homeEmphasis,
+    heroHeadline: currentClientAppConfig.heroHeadline,
+    heroSupportLine: currentClientAppConfig.heroSupportLine,
+    primaryCtaLabel: currentClientAppConfig.primaryCtaLabel,
+    themeMode: currentClientAppConfig.themeMode,
+    buttonStyle: currentClientAppConfig.buttonStyle,
+    cardStyle: currentClientAppConfig.cardStyle,
+    bannerStyle: currentClientAppConfig.bannerStyle,
+    secondaryColor: currentClientAppConfig.secondaryColor,
+    accentColor: currentClientAppConfig.accentColor,
+    welcomeHeadline: currentClientAppConfig.welcomeHeadline,
+    welcomeMessage: currentClientAppConfig.welcomeMessage,
+    promotionHeadline: currentClientAppConfig.promotionHeadline,
+    heroImageUrl: currentClientAppConfig.heroImageUrl,
+    galleryCoverImageUrl: currentClientAppConfig.galleryCoverImageUrl,
+    profileCoverImageUrl: currentClientAppConfig.profileCoverImageUrl,
+    visibleHomeModules: currentClientAppConfig.visibleHomeModules,
+  };
+  const nextExperienceSnapshot = {
+    experienceModel: clientAppConfig.experienceModel,
+    visualStyle: clientAppConfig.visualStyle,
+    homeEmphasis: clientAppConfig.homeEmphasis,
+    heroHeadline: clientAppConfig.heroHeadline,
+    heroSupportLine: clientAppConfig.heroSupportLine,
+    primaryCtaLabel: clientAppConfig.primaryCtaLabel,
+    themeMode: clientAppConfig.themeMode,
+    buttonStyle: clientAppConfig.buttonStyle,
+    cardStyle: clientAppConfig.cardStyle,
+    bannerStyle: clientAppConfig.bannerStyle,
+    secondaryColor: clientAppConfig.secondaryColor,
+    accentColor: clientAppConfig.accentColor,
+    welcomeHeadline: clientAppConfig.welcomeHeadline,
+    welcomeMessage: clientAppConfig.welcomeMessage,
+    promotionHeadline: clientAppConfig.promotionHeadline,
+    heroImageUrl: clientAppConfig.heroImageUrl,
+    galleryCoverImageUrl: clientAppConfig.galleryCoverImageUrl,
+    profileCoverImageUrl: clientAppConfig.profileCoverImageUrl,
+    visibleHomeModules: clientAppConfig.visibleHomeModules,
+  };
+  const vitrineChanged =
+    stringifyComparison(currentExperienceSnapshot) !==
+      stringifyComparison(nextExperienceSnapshot) ||
+    Boolean(heroImageFile) ||
+    Boolean(galleryCoverImageFile) ||
+    Boolean(profileCoverImageFile) ||
+    shouldRemoveHeroImage ||
+    shouldRemoveGalleryCoverImage ||
+    shouldRemoveProfileCoverImage;
+
+  const campaignsChanged =
+    stringifyComparison(currentClientAppConfig.centralCampaigns) !==
+    stringifyComparison(clientAppConfig.centralCampaigns);
+
+  const currentInformationSnapshot = {
+    instagramUrl: currentClientAppConfig.instagramUrl,
+    addressLabel: currentClientAppConfig.addressLabel,
+    mapUrl: currentClientAppConfig.mapUrl,
+    supportUrl: currentClientAppConfig.supportUrl,
+    supportEmail: currentClientAppConfig.supportEmail,
+    privacyPolicyUrl: currentClientAppConfig.privacyPolicyUrl,
+    termsOfUseUrl: currentClientAppConfig.termsOfUseUrl,
+    appDisplayName: currentClientAppConfig.appDisplayName,
+    ratingValue: currentClientAppConfig.ratingValue,
+    ratingCount: currentClientAppConfig.ratingCount,
+  };
+  const nextInformationSnapshot = {
+    instagramUrl: clientAppConfig.instagramUrl,
+    addressLabel: clientAppConfig.addressLabel,
+    mapUrl: clientAppConfig.mapUrl,
+    supportUrl: clientAppConfig.supportUrl,
+    supportEmail: clientAppConfig.supportEmail,
+    privacyPolicyUrl: clientAppConfig.privacyPolicyUrl,
+    termsOfUseUrl: clientAppConfig.termsOfUseUrl,
+    appDisplayName: clientAppConfig.appDisplayName,
+    ratingValue: clientAppConfig.ratingValue,
+    ratingCount: clientAppConfig.ratingCount,
+  };
+  const informationChanged =
+    stringifyComparison(currentInformationSnapshot) !==
+    stringifyComparison(nextInformationSnapshot);
+
+  const changedAreas = [
+    identityChanged ? "identidade" : null,
+    vitrineChanged ? "vitrine" : null,
+    campaignsChanged ? "campanhas" : null,
+    informationChanged ? "informacoes" : null,
+  ].filter((value): value is string => Boolean(value));
+
   const { error } = await supabase
     .from("salons")
     .update({
@@ -1110,6 +1411,9 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       brand_color: brandColor,
       business_segment: businessSegment,
       client_app_config: serializeSalonClientAppConfig(clientAppConfig),
+      whatsapp_dispatch_enabled: whatsappDispatchEnabled,
+      whatsapp_meta_business_account_id: dispatchBusinessAccountId || null,
+      whatsapp_meta_phone_number_id: dispatchPhoneNumberId || null,
       whatsapp_phone: whatsappDigits || null,
       logo_path: logoPath,
     })
@@ -1125,8 +1429,24 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     );
   }
 
+  if (changedAreas.length) {
+    const notification = buildClientAppRefreshNotification({
+      changedAreas,
+    });
+    await queueCustomerNotification({
+      supabase,
+      salonId: salon.id,
+      notificationType: notification.type,
+      title: notification.title,
+      body: notification.body,
+      payload: notification.payload,
+    });
+  }
+
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
+  revalidatePath("/dashboard/client-app");
+  revalidatePath(`/s/${salon.join_code}`);
   redirect(
     buildRedirectNotice(
       SETTINGS_PATH,
@@ -1303,18 +1623,22 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
       ? bookingPolicyPaymentModeInput
       : "manual";
   const bookingPolicyAsaasEnvironmentInput = String(
-    formData.get("bookingPolicyAsaasEnvironment") ?? "sandbox",
+    formData.has("bookingPolicyAsaasEnvironment")
+      ? formData.get("bookingPolicyAsaasEnvironment")
+      : (salon.booking_policy_asaas_environment ?? "sandbox"),
   ).trim();
   const bookingPolicyAsaasEnvironment =
     bookingPolicyAsaasEnvironmentInput === "production"
       ? "production"
       : "sandbox";
-  const bookingPolicyAsaasApiKey = normalizeOptionalTextInput(
-    formData.get("bookingPolicyAsaasApiKey"),
-  );
-  const bookingPolicyAsaasWebhookTokenInput = normalizeOptionalTextInput(
-    formData.get("bookingPolicyAsaasWebhookToken"),
-  );
+  const bookingPolicyAsaasApiKey = formData.has("bookingPolicyAsaasApiKey")
+    ? normalizeOptionalTextInput(formData.get("bookingPolicyAsaasApiKey"))
+    : (salon.booking_policy_asaas_api_key ?? null);
+  const bookingPolicyAsaasWebhookTokenInput = formData.has(
+    "bookingPolicyAsaasWebhookToken",
+  )
+    ? normalizeOptionalTextInput(formData.get("bookingPolicyAsaasWebhookToken"))
+    : (salon.booking_policy_asaas_webhook_token ?? null);
   const bookingPolicyPixKey = normalizeOptionalTextInput(
     formData.get("bookingPolicyPixKey"),
   );
@@ -1472,7 +1796,7 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SETTINGS_PATH,
-          "Informe a chave de API do Asaas para gerar o Pix automatico do sinal.",
+          "O Pix automático precisa ser ativado pela equipe de suporte antes do uso.",
           "error",
         ),
       );
@@ -1482,7 +1806,7 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SETTINGS_PATH,
-          "Nao foi possivel preparar o token do webhook do Asaas.",
+          "O Pix automático ainda está sendo preparado para este salão.",
           "error",
         ),
       );

@@ -4,6 +4,8 @@ import { createElement, type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
+
 const { createClientMock, requireOwnerSalonMock } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
@@ -54,7 +56,7 @@ describe("dashboard page UI", () => {
     vi.unstubAllEnvs();
   });
 
-  it("renders the redesigned dashboard with agenda, finance, team, stock and strategy panels", async () => {
+  it("renders a professional dashboard with customer growth, agenda and finance", async () => {
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "services") {
@@ -168,9 +170,50 @@ describe("dashboard page UI", () => {
 
         if (table === "customers") {
           return {
-            select: vi.fn(() => ({
-              eq: vi.fn().mockResolvedValue({ count: 52, error: null }),
-            })),
+            select: vi.fn(
+              (
+                columns?: string,
+                options?: { count?: string; head?: boolean },
+              ) => {
+                if (options?.head) {
+                  return {
+                    eq: vi.fn().mockResolvedValue({ count: 52, error: null }),
+                  };
+                }
+
+                if (columns === "created_at") {
+                  return {
+                    eq: vi.fn(() => ({
+                      gte: vi.fn(() => ({
+                        order: vi.fn().mockResolvedValue({
+                          data: [
+                            { created_at: "2025-10-12T15:00:00.000Z" },
+                            { created_at: "2025-11-02T15:00:00.000Z" },
+                            { created_at: "2025-11-15T15:00:00.000Z" },
+                            { created_at: "2025-12-10T15:00:00.000Z" },
+                            { created_at: "2025-12-18T15:00:00.000Z" },
+                            { created_at: "2026-01-03T15:00:00.000Z" },
+                            { created_at: "2026-01-11T15:00:00.000Z" },
+                            { created_at: "2026-01-19T15:00:00.000Z" },
+                            { created_at: "2026-01-28T15:00:00.000Z" },
+                            { created_at: "2026-02-06T15:00:00.000Z" },
+                            { created_at: "2026-02-14T15:00:00.000Z" },
+                            { created_at: "2026-02-22T15:00:00.000Z" },
+                            { created_at: "2026-03-05T15:00:00.000Z" },
+                            { created_at: "2026-03-12T15:00:00.000Z" },
+                            { created_at: "2026-03-18T15:00:00.000Z" },
+                            { created_at: "2026-03-24T15:00:00.000Z" },
+                          ],
+                          error: null,
+                        }),
+                      })),
+                    })),
+                  };
+                }
+
+                throw new Error(`Unexpected customers select: ${columns}`);
+              },
+            ),
           };
         }
 
@@ -204,6 +247,32 @@ describe("dashboard page UI", () => {
                       error: null,
                     }),
                   })),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "customer_tabs") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [
+                      {
+                        id: "tab-1",
+                        total_items: 210,
+                        total_paid: 120,
+                      },
+                      {
+                        id: "tab-2",
+                        total_items: 80,
+                        total_paid: 80,
+                      },
+                    ],
+                    error: null,
+                  }),
                 })),
               })),
             })),
@@ -286,6 +355,28 @@ describe("dashboard page UI", () => {
                   return {
                     eq: vi.fn(() => ({
                       eq: vi.fn(() => ({
+                        order: vi.fn(() => ({
+                          limit: vi.fn().mockResolvedValue({
+                            data: [
+                              {
+                                customer_id: "customer-1",
+                                date: "2026-03-29T15:00:00.000Z",
+                                services: { price: 120 },
+                              },
+                              {
+                                customer_id: "customer-2",
+                                date: "2026-03-28T16:00:00.000Z",
+                                services: { price: 200 },
+                              },
+                              {
+                                customer_id: "customer-1",
+                                date: "2026-03-20T18:00:00.000Z",
+                                services: { price: 150 },
+                              },
+                            ],
+                            error: null,
+                          }),
+                        })),
                         gte: vi.fn(() => ({
                           order: vi.fn(() => ({
                             limit: vi.fn().mockResolvedValue({
@@ -513,64 +604,51 @@ describe("dashboard page UI", () => {
     expect(screen.getByText("Resumo atualizado.")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Studio Beleza: operação, vendas e cliente em um lugar.",
+        name: "Studio Beleza",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", {
-        name: "Acessos rápidos",
-      }),
+      screen.getByRole("heading", { name: "Crescimento de clientes" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", {
-        name: "Onde cada função do sistema fica",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Agenda, clientes e equipe")).toBeInTheDocument();
-    expect(
-      screen.getAllByText("Serviços, benefícios e feed").length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getByText("App do cliente, cobrança e ajustes"),
+      screen.getByRole("heading", { name: "Agenda do dia" }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText("Loja, pedidos e estoque").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText(/5\/5 frentes/i)).toBeInTheDocument();
+      screen.getByRole("heading", { name: "Financeiro rapido" }),
+    ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Agenda do Dia" }),
+      screen.getByRole("heading", { name: "Hoje precisa de atencao" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Horarios hoje")).toBeInTheDocument();
+    expect(screen.getByText("Pendencias")).toBeInTheDocument();
+    expect(screen.getByText("Receita do mes")).toBeInTheDocument();
+    expect(screen.getByText("Proximo horario")).toBeInTheDocument();
+    expect(screen.getAllByText("09:00").length).toBeGreaterThan(0);
+    expect(screen.getByText("Corte feminino • Ana Paula")).toBeInTheDocument();
+    expect(screen.getByText("Base total")).toBeInTheDocument();
+    expect(screen.getByText("Novas no mes")).toBeInTheDocument();
+    expect(screen.getByText("Ativas 30d")).toBeInTheDocument();
+    expect(screen.getByText("Vs mes anterior")).toBeInTheDocument();
+    expect(screen.getByText("+33%")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Entrada de clientes" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Corte feminino")).toBeInTheDocument();
     expect(screen.getByText("Escova premium")).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s?470,00/)).toBeInTheDocument();
+    expect(screen.getAllByText(/R\$\s?156,67/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Concluidos no mes")).toBeInTheDocument();
+    expect(screen.getByText("Comandas abertas")).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s?90,00 em aberto/)).toBeInTheDocument();
+    expect(screen.getByText("Confirmacoes pendentes")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Resumo Financeiro" }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText(/R\$\s?650,00/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Pendências")).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Atalhos essenciais" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Top Profissionais" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Camila")).toBeInTheDocument();
+      screen.queryByRole("link", { name: "Abrir agenda" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Produtos em Falta" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Shampoo reconstrutor")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", {
-        name: "Recursos avançados",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", {
-        name: "Clubes, pacotes e campanhas",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText("Clube Glow Mensal").length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("heading", { name: "Encaixes Inteligentes" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Luzes premium")).toBeInTheDocument();
-    expect(screen.getByText("Marina")).toBeInTheDocument();
-    expect(screen.getByText("Automacao ligada")).toBeInTheDocument();
+      screen.queryByRole("link", { name: "Ver clientes" }),
+    ).not.toBeInTheDocument();
   });
 });

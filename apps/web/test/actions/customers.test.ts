@@ -66,6 +66,7 @@ describe("customer CRM actions", () => {
           contraindications: "Evitar calor excessivo após química.",
           technicalNotes: "Tonalização fria + reconstrução leve a cada 30 dias.",
           consentStatus: "signed",
+          birthDate: "1990-04-14",
           lastAssessmentAt: "2026-03-20",
           internalNotes: "Chega cedo e responde bem a combo de retorno.",
         }),
@@ -84,6 +85,7 @@ describe("customer CRM actions", () => {
       contraindications_input: "Evitar calor excessivo após química.",
       technical_notes_input: "Tonalização fria + reconstrução leve a cada 30 dias.",
       consent_status_input: "signed",
+      birth_date_input: "1990-04-14",
       last_assessment_at_input: "2026-03-20",
       internal_notes_input: "Chega cedo e responde bem a combo de retorno.",
     });

@@ -44,6 +44,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { SidebarNav } from "@/components/SidebarNav";
+import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 
 describe("SidebarNav", () => {
   beforeEach(() => {
@@ -54,22 +55,44 @@ describe("SidebarNav", () => {
     });
   });
 
+  it("prefetches only when the user signals navigation intent", () => {
+    render(<SidebarNav />);
+
+    expect(prefetchMock).not.toHaveBeenCalled();
+
+    const feedLink = screen.getByRole("link", { name: /feed/i });
+
+    fireEvent.mouseEnter(feedLink);
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+    expect(prefetchMock).toHaveBeenLastCalledWith("/dashboard/feed");
+
+    fireEvent.focus(feedLink);
+    fireEvent.touchStart(feedLink);
+
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("marca o link clicado como pendente imediatamente", () => {
     render(<SidebarNav />);
 
     expect(
-      screen.getByText(/agenda, clientes, equipe e rotina do salão/i),
+      screen.getByText(/Acesso rápido ao que move atendimento, agenda e operação\./i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Dia a dia do salão/i)).toBeInTheDocument();
+    expect(screen.getAllByText("6").length).toBeGreaterThan(0);
 
     expect(screen.getByRole("link", { name: /feed/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /notificações/i }),
+      screen.getByRole("link", { name: /lembretes/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /app do cliente/i }),
+      screen.getByRole("link", { name: /caixa/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /loja e estoque/i }),
+      screen.getByRole("link", { name: /vitrine do app/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /estoque/i }),
     ).toBeInTheDocument();
 
     const servicesLink = screen.getByRole("link", { name: /serviços/i });
@@ -77,6 +100,7 @@ describe("SidebarNav", () => {
 
     expect(servicesLink).toHaveClass("nav-link--pending");
     expect(servicesLink).toHaveAttribute("aria-busy", "true");
-    expect(prefetchMock).toHaveBeenCalledWith("/dashboard/services");
+    expect(prefetchMock).toHaveBeenCalledTimes(1);
+    expect(prefetchMock).toHaveBeenCalledWith(MANAGEMENT_ROUTES.services);
   });
 });

@@ -331,7 +331,7 @@ enabled = false
 # Use Firebase Auth as a third-party provider alongside Supabase Auth.
 [auth.third_party.firebase]
 enabled = true
-project_id = "salon-fun-ea6c0"
+project_id = "salon-fun-73373"
 
 # Use Auth0 as a third-party provider alongside Supabase Auth.
 [auth.third_party.auth0]

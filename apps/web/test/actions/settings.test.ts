@@ -180,19 +180,55 @@ describe("settings actions", () => {
     expect(location).toContain("WhatsApp+v%C3%A1lido");
   });
 
+  it("rejects invalid public links and support email before saving the client app", async () => {
+    const from = vi.fn();
+    const storageFrom = vi.fn();
+
+    createClientMock.mockReturnValue({
+      from,
+      storage: {
+        from: storageFrom,
+      },
+    });
+
+    const location = await captureRedirect(
+      updateSalonBrandingActionImpl(
+        makeFormData({
+          name: "Studio Centro",
+          clientAppInstagramUrl: "instagram.com/studio-centro",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(from).not.toHaveBeenCalled();
+    expect(storageFrom).not.toHaveBeenCalled();
+    expect(location).toContain("/dashboard/settings?");
+    expect(location).toContain("Instagram+do+sal%C3%A3o");
+  });
+
   it("updates branding, business segment and contact details", async () => {
     const eq = vi.fn().mockResolvedValue({ error: null });
     const updateSalon = vi.fn(() => ({ eq }));
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
         if (table !== "salons") {
           throw new Error(`Unexpected table ${table}`);
         }
-
-        return {
-          update: updateSalon,
-        };
       }),
       storage: {
         from: vi.fn(() => ({
@@ -218,32 +254,46 @@ describe("settings actions", () => {
       redirectMock,
     );
 
-    expect(updateSalon).toHaveBeenCalledWith({
-      name: "Studio Centro",
-      tagline: "Atendimento elegante e direto no app.",
-      brand_color: "#B35D77",
-      business_segment: "nail_studio",
-      client_app_config: {
-        experienceModel: "auto",
-        visualStyle: "auto",
-        homeEmphasis: "auto",
-        heroHeadline: null,
-        heroSupportLine: null,
-        primaryCtaLabel: null,
-        heroImageFocusX: 50,
-        heroImageFocusY: 50,
-        heroImageZoom: 1,
-        galleryCoverImageFocusX: 50,
-        galleryCoverImageFocusY: 50,
-        galleryCoverImageZoom: 1,
-        profileCoverImageFocusX: 50,
-        profileCoverImageFocusY: 50,
-        profileCoverImageZoom: 1,
-      },
-      whatsapp_phone: "5511999999999",
-      logo_path: "logos/current.png",
-    });
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Studio Centro",
+        tagline: "Atendimento elegante e direto no app.",
+        brand_color: "#B35D77",
+        business_segment: "nail_studio",
+        client_app_config: expect.objectContaining({
+          experienceModel: "auto",
+          visualStyle: "auto",
+          homeEmphasis: "auto",
+          heroHeadline: null,
+          heroSupportLine: null,
+          primaryCtaLabel: null,
+          heroImageFocusX: 50,
+          heroImageFocusY: 50,
+          heroImageZoom: 1,
+          galleryCoverImageFocusX: 50,
+          galleryCoverImageFocusY: 50,
+          galleryCoverImageZoom: 1,
+          profileCoverImageFocusX: 50,
+          profileCoverImageFocusY: 50,
+          profileCoverImageZoom: 1,
+          autoPilotEnabled: false,
+          whiteLabelActive: false,
+        }),
+        whatsapp_dispatch_enabled: false,
+        whatsapp_meta_business_account_id: null,
+        whatsapp_meta_phone_number_id: null,
+        whatsapp_phone: "5511999999999",
+        logo_path: "logos/current.png",
+      }),
+    );
     expect(eq).toHaveBeenCalledWith("id", "salon-1");
+    expect(insertNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        salon_id: "salon-1",
+        notification_type: "client_app_updated",
+        title: "Novidades no app do salão",
+      }),
+    );
     expect(location).toBe(
       "/dashboard/settings?message=Identidade+do+sal%C3%A3o+atualizada+com+sucesso.&tone=success",
     );
@@ -276,16 +326,25 @@ describe("settings actions", () => {
     const getPublicUrl = vi.fn((path: string) => ({
       data: { publicUrl: `https://cdn.example.com/${path}` },
     }));
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
         if (table !== "salons") {
           throw new Error(`Unexpected table ${table}`);
         }
-
-        return {
-          update: updateSalon,
-        };
       }),
       storage: {
         from: vi.fn(() => ({
@@ -329,78 +388,87 @@ describe("settings actions", () => {
       redirectMock,
     );
 
-    expect(updateSalon).toHaveBeenCalledWith({
-      name: "Barbearia Elite",
-      tagline: null,
-      brand_color: "#C56B43",
-      business_segment: "barbershop",
-      client_app_config: {
-        experienceModel: "auto",
-        visualStyle: "auto",
-        homeEmphasis: "auto",
-        heroHeadline: null,
-        heroSupportLine: null,
-        primaryCtaLabel: null,
-        themeMode: "dark",
-        buttonStyle: "elevated",
-        cardStyle: "glass",
-        bannerStyle: "immersive",
-        secondaryColor: "#3B3028",
-        accentColor: "#CDAA74",
-        welcomeHeadline: "Seu próximo trato começa aqui.",
-        welcomeMessage:
-          "Agenda rápida, profissionais fortes e uma vitrine com presença.",
-        promotionHeadline: "Combos, clube e produtos com assinatura da casa.",
-        heroImageUrl: "https://cdn.example.com/salon-1/client-app/hero/source",
-        heroImageVariantUrl:
-          "https://cdn.example.com/salon-1/client-app/hero/mobile.jpg",
-        heroImageTabletVariantUrl:
-          "https://cdn.example.com/salon-1/client-app/hero/tablet.jpg",
-        heroImageShareVariantUrl:
-          "https://cdn.example.com/salon-1/client-app/hero/share.jpg",
-        heroImagePath: "salon-1/client-app/hero/mobile.jpg",
-        heroImageSourcePath: "salon-1/client-app/hero/source",
-        heroImageSourceUrl: "https://cdn.example.com/hero.jpg",
-        galleryCoverImageUrl:
-          "https://cdn.example.com/salon-1/client-app/gallery-cover/source",
-        galleryCoverImageVariantUrl:
-          "https://cdn.example.com/salon-1/client-app/gallery-cover/mobile.jpg",
-        galleryCoverImageTabletVariantUrl:
-          "https://cdn.example.com/salon-1/client-app/gallery-cover/tablet.jpg",
-        galleryCoverImageShareVariantUrl:
-          "https://cdn.example.com/salon-1/client-app/gallery-cover/share.jpg",
-        galleryCoverImagePath: "salon-1/client-app/gallery-cover/mobile.jpg",
-        galleryCoverImageSourcePath: "salon-1/client-app/gallery-cover/source",
-        galleryCoverImageSourceUrl: "https://cdn.example.com/gallery.jpg",
-        heroImageFocusX: 50,
-        heroImageFocusY: 50,
-        heroImageZoom: 1,
-        galleryCoverImageFocusX: 50,
-        galleryCoverImageFocusY: 50,
-        galleryCoverImageZoom: 1,
-        profileCoverImageFocusX: 50,
-        profileCoverImageFocusY: 50,
-        profileCoverImageZoom: 1,
-        instagramUrl: "https://instagram.com/barbeariaelite",
-        privacyPolicyUrl: "https://barbeariaelite.com/privacidade",
-        termsOfUseUrl: "https://barbeariaelite.com/termos",
-        supportUrl: "https://barbeariaelite.com/suporte",
-        supportEmail: "suporte@barbeariaelite.com",
-        addressLabel: "Rua Augusta, 500 - São Paulo",
-        mapUrl: "https://maps.example.com/barbearia",
-        ratingValue: 4.9,
-        ratingCount: 186,
-        visibleHomeModules: ["shortcuts", "gallery", "products"],
-        featuredProducts: [
-          {
-            id: "kit-1",
-            name: "Kit premium",
-          },
-        ],
-      },
-      whatsapp_phone: null,
-      logo_path: "logos/current.png",
-    });
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Barbearia Elite",
+        tagline: null,
+        brand_color: "#C56B43",
+        business_segment: "barbershop",
+        client_app_config: expect.objectContaining({
+          experienceModel: "auto",
+          visualStyle: "auto",
+          homeEmphasis: "auto",
+          heroHeadline: null,
+          heroSupportLine: null,
+          primaryCtaLabel: null,
+          themeMode: "dark",
+          buttonStyle: "elevated",
+          cardStyle: "glass",
+          bannerStyle: "immersive",
+          secondaryColor: "#3B3028",
+          accentColor: "#CDAA74",
+          welcomeHeadline: "Seu próximo trato começa aqui.",
+          welcomeMessage:
+            "Agenda rápida, profissionais fortes e uma vitrine com presença.",
+          promotionHeadline: "Combos, clube e produtos com assinatura da casa.",
+          heroImageUrl:
+            "https://cdn.example.com/salon-1/client-app/hero/source",
+          heroImageVariantUrl:
+            "https://cdn.example.com/salon-1/client-app/hero/mobile.jpg",
+          heroImageTabletVariantUrl:
+            "https://cdn.example.com/salon-1/client-app/hero/tablet.jpg",
+          heroImageShareVariantUrl:
+            "https://cdn.example.com/salon-1/client-app/hero/share.jpg",
+          heroImagePath: "salon-1/client-app/hero/mobile.jpg",
+          heroImageSourcePath: "salon-1/client-app/hero/source",
+          heroImageSourceUrl: "https://cdn.example.com/hero.jpg",
+          galleryCoverImageUrl:
+            "https://cdn.example.com/salon-1/client-app/gallery-cover/source",
+          galleryCoverImageVariantUrl:
+            "https://cdn.example.com/salon-1/client-app/gallery-cover/mobile.jpg",
+          galleryCoverImageTabletVariantUrl:
+            "https://cdn.example.com/salon-1/client-app/gallery-cover/tablet.jpg",
+          galleryCoverImageShareVariantUrl:
+            "https://cdn.example.com/salon-1/client-app/gallery-cover/share.jpg",
+          galleryCoverImagePath: "salon-1/client-app/gallery-cover/mobile.jpg",
+          galleryCoverImageSourcePath:
+            "salon-1/client-app/gallery-cover/source",
+          galleryCoverImageSourceUrl: "https://cdn.example.com/gallery.jpg",
+          heroImageFocusX: 50,
+          heroImageFocusY: 50,
+          heroImageZoom: 1,
+          galleryCoverImageFocusX: 50,
+          galleryCoverImageFocusY: 50,
+          galleryCoverImageZoom: 1,
+          profileCoverImageFocusX: 50,
+          profileCoverImageFocusY: 50,
+          profileCoverImageZoom: 1,
+          instagramUrl: "https://instagram.com/barbeariaelite",
+          privacyPolicyUrl: "https://barbeariaelite.com/privacidade",
+          termsOfUseUrl: "https://barbeariaelite.com/termos",
+          supportUrl: "https://barbeariaelite.com/suporte",
+          supportEmail: "suporte@barbeariaelite.com",
+          addressLabel: "Rua Augusta, 500 - São Paulo",
+          mapUrl: "https://maps.example.com/barbearia",
+          ratingValue: 4.9,
+          ratingCount: 186,
+          visibleHomeModules: ["shortcuts", "gallery", "products"],
+          featuredProducts: [
+            {
+              id: "kit-1",
+              name: "Kit premium",
+            },
+          ],
+          autoPilotEnabled: false,
+          whiteLabelActive: false,
+        }),
+        whatsapp_dispatch_enabled: false,
+        whatsapp_meta_business_account_id: null,
+        whatsapp_meta_phone_number_id: null,
+        whatsapp_phone: null,
+        logo_path: "logos/current.png",
+      }),
+    );
     expect(location).toBe(
       "/dashboard/settings?message=Identidade+do+sal%C3%A3o+atualizada+com+sucesso.&tone=success",
     );
@@ -410,16 +478,25 @@ describe("settings actions", () => {
   it("publishes central campaigns for the client app with CTA targets", async () => {
     const eq = vi.fn().mockResolvedValue({ error: null });
     const updateSalon = vi.fn(() => ({ eq }));
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
         if (table !== "salons") {
           throw new Error(`Unexpected table ${table}`);
         }
-
-        return {
-          update: updateSalon,
-        };
       }),
       storage: {
         from: vi.fn(() => ({
@@ -510,16 +587,25 @@ describe("settings actions", () => {
     const getPublicUrl = vi.fn((path: string) => ({
       data: { publicUrl: `https://cdn.example.com/${path}` },
     }));
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
         if (table !== "salons") {
           throw new Error(`Unexpected table ${table}`);
         }
-
-        return {
-          update: updateSalon,
-        };
       }),
       storage: {
         from: vi.fn(() => ({

@@ -53,6 +53,24 @@ import {
 } from "@/app/_actions/instagram";
 import { encryptInstagramAccessToken } from "@/lib/instagram-crypto";
 
+function createTwoEqUpdateMock() {
+  return vi.fn(() => ({
+    eq: vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    })),
+  }));
+}
+
+function createThreeEqUpdateMock() {
+  return vi.fn(() => ({
+    eq: vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })),
+    })),
+  }));
+}
+
 describe("instagram actions", () => {
   const originalSecret = process.env.INSTAGRAM_CONNECTION_TOKEN_SECRET;
   const originalFetch = global.fetch;
@@ -348,7 +366,7 @@ describe("instagram actions", () => {
       }),
     );
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
-    expect(location).toBe("/dashboard/instagram?message=Token+validado+com+sucesso+na+API+da+Meta.&tone=success");
+    expect(location).toBe("/dashboard/instagram?message=Conexao+verificada+com+sucesso.&tone=success");
   });
 
   it("syncs recent instagram media and mentions into the moderation inbox", async () => {
@@ -358,6 +376,7 @@ describe("instagram actions", () => {
         salon_id: "salon-1",
         instagram_user_id: "17841442717327141",
         instagram_username: "jctecnologi07",
+        profile_picture_url: "https://cdn.instagram.example/profile.jpg",
         access_token_ciphertext: encryptInstagramAccessToken("EAAB-test-token"),
         require_mention_approval: true,
         import_story_mentions: true,
@@ -374,6 +393,8 @@ describe("instagram actions", () => {
     const update = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),
     }));
+    const updateMentionAvatars = createTwoEqUpdateMock();
+    const updateSalonPosts = createThreeEqUpdateMock();
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
@@ -392,6 +413,13 @@ describe("instagram actions", () => {
           return {
             select: selectExistingMentions,
             upsert: mentionsUpsert,
+            update: updateMentionAvatars,
+          };
+        }
+
+        if (table === "salon_posts") {
+          return {
+            update: updateSalonPosts,
           };
         }
 
@@ -480,7 +508,7 @@ describe("instagram actions", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
     expect(location).toBe(
-      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+da+Meta+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
+      "/dashboard/instagram?message=Atualizacao+concluida.+2+item%28ns%29+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
     );
   });
 
@@ -491,6 +519,7 @@ describe("instagram actions", () => {
         salon_id: "salon-1",
         instagram_user_id: "17841442717327141",
         instagram_username: "jctecnologi07",
+        profile_picture_url: "https://cdn.instagram.example/profile.jpg",
         facebook_page_id: "1120032767849275",
         facebook_page_name: "Salon Fun",
         facebook_page_access_token_ciphertext: encryptInstagramAccessToken("EAAB-page-token"),
@@ -510,6 +539,8 @@ describe("instagram actions", () => {
     const update = vi.fn(() => ({
       eq: vi.fn().mockResolvedValue({ error: null }),
     }));
+    const updateMentionAvatars = createTwoEqUpdateMock();
+    const updateSalonPosts = createThreeEqUpdateMock();
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
@@ -528,6 +559,13 @@ describe("instagram actions", () => {
           return {
             select: selectExistingMentions,
             upsert: mentionsUpsert,
+            update: updateMentionAvatars,
+          };
+        }
+
+        if (table === "salon_posts") {
+          return {
+            update: updateSalonPosts,
           };
         }
 
@@ -628,7 +666,7 @@ describe("instagram actions", () => {
       { onConflict: "dedupe_key" },
     );
     expect(location).toBe(
-      "/dashboard/instagram?message=Sincronizacao+concluida.+2+item%28ns%29+da+Meta+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
+      "/dashboard/instagram?message=Atualizacao+concluida.+2+item%28ns%29+foram+atualizados+e+2+publicado%28s%29+no+feed.&tone=success",
     );
   });
 
@@ -639,6 +677,7 @@ describe("instagram actions", () => {
         salon_id: "salon-1",
         instagram_user_id: "17841442717327141",
         instagram_username: "jctecnologi07",
+        profile_picture_url: "https://cdn.instagram.example/profile.jpg",
         facebook_page_id: "1120032767849275",
         facebook_page_name: "Salon Fun",
         facebook_page_access_token_ciphertext: null,
@@ -659,6 +698,8 @@ describe("instagram actions", () => {
     const update = vi.fn(() => ({
       eq: updateEq,
     }));
+    const updateMentionAvatars = createTwoEqUpdateMock();
+    const updateSalonPosts = createThreeEqUpdateMock();
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
@@ -677,6 +718,13 @@ describe("instagram actions", () => {
           return {
             select: selectExistingMentions,
             upsert: mentionsUpsert,
+            update: updateMentionAvatars,
+          };
+        }
+
+        if (table === "salon_posts") {
+          return {
+            update: updateSalonPosts,
           };
         }
 
@@ -744,7 +792,7 @@ describe("instagram actions", () => {
       }),
     );
     expect(location).toBe(
-      "/dashboard/instagram?message=Sincronizacao+concluida.+Nenhum+conteudo+novo+da+Meta+foi+encontrado+agora.&tone=success",
+      "/dashboard/instagram?message=Atualizacao+concluida.+Nenhum+conteudo+novo+foi+encontrado+agora.&tone=success",
     );
   });
 });

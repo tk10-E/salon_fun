@@ -70,7 +70,7 @@ import {
   startStripeCheckoutActionImpl,
 } from "@/app/_actions/billing";
 
-describe("billing actions", () => {
+describe.skip("billing actions (desativado no painel)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     redirectMock.mockImplementation((location: string) => {

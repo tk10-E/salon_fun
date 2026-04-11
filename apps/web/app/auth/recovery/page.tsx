@@ -18,11 +18,21 @@ function readRecoveryParams() {
   return {
     code: searchParams.get("code"),
     errorCode: searchParams.get("error_code") ?? hashParams.get("error_code"),
-    errorDescription: searchParams.get("error_description") ?? hashParams.get("error_description"),
+    errorDescription:
+      searchParams.get("error_description") ??
+      hashParams.get("error_description"),
     accessToken: hashParams.get("access_token"),
     refreshToken: hashParams.get("refresh_token"),
     type: hashParams.get("type"),
   };
+}
+
+function buildLoginSuccessRedirect() {
+  const searchParams = new URLSearchParams({
+    message: "Senha atualizada com sucesso. Entre com sua nova senha.",
+    tone: "success",
+  });
+  return `/login?${searchParams.toString()}`;
 }
 
 export default function PasswordRecoveryPage() {
@@ -38,12 +48,20 @@ export default function PasswordRecoveryPage() {
     let cancelled = false;
 
     async function bootstrapRecovery() {
-      const { code, errorCode, errorDescription, accessToken, refreshToken, type } = readRecoveryParams();
+      const {
+        code,
+        errorCode,
+        errorDescription,
+        accessToken,
+        refreshToken,
+        type,
+      } = readRecoveryParams();
 
       if (errorCode || errorDescription) {
         if (!cancelled) {
           setNotice({
-            message: "O link de recuperação não é mais válido. Peça um novo e-mail para continuar.",
+            message:
+              "O link de recuperação não é mais válido. Peça um novo e-mail para continuar.",
             tone: "error",
           });
           setBootstrapping(false);
@@ -60,7 +78,8 @@ export default function PasswordRecoveryPage() {
         if (error) {
           if (!cancelled) {
             setNotice({
-              message: "Não foi possível preparar a redefinição da senha. Peça um novo link para continuar.",
+              message:
+                "Não foi possível preparar a redefinição da senha. Peça um novo link para continuar.",
               tone: "error",
             });
             setBootstrapping(false);
@@ -82,7 +101,8 @@ export default function PasswordRecoveryPage() {
         if (error) {
           if (!cancelled) {
             setNotice({
-              message: "Não foi possível validar este link de recuperação. Peça um novo e-mail para continuar.",
+              message:
+                "Não foi possível validar este link de recuperação. Peça um novo e-mail para continuar.",
               tone: "error",
             });
             setBootstrapping(false);
@@ -165,7 +185,8 @@ export default function PasswordRecoveryPage() {
 
     if (error) {
       setNotice({
-        message: "Não foi possível atualizar a senha agora. Tente abrir o link de recuperação novamente.",
+        message:
+          "Não foi possível atualizar a senha agora. Tente abrir o link de recuperação novamente.",
         tone: "error",
       });
       setLoading(false);
@@ -173,12 +194,14 @@ export default function PasswordRecoveryPage() {
     }
 
     setNotice({
-      message: "Senha atualizada com sucesso. Redirecionando para o painel...",
+      message: "Senha atualizada com sucesso. Redirecionando para o login...",
       tone: "success",
     });
 
+    await supabase.auth.signOut().catch(() => undefined);
+
     setTimeout(() => {
-      window.location.assign("/dashboard");
+      window.location.assign(buildLoginSuccessRedirect());
     }, 800);
   }
 
@@ -192,10 +215,15 @@ export default function PasswordRecoveryPage() {
               <span className="hero-note">Acesso protegido</span>
             </div>
 
-            <p className="auth-hero-kicker">Redefina sua senha e volte ao painel com segurança</p>
-            <h1>Seu acesso do salão volta a ficar pronto em poucos instantes.</h1>
+            <p className="auth-hero-kicker">
+              Redefina sua senha e volte ao painel com segurança
+            </p>
+            <h1>
+              Seu acesso do salão volta a ficar pronto em poucos instantes.
+            </h1>
             <p className="auth-hero-summary">
-              Escolha uma nova senha para continuar acompanhando agenda, equipe, clientes e operação do salão no mesmo painel.
+              Escolha uma nova senha para continuar acompanhando agenda, equipe,
+              clientes e operação do salão no mesmo painel.
             </p>
           </div>
         </section>
@@ -217,11 +245,14 @@ export default function PasswordRecoveryPage() {
               <div className="auth-form-card__meta">
                 <h3>Criar nova senha</h3>
                 <p className="muted">
-                  Use uma senha forte para proteger o acesso profissional do salão.
+                  Use uma senha forte para proteger o acesso profissional do
+                  salão.
                 </p>
               </div>
 
-              {notice ? <FlashMessage message={notice.message} tone={notice.tone} /> : null}
+              {notice ? (
+                <FlashMessage message={notice.message} tone={notice.tone} />
+              ) : null}
 
               {ready ? (
                 <form className="form-grid" onSubmit={handleSubmit}>
@@ -239,19 +270,27 @@ export default function PasswordRecoveryPage() {
                   </div>
 
                   <div className="field">
-                    <label htmlFor="recovery-password-confirmation">Confirmar nova senha</label>
+                    <label htmlFor="recovery-password-confirmation">
+                      Confirmar nova senha
+                    </label>
                     <input
                       id="recovery-password-confirmation"
                       type="password"
                       minLength={6}
                       placeholder="Repita a nova senha"
                       value={passwordConfirmation}
-                      onChange={(event) => setPasswordConfirmation(event.target.value)}
+                      onChange={(event) =>
+                        setPasswordConfirmation(event.target.value)
+                      }
                       required
                     />
                   </div>
 
-                  <button type="submit" className="primary-button" disabled={loading}>
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={loading}
+                  >
                     {loading ? "Atualizando senha..." : "Salvar nova senha"}
                   </button>
                 </form>

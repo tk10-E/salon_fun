@@ -1,5 +1,6 @@
 import {
   GoogleAuthProvider,
+  getRedirectResult,
   createUserWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
@@ -9,8 +10,8 @@ import {
   type User,
 } from "firebase/auth";
 
-import { getFirebaseWebConfig } from "@/lib/firebase/config";
 import { getFirebasePanelAuth } from "@/lib/firebase/client";
+import { getRuntimeFirebaseWebConfig } from "@/lib/firebase/runtimeConfig";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -29,14 +30,19 @@ function normalizeEmailAddress(value: string) {
 }
 
 function formatFirebaseError(error: unknown) {
-  const errorCode = typeof error === "object" && error != null && "code" in error
-    ? String((error as { code?: unknown }).code ?? "")
-    : "";
-  const message = typeof error === "object" && error != null && "message" in error
-    ? String((error as { message?: unknown }).message ?? "").trim()
-    : "";
+  const errorCode =
+    typeof error === "object" && error != null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+  const message =
+    typeof error === "object" && error != null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "").trim()
+      : "";
+  const normalizedMessage = message.toLowerCase();
 
   switch (errorCode) {
+    case "auth/invalid-api-key":
+      return "O Firebase Web do painel está com chave inválida. Atualize a configuração do deploy.";
     case "auth/invalid-credential":
     case "auth/wrong-password":
     case "auth/user-not-found":
@@ -56,7 +62,16 @@ function formatFirebaseError(error: unknown) {
     case "auth/network-request-failed":
       return "Falha de rede. Confira sua conexão e tente de novo.";
     default:
-      return message.length > 0 ? message : "Não foi possível autenticar com o Firebase.";
+      if (
+        normalizedMessage.includes("api-key-not-valid") ||
+        normalizedMessage.includes("invalid api key")
+      ) {
+        return "O Firebase Web do painel está com chave inválida. Atualize a configuração do deploy.";
+      }
+
+      return message.length > 0
+        ? message
+        : "Não foi possível autenticar com o Firebase.";
   }
 }
 
@@ -88,8 +103,10 @@ function formatBridgeError(errorCode: string | null, detail?: string | null) {
   }
 }
 
-async function provisionSupabaseBridgeCredentials(firebaseUser: User): Promise<BridgeCredentials> {
-  const config = getFirebaseWebConfig();
+async function provisionSupabaseBridgeCredentials(
+  firebaseUser: User,
+): Promise<BridgeCredentials> {
+  const config = getRuntimeFirebaseWebConfig();
   if (config == null) {
     throw new Error("missing_firebase_web_config");
   }
@@ -99,20 +116,26 @@ async function provisionSupabaseBridgeCredentials(firebaseUser: User): Promise<B
     throw new Error("invalid_firebase_session");
   }
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/firebase-auth-bridge`, {
-    method: "POST",
-    headers: {
-      apikey: supabaseAnonKey,
-      authorization: `Bearer ${supabaseAnonKey}`,
-      "content-type": "application/json",
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/firebase-auth-bridge`,
+    {
+      method: "POST",
+      headers: {
+        apikey: supabaseAnonKey,
+        authorization: `Bearer ${supabaseAnonKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        firebase_api_key: config.apiKey,
+        firebase_id_token: firebaseIdToken,
+      }),
     },
-    body: JSON.stringify({
-      firebase_api_key: config.apiKey,
-      firebase_id_token: firebaseIdToken,
-    }),
-  });
+  );
 
-  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  const payload = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
 
   if (!response.ok) {
     throw new Error(
@@ -123,8 +146,14 @@ async function provisionSupabaseBridgeCredentials(firebaseUser: User): Promise<B
     );
   }
 
-  const email = typeof payload.email === "string" ? payload.email.trim() : firebaseUser.email?.trim();
-  const password = typeof payload.supabase_password === "string" ? payload.supabase_password.trim() : "";
+  const email =
+    typeof payload.email === "string"
+      ? payload.email.trim()
+      : firebaseUser.email?.trim();
+  const password =
+    typeof payload.supabase_password === "string"
+      ? payload.supabase_password.trim()
+      : "";
 
   if (!email || !password) {
     throw new Error("A bridge respondeu sem credenciais válidas do Supabase.");
@@ -137,7 +166,8 @@ async function provisionSupabaseBridgeCredentials(firebaseUser: User): Promise<B
 }
 
 async function signInToSupabaseWithFirebaseIdentity(firebaseUser: User) {
-  const bridgeCredentials = await provisionSupabaseBridgeCredentials(firebaseUser);
+  const bridgeCredentials =
+    await provisionSupabaseBridgeCredentials(firebaseUser);
   const supabase = createSupabaseBrowserClient();
 
   await supabase.auth.signOut();
@@ -148,11 +178,17 @@ async function signInToSupabaseWithFirebaseIdentity(firebaseUser: User) {
   });
 
   if (error || data.user == null || data.session == null) {
-    throw new Error(error?.message?.trim() || "O Supabase não retornou uma sessão válida para o painel.");
+    throw new Error(
+      error?.message?.trim() ||
+        "O Supabase não retornou uma sessão válida para o painel.",
+    );
   }
 }
 
-async function ensureEmailVerified(firebaseUser: User, resendIfNeeded: boolean) {
+async function ensureEmailVerified(
+  firebaseUser: User,
+  resendIfNeeded: boolean,
+) {
   await firebaseUser.reload();
   const auth = getFirebasePanelAuth();
   const refreshedUser = auth.currentUser ?? firebaseUser;
@@ -173,7 +209,10 @@ async function ensureEmailVerified(firebaseUser: User, resendIfNeeded: boolean) 
   throw new Error("Confirme o e-mail para liberar o acesso ao painel.");
 }
 
-export async function signInWithFirebasePassword(input: { email: string; password: string }) {
+export async function signInWithFirebasePassword(input: {
+  email: string;
+  password: string;
+}) {
   const auth = getFirebasePanelAuth();
 
   try {
@@ -228,6 +267,27 @@ export async function sendFirebasePasswordResetEmail(email: string) {
   }
 }
 
+export async function restorePanelSessionFromFirebaseIfNeeded() {
+  if (getRuntimeFirebaseWebConfig() == null) {
+    return false;
+  }
+
+  const auth = getFirebasePanelAuth();
+
+  if ("authStateReady" in auth && typeof auth.authStateReady === "function") {
+    await auth.authStateReady().catch(() => undefined);
+  }
+
+  const firebaseUser = auth.currentUser;
+  if (firebaseUser == null) {
+    return false;
+  }
+
+  const verifiedUser = await ensureEmailVerified(firebaseUser, false);
+  await signInToSupabaseWithFirebaseIdentity(verifiedUser);
+  return true;
+}
+
 export async function signInWithFirebaseGoogle() {
   const auth = getFirebasePanelAuth();
   const provider = new GoogleAuthProvider();
@@ -242,12 +302,18 @@ export async function signInWithFirebaseGoogle() {
       const credentials = await signInWithPopup(auth, provider);
       firebaseUser = credentials.user;
     } catch (error) {
-      const code = typeof error === "object" && error != null && "code" in error
-        ? String((error as { code?: unknown }).code ?? "")
-        : "";
+      const code =
+        typeof error === "object" && error != null && "code" in error
+          ? String((error as { code?: unknown }).code ?? "")
+          : "";
 
-      if (code === "auth/popup-blocked" || code === "auth/web-storage-unsupported") {
-        throw new Error("O navegador bloqueou a janela do Google. Libere os pop-ups para continuar.");
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/web-storage-unsupported"
+      ) {
+        throw new Error(
+          "O navegador bloqueou a janela do Google. Libere os pop-ups para continuar.",
+        );
       }
 
       if (
@@ -257,8 +323,12 @@ export async function signInWithFirebaseGoogle() {
         "customData" in error &&
         (error as { customData?: { email?: string } }).customData?.email
       ) {
-        const email = (error as { customData?: { email?: string } }).customData?.email ?? "";
-        throw new Error(`Esta conta já existe com outro método. Entre usando ${email}.`);
+        const email =
+          (error as { customData?: { email?: string } }).customData?.email ??
+          "";
+        throw new Error(
+          `Esta conta já existe com outro método. Entre usando ${email}.`,
+        );
       }
 
       throw error;
@@ -276,7 +346,6 @@ export async function signInWithFirebaseGoogle() {
 
 export async function completeFirebaseRedirectLoginIfNeeded() {
   const auth = getFirebasePanelAuth();
-  const { getRedirectResult } = await import("firebase/auth");
 
   try {
     const credentials = await getRedirectResult(auth);
@@ -292,7 +361,7 @@ export async function completeFirebaseRedirectLoginIfNeeded() {
 }
 
 export async function signOutPanelFirebaseSession() {
-  if (getFirebaseWebConfig() == null) {
+  if (getRuntimeFirebaseWebConfig() == null) {
     return;
   }
 

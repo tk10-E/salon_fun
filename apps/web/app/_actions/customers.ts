@@ -102,6 +102,7 @@ export async function saveOwnerCustomerProfileActionImpl(formData: FormData) {
   const technicalNotes = normalizeText(formData.get("technicalNotes"), 1200);
   const consentStatus = normalizeConsentStatus(formData.get("consentStatus"));
   const lastAssessmentAt = normalizeDate(formData.get("lastAssessmentAt"));
+  const birthDate = normalizeDate(formData.get("birthDate"));
 
   await requireOwnerSalon();
   const supabase = createClient();
@@ -139,6 +140,7 @@ export async function saveOwnerCustomerProfileActionImpl(formData: FormData) {
     technical_notes_input: technicalNotes,
     consent_status_input: consentStatus,
     last_assessment_at_input: lastAssessmentAt,
+    birth_date_input: birthDate,
   });
 
   if (error) {

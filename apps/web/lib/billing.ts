@@ -1,5 +1,9 @@
 import { cache as reactCache } from "react";
 
+// O workspace de billing pode existir, mas o bloqueio automático do painel segue desligado
+// até a operação do Stripe estar pronta em produção.
+export const BILLING_DISABLED = true;
+
 import { createClient } from "@/lib/supabase/server";
 
 export const BILLING_PATH = "/dashboard/billing";
@@ -140,6 +144,68 @@ const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [
 const cache = typeof reactCache === "function"
   ? reactCache
   : (<T extends (...args: never[]) => unknown>(fn: T) => fn);
+
+function buildDisabledSnapshot(salonId: string): SalonBillingSnapshot {
+  const now = new Date().toISOString();
+  const disabledPlan: SalonBillingPlan = {
+    id: "free",
+    displayName: "Assinatura desativada",
+    description: "Cobrança desligada temporariamente.",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    currencyCode: "BRL",
+    trialDays: 0,
+    maxStaffMembers: null,
+    maxServices: null,
+    maxMonthlyNotifications: null,
+    includesGrowthAutomation: true,
+    includesFeedVideo: true,
+    includesCustomBranding: true,
+    includesPrioritySupport: true,
+    isDefault: true,
+    isPublic: true,
+    sortOrder: 0,
+    highlight: "Sem cobrança ativa",
+    tagline: "Billing desativado",
+  };
+
+  return {
+    plans: [disabledPlan],
+    currentPlan: disabledPlan,
+    subscription: {
+      id: `disabled-${salonId}`,
+      salonId,
+      planId: disabledPlan.id,
+      status: "active",
+      billingInterval: "monthly",
+      trialStartedAt: null,
+      trialEndsAt: null,
+      currentPeriodStartedAt: null,
+      currentPeriodEndsAt: null,
+      graceEndsAt: null,
+      activatedAt: now,
+      canceledAt: null,
+      paymentProvider: null,
+      providerCustomerId: null,
+      providerSubscriptionId: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    accessState: "healthy",
+    isLocked: false,
+    shouldShowBanner: false,
+    statusLabel: "Desativado",
+    bannerTitle: null,
+    bannerMessage: null,
+    bannerTone: "soft",
+    nextBillingDateLabel: null,
+    statusDetail: "Cobrança desligada temporariamente.",
+    trialDaysRemaining: null,
+    graceDaysRemaining: null,
+    allowedPathsWhenLocked: ["/dashboard", "/dashboard/settings"],
+    isUsingFallback: true,
+  } satisfies SalonBillingSnapshot;
+}
 
 function relationIsMissing(error: { code?: string | null; message?: string | null } | null | undefined) {
   if (!error) {
@@ -437,7 +503,16 @@ async function createDefaultSubscriptionRow(params: {
   return normalizeSubscription(data as Record<string, unknown>, salonId);
 }
 
-export const getSalonBillingSnapshot = cache(async (salonId: string): Promise<SalonBillingSnapshot> => {
+async function loadSalonBillingSnapshot(
+  salonId: string,
+  options?: {
+    includeWorkspaceDataWhenDisabled?: boolean;
+  },
+): Promise<SalonBillingSnapshot> {
+  if (BILLING_DISABLED && !options?.includeWorkspaceDataWhenDisabled) {
+    return buildDisabledSnapshot(salonId);
+  }
+
   const supabase = createClient();
   const [planResult, subscriptionResult] = await Promise.all([
     supabase.from("saas_plan_catalog").select("*").eq("is_public", true).order("sort_order"),
@@ -462,6 +537,14 @@ export const getSalonBillingSnapshot = cache(async (salonId: string): Promise<Sa
       : await createDefaultSubscriptionRow({ salonId, plans });
 
   return buildSnapshot(plans, ensuredSubscription ?? buildFallbackSubscription(salonId, plans), !ensuredSubscription);
+}
+
+export const getSalonBillingSnapshot = cache(async (salonId: string): Promise<SalonBillingSnapshot> => {
+  return loadSalonBillingSnapshot(salonId);
+});
+
+export const getSalonBillingWorkspaceSnapshot = cache(async (salonId: string): Promise<SalonBillingSnapshot> => {
+  return loadSalonBillingSnapshot(salonId, { includeWorkspaceDataWhenDisabled: true });
 });
 
 export async function getSalonBillingEntitlements(salonId: string) {

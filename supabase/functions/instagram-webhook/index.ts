@@ -15,6 +15,7 @@ type InstagramConnectionRow = {
   salon_id: string;
   instagram_user_id: string;
   instagram_username: string;
+  profile_picture_url: string | null;
   facebook_page_id: string | null;
   facebook_page_name: string | null;
   facebook_page_access_token_ciphertext: string | null;
@@ -42,6 +43,7 @@ type WebhookClassification = {
 type MediaContext = {
   platform: MetaPlatform;
   externalMediaId: string | null;
+  authorProfilePictureUrl: string | null;
   authorUsername: string | null;
   caption: string | null;
   permalink: string | null;
@@ -57,6 +59,7 @@ type InstagramMentionRow = {
   platform: MetaPlatform;
   source_type: MentionSourceType;
   media_type: MentionMediaType;
+  author_profile_picture_url: string | null;
   author_username: string | null;
   caption: string | null;
   permalink: string | null;
@@ -441,6 +444,7 @@ async function importMentionIntoFeed(args: {
         instagram_mention_id: mention.id,
         external_platform: mention.platform,
         external_permalink: mention.permalink,
+        external_author_avatar_url: mention.author_profile_picture_url,
         external_author_username: mention.author_username,
         external_media_url: mention.media_url,
         external_thumbnail_url: mention.thumbnail_url,
@@ -614,6 +618,7 @@ async function fetchInstagramMediaContext(args: {
   return {
     platform: "instagram",
     externalMediaId: normalizeNonEmptyString(payload.id),
+    authorProfilePictureUrl: null,
     authorUsername: normalizeNonEmptyString(payload.username),
     caption: normalizeNonEmptyString(payload.caption),
     permalink: normalizeNonEmptyString(payload.permalink),
@@ -631,7 +636,7 @@ async function fetchFacebookMediaContext(args: {
   const url = new URL(`${graphApiBaseUrl}/${args.mediaId}`);
   url.searchParams.set(
     "fields",
-    "id,message,story,permalink_url,created_time,from{id,name},full_picture,attachments{media,media_type,type,url,subattachments}",
+    "id,message,story,permalink_url,created_time,from{id,name,picture{url}},full_picture,attachments{media,media_type,type,url,subattachments}",
   );
   url.searchParams.set("access_token", args.accessToken);
 
@@ -643,6 +648,10 @@ async function fetchFacebookMediaContext(args: {
 
   const payload = (await response.json()) as Record<string, unknown>;
   const fromNode = (payload.from ?? {}) as Record<string, unknown>;
+  const fromPictureNode =
+    ((fromNode.picture as Record<string, unknown> | undefined)?.data as
+      | Record<string, unknown>
+      | undefined) ?? null;
   const attachmentSummary = summarizeFacebookAttachments(payload.attachments);
   const fallbackPreview = normalizeNonEmptyString(payload.full_picture);
   const mediaUrl = attachmentSummary.mediaUrl ?? fallbackPreview;
@@ -651,6 +660,7 @@ async function fetchFacebookMediaContext(args: {
   return {
     platform: "facebook",
     externalMediaId: normalizeNonEmptyString(payload.id),
+    authorProfilePictureUrl: normalizeNonEmptyString(fromPictureNode?.url),
     authorUsername:
       normalizeNonEmptyString(fromNode.name) ||
       normalizeNonEmptyString(fromNode.id),
@@ -674,6 +684,13 @@ async function resolveMediaContext(args: {
   connection: InstagramConnectionRow;
 }): Promise<MediaContext> {
   const value = (args.change.value ?? {}) as Record<string, unknown>;
+  const fromNode = (value.from as Record<string, unknown> | undefined) ?? null;
+  const fromPictureNode =
+    fromNode == null
+      ? null
+      : ((fromNode.picture as Record<string, unknown> | undefined)?.data as
+            | Record<string, unknown>
+            | undefined) ?? null;
   const externalMediaId =
     normalizeNonEmptyString(value.post_id) ||
     normalizeNonEmptyString(value.comment_id) ||
@@ -687,10 +704,17 @@ async function resolveMediaContext(args: {
   const directContext: MediaContext = {
     platform: args.classification.platform,
     externalMediaId,
+    authorProfilePictureUrl:
+      normalizeNonEmptyString(value.profile_picture_url) ||
+      normalizeNonEmptyString(fromPictureNode?.url) ||
+      (args.classification.platform === "instagram" &&
+              args.classification.sourceType === "owned_post"
+        ? args.connection.profile_picture_url
+        : null),
     authorUsername:
       normalizeNonEmptyString(value.username) ||
-      normalizeNonEmptyString((value.from as Record<string, unknown> | undefined)?.name) ||
-      normalizeNonEmptyString((value.from as Record<string, unknown> | undefined)?.username) ||
+      normalizeNonEmptyString(fromNode?.name) ||
+      normalizeNonEmptyString(fromNode?.username) ||
       normalizeNonEmptyString(value.sender_name) ||
       null,
     caption:
@@ -856,7 +880,7 @@ async function processWebhookPayload(
         const { data } = await supabase
           .from("instagram_connections")
           .select(
-            "id,salon_id,instagram_user_id,instagram_username,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
+            "id,salon_id,instagram_user_id,instagram_username,profile_picture_url,facebook_page_id,facebook_page_name,facebook_page_access_token_ciphertext,access_token_ciphertext,require_mention_approval,import_story_mentions,auto_publish_owned_posts",
           )
           .or(
             `instagram_user_id.eq.${connectionLookupKey},facebook_page_id.eq.${connectionLookupKey}`,
@@ -966,6 +990,7 @@ async function processWebhookPayload(
               external_media_id: mediaContext.externalMediaId,
               source_type: classification.sourceType,
               media_type: mediaContext.mediaType,
+              author_profile_picture_url: mediaContext.authorProfilePictureUrl,
               author_username: mediaContext.authorUsername,
               caption: mediaContext.caption,
               permalink: mediaContext.permalink,
@@ -977,7 +1002,7 @@ async function processWebhookPayload(
             { onConflict: "dedupe_key" },
           )
           .select(
-            "id,salon_id,platform,source_type,media_type,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
+            "id,salon_id,platform,source_type,media_type,author_profile_picture_url,author_username,caption,permalink,media_url,thumbnail_url,moderation_status,published_post_id",
           )
           .single();
 

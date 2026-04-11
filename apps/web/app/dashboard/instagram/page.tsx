@@ -11,7 +11,9 @@ import {
 import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
+import { WorkspaceSectionNav } from "@/components/WorkspaceSectionNav";
 import { requireOwnerSalon } from "@/lib/auth";
+import { cleanFeedCaption } from "@/lib/feedPresentation";
 import { formatDateTime } from "@/lib/formatters";
 import { createClient } from "@/lib/supabase/server";
 
@@ -54,8 +56,34 @@ type InstagramMentionRecord = {
   published_at: string | null;
 };
 
-function getMentionPlatformLabel(platform: InstagramMentionRecord["platform"]) {
-  return platform === "facebook" ? "Facebook" : "Instagram";
+type InstagramConnectionAlert = {
+  eyebrow: string;
+  detail: string;
+  note: string;
+  tone: "warning" | "error";
+};
+
+function getMentionOriginLabel(platform: InstagramMentionRecord["platform"]) {
+  return platform === "facebook" ? "Página do salão" : "Instagram";
+}
+
+function getMentionPlatformBadgeLabel(platform: InstagramMentionRecord["platform"]) {
+  return platform === "facebook" ? "Página" : "Instagram";
+}
+
+function getMentionMediaTypeLabel(mediaType: InstagramMentionRecord["media_type"]) {
+  switch (mediaType) {
+    case "image":
+      return "imagem";
+    case "video":
+      return "vídeo";
+    case "carousel":
+      return "carrossel";
+    case "story":
+      return "story";
+    default:
+      return null;
+  }
 }
 
 function getMentionAuthorLabel(mention: Pick<InstagramMentionRecord, "platform" | "author_username">) {
@@ -71,17 +99,23 @@ function getMentionAuthorLabel(mention: Pick<InstagramMentionRecord, "platform" 
 }
 
 function getMentionSourceLabel(mention: Pick<InstagramMentionRecord, "platform" | "source_type">) {
-  const platformLabel = getMentionPlatformLabel(mention.platform);
+  const originLabel = getMentionOriginLabel(mention.platform);
 
   switch (mention.source_type) {
     case "story_mention":
       return "Story marcando o salão";
     case "owned_post":
-      return `Post do próprio salão no ${platformLabel}`;
+      return mention.platform === "facebook"
+        ? "Post próprio da página do salão"
+        : "Post do próprio salão no Instagram";
     case "comment_mention":
-      return `Menção em comentário no ${platformLabel}`;
+      return mention.platform === "facebook"
+        ? "Menção em comentário na página do salão"
+        : "Menção em comentário no Instagram";
     default:
-      return `Post marcando o salão no ${platformLabel}`;
+      return mention.platform === "facebook"
+        ? "Post marcando a página do salão"
+        : `Post marcando o salão no ${originLabel}`;
   }
 }
 
@@ -124,6 +158,70 @@ function getConnectionStatusClass(status: InstagramConnectionRecord["connection_
   }
 }
 
+function getInstagramConnectionAlert(
+  connection: Pick<InstagramConnectionRecord, "last_error" | "connection_status"> | null,
+): InstagramConnectionAlert | null {
+  const rawError = connection?.last_error?.trim();
+
+  if (!rawError) {
+    return null;
+  }
+
+  const normalizedError = rawError.toLowerCase();
+  const isFacebookPermissionWarning =
+    (normalizedError.includes("sincronizar o feed da pagina no facebook") ||
+      normalizedError.includes("pagina do facebook esta limitada")) &&
+    (normalizedError.includes("pages_read_engagement") ||
+      normalizedError.includes("page public content access") ||
+      normalizedError.includes("permissao da meta") ||
+      normalizedError.includes("instagram segue funcionando normalmente"));
+
+  if (isFacebookPermissionWarning) {
+    return {
+      eyebrow: "Aviso da conexao",
+      detail:
+        "O Instagram segue funcionando normalmente. So a leitura das publicacoes da pagina do salao esta limitada neste momento.",
+      note:
+        "Se voce quiser trazer tambem o conteudo da pagina do salão, vale revisar a conexao dessa conta.",
+      tone: "warning",
+    };
+  }
+
+  if (normalizedError.includes("assinatura automatica das menções")) {
+    return {
+      eyebrow: "Aviso da conexao",
+      detail: "A conta foi conectada, mas novas marcações podem demorar um pouco para aparecer.",
+      note: "Se esse aviso continuar, vale revisar a conexão da conta.",
+      tone: "warning",
+    };
+  }
+
+  if (normalizedError.includes("page access token")) {
+    return {
+      eyebrow: "Aviso da conexao",
+      detail: "A conta foi conectada, mas a página do salão ainda não liberou tudo o que o painel precisa.",
+      note: "Você pode seguir usando o Instagram enquanto a conexão da página é revisada.",
+      tone: "warning",
+    };
+  }
+
+  if (normalizedError.includes("sincronizacao inicial do instagram falhou")) {
+    return {
+      eyebrow: "Aviso da conexao",
+      detail: "A conta foi conectada, mas a primeira atualização não terminou agora.",
+      note: "Toque em Atualizar agora para tentar novamente.",
+      tone: "warning",
+    };
+  }
+
+  return {
+    eyebrow: "Ultimo alerta",
+    detail: "A conexão precisa de atenção para continuar trazendo novidades.",
+    note: "Se necessário, revise a conexão da conta e tente atualizar novamente.",
+    tone: connection?.connection_status === "active" ? "warning" : "error",
+  };
+}
+
 export default async function InstagramPage({ searchParams }: InstagramPageProps) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient() as any;
@@ -158,19 +256,21 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
   const publishedCount = safeMentions.filter((item) => getEffectiveMentionStatus(item) === "published").length;
   const reviewQueueCount = pendingCount + approvedCount;
   const latestMention = safeMentions[0] ?? null;
+  const connectionAlert = getInstagramConnectionAlert(safeConnection);
 
   return (
     <div className="page-grid workspace-page instagram-page">
       <DashboardWorkspaceHero
-        eyebrow="Instagram + Facebook"
-        title="Instagram e Facebook do salão"
-        description="A conexão oficial continua sendo da Meta, mas a leitura operacional ficou mais forte: você sabe o que chegou, o que precisa de aprovação e o que já virou conteúdo no app do cliente."
+        id="instagram-status"
+        eyebrow="Instagram do salão"
+        title="Marcação e publicações do salão"
+        description="Posts próprios e marcações entram aqui para revisão e publicação no app."
         highlight={{
           label: "Conta conectada",
-          value: safeConnection ? `@${safeConnection.instagram_username}` : "Meta não conectada",
+          value: safeConnection ? `@${safeConnection.instagram_username}` : "Instagram não conectado",
           note: safeConnection
-            ? `${safeConnection.facebook_page_name ? `Página: ${safeConnection.facebook_page_name}. ` : ""}${safeConnection.last_sync_at ? `Validada em ${formatDateTime(safeConnection.last_sync_at)}.` : "Aguardando nova sincronização manual ou webhook."}`
-            : "Conecte a conta profissional do salão para puxar posts próprios e marcações reais para o app do cliente.",
+            ? `${safeConnection.facebook_page_name ? `Página conectada: ${safeConnection.facebook_page_name}. ` : ""}${safeConnection.last_sync_at ? `Atualizado em ${formatDateTime(safeConnection.last_sync_at)}.` : "Aguardando atualização."}`
+            : "Conecte a conta profissional para receber menções reais.",
         }}
         signals={[
           {
@@ -198,25 +298,25 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
           {
             label: "Pendentes",
             value: pendingCount,
-            note: "Menções aguardando revisão antes de entrar no feed.",
+            note: "Aguardando revisão.",
             tone: "warm",
           },
           {
             label: "Aprovadas",
             value: approvedCount,
-            note: "Conteúdos prontos para publicar quando você quiser.",
+            note: "Prontas para publicar.",
             tone: "soft",
           },
           {
             label: "Publicadas",
             value: publishedCount,
-            note: "Posts que já viraram prova social no app do cliente.",
+            note: "Já viraram feed no app.",
             tone: "accent",
           },
           {
             label: "Fila total",
             value: safeMentions.length,
-            note: "Itens recentes trazidos da integração oficial da Meta.",
+            note: "Itens recentes da integração.",
             tone: "success",
           },
         ]}
@@ -225,18 +325,18 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
             <div className="row-actions">
               <form action={syncInstagramActivityAction}>
                 <button type="submit" className="secondary-button">
-                  Sincronizar agora
+                  Atualizar agora
                 </button>
               </form>
               {canUseAutomaticMetaConnect ? (
                 <Link href="/dashboard/instagram/connect" className="primary-button">
-                  Reconectar Meta
+                  Revisar conexão
                 </Link>
               ) : null}
             </div>
           ) : canUseAutomaticMetaConnect ? (
             <Link href="/dashboard/instagram/connect" className="primary-button">
-              Conectar Meta
+              Conectar Instagram
             </Link>
           ) : (
             <p className="muted">
@@ -249,16 +349,16 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
             <span className="workspace-panel__eyebrow">Resumo da conexão atual</span>
             <h3>
               {safeConnection
-                ? "Sua conta profissional já está conectada"
-                : "O fluxo de conexão oficial entra por aqui."}
+                ? "Conta profissional conectada"
+                : "Conexão oficial do Instagram"}
             </h3>
             {safeConnection?.facebook_page_name ? (
               <span className="instagram-info-pill">Página: {safeConnection.facebook_page_name}</span>
             ) : null}
             <p>
               {safeConnection
-                ? `${safeConnection.last_webhook_at ? `Última atividade recebida em ${formatDateTime(safeConnection.last_webhook_at)}.` : "Aguardando as próximas marcações aparecerem na fila."} Se quiser atualizar a autorização do Instagram ou Facebook, use o botão de reconexão acima.`
-                : "Você autoriza a conta em um fluxo seguro da Meta e as novas marcações do Instagram e do Facebook começam a aparecer aqui automaticamente para moderação e publicação."}
+                ? `${safeConnection.last_webhook_at ? `Última atividade em ${formatDateTime(safeConnection.last_webhook_at)}.` : "Aguardando novas marcações."}`
+                : "Conecte a conta para começar a moderar menções reais."}
             </p>
           </>
         }
@@ -266,47 +366,61 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
 
       {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
 
-      {safeConnection?.last_error ? (
-        <article className="instagram-alert-card instagram-alert-card--error">
-          <span className="feed-post-meta-card__eyebrow">Último alerta</span>
-          <strong>{safeConnection.last_error}</strong>
-          <p className="muted">Se necessário, reconecte a conta pelo botão acima.</p>
+      <WorkspaceSectionNav
+        label="Ir para uma área"
+        items={[
+          {
+            href: "#instagram-status",
+            label: "Conexão",
+            meta: "status e atualização",
+          },
+          {
+            href: "#instagram-queue",
+            label: "Fila",
+            meta: "revisão e publicação",
+          },
+        ]}
+      />
+
+      {connectionAlert ? (
+        <article className={`instagram-alert-card instagram-alert-card--${connectionAlert.tone}`}>
+          <span className="feed-post-meta-card__eyebrow">{connectionAlert.eyebrow}</span>
+          <strong>{connectionAlert.detail}</strong>
+          <p className="muted">{connectionAlert.note}</p>
         </article>
       ) : null}
 
       <div className="workspace-subgrid">
         <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Como esse painel funciona</span>
-          <h3>O conteúdo entra da Meta e sai como prova social no app.</h3>
+          <span className="workspace-panel__eyebrow">Fluxo</span>
+          <h3>Conecte, revise e publique.</h3>
           <ul className="feed-composer-tip-list">
-            <li>Conecte a conta profissional do salão uma única vez.</li>
-            <li>As menções do Instagram e do Facebook chegam nesta área para revisão com dados reais.</li>
-            <li>Publique no app só o que fortalece marca, desejo e confiança no salão.</li>
+            <li>Conecte a conta profissional uma vez.</li>
+            <li>As menções chegam aqui para revisão.</li>
+            <li>Publique no app só o que fortalece a marca.</li>
           </ul>
         </article>
 
         <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Ritmo da operação</span>
+          <span className="workspace-panel__eyebrow">Última atividade</span>
           <h3>
             {latestMention
-              ? `${getMentionAuthorLabel(latestMention)} foi a última movimentação capturada.`
-              : "A fila começa a viver assim que a conexão estiver recebendo mídia."}
+              ? `${getMentionAuthorLabel(latestMention)} foi a última movimentação.`
+              : "A fila aparece assim que a conexão começar a receber mídia."}
           </h3>
           <p>
             {latestMention
-              ? `${getMentionSourceLabel(latestMention)} ${latestMention.mentioned_at ? `em ${formatDateTime(latestMention.mentioned_at)}.` : "sem data disponível."}`
-              : "Quando a mídia chega pronta, o feed do salão pode publicar sozinho; quando não chega, esta área vira sua fila de fallback e curadoria."}
+              ? `${getMentionSourceLabel(latestMention)} ${latestMention.mentioned_at ? `em ${formatDateTime(latestMention.mentioned_at)}.` : "sem data."}`
+              : "Quando a mídia chegar, esta área vira sua fila de curadoria."}
           </p>
         </article>
       </div>
 
-      <section className="card content-card">
+      <section id="instagram-queue" className="card content-card">
         <div className="section-heading">
           <div>
-            <h2>Caixa de menções</h2>
-            <p className="muted">
-              Revise posts e stories marcando o salão, aprove o que faz sentido e publique no mesmo feed que já aparece no app do cliente.
-            </p>
+            <h2>Fila de menções</h2>
+            <p className="muted">Aprove, rejeite ou publique no feed.</p>
           </div>
         </div>
 
@@ -331,13 +445,13 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
               eyebrow={safeConnection ? "Nenhuma menção por enquanto" : "Conecte sua conta para começar"}
               title={
                 safeConnection
-                  ? "A fila do Instagram ainda está vazia"
-                  : "A caixa de menções será ativada depois da conexão"
+                  ? "A fila ainda está vazia"
+                  : "A fila começa depois da conexão"
               }
               description={
                 safeConnection
-                  ? "Depois de conectar a conta profissional, os novos conteúdos entram aqui para acompanhamento e eventual revisão se algo não puder ser publicado automaticamente."
-                  : "Assim que o Instagram profissional estiver conectado, os conteúdos aparecem aqui para você acompanhar o que entrou no feed."
+                  ? "Novas menções entram aqui assim que chegarem."
+                  : "Conecte o Instagram profissional para começar."
               }
             />
           ) : (
@@ -371,7 +485,7 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                       <div>
                         <div className="feed-post-kicker">
                           <span className="feed-format-badge">{getMentionStatusLabel(effectiveStatus)}</span>
-                          <span className="feed-format-badge">{getMentionPlatformLabel(mention.platform)}</span>
+                          <span className="feed-format-badge">{getMentionPlatformBadgeLabel(mention.platform)}</span>
                           <span className="feed-post-date">
                             {mention.mentioned_at ? formatDateTime(mention.mentioned_at) : "Sem data disponível"}
                           </span>
@@ -379,26 +493,23 @@ export default async function InstagramPage({ searchParams }: InstagramPageProps
                         <h3>{getMentionAuthorLabel(mention)}</h3>
                         <p className="feed-post-signature">
                           {getMentionSourceLabel(mention)}
-                          {mention.media_type !== "unknown" ? ` • ${mention.media_type}` : ""}
+                          {getMentionMediaTypeLabel(mention.media_type)
+                            ? ` • ${getMentionMediaTypeLabel(mention.media_type)}`
+                            : ""}
                         </p>
                       </div>
                     </div>
 
                     <p className="feed-post-note">
                       {mention.source_type === "story_mention"
-                        ? "Story recebida pela conta conectada. Se a mídia vier completa, ela também pode virar prova social no feed."
+                        ? "Story recebida pela conta conectada."
                         : mention.source_type === "owned_post"
-                        ? `Conteúdo do próprio salão vindo do ${getMentionPlatformLabel(mention.platform)}, já preparado para entrar no feed do app.`
-                        : `Prova social gerada por cliente marcando o salão no ${getMentionPlatformLabel(mention.platform)}. Quando a mídia chega correta, o feed publica sozinho.`}
+                        ? "Publicação do próprio salão."
+                        : "Cliente marcou o salão em uma publicação."}
                     </p>
 
-                    {mention.caption ? <p className="feed-post-caption">{mention.caption}</p> : null}
-                    {mention.permalink ? (
-                      <p className="muted">
-                        <a href={mention.permalink} target="_blank" rel="noreferrer">
-                          Ver no {getMentionPlatformLabel(mention.platform)}
-                        </a>
-                      </p>
+                    {cleanFeedCaption(mention.caption) ? (
+                      <p className="feed-post-caption">{cleanFeedCaption(mention.caption)}</p>
                     ) : null}
                     {mention.moderation_note ? <p className="muted">{mention.moderation_note}</p> : null}
 

@@ -1,14 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FlashMessage } from "@/components/FlashMessage";
-import { hasFirebaseWebConfig } from "@/lib/firebase/config";
+import {
+  restorePanelSessionFromFirebaseIfNeeded,
+  sendFirebasePasswordResetEmail,
+  signInWithFirebaseGoogle,
+  signInWithFirebasePassword,
+  signUpWithFirebasePassword,
+} from "@/lib/firebase/panelAuth";
+import { setRuntimeFirebaseWebConfig } from "@/lib/firebase/runtimeConfig";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { FirebaseWebConfig } from "@/lib/firebase/config";
 
 type PanelAuthClientProps = {
   initialMessage?: string;
   initialTone?: string;
+  firebaseConfig: FirebaseWebConfig | null;
 };
 
 type Notice = {
@@ -37,20 +46,161 @@ function normalizeNotice(message?: string, tone?: string): Notice | null {
   return { message, tone: "info" };
 }
 
-async function loadPanelAuthModule() {
-  return import("@/lib/firebase/panelAuth");
+function normalizeEmailAddress(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function buildBrowserUrl(pathname: string) {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  return `${window.location.origin}${pathname}`;
+}
+
+function formatSupabaseAuthError(error: unknown, fallbackMessage: string) {
+  const code =
+    typeof error === "object" && error != null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+  const message =
+    typeof error === "object" && error != null && "message" in error
+      ? String((error as { message?: unknown }).message ?? "").trim()
+      : "";
+  const normalizedMessage = message.toLowerCase();
+
+  switch (code) {
+    case "invalid_credentials":
+      return "E-mail ou senha inválidos.";
+    case "email_not_confirmed":
+      return "Confirme o e-mail antes de entrar no painel.";
+    case "email_exists":
+    case "user_already_exists":
+      return "Este e-mail já está em uso.";
+    case "over_email_send_rate_limit":
+      return "Muitos pedidos foram feitos em sequência. Aguarde alguns minutos e tente de novo.";
+    default:
+      if (
+        normalizedMessage.includes("invalid login credentials") ||
+        normalizedMessage.includes("email not confirmed")
+      ) {
+        return "E-mail ou senha inválidos.";
+      }
+
+      return message.length > 0 ? message : fallbackMessage;
+  }
+}
+
+async function signInWithSupabasePassword(input: {
+  email: string;
+  password: string;
+}) {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: normalizeEmailAddress(input.email),
+    password: input.password,
+  });
+
+  if (error || data.user == null || data.session == null) {
+    throw new Error(
+      formatSupabaseAuthError(error, "Não foi possível entrar agora."),
+    );
+  }
+}
+
+async function signUpWithSupabasePassword(input: {
+  email: string;
+  password: string;
+  passwordConfirmation: string;
+}) {
+  if (input.password !== input.passwordConfirmation) {
+    throw new Error("Confirme a mesma senha nos dois campos.");
+  }
+
+  const supabase = createSupabaseBrowserClient();
+  const email = normalizeEmailAddress(input.email);
+  const emailRedirectTo = buildBrowserUrl("/login");
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: input.password,
+    options: emailRedirectTo
+      ? {
+          emailRedirectTo,
+        }
+      : undefined,
+  });
+
+  if (error) {
+    throw new Error(
+      formatSupabaseAuthError(error, "Não foi possível criar a conta."),
+    );
+  }
+
+  return {
+    email,
+    requiresEmailConfirmation: data.session == null,
+  };
+}
+
+async function sendSupabasePasswordResetEmail(email: string) {
+  const supabase = createSupabaseBrowserClient();
+  const redirectTo = buildBrowserUrl("/auth/recovery");
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    normalizeEmailAddress(email),
+    redirectTo
+      ? {
+          redirectTo,
+        }
+      : undefined,
+  );
+
+  if (error) {
+    throw new Error(
+      formatSupabaseAuthError(
+        error,
+        "Não foi possível enviar o e-mail de recuperação agora.",
+      ),
+    );
+  }
+}
+
+async function signInWithSupabaseGoogle() {
+  const supabase = createSupabaseBrowserClient();
+  const redirectTo = buildBrowserUrl("/auth/callback?next=/dashboard");
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      scopes: "https://www.googleapis.com/auth/userinfo.email",
+    },
+  });
+
+  if (error || !data?.url) {
+    throw new Error("Não foi possível iniciar o login com Google.");
+  }
+
+  window.location.assign(data.url);
 }
 
 function openPanelWorkspace() {
   window.location.assign("/dashboard");
 }
 
-export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClientProps) {
-  const [notice, setNotice] = useState<Notice | null>(() => normalizeNotice(initialMessage, initialTone));
+export function PanelAuthClient({
+  initialMessage,
+  initialTone,
+  firebaseConfig,
+}: PanelAuthClientProps) {
+  const [notice, setNotice] = useState<Notice | null>(() =>
+    normalizeNotice(initialMessage, initialTone),
+  );
   const [loadingIntent, setLoadingIntent] = useState<string | null>(null);
   const [formState, setFormState] = useState(emptyFormState);
+  const firebaseEnabled = firebaseConfig != null;
 
-  const firebaseConfigured = useMemo(() => hasFirebaseWebConfig(), []);
+  useEffect(() => {
+    setRuntimeFirebaseWebConfig(firebaseConfig);
+  }, [firebaseConfig]);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -59,13 +209,31 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
     async function recoverExistingPanelSession() {
       const {
         data: { session },
-      } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+      } = await supabase.auth
+        .getSession()
+        .catch(() => ({ data: { session: null } }));
 
-      if (cancelled || !session?.user) {
+      if (cancelled) {
         return;
       }
 
-      window.location.replace("/dashboard");
+      if (session?.user) {
+        window.location.replace("/dashboard");
+        return;
+      }
+
+      if (!firebaseEnabled) {
+        return;
+      }
+
+      try {
+        const restored = await restorePanelSessionFromFirebaseIfNeeded();
+        if (!cancelled && restored) {
+          window.location.replace("/dashboard");
+        }
+      } catch {
+        // best effort, user can still sign in manually
+      }
     }
 
     void recoverExistingPanelSession();
@@ -82,7 +250,7 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [firebaseEnabled]);
 
   function updateField(name: keyof typeof emptyFormState, value: string) {
     setFormState((current) => ({
@@ -93,27 +261,53 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
 
   async function handleEmailSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!firebaseConfigured) {
-      setNotice({
-        message: "O login do painel ainda não recebeu as chaves do Firebase Web.",
-        tone: "error",
-      });
-      return;
-    }
-
     setLoadingIntent("sign-in");
     setNotice(null);
 
     try {
-      const { signInWithFirebasePassword } = await loadPanelAuthModule();
-      await signInWithFirebasePassword({
-        email: formState.signInEmail,
-        password: formState.signInPassword,
-      });
+      if (firebaseEnabled) {
+        try {
+          await signInWithFirebasePassword({
+            email: formState.signInEmail,
+            password: formState.signInPassword,
+          });
+        } catch (firebaseError) {
+          const message =
+            firebaseError instanceof Error
+              ? firebaseError.message
+              : "Não foi possível entrar agora.";
+          if (
+            message === "E-mail ou senha inválidos." ||
+            message ===
+              "O Firebase Web do painel está com chave inválida. Atualize a configuração do deploy."
+          ) {
+            await signInWithSupabasePassword({
+              email: formState.signInEmail,
+              password: formState.signInPassword,
+            });
+          } else {
+            throw firebaseError;
+          }
+        }
+      } else {
+        await signInWithSupabasePassword({
+          email: formState.signInEmail,
+          password: formState.signInPassword,
+        });
+      }
       openPanelWorkspace();
     } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Não foi possível entrar agora.";
       setNotice({
-        message: error instanceof Error ? error.message : "Não foi possível entrar agora.",
+        message:
+          errorMessage === "E-mail ou senha inválidos."
+            ? firebaseEnabled
+              ? `${errorMessage} Se esta conta já existia no painel, tente a recuperação do mesmo e-mail para alinhar o acesso.`
+              : `${errorMessage} Se esta conta é antiga, use a recuperação para definir uma nova senha do painel.`
+            : errorMessage,
         tone: "error",
       });
     } finally {
@@ -122,24 +316,21 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
   }
 
   async function handleGoogleSignIn() {
-    if (!firebaseConfigured) {
-      setNotice({
-        message: "O login do painel ainda não recebeu as chaves do Firebase Web.",
-        tone: "error",
-      });
-      return;
-    }
-
     setLoadingIntent("google");
     setNotice(null);
 
     try {
-      const { signInWithFirebaseGoogle } = await loadPanelAuthModule();
-      await signInWithFirebaseGoogle();
-      openPanelWorkspace();
+      if (firebaseEnabled) {
+        await signInWithFirebaseGoogle();
+      } else {
+        await signInWithSupabaseGoogle();
+      }
     } catch (error) {
       setNotice({
-        message: error instanceof Error ? error.message : "Não foi possível iniciar o login com Google.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Não foi possível iniciar o login com Google.",
         tone: "error",
       });
       setLoadingIntent(null);
@@ -148,27 +339,27 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
 
   async function handlePasswordReset(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!firebaseConfigured) {
-      setNotice({
-        message: "A recuperação de senha ainda não recebeu as chaves do Firebase Web.",
-        tone: "error",
-      });
-      return;
-    }
-
     setLoadingIntent("reset");
     setNotice(null);
 
     try {
-      const { sendFirebasePasswordResetEmail } = await loadPanelAuthModule();
-      await sendFirebasePasswordResetEmail(formState.resetEmail);
+      if (firebaseEnabled) {
+        await sendFirebasePasswordResetEmail(formState.resetEmail);
+      } else {
+        await sendSupabasePasswordResetEmail(formState.resetEmail);
+      }
       setNotice({
-        message: "Enviamos um e-mail de redefinição pelo Firebase. Abra a mensagem mais recente para continuar.",
+        message: firebaseEnabled
+          ? "Enviamos um e-mail de redefinição. Abra a mensagem mais recente do Firebase, crie a nova senha e depois volte para entrar no painel."
+          : "Enviamos um e-mail de redefinição. Abra a mensagem mais recente para continuar.",
         tone: "success",
       });
     } catch (error) {
       setNotice({
-        message: error instanceof Error ? error.message : "Não foi possível enviar o e-mail de recuperação agora.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Não foi possível enviar o e-mail de recuperação agora.",
         tone: "error",
       });
     } finally {
@@ -178,28 +369,30 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
 
   async function handleSignUp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!firebaseConfigured) {
-      setNotice({
-        message: "O cadastro do painel ainda não recebeu as chaves do Firebase Web.",
-        tone: "error",
-      });
-      return;
-    }
-
     setLoadingIntent("sign-up");
     setNotice(null);
 
     try {
-      const { signUpWithFirebasePassword } = await loadPanelAuthModule();
-      const outcome = await signUpWithFirebasePassword({
-        email: formState.signUpEmail,
-        password: formState.signUpPassword,
-        passwordConfirmation: formState.signUpPasswordConfirmation,
-      });
+      const outcome = firebaseEnabled
+        ? await signUpWithFirebasePassword({
+            email: formState.signUpEmail,
+            password: formState.signUpPassword,
+            passwordConfirmation: formState.signUpPasswordConfirmation,
+          })
+        : await signUpWithSupabasePassword({
+            email: formState.signUpEmail,
+            password: formState.signUpPassword,
+            passwordConfirmation: formState.signUpPasswordConfirmation,
+          });
+
+      if (!outcome.requiresEmailConfirmation) {
+        window.location.assign("/onboarding");
+        return;
+      }
 
       setNotice({
         message: outcome.requiresEmailConfirmation
-          ? `Conta criada no Firebase. Confirme o e-mail ${outcome.email} antes de entrar no painel.`
+          ? `Conta criada. Confirme o e-mail ${outcome.email} antes de entrar no painel.`
           : "Conta criada com sucesso. Você já pode entrar no painel.",
         tone: "success",
       });
@@ -210,7 +403,10 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
       }));
     } catch (error) {
       setNotice({
-        message: error instanceof Error ? error.message : "Não foi possível criar a conta.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Não foi possível criar a conta.",
         tone: "error",
       });
     } finally {
@@ -225,20 +421,20 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
           <div className="panel-card__header">
             <span className="eyebrow">Acesso rápido</span>
           </div>
-          <div className="auth-form-card__meta">
-            <h3>Continuar com Google</h3>
+          <div className="auth-form-card__meta auth-form-card__meta--compact">
+            <h3>Entrar no painel</h3>
             <p className="muted">
-              Entre com sua conta profissional. Se for seu primeiro acesso, o cadastro do painel começa na hora.
+              Use Google ou o e-mail profissional do salão.
             </p>
           </div>
-          <div className="form-grid">
+          <div className="auth-social-grid">
             <button
               type="button"
-              className="secondary-button auth-provider-button"
+              className="secondary-button auth-social-button"
               onClick={handleGoogleSignIn}
               disabled={loadingIntent !== null}
             >
-              <span className="auth-provider-button__mark" aria-hidden="true">
+              <span className="auth-social-button__mark" aria-hidden="true">
                 <svg viewBox="0 0 18 18" role="presentation" focusable="false">
                   <path
                     fill="#4285F4"
@@ -258,13 +454,32 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
                   />
                 </svg>
               </span>
-              <span>
-                {loadingIntent === "google" ? "Abrindo Google..." : "Continuar com Google"}
+              <span className="auth-social-button__meta">
+                <strong>Google</strong>
+                <span>
+                  {loadingIntent === "google" ? "Abrindo..." : "Continuar"}
+                </span>
               </span>
             </button>
-            <p className="field-hint auth-provider-note">
-              Ideal para um onboarding mais rápido, sem depender de senha no primeiro acesso.
-            </p>
+            <button
+              type="button"
+              className="secondary-button auth-social-button auth-social-button--facebook"
+              disabled
+              title="Login com Facebook em breve"
+            >
+              <span className="auth-social-button__mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <path
+                    fill="currentColor"
+                    d="M13.47 21.5v-8.2h2.76l.41-3.2h-3.17V8.06c0-.92.26-1.55 1.58-1.55h1.69V3.65c-.29-.04-1.28-.12-2.43-.12-2.4 0-4.05 1.47-4.05 4.17v2.4H7.53v3.2h2.73v8.2h3.21Z"
+                  />
+                </svg>
+              </span>
+              <span className="auth-social-button__meta">
+                <strong>Facebook</strong>
+                <span>Em breve</span>
+              </span>
+            </button>
           </div>
         </div>
 
@@ -272,9 +487,9 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
           <div className="panel-card__header">
             <span className="eyebrow">Sua conta</span>
           </div>
-          <div className="auth-form-card__meta">
-            <h3>Entrar</h3>
-            <p className="muted">Acesse o painel para acompanhar a operação do salão em tempo real.</p>
+          <div className="auth-form-card__meta auth-form-card__meta--compact">
+            <h3>Entrar com e-mail</h3>
+            <p className="muted">Acesse o painel com o e-mail principal do salão.</p>
           </div>
           <form className="form-grid" onSubmit={handleEmailSignIn}>
             <div className="field">
@@ -286,7 +501,9 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
                 placeholder="salao@email.com"
                 required
                 value={formState.signInEmail}
-                onChange={(event) => updateField("signInEmail", event.target.value)}
+                onChange={(event) =>
+                  updateField("signInEmail", event.target.value)
+                }
               />
             </div>
 
@@ -299,12 +516,20 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
                 placeholder="Sua senha"
                 required
                 value={formState.signInPassword}
-                onChange={(event) => updateField("signInPassword", event.target.value)}
+                onChange={(event) =>
+                  updateField("signInPassword", event.target.value)
+                }
               />
             </div>
 
-            <button type="submit" className="primary-button" disabled={loadingIntent !== null}>
-              {loadingIntent === "sign-in" ? "Entrando..." : "Acessar minha conta"}
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={loadingIntent !== null}
+            >
+              {loadingIntent === "sign-in"
+                ? "Entrando..."
+                : "Acessar minha conta"}
             </button>
           </form>
 
@@ -312,11 +537,14 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
             <span />
           </div>
 
-          <form className="form-grid auth-recovery-form" onSubmit={handlePasswordReset}>
+          <form
+            className="form-grid auth-recovery-form"
+            onSubmit={handlePasswordReset}
+          >
             <div className="auth-compact-copy">
-              <strong>Recuperar conta</strong>
+              <strong>Recuperar acesso</strong>
               <p className="muted">
-                Use a recuperação do Firebase para redefinir a senha e retomar o acesso do salão.
+                Envie um link novo para redefinir a senha da conta.
               </p>
             </div>
 
@@ -329,12 +557,20 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
                 placeholder="salao@email.com"
                 required
                 value={formState.resetEmail}
-                onChange={(event) => updateField("resetEmail", event.target.value)}
+                onChange={(event) =>
+                  updateField("resetEmail", event.target.value)
+                }
               />
             </div>
 
-            <button type="submit" className="secondary-button" disabled={loadingIntent !== null}>
-              {loadingIntent === "reset" ? "Enviando..." : "Enviar link de recuperação"}
+            <button
+              type="submit"
+              className="secondary-button"
+              disabled={loadingIntent !== null}
+            >
+              {loadingIntent === "reset"
+                ? "Enviando..."
+                : "Enviar link de recuperação"}
             </button>
           </form>
         </div>
@@ -343,10 +579,10 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
           <div className="panel-card__header">
             <span className="eyebrow">Novo por aqui?</span>
           </div>
-          <div className="auth-form-card__meta">
+          <div className="auth-form-card__meta auth-form-card__meta--compact">
             <h3>Criar conta</h3>
             <p className="muted">
-              Comece agora e deixe o seu salão pronto para receber agenda, equipe e clientes.
+              Abra o painel do seu salão com um acesso novo e profissional.
             </p>
           </div>
           <form className="form-grid" onSubmit={handleSignUp}>
@@ -359,7 +595,9 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
                 placeholder="novo@email.com"
                 required
                 value={formState.signUpEmail}
-                onChange={(event) => updateField("signUpEmail", event.target.value)}
+                onChange={(event) =>
+                  updateField("signUpEmail", event.target.value)
+                }
               />
             </div>
 
@@ -373,12 +611,16 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
                 placeholder="Mínimo 6 caracteres"
                 required
                 value={formState.signUpPassword}
-                onChange={(event) => updateField("signUpPassword", event.target.value)}
+                onChange={(event) =>
+                  updateField("signUpPassword", event.target.value)
+                }
               />
             </div>
 
             <div className="field">
-              <label htmlFor="signup-password-confirmation">Confirmar senha</label>
+              <label htmlFor="signup-password-confirmation">
+                Confirmar senha
+              </label>
               <input
                 id="signup-password-confirmation"
                 name="passwordConfirmation"
@@ -387,21 +629,32 @@ export function PanelAuthClient({ initialMessage, initialTone }: PanelAuthClient
                 placeholder="Repita a senha"
                 required
                 value={formState.signUpPasswordConfirmation}
-                onChange={(event) => updateField("signUpPasswordConfirmation", event.target.value)}
+                onChange={(event) =>
+                  updateField("signUpPasswordConfirmation", event.target.value)
+                }
               />
               <span className="field-hint">
-                Depois de confirmar o e-mail no Firebase, você entra e segue para o onboarding do salão.
+                Depois de confirmar o e-mail, você entra e segue para o
+                onboarding do salão.
               </span>
             </div>
 
-            <button type="submit" className="secondary-button" disabled={loadingIntent !== null}>
-              {loadingIntent === "sign-up" ? "Criando conta..." : "Começar agora"}
+            <button
+              type="submit"
+              className="secondary-button"
+              disabled={loadingIntent !== null}
+            >
+              {loadingIntent === "sign-up"
+                ? "Criando conta..."
+                : "Começar agora"}
             </button>
           </form>
         </div>
       </div>
 
-      {notice ? <FlashMessage message={notice.message} tone={notice.tone} /> : null}
+      {notice ? (
+        <FlashMessage message={notice.message} tone={notice.tone} />
+      ) : null}
     </>
   );
 }

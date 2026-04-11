@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 type DashboardWorkspaceHeroStat = {
   label: string;
   value: ReactNode;
-  note: string;
+  note?: string;
   tone?: "warm" | "soft" | "accent" | "success" | "danger" | "neutral";
 };
 
@@ -16,13 +16,14 @@ type DashboardWorkspaceHeroSignal = {
 type DashboardWorkspaceHeroHighlight = {
   label: string;
   value: ReactNode;
-  note: string;
+  note?: string;
 };
 
 type DashboardWorkspaceHeroProps = {
+  id?: string;
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   highlight?: DashboardWorkspaceHeroHighlight;
   stats?: DashboardWorkspaceHeroStat[];
   signals?: DashboardWorkspaceHeroSignal[];
@@ -49,6 +50,7 @@ function getToneClass(tone?: DashboardWorkspaceHeroStat["tone"]) {
 }
 
 export function DashboardWorkspaceHero({
+  id,
   eyebrow,
   title,
   description,
@@ -60,7 +62,7 @@ export function DashboardWorkspaceHero({
   className,
 }: DashboardWorkspaceHeroProps) {
   return (
-    <section className={["workspace-hero", className].filter(Boolean).join(" ")}>
+    <section id={id} className={["workspace-hero", className].filter(Boolean).join(" ")}>
       <div className="workspace-hero__grid">
         <div className="workspace-hero__body">
           <span className="eyebrow workspace-hero__eyebrow">{eyebrow}</span>
@@ -68,7 +70,7 @@ export function DashboardWorkspaceHero({
           <div className="workspace-hero__heading">
             <div className="workspace-hero__copy">
               <h1>{title}</h1>
-              <p>{description}</p>
+              {description ? <p>{description}</p> : null}
             </div>
 
             {actions ? <div className="workspace-hero__actions">{actions}</div> : null}
@@ -78,7 +80,7 @@ export function DashboardWorkspaceHero({
             <article className="workspace-highlight-card">
               <span className="workspace-highlight-card__label">{highlight.label}</span>
               <strong>{highlight.value}</strong>
-              <p>{highlight.note}</p>
+              {highlight.note ? <p>{highlight.note}</p> : null}
             </article>
           ) : null}
 
@@ -108,7 +110,7 @@ export function DashboardWorkspaceHero({
                   >
                     <span className="workspace-hero__stat-label">{stat.label}</span>
                     <strong>{stat.value}</strong>
-                    <p>{stat.note}</p>
+                    {stat.note ? <p>{stat.note}</p> : null}
                   </article>
                 ))}
               </div>

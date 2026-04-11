@@ -9,6 +9,7 @@ import {
 } from "./_actions/auth";
 import {
   createSalonOfferActionImpl,
+  markReferralRewardRedeemedActionImpl,
   deleteSalonOfferActionImpl,
   saveSalonGrowthAutomationActionImpl,
   saveSalonLoyaltyProgramActionImpl,
@@ -25,6 +26,7 @@ import {
 import {
   consumeAppointmentMembershipActionImpl,
   reverseAppointmentMembershipActionImpl,
+  sendAppointmentWhatsAppActionImpl,
   updateAppointmentDepositActionImpl,
   updateAppointmentStatusActionImpl,
 } from "./_actions/appointments";
@@ -46,6 +48,8 @@ import {
   deleteSalonPostActionImpl,
   deleteSalonPostCommentActionImpl,
 } from "./_actions/feed";
+import { createSalonFinancialTransactionActionImpl } from "./_actions/finance";
+import { sendMarketingCustomerCampaignActionImpl } from "./_actions/marketing";
 import {
   approveInstagramMentionActionImpl,
   disconnectInstagramConnectionActionImpl,
@@ -67,10 +71,19 @@ import {
 } from "./_actions/staff";
 import {
   registerInventoryMovementActionImpl,
+  runSalonAutoPilotActionImpl,
+  saveSalonMonthlyTargetsActionImpl,
   saveInventoryProductActionImpl,
   saveStaffCommissionSettingsActionImpl,
   updateCustomerProductOrderStatusActionImpl,
+  sendCustomerReactivationActionImpl,
 } from "./_actions/operations";
+import {
+  addTabItemActionImpl,
+  addTabPaymentActionImpl,
+  closeTabActionImpl,
+  openTabActionImpl,
+} from "./_actions/tabs";
 import {
   assignCustomerMembershipPackageActionImpl,
   saveOwnerCustomerProfileActionImpl,
@@ -131,6 +144,10 @@ export async function deleteSalonOfferAction(formData: FormData) {
 
 export async function saveSalonReferralProgramAction(formData: FormData) {
   return saveSalonReferralProgramActionImpl(formData);
+}
+
+export async function markReferralRewardRedeemedAction(formData: FormData) {
+  return markReferralRewardRedeemedActionImpl(formData);
 }
 
 export async function saveSalonLoyaltyProgramAction(formData: FormData) {
@@ -213,6 +230,10 @@ export async function reverseAppointmentMembershipAction(formData: FormData) {
   return reverseAppointmentMembershipActionImpl(formData);
 }
 
+export async function sendAppointmentWhatsAppAction(formData: FormData) {
+  return sendAppointmentWhatsAppActionImpl(formData);
+}
+
 export async function saveOwnerCustomerProfileAction(formData: FormData) {
   return saveOwnerCustomerProfileActionImpl(formData);
 }
@@ -245,6 +266,16 @@ export async function updateSalonBookingPolicyAction(formData: FormData) {
 
 export async function createSalonPostAction(formData: FormData) {
   return createSalonPostActionImpl(formData);
+}
+
+export async function createSalonFinancialTransactionAction(
+  formData: FormData,
+) {
+  return createSalonFinancialTransactionActionImpl(formData);
+}
+
+export async function sendMarketingCustomerCampaignAction(formData: FormData) {
+  return sendMarketingCustomerCampaignActionImpl(formData);
 }
 
 export async function deleteSalonPostAction(formData: FormData) {
@@ -293,10 +324,40 @@ export async function saveInventoryProductAction(formData: FormData) {
   return saveInventoryProductActionImpl(formData);
 }
 
-export async function updateCustomerProductOrderStatusAction(formData: FormData) {
+export async function saveSalonMonthlyTargetsAction(formData: FormData) {
+  return saveSalonMonthlyTargetsActionImpl(formData);
+}
+
+export async function updateCustomerProductOrderStatusAction(
+  formData: FormData,
+) {
   return updateCustomerProductOrderStatusActionImpl(formData);
 }
 
 export async function registerInventoryMovementAction(formData: FormData) {
   return registerInventoryMovementActionImpl(formData);
+}
+
+export async function sendCustomerReactivationAction(formData: FormData) {
+  return sendCustomerReactivationActionImpl(formData);
+}
+
+export async function runSalonAutoPilotAction(formData: FormData) {
+  return runSalonAutoPilotActionImpl(formData);
+}
+
+export async function openTabAction(formData: FormData) {
+  return openTabActionImpl(formData);
+}
+
+export async function addTabItemAction(formData: FormData) {
+  return addTabItemActionImpl(formData);
+}
+
+export async function addTabPaymentAction(formData: FormData) {
+  return addTabPaymentActionImpl(formData);
+}
+
+export async function closeTabAction(formData: FormData) {
+  return closeTabActionImpl(formData);
 }

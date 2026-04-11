@@ -31,3 +31,35 @@ export function getStripePriceEnvName(planId: string, billingInterval: "monthly"
 export function getStripePriceId(planId: string, billingInterval: "monthly" | "yearly") {
   return readOptionalEnv(getStripePriceEnvName(planId, billingInterval));
 }
+
+export function getWhatsAppPhoneNumberId() {
+  return readOptionalEnv("WHATSAPP_PHONE_NUMBER_ID");
+}
+
+export function getWhatsAppBusinessAccountId() {
+  return readOptionalEnv("WHATSAPP_BUSINESS_ACCOUNT_ID");
+}
+
+export function getMetaPermanentToken() {
+  return readOptionalEnv("META_PERMANENT_TOKEN");
+}
+
+export function getMetaAppId() {
+  return readOptionalEnv("META_APP_ID");
+}
+
+export function getMetaAppSecret() {
+  return readOptionalEnv("META_APP_SECRET");
+}
+
+export function getWhatsAppVerifyToken() {
+  return readOptionalEnv("WHATSAPP_VERIFY_TOKEN");
+}
+
+export function getWhatsAppDispatchSecret() {
+  return readOptionalEnv(
+    "WHATSAPP_DISPATCH_SECRET",
+    "CRON_SECRET",
+    "VERCEL_CRON_SECRET",
+  );
+}

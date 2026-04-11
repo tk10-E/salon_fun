@@ -177,20 +177,26 @@ describe("notifications page UI", () => {
     render(ui);
 
     expect(
-      screen.getByRole("heading", { name: "Histórico de push com leitura clara de entrega, público e ruído." }),
+      screen.getByRole("heading", { name: "Lembretes, push e avisos do salão" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "O que já sustenta alcance e recorrência" }),
+      screen.getByRole("heading", { name: "Filtro rápido" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Dispositivos ativos")).toBeInTheDocument();
-    expect(screen.getByText("Automação comercial")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Histórico" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Exportar CSV" }),
+    ).toHaveAttribute("href", "/dashboard/notifications/export");
+    expect(screen.getByText(/12 clientes com app ativo/i)).toBeInTheDocument();
+    expect(screen.getByText(/9 ativos recentemente/i)).toBeInTheDocument();
     expect(screen.getByText("Novidade VIP")).toBeInTheDocument();
     expect(screen.getByText("Cashback dobrado até sexta.")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Retenção automática" }),
+      screen.getByRole("link", { name: "Retenção" }),
     ).toHaveAttribute("href", "/dashboard/benefits/automations");
     expect(
-      screen.getByRole("link", { name: "Ajustar app" }),
+      screen.getByRole("link", { name: "Ajustes do app" }),
     ).toHaveAttribute("href", "/dashboard/settings");
   });
 });
