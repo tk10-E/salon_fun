@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 
 type GestaoPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
-export default function GestaoPage({ searchParams }: GestaoPageProps) {
+export default async function GestaoPage({ searchParams: searchParamsPromise }: GestaoPageProps) {
+  const searchParams = await searchParamsPromise;
   const params = new URLSearchParams();
 
   if (searchParams?.message?.trim()) {

@@ -48,7 +48,7 @@ const TINY_PNG_BASE64 =
 export function makeImageFile(
   name: string,
   contents: BlobPart = "image-bytes",
-  type = "image/jpeg",
+  type = "image/png",
 ) {
   const payload =
     contents === "image-bytes"
@@ -58,6 +58,15 @@ export function makeImageFile(
   return new File([payload], name, { type });
 }
 
-export function makeVideoFile(name: string, contents = "video-bytes", type = "video/mp4") {
+const TINY_MP4_BYTES = Buffer.from([
+  0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+  0x00, 0x00, 0x02, 0x00, 0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32,
+]);
+
+export function makeVideoFile(
+  name: string,
+  contents: BlobPart = TINY_MP4_BYTES,
+  type = "video/mp4",
+) {
   return new File([contents], name, { type });
 }

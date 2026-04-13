@@ -54,6 +54,10 @@ type PublicOfferRow = {
   title: string;
   description: string | null;
   highlight_text: string | null;
+  image_path: string | null;
+  membership_service_id: string | null;
+  membership_sessions_included: number | null;
+  membership_validity_days: number | null;
   price: number | null;
   is_active: boolean;
   starts_on: string | null;
@@ -177,9 +181,14 @@ export type PublicSalonServiceHighlight = {
 
 export type PublicSalonOfferHighlight = {
   id: string;
+  kind: "promotion" | "membership";
   title: string;
   description: string | null;
   highlightText: string | null;
+  imageUrl: string | null;
+  bookingServiceId: string | null;
+  bookingServiceName: string | null;
+  actionKind: "open_agenda" | "book_service" | "request_membership";
   kindLabel: string;
   priceLabel: string | null;
   lifecycleLabel: string;
@@ -567,30 +576,115 @@ async function loadPublicOffers(
   salonId: string,
 ) {
   try {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
     const { data, error } = await supabase
       .from("salon_offers")
       .select(
-        "id, kind, title, description, highlight_text, price, is_active, starts_on, ends_on, sort_order",
+        "id, kind, title, description, highlight_text, image_path, membership_service_id, membership_sessions_included, membership_validity_days, price, is_active, starts_on, ends_on, sort_order",
       )
       .eq("salon_id", salonId)
       .eq("is_active", true)
       .order("sort_order")
-      .limit(3);
+      .limit(12);
 
     if (error) {
       return [];
     }
 
-    return ((data ?? []) as PublicOfferRow[]).map((offer) => ({
-      id: offer.id,
-      title: offer.title,
-      description: normalizeText(offer.description),
-      highlightText: normalizeText(offer.highlight_text),
-      kindLabel: offer.kind === "membership" ? "Clube" : "Oferta ativa",
-      priceLabel:
-        offer.price == null ? null : formatCurrency(Number(offer.price ?? 0)),
-      lifecycleLabel: resolveOfferLifecycleLabel(offer),
-    }));
+    const offers = ((data ?? []) as PublicOfferRow[])
+      .filter((offer) => {
+        const startsOn = normalizeText(offer.starts_on);
+        const endsOn = normalizeText(offer.ends_on);
+        const insideWindow =
+          (!startsOn || startsOn <= today) && (!endsOn || endsOn >= today);
+
+        if (!insideWindow) {
+          return false;
+        }
+
+        if (offer.kind !== "membership") {
+          return true;
+        }
+
+        return Boolean(
+          normalizeText(offer.membership_service_id) &&
+            offer.membership_sessions_included != null &&
+            offer.membership_sessions_included > 0 &&
+            offer.membership_validity_days != null &&
+            offer.membership_validity_days > 0,
+        );
+      })
+      .slice(0, 3);
+    const serviceIds = offers
+      .map((offer) => normalizeText(offer.membership_service_id))
+      .filter((serviceId): serviceId is string => Boolean(serviceId));
+    const serviceMetaById = new Map<
+      string,
+      { imagePath: string | null; name: string | null }
+    >();
+
+    if (serviceIds.length > 0) {
+      const { data: servicesData } = await supabase
+        .from("services")
+        .select("id, image_path, name")
+        .in("id", serviceIds);
+
+      for (const service of ((servicesData ?? []) as {
+        id?: string | null;
+        image_path?: string | null;
+        name?: string | null;
+      }[])) {
+        const serviceId = normalizeText(service.id);
+        if (serviceId) {
+          serviceMetaById.set(serviceId, {
+            imagePath: normalizeText(service.image_path),
+            name: normalizeText(service.name),
+          });
+        }
+      }
+    }
+
+    return offers.map((offer) => {
+      const kind: PublicSalonOfferHighlight["kind"] =
+        offer.kind === "membership" ? "membership" : "promotion";
+      const bookingServiceId = normalizeText(offer.membership_service_id);
+      const bookingService = bookingServiceId
+        ? serviceMetaById.get(bookingServiceId) ?? null
+        : null;
+      const imagePath =
+        normalizeText(offer.image_path) ??
+        bookingService?.imagePath;
+      const actionKind: PublicSalonOfferHighlight["actionKind"] =
+        kind === "membership"
+          ? "request_membership"
+          : bookingServiceId
+            ? "book_service"
+            : "open_agenda";
+
+      return {
+        id: offer.id,
+        kind,
+        title: offer.title,
+        description: normalizeText(offer.description),
+        highlightText: normalizeText(offer.highlight_text),
+        imageUrl: imagePath
+          ? supabase.storage.from("salon-assets").getPublicUrl(imagePath)
+              .data.publicUrl
+          : null,
+        bookingServiceId,
+        bookingServiceName: bookingService?.name ?? null,
+        actionKind,
+        kindLabel: kind === "membership" ? "Clube" : "Oferta ativa",
+        priceLabel:
+          offer.price == null ? null : formatCurrency(Number(offer.price ?? 0)),
+        lifecycleLabel: resolveOfferLifecycleLabel(offer),
+      };
+    });
   } catch {
     return [];
   }

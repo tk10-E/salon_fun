@@ -1,5 +1,10 @@
 import Link from "next/link";
 
+import {
+  approveCustomerMembershipRequestAction,
+  updateCustomerProductOrderStatusAction,
+} from "@/app/actions";
+import { updateManagementAppointmentStatusAction } from "@/app/_actions/management";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 
@@ -23,9 +28,10 @@ export function DashboardHomeContent({ data }: DashboardHomeContentProps) {
 
       <section className="dashboard-reference-grid dashboard-reference-grid--simple dashboard-reference-grid--home">
         <DashboardGrowthPanel customerGrowth={data.customerGrowth} />
+        <DashboardClientAppRequestsPanel clientAppRequests={data.clientAppRequests} />
+        <DashboardAttentionPanel attentionItems={data.attentionItems} />
         <DashboardAgendaPanel agenda={data.agenda} />
         <DashboardFinancePanel finance={data.finance} />
-        <DashboardAttentionPanel attentionItems={data.attentionItems} />
       </section>
     </>
   );
@@ -432,13 +438,296 @@ function DashboardFinancePanel({
   );
 }
 
+function DashboardClientAppRequestsPanel({
+  clientAppRequests,
+}: {
+  clientAppRequests: DashboardHomeData["clientAppRequests"];
+}) {
+  const appointmentCount = clientAppRequests.appointments.length;
+  const storeOrderCount = clientAppRequests.storeOrders.length;
+  const membershipCount = clientAppRequests.memberships.length;
+  const hasRequests =
+    appointmentCount > 0 || membershipCount > 0 || storeOrderCount > 0;
+
+  return (
+    <article className="card content-card dashboard-panel dashboard-panel--client-requests">
+      <div className="dashboard-panel__header">
+        <div>
+          <h2>Pedidos do app cliente</h2>
+          <p className="muted">
+            O que a cliente pedir no app aparece aqui para o salão responder.
+          </p>
+        </div>
+        <span className="dashboard-panel__link">
+          {clientAppRequests.pendingCount} aguardando
+        </span>
+      </div>
+
+      {hasRequests ? (
+        <div className="dashboard-request-stack">
+          <div className="dashboard-request-overview">
+            <article className="dashboard-request-overview__card">
+              <span>Agendamentos</span>
+              <strong>{appointmentCount}</strong>
+            </article>
+            <article className="dashboard-request-overview__card">
+              <span>Loja</span>
+              <strong>{storeOrderCount}</strong>
+            </article>
+            <article className="dashboard-request-overview__card">
+              <span>Planos</span>
+              <strong>{membershipCount}</strong>
+            </article>
+          </div>
+
+          {appointmentCount ? (
+            <section className="dashboard-request-section">
+              <div className="dashboard-request-section__header">
+                <div>
+                  <h3>Agendamentos</h3>
+                  <p className="muted">
+                    Confirme rápido os horários pedidos no app.
+                  </p>
+                </div>
+                <span className="dashboard-request-section__count">
+                  {appointmentCount}
+                </span>
+              </div>
+              <div className="simple-list dashboard-request-section__list">
+                {clientAppRequests.appointments.map((request) => (
+                  <article
+                    key={`appointment-${request.id}`}
+                    className="simple-row"
+                  >
+                    <div
+                      className="inline-actions"
+                      style={{ marginBottom: 6, flexWrap: "wrap" }}
+                    >
+                      <span className="badge badge--pending">Agendamento</span>
+                      <span className="badge badge--soft">
+                        {request.customerName}
+                      </span>
+                      <span className="badge badge--soft">
+                        {request.dateLabel} • {request.timeLabel}
+                      </span>
+                    </div>
+                    <h4>{request.serviceName}</h4>
+                    <p className="muted">
+                      Pedido feito no app cliente aguardando confirmação do salão.
+                    </p>
+                    <div
+                      className="simple-row__actions"
+                      style={{ flexWrap: "wrap" }}
+                    >
+                      <form action={updateManagementAppointmentStatusAction}>
+                        <input
+                          type="hidden"
+                          name="returnPath"
+                          value="/dashboard"
+                        />
+                        <input
+                          type="hidden"
+                          name="appointmentId"
+                          value={request.id}
+                        />
+                        <input type="hidden" name="status" value="confirmed" />
+                        <button type="submit" className="primary-button">
+                          Confirmar horário
+                        </button>
+                      </form>
+                      <Link
+                        href={MANAGEMENT_ROUTES.appointments}
+                        className="secondary-button"
+                      >
+                        Abrir agenda
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {storeOrderCount ? (
+            <section className="dashboard-request-section">
+              <div className="dashboard-request-section__header">
+                <div>
+                  <h3>Pedidos da loja</h3>
+                  <p className="muted">
+                    Separe e confirme o que entrou pela vitrine do app.
+                  </p>
+                </div>
+                <span className="dashboard-request-section__count">
+                  {storeOrderCount}
+                </span>
+              </div>
+              <div className="simple-list dashboard-request-section__list">
+                {clientAppRequests.storeOrders.map((request) => (
+                  <article
+                    key={`store-order-${request.id}`}
+                    className="simple-row"
+                  >
+                    <div
+                      className="inline-actions"
+                      style={{ marginBottom: 6, flexWrap: "wrap" }}
+                    >
+                      <span className="badge badge--pending">Loja</span>
+                      <span className="badge badge--soft">
+                        {request.customerName}
+                      </span>
+                      <span className="badge badge--soft">
+                        {request.orderNumberLabel}
+                      </span>
+                    </div>
+                    <h4>{request.itemsLabel}</h4>
+                    <p className="muted">
+                      {request.priceLabel} • {request.requestedAtLabel}
+                    </p>
+                    <small className="list-meta">{request.note}</small>
+                    <div
+                      className="simple-row__actions"
+                      style={{ flexWrap: "wrap" }}
+                    >
+                      <form action={updateCustomerProductOrderStatusAction}>
+                        <input
+                          type="hidden"
+                          name="returnPath"
+                          value="/dashboard"
+                        />
+                        <input type="hidden" name="orderId" value={request.id} />
+                        <input type="hidden" name="status" value="confirmed" />
+                        <button type="submit" className="primary-button">
+                          Confirmar pedido
+                        </button>
+                      </form>
+                      <Link
+                        href="/dashboard/inventory"
+                        className="secondary-button"
+                      >
+                        Abrir loja
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {membershipCount ? (
+            <section className="dashboard-request-section">
+              <div className="dashboard-request-section__header">
+                <div>
+                  <h3>Pedidos de plano</h3>
+                  <p className="muted">
+                    Ative o plano direto da home quando o salão aprovar.
+                  </p>
+                </div>
+                <span className="dashboard-request-section__count">
+                  {membershipCount}
+                </span>
+              </div>
+              <div className="simple-list dashboard-request-section__list">
+                {clientAppRequests.memberships.map((request) => (
+                  <article
+                    key={`membership-${request.id}`}
+                    className="simple-row"
+                  >
+                    <div
+                      className="inline-actions"
+                      style={{ marginBottom: 6, flexWrap: "wrap" }}
+                    >
+                      <span className="badge badge--pending">Plano</span>
+                      <span className="badge badge--soft">
+                        {request.customerName}
+                      </span>
+                      <span className="badge badge--soft">
+                        {request.requestedAtLabel}
+                      </span>
+                    </div>
+                    <h4>{request.title}</h4>
+                    <p className="muted">
+                      {request.priceLabel
+                        ? `${request.priceLabel} • pedido feito no app cliente.`
+                        : "Pedido feito no app cliente."}
+                    </p>
+                    {request.validityLabel ? (
+                      <p className="list-meta">{request.validityLabel}</p>
+                    ) : null}
+                    <small className="list-meta">
+                      {request.note.startsWith("Sem observacao")
+                        ? request.note
+                        : `Mensagem da cliente: ${request.note}`}
+                    </small>
+                    <div
+                      className="simple-row__actions"
+                      style={{ flexWrap: "wrap" }}
+                    >
+                      <form
+                        action={approveCustomerMembershipRequestAction}
+                        style={{
+                          display: "flex",
+                          gap: 10,
+                          flexWrap: "wrap",
+                          alignItems: "end",
+                        }}
+                      >
+                        <input
+                          type="hidden"
+                          name="returnPath"
+                          value="/dashboard"
+                        />
+                        <input
+                          type="hidden"
+                          name="requestId"
+                          value={request.id}
+                        />
+                        <div className="field" style={{ minWidth: 190 }}>
+                          <label htmlFor={`membership-start-${request.id}`}>
+                            Inicio real da assinatura
+                          </label>
+                          <input
+                            id={`membership-start-${request.id}`}
+                            name="startsOn"
+                            type="date"
+                            defaultValue={request.defaultStartsOn}
+                            required
+                          />
+                        </div>
+                        <button type="submit" className="primary-button">
+                          Aprovar e ativar
+                        </button>
+                      </form>
+                      <Link
+                        href="/dashboard/subscriptions"
+                        className="secondary-button"
+                      >
+                        Ver plano
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      ) : (
+        <EmptyStateCard
+          eyebrow="Sem pedidos"
+          title="Nada pendente agora"
+          description="Quando a cliente pedir agenda, loja ou plano no app, a home mostra aqui."
+        />
+      )}
+    </article>
+  );
+}
+
 function DashboardAttentionPanel({
   attentionItems,
 }: {
   attentionItems: DashboardHomeData["attentionItems"];
 }) {
   return (
-    <article className="card content-card dashboard-panel dashboard-panel--attention">
+    <article className="card content-card dashboard-panel dashboard-panel--attention dashboard-panel--attention-summary">
       <div className="dashboard-panel__header">
         <h2>Hoje precisa de atencao</h2>
       </div>

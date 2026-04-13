@@ -42,6 +42,8 @@ export const CATEGORY_NOTIFICATION_TYPES = {
     "promotion_updated",
     "membership_published",
     "membership_updated",
+    "membership_request_approved",
+    "membership_request_rejected",
     "birthday_campaign",
     "loyalty_program_updated",
     "loyalty_tier_unlocked",
@@ -51,6 +53,7 @@ export const CATEGORY_NOTIFICATION_TYPES = {
     "winback_offer",
     "smart_rebook_prompt",
     "haircut_rebook_reminder",
+    "membership_renewal_reminder",
     "manual_reactivation",
   ],
   appointment: [
@@ -73,7 +76,9 @@ export const CATEGORY_NOTIFICATION_TYPES = {
   feed: ["feed_post_published"],
 } as const;
 
-export const KNOWN_NOTIFICATION_TYPES = Object.values(CATEGORY_NOTIFICATION_TYPES).flat();
+export const KNOWN_NOTIFICATION_TYPES = Object.values(
+  CATEGORY_NOTIFICATION_TYPES,
+).flat();
 
 export function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
@@ -121,7 +126,9 @@ export function getCategory(type: string): NotificationCategory {
   }
 
   if (
-    CATEGORY_NOTIFICATION_TYPES.feed.includes(type as (typeof CATEGORY_NOTIFICATION_TYPES.feed)[number])
+    CATEGORY_NOTIFICATION_TYPES.feed.includes(
+      type as (typeof CATEGORY_NOTIFICATION_TYPES.feed)[number],
+    )
   ) {
     return "feed";
   }
@@ -176,7 +183,9 @@ export function badgeClassForCategory(category: NotificationCategory) {
 }
 
 export function formatAudienceLabel(audience: NotificationRow["audience"]) {
-  return audience === "single_customer" ? "Cliente específico" : "Todos os clientes";
+  return audience === "single_customer"
+    ? "Cliente específico"
+    : "Todos os clientes";
 }
 
 export function formatNotificationType(type: string) {
@@ -203,8 +212,16 @@ export function formatNotificationType(type: string) {
       return "Reagendamento inteligente";
     case "haircut_rebook_reminder":
       return "Lembrete de retorno para corte";
+    case "membership_renewal_reminder":
+      return "Lembrete de renovação do plano";
+    case "membership_request_approved":
+      return "Plano ativado para cliente";
+    case "membership_request_rejected":
+      return "Pedido de plano recusado";
     case "manual_reactivation":
       return "Reativação manual";
+    case "manual_whatsapp_message":
+      return "Mensagem manual de WhatsApp";
     case "referral_program_updated":
       return "Programa de indicação atualizado";
     case "referral_qualified":
@@ -250,7 +267,9 @@ export function formatNotificationType(type: string) {
   }
 }
 
-export function formatDispatchStatus(status?: NotificationDispatchSnapshot["status"] | null) {
+export function formatDispatchStatus(
+  status?: NotificationDispatchSnapshot["status"] | null,
+) {
   switch (status) {
     case "queued":
       return "Na fila";
@@ -271,7 +290,9 @@ export function formatDispatchStatus(status?: NotificationDispatchSnapshot["stat
   }
 }
 
-export function badgeClassForDispatchStatus(status?: NotificationDispatchSnapshot["status"] | null) {
+export function badgeClassForDispatchStatus(
+  status?: NotificationDispatchSnapshot["status"] | null,
+) {
   switch (status) {
     case "delivered":
       return "badge badge--confirmed";

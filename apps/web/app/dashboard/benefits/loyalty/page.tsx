@@ -4,13 +4,14 @@ import { loadLoyaltyPageData } from "../_lib";
 import { LoyaltyPageContent } from "../_loyalty-components";
 
 type LoyaltyPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
-export default async function LoyaltyPage({ searchParams }: LoyaltyPageProps) {
+export default async function LoyaltyPage({ searchParams: searchParamsPromise }: LoyaltyPageProps) {
+  const searchParams = await searchParamsPromise;
   const data = await loadLoyaltyPageData();
 
   return (

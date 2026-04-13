@@ -6,10 +6,11 @@ import {
 } from "@/lib/management-navigation";
 
 type ServicesPageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default function ServicesPage({ searchParams }: ServicesPageProps) {
+export default async function ServicesPage({ searchParams: searchParamsPromise }: ServicesPageProps) {
+  const searchParams = await searchParamsPromise;
   redirect(
     buildLegacyManagementRedirectPath(
       LEGACY_MANAGEMENT_ROUTES.services,

@@ -19,18 +19,19 @@ import {
 import { formatCurrency } from "@/lib/formatters";
 
 type PagamentosPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     dateFrom?: string;
     dateTo?: string;
     paymentMethod?: string;
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 export default async function PagamentosPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: PagamentosPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const timeZone = salon.timezone ?? "America/Sao_Paulo";
   const todayKey = getLocalDateKey(new Date(), timeZone);

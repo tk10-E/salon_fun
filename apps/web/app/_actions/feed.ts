@@ -17,6 +17,10 @@ import {
 } from "@/lib/mediaUploadPresets";
 import { createClient } from "@/lib/supabase/server";
 import { optimizeUploadedImage } from "@/lib/uploadedImageOptimization";
+import {
+  assertSafeVideoUpload,
+  getSafeFeedVideoExtension,
+} from "@/lib/uploadedVideoValidation";
 
 import {
   buildFeedPostNotification,
@@ -210,7 +214,13 @@ export async function createSalonPostActionImpl(formData: FormData) {
       if (uploadedAssetPaths.length) {
         await supabase.storage.from("salon-posts").remove(uploadedAssetPaths);
       }
-      redirect(buildRedirectNotice(FEED_PATH, "Não foi possível enviar as imagens do post.", "error"));
+      redirect(
+        buildRedirectNotice(
+          FEED_PATH,
+          "Não foi possível enviar as imagens do post.",
+          "error",
+        ),
+      );
     }
 
     uploadedImagePaths.push(uploadPath);
@@ -218,18 +228,52 @@ export async function createSalonPostActionImpl(formData: FormData) {
   }
 
   if (videoFile) {
-    const uploadPath = buildFeedUploadPath(salon.id, "mp4");
     const bytes = Buffer.from(await videoFile.arrayBuffer());
-    const { error: uploadError } = await supabase.storage.from("salon-posts").upload(uploadPath, bytes, {
-      contentType: videoFile.type,
-      upsert: false,
-    });
+    let videoContentType: ReturnType<typeof assertSafeVideoUpload>;
+
+    try {
+      videoContentType = assertSafeVideoUpload({
+        buffer: bytes,
+        declaredMimeType: videoFile.type,
+        maxBytes: FEED_VIDEO_MAX_BYTES,
+        contextLabel: "video do feed",
+      });
+    } catch {
+      if (uploadedAssetPaths.length) {
+        await supabase.storage.from("salon-posts").remove(uploadedAssetPaths);
+      }
+
+      redirect(
+        buildRedirectNotice(
+          FEED_PATH,
+          "Nao foi possivel validar o video do post.",
+          "error",
+        ),
+      );
+    }
+
+    const uploadPath = buildFeedUploadPath(
+      salon.id,
+      getSafeFeedVideoExtension(videoContentType),
+    );
+    const { error: uploadError } = await supabase.storage
+      .from("salon-posts")
+      .upload(uploadPath, bytes, {
+        contentType: videoContentType,
+        upsert: false,
+      });
 
     if (uploadError) {
       if (uploadedAssetPaths.length) {
         await supabase.storage.from("salon-posts").remove(uploadedAssetPaths);
       }
-      redirect(buildRedirectNotice(FEED_PATH, "Não foi possível enviar o vídeo do post.", "error"));
+      redirect(
+        buildRedirectNotice(
+          FEED_PATH,
+          "Não foi possível enviar o vídeo do post.",
+          "error",
+        ),
+      );
     }
 
     videoPath = uploadPath;

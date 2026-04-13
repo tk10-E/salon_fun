@@ -15,23 +15,42 @@ import {
   normalizeSalonClientAppConfig,
   serializeSalonClientAppConfig,
 } from "@/lib/clientAppConfig";
+import { normalizeCountryCodesInput } from "@/lib/panelSecurityPolicy";
 import {
   SALON_TIMEZONE_OPTIONS,
   SLOT_STEP_OPTIONS,
   WEEKDAY_OPTIONS,
 } from "@/lib/schedule";
+import {
+  CLIENT_APP_IMAGE_MAX_BYTES,
+  SALON_LOGO_MAX_BYTES,
+  SETTINGS_BRANDING_UPLOAD_LIMIT_MESSAGE,
+  isSettingsBrandingUploadMimeTypeAllowed,
+  type SettingsBrandingUploadField,
+} from "@/lib/settingsBrandingUploads";
 import { normalizeSalonBusinessSegment } from "@/lib/salonSegments";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import {
+  SAFE_RASTER_IMAGE_MIME_TYPES,
+  assertSafeImageUpload,
+  optimizeSalonLogoImage,
+} from "@/lib/uploadedImageOptimization";
+import { sanitizePhone, sendSalonWhatsAppTextMessage } from "@/lib/whatsapp";
 
 import {
   buildClientAppRefreshNotification,
   buildRedirectNotice,
   queueCustomerNotification,
+  truncateNotificationText,
 } from "./shared";
 
 const SETTINGS_PATH = "/dashboard/settings";
+const WHATSAPP_SETTINGS_PATH = "/dashboard/whatsapp";
 const DASHBOARD_PATH = "/dashboard";
-const CLIENT_APP_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const MANAGEMENT_APPOINTMENTS_PATH = "/dashboard/gestao/agendamentos";
+const OPERATIONS_PATH = "/dashboard/operations";
+const NOTIFICATIONS_PATH = "/dashboard/notifications";
 const CLIENT_APP_CAMPAIGN_SLOT_COUNT = 3;
 
 function readUploadedFile(formData: FormData, field: string) {
@@ -102,6 +121,15 @@ function normalizeOptionalDateTimeInput(value: FormDataEntryValue | null) {
   }
 
   return Number.isNaN(Date.parse(normalized)) ? null : normalized;
+}
+
+function buildManualWhatsAppTitle(customerName: string | null) {
+  const normalized = customerName?.trim();
+  if (!normalized) {
+    return "Mensagem manual de WhatsApp";
+  }
+
+  return truncateNotificationText(`Mensagem manual para ${normalized}`, 80);
 }
 
 function normalizeOptionalNumberInput(value: FormDataEntryValue | null) {
@@ -370,7 +398,21 @@ async function resolveClientAppImageAssetOrRedirect(params: {
 
   if (incomingFile) {
     sourceBuffer = Buffer.from(await incomingFile.arrayBuffer());
-    sourceContentType = incomingFile.type;
+    try {
+      sourceContentType = assertSafeImageUpload({
+        buffer: sourceBuffer,
+        declaredMimeType: incomingFile.type,
+        allowedMimeTypes: SAFE_RASTER_IMAGE_MIME_TYPES,
+        maxBytes: CLIENT_APP_IMAGE_MAX_BYTES,
+        contextLabel: "imagem premium do app",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : sourceErrorMessage;
+      redirect(buildRedirectNotice(SETTINGS_PATH, message, "error"));
+    }
     nextSourceUrl = null;
   } else if (sourceChanged) {
     if (!incomingUrl) {
@@ -759,39 +801,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     "profileCoverImageSourceUrl",
   );
 
-  for (const [file, message] of [
-    [
-      heroImageFile,
-      "Envie uma imagem válida para o hero principal do app.",
-    ] as const,
-    [
-      galleryCoverImageFile,
-      "Envie uma imagem válida para a capa da galeria do app.",
-    ] as const,
-    [
-      profileCoverImageFile,
-      "Envie uma imagem válida para a capa institucional do perfil do salão.",
-    ] as const,
-  ]) {
-    if (!file) {
-      continue;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      redirect(buildRedirectNotice(SETTINGS_PATH, message, "error"));
-    }
-
-    if (file.size > CLIENT_APP_IMAGE_MAX_BYTES) {
-      redirect(
-        buildRedirectNotice(
-          SETTINGS_PATH,
-          "As imagens premium do app devem ter no máximo 4 MB.",
-          "error",
-        ),
-      );
-    }
-  }
-
   if (secondaryColorInput && !secondaryColor) {
     redirect(
       buildRedirectNotice(
@@ -1175,6 +1184,61 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   const logoInput = formData.get("logo");
   const logoFile =
     logoInput instanceof File && logoInput.size > 0 ? logoInput : null;
+  const uploadedBrandingCandidates: Array<
+    [SettingsBrandingUploadField, File | null]
+  > = [
+    ["logo", logoFile],
+    ["clientAppHeroImageFile", heroImageFile],
+    ["clientAppGalleryCoverImageFile", galleryCoverImageFile],
+    ["clientAppProfileCoverImageFile", profileCoverImageFile],
+  ];
+  const uploadedBrandingFiles = uploadedBrandingCandidates.filter(
+    (entry): entry is [SettingsBrandingUploadField, File] => Boolean(entry[1]),
+  );
+
+  if (uploadedBrandingFiles.length > 1) {
+    return redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        SETTINGS_BRANDING_UPLOAD_LIMIT_MESSAGE,
+        "error",
+      ),
+    );
+  }
+
+  for (const [field, file] of uploadedBrandingFiles) {
+    if (!isSettingsBrandingUploadMimeTypeAllowed(field, file.type)) {
+      const message =
+        field === "logo"
+          ? "Envie uma imagem válida para a logo."
+          : field === "clientAppHeroImageFile"
+            ? "Envie uma imagem válida para o hero principal do app."
+            : field === "clientAppGalleryCoverImageFile"
+              ? "Envie uma imagem válida para a capa da galeria do app."
+              : "Envie uma imagem válida para a capa institucional do perfil do salão.";
+      return redirect(buildRedirectNotice(SETTINGS_PATH, message, "error"));
+    }
+
+    if (field === "logo" && file.size > SALON_LOGO_MAX_BYTES) {
+      return redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "A logo deve ter no máximo 2 MB.",
+          "error",
+        ),
+      );
+    }
+
+    if (field !== "logo" && file.size > CLIENT_APP_IMAGE_MAX_BYTES) {
+      const message =
+        field === "clientAppHeroImageFile"
+          ? "A imagem principal do app deve ter no máximo 3 MB."
+          : field === "clientAppGalleryCoverImageFile"
+            ? "A capa da galeria do app deve ter no máximo 3 MB."
+            : "A capa do perfil do salão deve ter no máximo 3 MB.";
+      return redirect(buildRedirectNotice(SETTINGS_PATH, message, "error"));
+    }
+  }
 
   if (!rawName) {
     redirect(
@@ -1251,33 +1315,26 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   }
 
   if (logoFile) {
-    if (!logoFile.type.startsWith("image/")) {
+    let optimizedLogo;
+
+    try {
+      optimizedLogo = await optimizeSalonLogoImage(logoFile);
+    } catch {
       redirect(
         buildRedirectNotice(
           SETTINGS_PATH,
-          "Envie uma imagem válida para a logo.",
+          "Não foi possível processar a logo do salão.",
           "error",
         ),
       );
     }
 
-    if (logoFile.size > 2 * 1024 * 1024) {
-      redirect(
-        buildRedirectNotice(
-          SETTINGS_PATH,
-          "A logo deve ter no máximo 2 MB.",
-          "error",
-        ),
-      );
-    }
-
-    const bytes = Buffer.from(await logoFile.arrayBuffer());
-    const uploadPath = `${salon.id}/logo`;
+    const uploadPath = `${salon.id}/logo/${randomUUID()}.${optimizedLogo.extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from("salon-assets")
-      .upload(uploadPath, bytes, {
-        contentType: logoFile.type,
+      .upload(uploadPath, optimizedLogo.buffer, {
+        contentType: optimizedLogo.contentType,
         upsert: true,
       });
 
@@ -1289,6 +1346,10 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
           "error",
         ),
       );
+    }
+
+    if (salon.logo_path && salon.logo_path !== uploadPath) {
+      await supabase.storage.from("salon-assets").remove([salon.logo_path]);
     }
 
     logoPath = uploadPath;
@@ -1452,6 +1513,247 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       SETTINGS_PATH,
       "Identidade do salão atualizada com sucesso.",
       "success",
+    ),
+  );
+}
+
+export async function updateSalonWhatsAppSettingsActionImpl(
+  formData: FormData,
+) {
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+  const rawWhatsapp = String(formData.get("whatsappPhone") ?? "").trim();
+  const hasDispatchPhoneNumberIdInput = formData.has(
+    "whatsappMetaPhoneNumberId",
+  );
+  const hasDispatchBusinessAccountIdInput = formData.has(
+    "whatsappMetaBusinessAccountId",
+  );
+  const rawDispatchPhoneNumberId = hasDispatchPhoneNumberIdInput
+    ? String(formData.get("whatsappMetaPhoneNumberId") ?? "").trim()
+    : null;
+  const rawDispatchBusinessAccountId = hasDispatchBusinessAccountIdInput
+    ? String(formData.get("whatsappMetaBusinessAccountId") ?? "").trim()
+    : null;
+  const whatsappDispatchEnabled =
+    formData.get("whatsappDispatchEnabled") === "on";
+  const whatsappDigits = rawWhatsapp.replace(/\D/g, "");
+  const dispatchPhoneNumberId = rawDispatchPhoneNumberId?.replace(/\D/g, "") ?? "";
+  const dispatchBusinessAccountId =
+    rawDispatchBusinessAccountId?.replace(/\D/g, "") ?? "";
+
+  if (
+    rawWhatsapp &&
+    (whatsappDigits.length < 10 || whatsappDigits.length > 15)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        WHATSAPP_SETTINGS_PATH,
+        "Informe um WhatsApp válido com DDD e código do país, se necessário.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    rawDispatchPhoneNumberId &&
+    (dispatchPhoneNumberId.length < 8 || dispatchPhoneNumberId.length > 32)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        WHATSAPP_SETTINGS_PATH,
+        "Informe um Phone Number ID válido da Meta para o canal técnico do WhatsApp.",
+        "error",
+      ),
+    );
+  }
+
+  if (
+    rawDispatchBusinessAccountId &&
+    (dispatchBusinessAccountId.length < 8 ||
+      dispatchBusinessAccountId.length > 32)
+  ) {
+    redirect(
+      buildRedirectNotice(
+        WHATSAPP_SETTINGS_PATH,
+        "Informe um WhatsApp Business Account ID válido da Meta.",
+        "error",
+      ),
+    );
+  }
+
+  const { error } = await supabase
+    .from("salons")
+    .update({
+      whatsapp_dispatch_enabled: whatsappDispatchEnabled,
+      whatsapp_meta_business_account_id:
+        hasDispatchBusinessAccountIdInput
+          ? dispatchBusinessAccountId || null
+          : salon.whatsapp_meta_business_account_id,
+      whatsapp_meta_phone_number_id: hasDispatchPhoneNumberIdInput
+        ? dispatchPhoneNumberId || null
+        : salon.whatsapp_meta_phone_number_id,
+      whatsapp_phone: whatsappDigits || null,
+    })
+    .eq("id", salon.id);
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        WHATSAPP_SETTINGS_PATH,
+        "Não foi possível atualizar o WhatsApp do salão.",
+        "error",
+      ),
+    );
+  }
+
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(SETTINGS_PATH);
+  revalidatePath(WHATSAPP_SETTINGS_PATH);
+  revalidatePath("/dashboard/client-app");
+  revalidatePath(MANAGEMENT_APPOINTMENTS_PATH);
+  revalidatePath(OPERATIONS_PATH);
+  revalidatePath(`/s/${salon.join_code}`);
+  redirect(
+    buildRedirectNotice(
+      WHATSAPP_SETTINGS_PATH,
+      "WhatsApp do salão atualizado com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function sendSalonManualWhatsAppActionImpl(formData: FormData) {
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient() as any;
+  const returnPath =
+    String(formData.get("returnPath") ?? WHATSAPP_SETTINGS_PATH).trim() ||
+    WHATSAPP_SETTINGS_PATH;
+  const customerId = String(formData.get("customerId") ?? "").trim();
+  const rawCustomerName = String(formData.get("customerName") ?? "").trim();
+  const rawCustomerPhone = String(formData.get("customerPhone") ?? "").trim();
+  const rawMessage = String(formData.get("message") ?? "").trim();
+
+  if (!rawMessage) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Escreva a mensagem antes de enviar pelo WhatsApp.",
+        "error",
+      ),
+    );
+  }
+
+  if (rawMessage.length > 1200) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "A mensagem manual pode ter no máximo 1200 caracteres.",
+        "error",
+      ),
+    );
+  }
+
+  let resolvedCustomerId: string | null = customerId || null;
+  let resolvedCustomerName = rawCustomerName || null;
+  let resolvedCustomerPhone = sanitizePhone(rawCustomerPhone);
+
+  if (customerId) {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("id, name, phone, whatsapp_phone")
+      .eq("salon_id", salon.id)
+      .eq("id", customerId)
+      .maybeSingle();
+
+    if (!customer?.id) {
+      redirect(
+        buildRedirectNotice(
+          returnPath,
+          "Cliente não encontrado para responder por WhatsApp.",
+          "error",
+        ),
+      );
+    }
+
+    resolvedCustomerId = customer.id;
+    resolvedCustomerName = customer.name?.trim() || resolvedCustomerName;
+    resolvedCustomerPhone =
+      resolvedCustomerPhone ??
+      sanitizePhone(customer.whatsapp_phone ?? customer.phone ?? null);
+  }
+
+  if (!resolvedCustomerPhone) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Esse contato não tem WhatsApp válido para envio manual.",
+        "error",
+      ),
+    );
+  }
+
+  const sentAt = new Date().toISOString();
+  const sendResult = await sendSalonWhatsAppTextMessage(
+    salon.id,
+    resolvedCustomerPhone,
+    rawMessage,
+  );
+
+  const notificationRecord = {
+    audience: "single_customer",
+    body: rawMessage,
+    customer_id: resolvedCustomerId,
+    notification_type: "manual_whatsapp_message",
+    payload: {
+      channel: "whatsapp",
+      customerName: resolvedCustomerName,
+      customerPhone: resolvedCustomerPhone,
+      source: "dashboard_whatsapp",
+      type: "manual_whatsapp_message",
+    },
+    salon_id: salon.id,
+    title: buildManualWhatsAppTitle(resolvedCustomerName),
+    whatsapp_delivery_status: sendResult.ok ? "sent" : "failed",
+    whatsapp_error: sendResult.ok
+      ? null
+      : sendResult.reason === "missing_config"
+        ? "missing_config"
+        : (sendResult.detail ?? "request_failed"),
+    whatsapp_message_id: sendResult.ok ? sendResult.id : null,
+    whatsapp_sent_at: sendResult.ok ? sentAt : null,
+    whatsapp_status_at: sentAt,
+  };
+
+  const { error } = await supabase
+    .from("salon_customer_notifications")
+    .insert(notificationRecord);
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "A mensagem foi processada, mas o histórico do canal não pôde ser salvo no painel.",
+        "error",
+      ),
+    );
+  }
+
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(WHATSAPP_SETTINGS_PATH);
+  revalidatePath(NOTIFICATIONS_PATH);
+  revalidatePath(MANAGEMENT_APPOINTMENTS_PATH);
+  revalidatePath(OPERATIONS_PATH);
+
+  redirect(
+    buildRedirectNotice(
+      returnPath,
+      sendResult.ok
+        ? "Mensagem manual enviada pelo WhatsApp."
+        : sendResult.reason === "missing_config"
+          ? "O canal técnico do WhatsApp ainda não está pronto para enviar mensagens manuais."
+          : "O WhatsApp não aceitou esse envio agora. Revise o canal e tente novamente.",
+      sendResult.ok ? "success" : "error",
     ),
   );
 }
@@ -1905,6 +2207,91 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
     buildRedirectNotice(
       SETTINGS_PATH,
       "Politica de reserva protegida atualizada com sucesso.",
+      "success",
+    ),
+  );
+}
+
+export async function updateSalonSecurityPolicyActionImpl(formData: FormData) {
+  const { salon, user } = await requireOwnerSalon();
+  const supabase = createClient() as any;
+  const mfaTotpEnabled = formData.get("mfaTotpEnabled") === "on";
+  const geoAllowlistEnabled = formData.get("geoAllowlistEnabled") === "on";
+  const rawAllowedCountryCodes = formData.get("allowedCountryCodes");
+  const allowedCountryCodes = normalizeCountryCodesInput(
+    rawAllowedCountryCodes instanceof File ? null : rawAllowedCountryCodes,
+  );
+
+  if (geoAllowlistEnabled && allowedCountryCodes.length === 0) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Informe pelo menos um pais com codigo ISO-3166 alpha-2, como BR ou US.",
+        "error",
+      ),
+    );
+  }
+
+  if (mfaTotpEnabled) {
+    const admin = createAdminClient() as any;
+    const { data, error } = await admin.auth.admin.mfa.listFactors({
+      userId: user.id,
+    });
+
+    if (error) {
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Nao foi possivel validar o autenticador antes de ligar o MFA.",
+          "error",
+        ),
+      );
+    }
+
+    const hasVerifiedTotpFactor = (data?.factors ?? []).some(
+      (factor: { factor_type?: string | null; status?: string | null }) =>
+        factor.factor_type === "totp" && factor.status === "verified",
+    );
+
+    if (!hasVerifiedTotpFactor) {
+      redirect(
+        buildRedirectNotice(
+          SETTINGS_PATH,
+          "Conecte e confirme um autenticador TOTP antes de exigir MFA no painel.",
+          "error",
+        ),
+      );
+    }
+  }
+
+  const { error } = await supabase.from("salon_security_settings").upsert(
+    {
+      salon_id: salon.id,
+      mfa_totp_enabled: mfaTotpEnabled,
+      geo_allowlist_enabled: geoAllowlistEnabled,
+      allowed_country_codes: allowedCountryCodes,
+    },
+    {
+      onConflict: "salon_id",
+    },
+  );
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "Nao foi possivel salvar a politica de seguranca do painel.",
+        "error",
+      ),
+    );
+  }
+
+  revalidatePath(DASHBOARD_PATH);
+  revalidatePath(SETTINGS_PATH);
+  redirect(
+    buildRedirectNotice(
+      SETTINGS_PATH,
+      "Politica de seguranca do painel atualizada com sucesso.",
       "success",
     ),
   );

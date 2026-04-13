@@ -43,6 +43,7 @@ vi.mock("next/cache", () => ({
 import {
   createStaffMemberActionImpl,
   toggleStaffMemberStatusActionImpl,
+  updateStaffBusinessHoursActionImpl,
 } from "@/app/_actions/staff";
 
 describe("staff actions", () => {
@@ -213,6 +214,77 @@ describe("staff actions", () => {
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/team");
     expect(location).toBe(
       "/dashboard/team?message=Profissional+reativado+com+sucesso.&tone=success",
+    );
+  });
+
+  it("blocks staff openings that are off the salon schedule step", async () => {
+    requireOwnerSalonMock.mockResolvedValue({
+      salon: { id: "salon-1", slot_step_minutes: 30 },
+    });
+    const upsertBusinessHours = vi.fn();
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "staff_members") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "staff-1",
+                      name: "Marina",
+                      role: "Colorista",
+                      is_active: true,
+                    },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_business_hours") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({
+                data: [
+                  {
+                    weekday: 1,
+                    is_open: true,
+                    opens_at: "09:00:00",
+                  },
+                ],
+                error: null,
+              }),
+            })),
+          };
+        }
+
+        if (table === "staff_business_hours") {
+          return { upsert: upsertBusinessHours };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateStaffBusinessHoursActionImpl(
+        makeFormData({
+          staffMemberId: "staff-1",
+          staffIsOpen_1: "on",
+          staffOpensAt_1: "09:15",
+          staffClosesAt_1: "18:00",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(upsertBusinessHours).not.toHaveBeenCalled();
+    expect(location).toBe(
+      "/dashboard/team?message=A+abertura+do+profissional+em+segunda+precisa+seguir+o+intervalo+oficial+da+agenda+do+sal%C3%A3o.&tone=error",
     );
   });
 });

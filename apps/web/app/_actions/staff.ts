@@ -37,6 +37,26 @@ function normalizeBusinessTimeInput(value: string) {
   return `${value}:00`;
 }
 
+function businessTimeToMinutes(value: string) {
+  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function isStaffOpeningAlignedToSalonGrid(args: {
+  salonOpensAt: string;
+  slotStepMinutes: number;
+  staffOpensAt: string;
+}) {
+  const staffOpenMinutes = businessTimeToMinutes(args.staffOpensAt);
+  const salonOpenMinutes = businessTimeToMinutes(args.salonOpensAt);
+
+  if (staffOpenMinutes <= salonOpenMinutes) {
+    return true;
+  }
+
+  return (staffOpenMinutes - salonOpenMinutes) % args.slotStepMinutes === 0;
+}
+
 export async function createStaffMemberActionImpl(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const role = String(formData.get("role") ?? "").trim();
@@ -219,6 +239,24 @@ export async function updateStaffBusinessHoursActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
   }
 
+  const { data: salonBusinessHours, error: salonBusinessHoursError } = await supabase
+    .from("salon_business_hours")
+    .select("weekday, is_open, opens_at")
+    .eq("salon_id", salon.id);
+
+  if (salonBusinessHoursError) {
+    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível carregar a grade oficial do salão.", "error"));
+  }
+
+  const salonBusinessHoursByWeekday = new Map(
+    ((salonBusinessHours ?? []) as Array<{
+      is_open: boolean;
+      opens_at: string | null;
+      weekday: number;
+    }>).map((entry) => [entry.weekday, entry]),
+  );
+  const slotStepMinutes = salon.slot_step_minutes ?? 30;
+
   const businessHours = WEEKDAY_OPTIONS.map((weekday) => {
     const isOpen = formData.get(`staffIsOpen_${weekday.value}`) === "on";
     const opensAt = String(formData.get(`staffOpensAt_${weekday.value}`) ?? "").trim();
@@ -252,6 +290,26 @@ export async function updateStaffBusinessHoursActionImpl(formData: FormData) {
         buildRedirectNotice(
           TEAM_PATH,
           `O horário de abertura precisa ser antes do fechamento em ${weekday.label.toLowerCase()}.`,
+          "error",
+        ),
+      );
+    }
+
+    const salonBusinessHour = salonBusinessHoursByWeekday.get(weekday.value);
+
+    if (
+      salonBusinessHour?.is_open &&
+      salonBusinessHour.opens_at &&
+      !isStaffOpeningAlignedToSalonGrid({
+        salonOpensAt: salonBusinessHour.opens_at,
+        slotStepMinutes,
+        staffOpensAt: normalizedOpen,
+      })
+    ) {
+      redirect(
+        buildRedirectNotice(
+          TEAM_PATH,
+          `A abertura do profissional em ${weekday.label.toLowerCase()} precisa seguir o intervalo oficial da agenda do salão.`,
           "error",
         ),
       );

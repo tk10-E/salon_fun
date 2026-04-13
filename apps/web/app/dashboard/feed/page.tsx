@@ -3,13 +3,14 @@ import { FeedPageContent } from "./_components";
 import { loadFeedPageData } from "./_lib";
 
 export type FeedPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
-export default async function FeedPage({ searchParams }: FeedPageProps) {
+export default async function FeedPage({ searchParams: searchParamsPromise }: FeedPageProps) {
+  const searchParams = await searchParamsPromise;
   const feedPageData = await loadFeedPageData();
 
   return (

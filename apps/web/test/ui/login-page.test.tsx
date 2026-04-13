@@ -19,7 +19,7 @@ vi.mock("@/components/auth/PanelAuthClient", () => ({
 
     return (
       <div>
-        <h3>Entrar no painel</h3>
+        <h3>Acessar com sua conta</h3>
         <label htmlFor="signin-email">E-mail</label>
         <input id="signin-email" />
         <label htmlFor="signin-password">Senha</label>
@@ -34,9 +34,9 @@ vi.mock("@/components/auth/PanelAuthClient", () => ({
         <input id="signup-password-confirmation" />
         <button type="button">Google</button>
         <button type="button">Facebook</button>
-        <button type="button">Acessar minha conta</button>
+        <button type="button">Entrar</button>
         <button type="button">Enviar link de recuperação</button>
-        <button type="button">Começar agora</button>
+        <button type="button">Criar conta</button>
         {props.initialMessage ? <span>{props.initialMessage}</span> : null}
       </div>
     );
@@ -74,10 +74,10 @@ describe("login page UI", () => {
 
       expect(
         screen.getByRole("heading", {
-          name: "Entrar no painel do salão",
+          name: "Acessar o painel",
         }),
       ).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Use o login do salão" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Entre com sua conta" })).toBeInTheDocument();
       expect(screen.getByLabelText("E-mail", { selector: "#signin-email" })).toBeInTheDocument();
       expect(screen.getByLabelText("Senha", { selector: "#signin-password" })).toBeInTheDocument();
       expect(screen.getByLabelText("E-mail da conta", { selector: "#recovery-email" })).toBeInTheDocument();
@@ -86,16 +86,34 @@ describe("login page UI", () => {
       expect(
         screen.getByLabelText("Confirmar senha", { selector: "#signup-password-confirmation" }),
       ).toBeInTheDocument();
-      expect(screen.getByRole("heading", { name: "Entrar no painel" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Acessar com sua conta" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Google" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Facebook" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Acessar minha conta" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Entrar" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Enviar link de recuperação" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Começar agora" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Criar conta" })).toBeInTheDocument();
       expect(screen.getByText("Conta criada com sucesso.")).toBeInTheDocument();
       expect(panelAuthClientMock).toHaveBeenCalledWith({
         initialMessage: "Conta criada com sucesso.",
         initialTone: "success",
+        firebaseConfig: null,
+      });
+    });
+  });
+
+  it("shows the security onboarding message when no flash is provided", () => {
+    return LoginPage({}).then((page) => {
+      render(page);
+
+      expect(
+        screen.getByText(
+          "No primeiro acesso, pode ser necessário configurar o autenticador.",
+        ),
+      ).toBeInTheDocument();
+      expect(panelAuthClientMock).toHaveBeenCalledWith({
+        initialMessage:
+          "No primeiro acesso, pode ser necessário configurar o autenticador.",
+        initialTone: "info",
         firebaseConfig: null,
       });
     });

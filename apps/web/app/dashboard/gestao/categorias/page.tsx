@@ -14,15 +14,16 @@ import {
 } from "@/lib/management";
 
 type CategoriasPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 export default async function CategoriasPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: CategoriasPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const currentPath = buildFilterHref(
     "/dashboard/gestao/categorias",

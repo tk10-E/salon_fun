@@ -65,6 +65,7 @@ describe("public salon page", () => {
       activeOffers: [
         {
           id: "offer-1",
+          kind: "promotion",
           title: "Combo glow da semana",
           description: "Pacote com acabamento editorial.",
           highlightText: "Vagas limitadas",

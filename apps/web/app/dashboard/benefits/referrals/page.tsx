@@ -4,12 +4,13 @@ import { loadReferralsPageData, type ReferralSearchParams } from "../_lib";
 import { ReferralsPageContent } from "../_referrals-components";
 
 export type ReferralsPageProps = {
-  searchParams?: ReferralSearchParams;
+  searchParams?: Promise<ReferralSearchParams>;
 };
 
 export default async function ReferralsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: ReferralsPageProps) {
+  const searchParams = await searchParamsPromise;
   const data = await loadReferralsPageData(searchParams);
 
   return (

@@ -1,6 +1,14 @@
 import { Buffer } from "node:buffer";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 
-import sharp from "sharp";
+import { CLIENT_APP_IMAGE_MAX_BYTES } from "@/lib/settingsBrandingUploads";
+import {
+  SAFE_RASTER_IMAGE_MIME_TYPES,
+  assertSafeImageDimensions,
+  assertSafeImageUpload,
+  createSafeSharpImage,
+} from "@/lib/uploadedImageOptimization";
 
 export type ClientAppImageAssetKey = "hero" | "galleryCover" | "profileCover";
 export type ClientAppImageVariantKind = "mobile" | "tablet" | "share";
@@ -141,8 +149,12 @@ export async function fetchRemoteClientAppImage(
     throw new Error("Use uma URL http ou https para a imagem premium do app.");
   }
 
+  await assertRemoteImageUrlIsPublic(parsedUrl);
+
   const response = await fetch(parsedUrl, {
     headers: { accept: "image/*,*/*;q=0.8" },
+    redirect: "error",
+    signal: AbortSignal.timeout(8_000),
   });
 
   if (!response.ok) {
@@ -159,9 +171,31 @@ export async function fetchRemoteClientAppImage(
     throw new Error("A URL informada precisa apontar para uma imagem.");
   }
 
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > CLIENT_APP_IMAGE_MAX_BYTES
+  ) {
+    throw new Error("A imagem premium da URL deve ter no máximo 3 MB.");
+  }
+
+  const buffer = await readResponseBufferWithLimit(
+    response,
+    CLIENT_APP_IMAGE_MAX_BYTES,
+  );
+
+  const detectedContentType = assertSafeImageUpload({
+    buffer,
+    declaredMimeType: contentType,
+    allowedMimeTypes: SAFE_RASTER_IMAGE_MIME_TYPES,
+    maxBytes: CLIENT_APP_IMAGE_MAX_BYTES,
+    contextLabel: "imagem premium do app",
+  });
+
   return {
-    buffer: Buffer.from(await response.arrayBuffer()),
-    contentType,
+    buffer,
+    contentType: detectedContentType,
   };
 }
 
@@ -174,16 +208,21 @@ export async function generateClientAppImageVariants(params: {
 }) {
   const { assetKey, sourceBuffer, focusX, focusY, zoom } = params;
   const spec = CLIENT_APP_IMAGE_VARIANT_SPECS[assetKey];
-  const normalizedSource = await sharp(sourceBuffer, { failOn: "none" })
+  assertSafeImageUpload({
+    buffer: sourceBuffer,
+    allowedMimeTypes: SAFE_RASTER_IMAGE_MIME_TYPES,
+    maxBytes: CLIENT_APP_IMAGE_MAX_BYTES,
+    contextLabel: "imagem premium do app",
+  });
+
+  const normalizedSource = await createSafeSharpImage(sourceBuffer)
     .rotate()
     .toBuffer();
-  const metadata = await sharp(normalizedSource).metadata();
+  const metadata = await createSafeSharpImage(normalizedSource).metadata();
   const width = metadata.width ?? 0;
   const height = metadata.height ?? 0;
 
-  if (width <= 0 || height <= 0) {
-    throw new Error("Não foi possível processar a imagem premium enviada.");
-  }
+  assertSafeImageDimensions(width, height, "imagem premium do app");
 
   const variants = Object.fromEntries(
     await Promise.all(
@@ -197,7 +236,7 @@ export async function generateClientAppImageVariants(params: {
           zoom,
         });
 
-        const buffer = await sharp(normalizedSource)
+        const buffer = await createSafeSharpImage(normalizedSource)
           .extract(cropRect)
           .resize(outputSpec.outputWidth, outputSpec.outputHeight, {
             fit: "cover",
@@ -279,4 +318,128 @@ function computeCropRect(params: {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+async function readResponseBufferWithLimit(
+  response: Response,
+  maxBytes: number,
+) {
+  if (!response.body) {
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    if (buffer.length > maxBytes) {
+      throw new Error("A imagem premium da URL deve ter no máximo 3 MB.");
+    }
+
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    if (!value) {
+      continue;
+    }
+
+    totalBytes += value.byteLength;
+
+    if (totalBytes > maxBytes) {
+      await reader.cancel();
+      throw new Error("A imagem premium da URL deve ter no máximo 3 MB.");
+    }
+
+    chunks.push(Buffer.from(value));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function assertRemoteImageUrlIsPublic(parsedUrl: URL) {
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error("Use uma URL pública da imagem, sem usuário ou senha.");
+  }
+
+  const hostname = parsedUrl.hostname.toLowerCase();
+
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal")
+  ) {
+    throw new Error("Use uma URL pública da imagem premium do app.");
+  }
+
+  if (isIP(hostname)) {
+    if (!isPublicIpAddress(hostname)) {
+      throw new Error("Use uma URL pública da imagem premium do app.");
+    }
+
+    return;
+  }
+
+  let addresses;
+
+  try {
+    addresses = await lookup(hostname, { all: true, verbatim: false });
+  } catch {
+    throw new Error("Não foi possível validar a URL da imagem premium do app.");
+  }
+
+  if (
+    !addresses.length ||
+    addresses.some(({ address }) => !isPublicIpAddress(address))
+  ) {
+    throw new Error("Use uma URL pública da imagem premium do app.");
+  }
+}
+
+function isPublicIpAddress(address: string) {
+  if (address.startsWith("::ffff:")) {
+    return isPublicIpAddress(address.slice(7));
+  }
+
+  const ipVersion = isIP(address);
+
+  if (ipVersion === 4) {
+    const parts = address.split(".").map((part) => Number(part));
+    const [a = 0, b = 0, c = 0] = parts;
+
+    return !(
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      (a === 198 && b === 51 && c === 100) ||
+      (a === 203 && b === 0 && c === 113) ||
+      a >= 224
+    );
+  }
+
+  if (ipVersion === 6) {
+    const normalized = address.toLowerCase();
+
+    return !(
+      normalized === "::1" ||
+      normalized === "::" ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd") ||
+      normalized.startsWith("fe80:")
+    );
+  }
+
+  return false;
 }

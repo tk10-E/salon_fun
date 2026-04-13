@@ -8,20 +8,21 @@ import { buildAbsoluteUrl } from "@/lib/requestOrigin";
 import { fetchPublicSalonLandingData } from "@/lib/publicSalonShare";
 
 type PublicSalonPageProps = {
-  params: {
+  params: Promise<{
     joinCode: string;
-  };
+  }>;
 };
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
-  params,
+  params: paramsPromise,
 }: PublicSalonPageProps): Promise<Metadata> {
+  const params = await paramsPromise;
   const landingData = await fetchPublicSalonLandingData(params.joinCode);
   const preview = landingData?.preview;
   const canonicalPath = `/s/${params.joinCode.trim().toUpperCase()}`;
-  const canonicalUrl = buildAbsoluteUrl(canonicalPath);
+  const canonicalUrl = await buildAbsoluteUrl(canonicalPath);
 
   if (!preview) {
     return {
@@ -74,8 +75,9 @@ export async function generateMetadata({
 }
 
 export default async function PublicSalonPage({
-  params,
+  params: paramsPromise,
 }: PublicSalonPageProps) {
+  const params = await paramsPromise;
   const landingData = await fetchPublicSalonLandingData(params.joinCode);
   if (!landingData) {
     notFound();

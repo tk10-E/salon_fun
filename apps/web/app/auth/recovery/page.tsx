@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 import { FlashMessage } from "@/components/FlashMessage";
 import { createClient } from "@/lib/supabase/browser";
@@ -135,7 +136,10 @@ export default function PasswordRecoveryPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((
+      event: AuthChangeEvent,
+      session: Session | null,
+    ) => {
       if (cancelled) {
         return;
       }

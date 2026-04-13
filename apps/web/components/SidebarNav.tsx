@@ -50,6 +50,12 @@ const primaryNav: NavItem[] = [
     icon: "team",
   },
   {
+    href: "/dashboard/whatsapp",
+    label: "WhatsApp",
+    description: "Canal e envios",
+    icon: "whatsapp",
+  },
+  {
     href: "/dashboard/settings",
     label: "Configurações",
     description: "Marca e operação",
@@ -298,6 +304,15 @@ function NavIcon({ name }: { name: string }) {
           />
         </svg>
       );
+    case "whatsapp":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12.02 4.25a7.73 7.73 0 0 1 7.73 7.73a7.68 7.68 0 0 1-1.14 4.04l.89 3.15a.75.75 0 0 1-.92.92l-3.08-.88a7.73 7.73 0 1 1-3.48-14.96Zm0 1.5a6.23 6.23 0 0 0-5.4 9.34a.75.75 0 0 1 .08.58l-.58 2.04l2-.57a.75.75 0 0 1 .57.06a6.23 6.23 0 1 0 3.33-11.45Zm-1.8 2.82c.23 0 .45.01.64.42l.37.86c.1.22.16.48.02.7c-.06.1-.14.22-.25.35c-.11.13-.23.27-.33.37c-.11.11-.22.23-.1.44c.12.22.53.87 1.14 1.41c.79.7 1.45.92 1.66 1.02c.2.1.32.09.43-.05c.12-.14.5-.58.63-.78c.13-.19.27-.16.46-.1c.18.06 1.17.55 1.36.65c.2.1.33.15.38.24c.05.1.05.56-.13 1.1c-.17.53-1 1.02-1.37 1.08c-.35.06-.8.08-1.3-.08c-.3-.1-.67-.22-1.14-.42c-2-.87-3.3-2.92-3.4-3.05c-.1-.14-.81-1.08-.81-2.06c0-.98.52-1.45.7-1.65c.18-.2.4-.25.53-.25h.41Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
     case "home":
     default:
       return (
@@ -392,6 +407,15 @@ export function SidebarNav({
           "/dashboard/operations/comandas",
           "/dashboard/inventory",
           "/dashboard/finance",
+        ];
+      }
+
+      if (pathname.startsWith("/dashboard/whatsapp")) {
+        return [
+          "/dashboard/gestao/agendamentos",
+          "/dashboard/operations",
+          "/dashboard/client-app",
+          "/dashboard/settings",
         ];
       }
 

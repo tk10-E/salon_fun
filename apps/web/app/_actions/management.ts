@@ -11,6 +11,7 @@ import {
   MEDIA_UPLOAD_PRESETS,
   formatPresetMegabytes,
 } from "@/lib/mediaUploadPresets";
+import { resolveAuthoritativeAppointmentPayment } from "@/lib/paymentIntegrity";
 import {
   MANAGEMENT_BASE_PATH,
   MANAGEMENT_PATHS,
@@ -20,6 +21,7 @@ import {
   sanitizePhone,
   sendSalonWhatsAppTextMessage,
 } from "@/lib/whatsapp";
+import { recordSecurityAuditEvent } from "@/lib/security";
 import {
   managementAppointmentSchema,
   managementAppointmentStatusSchema,
@@ -116,6 +118,7 @@ type AppointmentTransferPlan = {
   previousStaffMemberName: string;
   replacementStaffMemberId: string;
   replacementStaffMemberName: string;
+  serviceId: string;
   serviceName: string;
 };
 
@@ -238,7 +241,10 @@ function rethrowIfRedirectError(error: unknown) {
 }
 
 function getReturnPath(formData: FormData, fallbackPath: string) {
-  return resolveDashboardReturnPath(formData, fallbackPath, MANAGEMENT_PATHS);
+  return resolveDashboardReturnPath(formData, fallbackPath, [
+    ...MANAGEMENT_PATHS,
+    "/dashboard",
+  ]);
 }
 
 function invalidateManagementPages() {
@@ -593,12 +599,20 @@ function mapDatabaseError(
     return "Esse profissional já possui outro agendamento nesse horário.";
   }
 
+  if (normalized.includes("customer_not_found")) {
+    return "Selecione um cliente válido para esse salão.";
+  }
+
   if (normalized.includes("inactive_service_not_allowed")) {
     return "Apenas serviços ativos podem receber novos agendamentos.";
   }
 
   if (normalized.includes("inactive_staff_member_not_allowed")) {
     return "Apenas profissionais ativos podem receber agendamentos.";
+  }
+
+  if (normalized.includes("appointment_not_open_for_update")) {
+    return "Somente agendamentos em aberto podem ser editados.";
   }
 
   if (normalized.includes("inactive_service_category_not_allowed")) {
@@ -619,6 +633,14 @@ function mapDatabaseError(
     return "Somente atendimentos concluídos podem receber pagamento.";
   }
 
+  if (normalized.includes("payment_amount_must_match_service_price")) {
+    return "O valor do pagamento precisa seguir o valor oficial salvo no atendimento.";
+  }
+
+  if (normalized.includes("appointment_service_price_unavailable")) {
+    return "Não foi possível validar o valor oficial desse atendimento.";
+  }
+
   if (normalized.includes("service_category_not_found")) {
     return "Selecione uma categoria válida.";
   }
@@ -629,6 +651,41 @@ function mapDatabaseError(
 
   if (normalized.includes("appointment_not_finished")) {
     return "Espere o horário terminar antes de concluir o atendimento.";
+  }
+
+  if (normalized.includes("salon_closed_on_selected_day")) {
+    return "O salão não atende nessa data.";
+  }
+
+  if (normalized.includes("staff_member_closed_on_selected_day")) {
+    return "Esse profissional não atende nessa data.";
+  }
+
+  if (
+    normalized.includes("outside_business_hours") ||
+    normalized.includes("staff_member_outside_business_hours")
+  ) {
+    return "Escolha um horário dentro da agenda operacional do salão e do profissional.";
+  }
+
+  if (normalized.includes("staff_member_blocked_time")) {
+    return "Esse horário está bloqueado na agenda do profissional.";
+  }
+
+  if (normalized.includes("slot_step_mismatch")) {
+    return "Use um horário alinhado ao intervalo configurado da agenda do salão.";
+  }
+
+  if (normalized.includes("past_time_not_allowed")) {
+    return "Escolha uma data e um horário futuros para o agendamento.";
+  }
+
+  if (normalized.includes("invalid_transfer_plan")) {
+    return "Não foi possível montar um plano seguro para remanejar a agenda.";
+  }
+
+  if (normalized.includes("staff_member_has_untransferred_appointments")) {
+    return "Ainda existem agendamentos futuros com esse profissional. Recalcule o remanejamento antes de remover.";
   }
 
   return null;
@@ -712,6 +769,7 @@ export async function createManagementCategoryAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Categoria cadastrada com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível criar a categoria."),
@@ -751,6 +809,7 @@ export async function updateManagementCategoryAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Categoria atualizada com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível atualizar a categoria."),
@@ -796,6 +855,7 @@ export async function deleteManagementCategoryAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Categoria removida com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível excluir a categoria."),
@@ -1048,6 +1108,7 @@ export async function createManagementClientAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Cliente cadastrado com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível cadastrar o cliente."),
@@ -1093,6 +1154,7 @@ export async function updateManagementClientAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Cliente atualizado com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível atualizar o cliente."),
@@ -1138,6 +1200,7 @@ export async function deleteManagementClientAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Cliente removido com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível excluir o cliente."),
@@ -1484,6 +1547,7 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
           previousStatus: appointment.status,
           replacementStaffMemberId: candidate.id,
           replacementStaffMemberName: candidate.name,
+          serviceId: appointment.service_id,
           serviceName:
             typeof service?.name === "string" && service.name.trim().length
               ? service.name.trim()
@@ -1524,7 +1588,7 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
       transferPlans.push(resolvedPlan);
     }
 
-    for (const plan of transferPlans) {
+    const transferPayload = transferPlans.map((plan) => {
       const notes = buildAppointmentReassignmentNote({
         nextStartAt: plan.nextStartAt,
         previousNotes: plan.previousNotes,
@@ -1533,25 +1597,32 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
         sameTime: plan.keepsSameTime,
         timeZone,
       });
-      const { error } = await supabase
-        .from("appointments")
-        .update({
-          staff_member_id: plan.replacementStaffMemberId,
-          date: plan.nextStartAt,
-          ends_at: plan.nextEndsAt,
-          notes,
-          status: "pending",
-        })
-        .eq("id", plan.appointmentId)
-        .eq("salon_id", salon.id);
 
-      if (error) {
-        fail(
-          returnPath,
-          mapDatabaseError(error) ??
-            "Não foi possível concluir o remanejamento da agenda desse profissional.",
-        );
-      }
+      return {
+        appointmentId: plan.appointmentId,
+        customerId: plan.customerId,
+        nextStartAt: plan.nextStartAt,
+        notes,
+        replacementStaffMemberId: plan.replacementStaffMemberId,
+        serviceId: plan.serviceId,
+      };
+    });
+
+    const transferResult = await supabase.rpc(
+      "offboard_management_professional_with_transfers",
+      {
+        block_cutoff: nowIso,
+        target_staff_member_uuid: parsed.id,
+        transfer_plans: transferPayload,
+      },
+    );
+
+    if (transferResult.error) {
+      fail(
+        returnPath,
+        mapDatabaseError(transferResult.error) ??
+          "Não foi possível concluir o remanejamento da agenda desse profissional.",
+      );
     }
 
     const notifications = transferPlans
@@ -1640,31 +1711,6 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
       );
     }
 
-    const [pauseResult, blocksResult] = await Promise.all([
-      supabase
-        .from("staff_members")
-        .update({ is_active: false })
-        .eq("id", parsed.id)
-        .eq("salon_id", salon.id),
-      supabase
-        .from("staff_blocks")
-        .delete()
-        .eq("staff_member_id", parsed.id)
-        .gte("ends_at", nowIso),
-    ]);
-
-    if (pauseResult.error) {
-      fail(
-        returnPath,
-        mapDatabaseError(pauseResult.error) ??
-          "Os clientes foram remanejados, mas não foi possível finalizar a saída desse profissional.",
-      );
-    }
-
-    if (blocksResult.error) {
-      warnings.push("revise os bloqueios futuros desse profissional");
-    }
-
     invalidateManagementPages();
     succeed(
       returnPath,
@@ -1709,42 +1755,18 @@ export async function createManagementAppointmentAction(formData: FormData) {
       );
     }
 
-    const serviceResult = await supabase
-      .from("services")
-      .select("id, duration, is_active")
-      .eq("id", parsed.serviceId)
-      .eq("salon_id", salon.id)
-      .maybeSingle();
-
-    if (serviceResult.error || !serviceResult.data?.id) {
-      fail(returnPath, "Selecione um serviço válido.");
-    }
-
-    if (!serviceResult.data.is_active) {
-      fail(
-        returnPath,
-        "Apenas serviços ativos podem receber novos agendamentos.",
-      );
-    }
-
-    const endsAt = new Date(
-      scheduledAt.getTime() + Number(serviceResult.data.duration) * 60 * 1000,
-    );
-    const insertResult = await supabase.from("appointments").insert({
-      salon_id: salon.id,
-      customer_id: parsed.clientId,
-      staff_member_id: parsed.professionalId,
-      service_id: parsed.serviceId,
-      date: scheduledAt.toISOString(),
-      ends_at: endsAt.toISOString(),
-      status: "pending",
-      notes: parsed.notes ?? null,
+    const createResult = await supabase.rpc("create_management_appointment", {
+      customer_uuid: parsed.clientId,
+      service_uuid: parsed.serviceId,
+      requested_date: scheduledAt.toISOString(),
+      staff_member_uuid: parsed.professionalId,
+      notes_input: parsed.notes ?? null,
     });
 
-    if (insertResult.error) {
+    if (createResult.error) {
       fail(
         returnPath,
-        mapDatabaseError(insertResult.error) ??
+        mapDatabaseError(createResult.error) ??
           "Não foi possível criar o agendamento.",
       );
     }
@@ -1752,6 +1774,7 @@ export async function createManagementAppointmentAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Agendamento criado com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível criar o agendamento."),
@@ -1774,68 +1797,32 @@ export async function updateManagementAppointmentAction(formData: FormData) {
     });
     const { salon } = await requireOwnerSalon();
     const supabase = createClient() as any;
-    const appointmentResult = await supabase
-      .from("appointments")
-      .select("id, status")
-      .eq("id", parsed.appointmentId)
-      .eq("salon_id", salon.id)
-      .maybeSingle();
-
-    if (appointmentResult.error || !appointmentResult.data?.id) {
-      fail(returnPath, "Não foi possível localizar esse agendamento.");
-    }
-
-    if (
-      appointmentResult.data.status === "completed" ||
-      appointmentResult.data.status === "cancelled" ||
-      appointmentResult.data.status === "no_show"
-    ) {
-      fail(returnPath, "Somente agendamentos em aberto podem ser editados.");
-    }
-
-    const serviceResult = await supabase
-      .from("services")
-      .select("id, duration")
-      .eq("id", parsed.serviceId)
-      .eq("salon_id", salon.id)
-      .maybeSingle();
-
-    if (serviceResult.error || !serviceResult.data?.id) {
-      fail(returnPath, "Selecione um serviço válido.");
-    }
-
     const scheduledAt = combineDateAndTimeToUtc(
       parsed.date,
       parsed.time,
       salon.timezone ?? "America/Sao_Paulo",
     );
-    const endsAt = new Date(
-      scheduledAt.getTime() + Number(serviceResult.data.duration) * 60 * 1000,
-    );
+    const updateResult = await supabase.rpc("update_management_appointment", {
+      appointment_uuid: parsed.appointmentId,
+      customer_uuid: parsed.clientId,
+      service_uuid: parsed.serviceId,
+      requested_date: scheduledAt.toISOString(),
+      staff_member_uuid: parsed.professionalId,
+      notes_input: parsed.notes ?? null,
+    });
 
-    const { error } = await supabase
-      .from("appointments")
-      .update({
-        customer_id: parsed.clientId,
-        staff_member_id: parsed.professionalId,
-        service_id: parsed.serviceId,
-        date: scheduledAt.toISOString(),
-        ends_at: endsAt.toISOString(),
-        notes: parsed.notes ?? null,
-      })
-      .eq("id", parsed.appointmentId)
-      .eq("salon_id", salon.id);
-
-    if (error) {
+    if (updateResult.error) {
       fail(
         returnPath,
-        mapDatabaseError(error) ?? "Não foi possível atualizar o agendamento.",
+        mapDatabaseError(updateResult.error) ??
+          "Não foi possível atualizar o agendamento.",
       );
     }
 
     invalidateManagementPages();
     succeed(returnPath, "Agendamento atualizado com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível atualizar o agendamento."),
@@ -1865,6 +1852,17 @@ export async function updateManagementAppointmentStatusAction(
 
     if (appointmentResult.error || !appointmentResult.data?.id) {
       fail(returnPath, "Não foi possível localizar esse agendamento.");
+    }
+
+    if (
+      appointmentResult.data.status === "completed" ||
+      appointmentResult.data.status === "cancelled" ||
+      appointmentResult.data.status === "no_show"
+    ) {
+      fail(
+        returnPath,
+        "Esse agendamento já foi encerrado e não pode voltar para a agenda por essa ação.",
+      );
     }
 
     const paymentCount = await getAppointmentPaymentCount(
@@ -1917,9 +1915,19 @@ export async function updateManagementAppointmentStatusAction(
 
     if (
       parsed.status === "no_show" &&
-      new Date(appointmentResult.data.date) > new Date()
+      new Date(appointmentResult.data.ends_at) > new Date()
     ) {
-      fail(returnPath, "Registre falta apenas depois do horário agendado.");
+      fail(returnPath, "Registre falta apenas depois do horário final do atendimento.");
+    }
+
+    if (
+      (parsed.status === "pending" || parsed.status === "confirmed") &&
+      new Date(appointmentResult.data.ends_at) <= new Date()
+    ) {
+      fail(
+        returnPath,
+        "Use apenas status finais para horários que já terminaram.",
+      );
     }
 
     const { error } = await supabase
@@ -1944,6 +1952,7 @@ export async function updateManagementAppointmentStatusAction(
     invalidateManagementPages();
     succeed(returnPath, "Status do agendamento atualizado com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível atualizar o status."),
@@ -1963,11 +1972,11 @@ export async function upsertManagementPaymentAction(formData: FormData) {
       paidAtTime: formData.get("paidAtTime"),
       notes: formData.get("notes"),
     });
-    const { salon } = await requireOwnerSalon();
+    const { salon, user } = await requireOwnerSalon();
     const supabase = createClient() as any;
     const appointmentResult = await supabase
       .from("appointments")
-      .select("id, status")
+      .select("id, status, service_price_snapshot, services(id, name, price)")
       .eq("id", parsed.appointmentId)
       .eq("salon_id", salon.id)
       .maybeSingle();
@@ -1983,6 +1992,43 @@ export async function upsertManagementPaymentAction(formData: FormData) {
       );
     }
 
+    const relatedService = firstRelation(
+      appointmentResult.data.services as
+        | { id?: string | null; name?: string | null; price?: number | string | null }
+        | Array<{ id?: string | null; name?: string | null; price?: number | string | null }>
+        | null,
+    );
+    const submittedAmount = Number(parsed.amount);
+    const paymentIntegrity = resolveAuthoritativeAppointmentPayment({
+      servicePrice: relatedService?.price ?? null,
+      servicePriceSnapshot: appointmentResult.data.service_price_snapshot,
+      submittedAmount,
+    });
+
+    if (!paymentIntegrity.isValid) {
+      fail(
+        returnPath,
+        "Não foi possível validar o valor oficial desse atendimento.",
+      );
+    }
+
+    if (paymentIntegrity.hasMismatch) {
+      await recordSecurityAuditEvent({
+        actorUserId: user.id,
+        eventType: "management.payment_amount_mismatch",
+        metadata: {
+          appointmentId: parsed.appointmentId,
+          expectedAmount: paymentIntegrity.expectedAmount,
+          serviceId: relatedService?.id ?? null,
+          serviceName: relatedService?.name ?? null,
+          submittedAmount,
+        },
+        requestPath: returnPath,
+        salonId: salon.id,
+        severity: "warn",
+      });
+    }
+
     const paidAt = combineDateAndTimeToUtc(
       parsed.paidAtDate,
       parsed.paidAtTime,
@@ -1992,7 +2038,7 @@ export async function upsertManagementPaymentAction(formData: FormData) {
       {
         salon_id: salon.id,
         appointment_id: parsed.appointmentId,
-        amount: parsed.amount,
+        amount: paymentIntegrity.expectedAmount,
         payment_method: parsed.paymentMethod,
         paid_at: paidAt.toISOString(),
         notes: parsed.notes ?? null,
@@ -2011,8 +2057,14 @@ export async function upsertManagementPaymentAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Pagamento salvo com sucesso.");
+    succeed(
+      returnPath,
+      paymentIntegrity.hasMismatch
+        ? "Pagamento salvo com o valor oficial do atendimento."
+        : "Pagamento salvo com sucesso.",
+    );
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível registrar o pagamento."),
@@ -2045,6 +2097,7 @@ export async function deleteManagementPaymentAction(formData: FormData) {
     invalidateManagementPages();
     succeed(returnPath, "Pagamento removido com sucesso.");
   } catch (error) {
+    rethrowIfRedirectError(error);
     fail(
       returnPath,
       firstMessage(error, "Não foi possível remover o pagamento."),

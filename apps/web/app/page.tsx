@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const supabase = createClient();
-  const host = headers()
+  const headerStore = await headers();
+  const host = headerStore
     .get("x-forwarded-host")
     ?.split(",")[0]
-    ?.trim() || headers().get("host");
+    ?.trim() || headerStore.get("host");
   const normalizedHost = host?.toLowerCase().replace(/:\d+$/, "") ?? null;
 
   if (normalizedHost) {

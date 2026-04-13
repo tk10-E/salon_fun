@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   const failedNotice =
     nextPath === "/auth/recovery"
       ? "Não foi possível validar o link de recuperação."
-      : "Não foi possível concluir o login com Google.";
+      : "Não foi possível concluir o login social.";
 
   if (code) {
     const successResponse = NextResponse.redirect(`${origin}${nextPath}`);

@@ -31,7 +31,7 @@ export function PanelSignOutButton() {
 
       await Promise.allSettled([
         signOutPanelFirebaseSession(),
-        supabase.auth.signOut(),
+        supabase.auth.signOut({ scope: "local" }),
       ]);
     } finally {
       window.location.assign(

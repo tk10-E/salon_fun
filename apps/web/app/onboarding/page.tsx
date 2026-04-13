@@ -8,13 +8,14 @@ import { SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
 export const dynamic = "force-dynamic";
 
 type OnboardingPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
-export default async function OnboardingPage({ searchParams }: OnboardingPageProps) {
+export default async function OnboardingPage({ searchParams: searchParamsPromise }: OnboardingPageProps) {
+  const searchParams = await searchParamsPromise;
   const { user } = await requireUser();
 
   const existingSalon = await getOwnerSalon(user.id);

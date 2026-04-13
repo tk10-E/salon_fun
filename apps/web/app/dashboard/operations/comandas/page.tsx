@@ -157,10 +157,11 @@ function getDateValue(value: string | null | undefined) {
 }
 
 export default async function ComandasPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams?: { message?: string; tone?: string };
+  searchParams?: Promise<{ message?: string; tone?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
 

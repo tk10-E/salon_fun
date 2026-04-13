@@ -9,27 +9,41 @@ import {
 } from "@/test/server-action-test-helpers";
 
 const {
+  createAdminClientMock,
   createClientMock,
   fetchRemoteClientAppImageMock,
   generateClientAppImageVariantsMock,
   redirectMock,
   revalidatePathMock,
   requireOwnerSalonMock,
+  sendSalonWhatsAppTextMessageMock,
 } = vi.hoisted(() => ({
+  createAdminClientMock: vi.fn(),
   createClientMock: vi.fn(),
   fetchRemoteClientAppImageMock: vi.fn(),
   generateClientAppImageVariantsMock: vi.fn(),
   redirectMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
+  sendSalonWhatsAppTextMessageMock: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: createClientMock,
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: createAdminClientMock,
+}));
+
 vi.mock("@/lib/auth", () => ({
   requireOwnerSalon: requireOwnerSalonMock,
+}));
+
+vi.mock("@/lib/whatsapp", () => ({
+  sanitizePhone: (value: string | null | undefined) =>
+    (value ?? "").replace(/\D+/g, "") || null,
+  sendSalonWhatsAppTextMessage: sendSalonWhatsAppTextMessageMock,
 }));
 
 vi.mock("@/lib/clientAppImageVariants", async () => {
@@ -54,14 +68,31 @@ vi.mock("next/cache", () => ({
 
 import {
   regenerateSalonCodeActionImpl,
+  sendSalonManualWhatsAppActionImpl,
   updateSalonBookingPolicyActionImpl,
   updateSalonBrandingActionImpl,
+  updateSalonSecurityPolicyActionImpl,
   updateSalonScheduleActionImpl,
+  updateSalonWhatsAppSettingsActionImpl,
 } from "@/app/_actions/settings";
 
 describe("settings actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    createAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          mfa: {
+            listFactors: vi.fn().mockResolvedValue({
+              data: {
+                factors: [],
+              },
+              error: null,
+            }),
+          },
+        },
+      },
+    });
     fetchRemoteClientAppImageMock.mockResolvedValue({
       buffer: Buffer.from("remote-image"),
       contentType: "image/jpeg",
@@ -85,6 +116,10 @@ describe("settings actions", () => {
     });
     redirectMock.mockImplementation((location: string) => {
       throw new Error(`${TEST_REDIRECT_PREFIX}${location}`);
+    });
+    sendSalonWhatsAppTextMessageMock.mockResolvedValue({
+      ok: true,
+      id: "wamid.123",
     });
     requireOwnerSalonMock.mockResolvedValue({
       salon: {
@@ -111,7 +146,12 @@ describe("settings actions", () => {
         booking_policy_summary: null,
         booking_policy_title: "Reserva protegida",
         booking_policy_version: "booking-policy-20260403190000",
+        join_code: "ABCD1234",
         logo_path: "logos/current.png",
+      },
+      user: {
+        id: "user-1",
+        email: "owner@studio.com",
       },
     });
   });
@@ -205,6 +245,248 @@ describe("settings actions", () => {
     expect(storageFrom).not.toHaveBeenCalled();
     expect(location).toContain("/dashboard/settings?");
     expect(location).toContain("Instagram+do+sal%C3%A3o");
+  });
+
+  it("rejects invalid whatsapp numbers before updating the dedicated whatsapp page", async () => {
+    const from = vi.fn();
+
+    createClientMock.mockReturnValue({
+      from,
+    });
+
+    const location = await captureRedirect(
+      updateSalonWhatsAppSettingsActionImpl(
+        makeFormData({
+          whatsappPhone: "123",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(from).not.toHaveBeenCalled();
+    expect(location).toContain("/dashboard/whatsapp?");
+    expect(location).toContain("WhatsApp+v%C3%A1lido");
+  });
+
+  it("updates the dedicated whatsapp settings and revalidates related views", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const updateSalon = vi.fn(() => ({ eq }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateSalonWhatsAppSettingsActionImpl(
+        makeFormData({
+          whatsappPhone: "55 11 98888-7777",
+          whatsappDispatchEnabled: "on",
+          whatsappMetaPhoneNumberId: "123 456 789 012 345",
+          whatsappMetaBusinessAccountId: "210 248 555 053 210",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/whatsapp?message=WhatsApp+do+sal%C3%A3o+atualizado+com+sucesso.&tone=success",
+    );
+    expect(updateSalon).toHaveBeenCalledWith({
+      whatsapp_dispatch_enabled: true,
+      whatsapp_meta_business_account_id: "210248555053210",
+      whatsapp_meta_phone_number_id: "123456789012345",
+      whatsapp_phone: "5511988887777",
+    });
+    expect(eq).toHaveBeenCalledWith("id", "salon-1");
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
+      expect.arrayContaining([
+        "/dashboard",
+        "/dashboard/settings",
+        "/dashboard/whatsapp",
+        "/dashboard/client-app",
+        "/dashboard/gestao/agendamentos",
+        "/dashboard/operations",
+        "/s/ABCD1234",
+      ]),
+    );
+  });
+
+  it("preserves technical whatsapp ids when the simplified UI saves only end-user fields", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const updateSalon = vi.fn(() => ({ eq }));
+
+    requireOwnerSalonMock.mockResolvedValueOnce({
+      salon: {
+        id: "salon-1",
+        join_code: "ABCD1234",
+        whatsapp_meta_business_account_id: "210248555053210",
+        whatsapp_meta_phone_number_id: "123456789012345",
+      },
+      user: {
+        id: "user-1",
+        email: "owner@studio.com",
+      },
+    });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateSalonWhatsAppSettingsActionImpl(
+        makeFormData({
+          whatsappPhone: "55 11 98888-7777",
+          whatsappDispatchEnabled: "on",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/whatsapp?message=WhatsApp+do+sal%C3%A3o+atualizado+com+sucesso.&tone=success",
+    );
+    expect(updateSalon).toHaveBeenCalledWith({
+      whatsapp_dispatch_enabled: true,
+      whatsapp_meta_business_account_id: "210248555053210",
+      whatsapp_meta_phone_number_id: "123456789012345",
+      whatsapp_phone: "5511988887777",
+    });
+  });
+
+  it("sends a manual whatsapp message and stores the attempt in the notification history", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "customer-1",
+        name: "Ana Paula",
+        phone: "5511991112222",
+        whatsapp_phone: "5511991112222",
+      },
+      error: null,
+    });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "customers") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle,
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      sendSalonManualWhatsAppActionImpl(
+        makeFormData({
+          customerId: "customer-1",
+          message:
+            "Oi Ana, vi sua mensagem e já reservei um horário para você.",
+          returnPath: "/dashboard/whatsapp",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(sendSalonWhatsAppTextMessageMock).toHaveBeenCalledWith(
+      "salon-1",
+      "5511991112222",
+      "Oi Ana, vi sua mensagem e já reservei um horário para você.",
+    );
+    expect(insertNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audience: "single_customer",
+        customer_id: "customer-1",
+        notification_type: "manual_whatsapp_message",
+        salon_id: "salon-1",
+        whatsapp_delivery_status: "sent",
+      }),
+    );
+    expect(location).toBe(
+      "/dashboard/whatsapp?message=Mensagem+manual+enviada+pelo+WhatsApp.&tone=success",
+    );
+    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
+      expect.arrayContaining([
+        "/dashboard",
+        "/dashboard/whatsapp",
+        "/dashboard/notifications",
+        "/dashboard/gestao/agendamentos",
+        "/dashboard/operations",
+      ]),
+    );
+  });
+
+  it("records a failed manual whatsapp send with a clear redirect message", async () => {
+    sendSalonWhatsAppTextMessageMock.mockResolvedValueOnce({
+      ok: false,
+      reason: "missing_config",
+    });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      sendSalonManualWhatsAppActionImpl(
+        makeFormData({
+          customerName: "Ana Paula",
+          customerPhone: "55 11 91111-2222",
+          message: "Oi Ana, seu horário está pronto para confirmar.",
+          returnPath: "/dashboard/whatsapp",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(insertNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer_id: null,
+        notification_type: "manual_whatsapp_message",
+        whatsapp_delivery_status: "failed",
+        whatsapp_error: "missing_config",
+      }),
+    );
+    expect(location).toBe(
+      "/dashboard/whatsapp?message=O+canal+t%C3%A9cnico+do+WhatsApp+ainda+n%C3%A3o+est%C3%A1+pronto+para+enviar+mensagens+manuais.&tone=error",
+    );
   });
 
   it("updates branding, business segment and contact details", async () => {
@@ -579,7 +861,7 @@ describe("settings actions", () => {
     );
   });
 
-  it("uploads hero, gallery and profile assets to storage and saves their public URLs", async () => {
+  it("uploads a single local client app asset and saves its processed public URLs", async () => {
     const eq = vi.fn().mockResolvedValue({ error: null });
     const updateSalon = vi.fn(() => ({ eq }));
     const upload = vi.fn().mockResolvedValue({ error: null });
@@ -621,20 +903,18 @@ describe("settings actions", () => {
         makeFormData({
           name: "Studio Centro",
           clientAppHeroImageFile: makeImageFile("hero.jpg"),
-          clientAppGalleryCoverImageFile: makeImageFile("gallery.jpg"),
-          clientAppProfileCoverImageFile: makeImageFile("profile.jpg"),
         }),
       ),
       redirectMock,
     );
 
-    expect(upload).toHaveBeenCalledTimes(12);
+    expect(upload).toHaveBeenCalledTimes(4);
     expect(upload).toHaveBeenNthCalledWith(
       1,
       "salon-1/client-app/hero/source",
       expect.any(Buffer),
       expect.objectContaining({
-        contentType: "image/jpeg",
+        contentType: "image/png",
         upsert: true,
       }),
     );
@@ -665,78 +945,6 @@ describe("settings actions", () => {
         upsert: true,
       }),
     );
-    expect(upload).toHaveBeenNthCalledWith(
-      5,
-      "salon-1/client-app/gallery-cover/source",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
-    expect(upload).toHaveBeenNthCalledWith(
-      6,
-      "salon-1/client-app/gallery-cover/mobile.jpg",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
-    expect(upload).toHaveBeenNthCalledWith(
-      7,
-      "salon-1/client-app/gallery-cover/tablet.jpg",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
-    expect(upload).toHaveBeenNthCalledWith(
-      8,
-      "salon-1/client-app/gallery-cover/share.jpg",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
-    expect(upload).toHaveBeenNthCalledWith(
-      9,
-      "salon-1/client-app/profile-cover/source",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
-    expect(upload).toHaveBeenNthCalledWith(
-      10,
-      "salon-1/client-app/profile-cover/mobile.jpg",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
-    expect(upload).toHaveBeenNthCalledWith(
-      11,
-      "salon-1/client-app/profile-cover/tablet.jpg",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
-    expect(upload).toHaveBeenNthCalledWith(
-      12,
-      "salon-1/client-app/profile-cover/share.jpg",
-      expect.any(Buffer),
-      expect.objectContaining({
-        contentType: "image/jpeg",
-        upsert: true,
-      }),
-    );
     expect(updateSalon).toHaveBeenCalledWith(
       expect.objectContaining({
         client_app_config: expect.objectContaining({
@@ -751,29 +959,7 @@ describe("settings actions", () => {
           heroImageShareVariantUrl:
             "https://cdn.example.com/salon-1/client-app/hero/share.jpg",
           heroImageZoom: 1,
-          galleryCoverImagePath: "salon-1/client-app/gallery-cover/mobile.jpg",
-          galleryCoverImageSourcePath:
-            "salon-1/client-app/gallery-cover/source",
-          galleryCoverImageUrl:
-            "https://cdn.example.com/salon-1/client-app/gallery-cover/source",
-          galleryCoverImageVariantUrl:
-            "https://cdn.example.com/salon-1/client-app/gallery-cover/mobile.jpg",
-          galleryCoverImageTabletVariantUrl:
-            "https://cdn.example.com/salon-1/client-app/gallery-cover/tablet.jpg",
-          galleryCoverImageShareVariantUrl:
-            "https://cdn.example.com/salon-1/client-app/gallery-cover/share.jpg",
           galleryCoverImageZoom: 1,
-          profileCoverImagePath: "salon-1/client-app/profile-cover/mobile.jpg",
-          profileCoverImageSourcePath:
-            "salon-1/client-app/profile-cover/source",
-          profileCoverImageUrl:
-            "https://cdn.example.com/salon-1/client-app/profile-cover/source",
-          profileCoverImageVariantUrl:
-            "https://cdn.example.com/salon-1/client-app/profile-cover/mobile.jpg",
-          profileCoverImageTabletVariantUrl:
-            "https://cdn.example.com/salon-1/client-app/profile-cover/tablet.jpg",
-          profileCoverImageShareVariantUrl:
-            "https://cdn.example.com/salon-1/client-app/profile-cover/share.jpg",
           profileCoverImageZoom: 1,
         }),
       }),
@@ -1005,6 +1191,103 @@ describe("settings actions", () => {
         booking_policy_requires_deposit: false,
         booking_policy_auto_cancel_pending_deposit: false,
       }),
+    );
+  });
+
+  it("requires at least one country when the geo allowlist is enabled", async () => {
+    const location = await captureRedirect(
+      updateSalonSecurityPolicyActionImpl(
+        makeFormData({
+          geoAllowlistEnabled: "on",
+          allowedCountryCodes: "",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toContain("dashboard/settings");
+    expect(location).toContain("pelo+menos+um+pais");
+  });
+
+  it("requires a verified TOTP factor before enabling MFA", async () => {
+    createClientMock.mockReturnValue({
+      from: vi.fn(),
+    });
+
+    const location = await captureRedirect(
+      updateSalonSecurityPolicyActionImpl(
+        makeFormData({
+          mfaTotpEnabled: "on",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toContain("Conecte+e+confirme+um+autenticador+TOTP");
+  });
+
+  it("saves the salon security policy when MFA and allowed countries are valid", async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const listFactors = vi.fn().mockResolvedValue({
+      data: {
+        factors: [
+          {
+            factor_type: "totp",
+            status: "verified",
+          },
+        ],
+      },
+      error: null,
+    });
+
+    createAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          mfa: {
+            listFactors,
+          },
+        },
+      },
+    });
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salon_security_settings") {
+          return {
+            upsert,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateSalonSecurityPolicyActionImpl(
+        makeFormData({
+          mfaTotpEnabled: "on",
+          geoAllowlistEnabled: "on",
+          allowedCountryCodes: "br, us, BR",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(listFactors).toHaveBeenCalledWith({
+      userId: "user-1",
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      {
+        allowed_country_codes: ["BR", "US"],
+        geo_allowlist_enabled: true,
+        mfa_totp_enabled: true,
+        salon_id: "salon-1",
+      },
+      {
+        onConflict: "salon_id",
+      },
+    );
+    expect(location).toBe(
+      "/dashboard/settings?message=Politica+de+seguranca+do+painel+atualizada+com+sucesso.&tone=success",
     );
   });
 });

@@ -1,6 +1,8 @@
 import { cache } from "react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { evaluatePanelAccessPolicy } from "@/lib/sessionSecurity";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 
@@ -15,10 +17,23 @@ const withCache = typeof cache === "function"
 const getAuthenticatedUser = withCache(async () => {
   const supabase = createClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-  return session?.user ?? null;
+  if (user) {
+    return user;
+  }
+
+  if (error) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    return session?.user ?? null;
+  }
+
+  return null;
 });
 
 export function buildRedirectPath(
@@ -78,6 +93,28 @@ export async function getAuthenticatedPanelEntryPath() {
 
   if (!user) {
     return null;
+  }
+
+  try {
+    const supabase = createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.access_token) {
+      const accessPolicy = await evaluatePanelAccessPolicy({
+        accessToken: session.access_token,
+        headerStore: await headers(),
+        requestPath: "/login",
+        userId: user.id,
+      });
+
+      if (!accessPolicy.allowed && accessPolicy.action === "mfa_required") {
+        return null;
+      }
+    }
+  } catch {
+    // best effort: if policy lookup fails, keep the previous entry routing
   }
 
   const salon = await getOwnerSalon(user.id);

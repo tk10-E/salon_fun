@@ -43,9 +43,12 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
+  createManagementAppointmentAction,
   createManagementProfessionalAction,
   createManagementServiceAction,
   deleteManagementProfessionalAction,
+  updateManagementAppointmentAction,
+  updateManagementAppointmentStatusAction,
   updateManagementProfessionalAction,
   updateManagementServiceAction,
 } from "@/app/_actions/management";
@@ -53,6 +56,8 @@ import {
 const categoryId = "11111111-1111-4111-8111-111111111111";
 const serviceId = "22222222-2222-4222-8222-222222222222";
 const professionalId = "33333333-3333-4333-8333-333333333333";
+const customerId = "44444444-4444-4444-8444-444444444444";
+const appointmentId = "55555555-5555-4555-8555-555555555555";
 
 describe("management catalog notifications", () => {
   beforeEach(() => {
@@ -123,6 +128,184 @@ describe("management catalog notifications", () => {
     );
     expect(location).toBe(
       "/dashboard/gestao/servicos?message=Servi%C3%A7o+cadastrado+com+sucesso.&tone=success",
+    );
+  });
+
+  it("keeps the success redirect intact when creating an appointment", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      rpc,
+    });
+
+    const location = await captureRedirect(
+      createManagementAppointmentAction(
+        makeFormData({
+          clientId: customerId,
+          professionalId: professionalId,
+          serviceId,
+          date: "2099-04-12",
+          time: "15:30",
+          notes: "Cliente prefere janela.",
+          returnPath: "/dashboard/gestao/agendamentos?day=2099-04-12",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(rpc).toHaveBeenCalledWith(
+      "create_management_appointment",
+      expect.objectContaining({
+        customer_uuid: customerId,
+        service_uuid: serviceId,
+        staff_member_uuid: professionalId,
+        notes_input: "Cliente prefere janela.",
+      }),
+    );
+    expect(location).toBe(
+      "/dashboard/gestao/agendamentos?message=Agendamento+criado+com+sucesso.&tone=success",
+    );
+  });
+
+  it("keeps the success redirect intact when updating an open appointment", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      rpc,
+    });
+
+    const location = await captureRedirect(
+      updateManagementAppointmentAction(
+        makeFormData({
+          appointmentId,
+          clientId: customerId,
+          professionalId,
+          serviceId,
+          date: "2099-04-12",
+          time: "16:00",
+          notes: "Cliente vai chegar um pouco antes.",
+          returnPath: "/dashboard/gestao/agendamentos?day=2099-04-12",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(rpc).toHaveBeenCalledWith(
+      "update_management_appointment",
+      expect.objectContaining({
+        appointment_uuid: appointmentId,
+        customer_uuid: customerId,
+        service_uuid: serviceId,
+        staff_member_uuid: professionalId,
+        notes_input: "Cliente vai chegar um pouco antes.",
+      }),
+    );
+    expect(location).toBe(
+      "/dashboard/gestao/agendamentos?message=Agendamento+atualizado+com+sucesso.&tone=success",
+    );
+  });
+
+  it("keeps the success redirect intact when updating an appointment status", async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "appointments") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: appointmentId,
+                      date: "2099-04-12T15:30:00.000Z",
+                      ends_at: "2099-04-12T16:15:00.000Z",
+                      status: "confirmed",
+                    },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "appointment_payments") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({
+                count: 0,
+                error: null,
+              }),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateManagementAppointmentStatusAction(
+        makeFormData({
+          appointmentId,
+          status: "completed",
+          cancellationReason: "",
+          returnPath: "/dashboard/gestao/agendamentos?day=2099-04-12",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/gestao/agendamentos?message=Atendimento+conclu%C3%ADdo+com+sucesso.&tone=success",
+    );
+    expect(location).not.toContain("NEXT_REDIRECT");
+  });
+
+  it("blocks reopening a cancelled appointment through status updates", async () => {
+    createClientMock.mockReturnValue({
+      rpc: vi.fn(),
+      from: vi.fn((table: string) => {
+        if (table === "appointments") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: appointmentId,
+                      date: "2099-04-12T15:30:00.000Z",
+                      ends_at: "2099-04-12T16:15:00.000Z",
+                      status: "cancelled",
+                    },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateManagementAppointmentStatusAction(
+        makeFormData({
+          appointmentId,
+          status: "confirmed",
+          cancellationReason: "",
+          returnPath: "/dashboard/gestao/agendamentos?day=2099-04-12",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/gestao/agendamentos?message=Esse+agendamento+j%C3%A1+foi+encerrado+e+n%C3%A3o+pode+voltar+para+a+agenda+por+essa+a%C3%A7%C3%A3o.&tone=error",
     );
   });
 
@@ -471,12 +654,34 @@ describe("management professional offboarding", () => {
         gte: vi.fn().mockResolvedValue({ error: null }),
       })),
     }));
-    const updateAppointment = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    }));
     const insertNotifications = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn((fn: string) => {
+      if (fn === "get_available_staff_slots_for_service") {
+        return Promise.resolve({
+          data: [
+            {
+              start_at: "2026-04-12T14:00:00.000Z",
+              ends_at: "2026-04-12T15:00:00.000Z",
+              staff_member_id: "22222222-2222-4222-8222-222222222222",
+              staff_member_name: "Camila",
+            },
+          ],
+          error: null,
+        });
+      }
+
+      if (fn === "offboard_management_professional_with_transfers") {
+        return Promise.resolve({
+          data: {
+            deleted_blocks_count: 1,
+            transferred_count: 1,
+          },
+          error: null,
+        });
+      }
+
+      throw new Error(`Unexpected rpc ${fn}`);
+    });
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
@@ -591,7 +796,6 @@ describe("management professional offboarding", () => {
                 })),
               };
             }),
-            update: updateAppointment,
           };
         }
 
@@ -629,23 +833,7 @@ describe("management professional offboarding", () => {
 
         throw new Error(`Unexpected table ${table}`);
       }),
-      rpc: vi.fn((fn: string) => {
-        if (fn !== "get_available_staff_slots_for_service") {
-          throw new Error(`Unexpected rpc ${fn}`);
-        }
-
-        return Promise.resolve({
-          data: [
-            {
-              start_at: "2026-04-12T14:00:00.000Z",
-              ends_at: "2026-04-12T15:00:00.000Z",
-              staff_member_id: "22222222-2222-4222-8222-222222222222",
-              staff_member_name: "Camila",
-            },
-          ],
-          error: null,
-        });
-      }),
+      rpc,
     });
 
     const location = await captureRedirect(
@@ -657,12 +845,19 @@ describe("management professional offboarding", () => {
       redirectMock,
     );
 
-    expect(updateAppointment).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
+      "offboard_management_professional_with_transfers",
       expect.objectContaining({
-        staff_member_id: "22222222-2222-4222-8222-222222222222",
-        date: "2026-04-12T14:00:00.000Z",
-        ends_at: "2026-04-12T15:00:00.000Z",
-        status: "pending",
+        target_staff_member_uuid: "11111111-1111-4111-8111-111111111111",
+        transfer_plans: [
+          expect.objectContaining({
+            appointmentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            customerId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            nextStartAt: "2026-04-12T14:00:00.000Z",
+            replacementStaffMemberId: "22222222-2222-4222-8222-222222222222",
+            serviceId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          }),
+        ],
       }),
     );
     expect(insertNotifications).toHaveBeenCalledWith(
@@ -679,7 +874,6 @@ describe("management professional offboarding", () => {
       "11999990000",
       expect.stringContaining("Camila"),
     );
-    expect(updateProfessional).toHaveBeenCalledWith({ is_active: false });
     expect(location).toContain(
       "Ricardo+saiu+da+equipe+ativa+e+foi+movido+para+o+hist%C3%B3rico.+1+cliente%28s%29+foram+remanejados",
     );

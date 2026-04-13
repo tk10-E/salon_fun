@@ -18,11 +18,11 @@ type ManagementProfessional =
   Awaited<ReturnType<typeof loadManagementProfessionals>>[number];
 
 type ProfissionaisPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     showHistory?: string;
     tone?: string;
-  };
+  }>;
 };
 
 function ProfessionalCard({
@@ -140,8 +140,9 @@ function ProfessionalCard({
 }
 
 export default async function ProfissionaisPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: ProfissionaisPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const showHistory = searchParams?.showHistory === "1";
   const currentPath = buildFilterHref(

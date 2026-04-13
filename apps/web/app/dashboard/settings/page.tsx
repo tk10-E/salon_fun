@@ -3,9 +3,12 @@ import type { ReactNode } from "react";
 import {
   regenerateSalonCodeAction,
   updateSalonBookingPolicyAction,
+  updateSalonSecurityPolicyAction,
   updateSalonScheduleAction,
 } from "@/app/actions";
 import { FlashMessage } from "@/components/FlashMessage";
+import { SalonSecuritySettingsPanel } from "@/components/SalonSecuritySettingsPanel";
+import { SettingsBrandingForm } from "@/components/SettingsBrandingForm";
 import { requireOwnerSalon } from "@/lib/auth";
 import {
   CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS,
@@ -21,14 +24,16 @@ import {
   CLIENT_HOME_EMPHASIS_OPTIONS,
   normalizeSalonClientAppConfig,
 } from "@/lib/clientAppConfig";
+import { coerceSalonSecurityPolicy } from "@/lib/panelSecurityPolicy";
 import { SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
 import { SALON_TIMEZONE_OPTIONS, SLOT_STEP_OPTIONS } from "@/lib/schedule";
+import { createClient } from "@/lib/supabase/server";
 
 type SettingsPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 const UPDATE_SALON_BRANDING_PATH = "/api/internal/dashboard/settings/branding";
@@ -54,6 +59,7 @@ function SettingsSummaryCard({
 }
 
 type SettingsFormSectionProps = {
+  id?: string;
   title: string;
   description: string;
   children: ReactNode;
@@ -61,6 +67,7 @@ type SettingsFormSectionProps = {
 };
 
 function SettingsFormSection({
+  id,
   title,
   description,
   children,
@@ -68,6 +75,7 @@ function SettingsFormSection({
 }: SettingsFormSectionProps) {
   return (
     <section
+      id={id}
       className={`settings-form-section${className ? ` ${className}` : ""}`}
     >
       <div className="settings-form-section__header">
@@ -91,6 +99,7 @@ type SettingsMediaCardProps = {
   fileId: string;
   fileName: string;
   fileLabel: string;
+  fileHint: string;
   removeName: string;
   removeLabel: string;
 };
@@ -105,6 +114,7 @@ function SettingsMediaCard({
   fileId,
   fileName,
   fileLabel,
+  fileHint,
   removeName,
   removeLabel,
 }: SettingsMediaCardProps) {
@@ -133,6 +143,7 @@ function SettingsMediaCard({
           type="file"
           accept="image/png,image/jpeg,image/webp"
         />
+        <small className="muted">{fileHint}</small>
       </label>
 
       <label className="checkbox-field">
@@ -344,9 +355,24 @@ function SettingsCampaignCard({ campaign }: SettingsCampaignCardProps) {
 }
 
 export default async function SettingsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: SettingsPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
+  const supabase = createClient() as any;
+  const securitySettingsResult = await supabase
+    .from("salon_security_settings")
+    .select("mfa_totp_enabled, geo_allowlist_enabled, allowed_country_codes")
+    .eq("salon_id", salon.id)
+    .maybeSingle();
+  const securityPolicy = coerceSalonSecurityPolicy({
+    row:
+      securitySettingsResult.data &&
+      typeof securitySettingsResult.data === "object"
+        ? (securitySettingsResult.data as Record<string, unknown>)
+        : null,
+    salonId: salon.id,
+  });
   const clientAppConfig = normalizeSalonClientAppConfig(
     salon.client_app_config,
   );
@@ -402,6 +428,11 @@ export default async function SettingsPage({
       ? `Sinal de ${currencyFormatter.format(bookingPolicyDepositAmount)}`
       : "Sinal ativo sem valor definido"
     : "Sem sinal obrigatório";
+  const allowedCountryLabel =
+    securityPolicy.geoAllowlistEnabled &&
+    securityPolicy.allowedCountryCodes.length > 0
+      ? securityPolicy.allowedCountryCodes.join(", ")
+      : "Sem restrição por país";
 
   return (
     <div className="page-grid workspace-page settings-page settings-lean">
@@ -449,15 +480,16 @@ export default async function SettingsPage({
               }
             />
             <SettingsSummaryCard
-              eyebrow="Mensagens"
+              eyebrow="Marca"
               title={
-                salon.whatsapp_phone?.trim()
-                  ? "WhatsApp do salão"
-                  : "Contato ainda não definido"
+                salon.logo_path?.trim()
+                  ? "Identidade visual publicada"
+                  : "Logo principal pendente"
               }
               description={
-                salon.whatsapp_phone?.trim() ||
-                "Cadastre o número público para clientes encontrarem o atendimento."
+                salon.logo_path?.trim()
+                  ? "Logo e base visual já estão disponíveis para o painel e para a vitrine do salão."
+                  : "Publique a logo principal para deixar a marca mais consistente no app e na vitrine."
               }
             />
             <SettingsSummaryCard
@@ -467,20 +499,14 @@ export default async function SettingsPage({
             />
           </div>
 
-          <form
+          <SettingsBrandingForm
             action={UPDATE_SALON_BRANDING_PATH}
-            className="form-grid settings-identity-form"
-            encType="multipart/form-data"
-            method="post"
-            noValidate
-            style={{ marginTop: 12 }}
+            salonId={salon.id}
           >
-            <input type="hidden" name="salonId" value={salon.id} />
-
             <div className="settings-section-stack">
               <SettingsFormSection
                 title="Base do salão"
-                description="Organize o essencial primeiro: nome, segmento e descrição curta para a vitrine."
+                description="Nome, segmento e descrição curta."
               >
                 <div className="split-grid">
                   <label className="field">
@@ -523,7 +549,7 @@ export default async function SettingsPage({
 
               <SettingsFormSection
                 title="Marca e vitrine"
-                description="Defina como o salão aparece no app, na vitrine pública e no contato principal."
+                description="Nome, contato, cor e logo."
               >
                 <div className="split-grid">
                   <label className="field">
@@ -544,52 +570,33 @@ export default async function SettingsPage({
                       defaultValue={clientAppConfig.customDomain ?? ""}
                       placeholder="app.seusalao.com.br"
                     />
-                    <small className="muted">
-                      Opcional. Use se você quiser abrir a vitrine do salão em
-                      um endereço próprio.
-                    </small>
+                    <small className="muted">Opcional.</small>
                   </label>
                 </div>
 
-                <div className="split-grid settings-brand-grid">
-                  <label className="field">
-                    <span>WhatsApp público do salão</span>
+                <div className="split-grid">
+                  <label className="field settings-color-field">
+                    <span>Cor principal</span>
                     <input
-                      id="whatsappPhone"
-                      name="whatsappPhone"
-                      defaultValue={salon.whatsapp_phone ?? ""}
-                      placeholder="5511999999999"
+                      type="color"
+                      id="brandColor"
+                      name="brandColor"
+                      defaultValue={salon.brand_color ?? "#6d5ab3"}
                     />
-                    <small className="muted">
-                      Esse é o contato que aparece na vitrine e no app do
-                      cliente.
-                    </small>
                   </label>
 
-                  <div className="form-grid">
-                    <label className="field settings-color-field">
-                      <span>Cor principal</span>
-                      <input
-                        type="color"
-                        id="brandColor"
-                        name="brandColor"
-                        defaultValue={salon.brand_color ?? "#6d5ab3"}
-                      />
-                    </label>
-
-                    <label className="field">
-                      <span>Logo do app</span>
-                      <input
-                        id="logo"
-                        name="logo"
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      />
-                      <small className="muted">
-                        PNG, JPG, WEBP ou SVG até 2 MB.
-                      </small>
-                    </label>
-                  </div>
+                  <label className="field">
+                    <span>Logo do app</span>
+                    <input
+                      id="logo"
+                      name="logo"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    />
+                    <small className="muted">
+                      PNG, JPG, WEBP ou SVG • ate 2 MB.
+                    </small>
+                  </label>
                 </div>
 
                 <div className="settings-toggle-grid">
@@ -615,7 +622,7 @@ export default async function SettingsPage({
 
               <SettingsFormSection
                 title="Conteúdo e visual do app"
-                description="Tudo o que o app mobile já respeita no visual, na mensagem principal e na hierarquia da home."
+                description="Mensagens, cores e estilo."
               >
                 <div className="split-grid">
                   <label className="field">
@@ -721,9 +728,7 @@ export default async function SettingsPage({
                       defaultValue={clientAppConfig.secondaryColor ?? ""}
                       placeholder="#E7D9CF"
                     />
-                    <small className="muted">
-                      Opcional. Use no formato #RRGGBB.
-                    </small>
+                    <small className="muted">Opcional. Use #RRGGBB.</small>
                   </label>
 
                   <label className="field">
@@ -734,9 +739,7 @@ export default async function SettingsPage({
                       defaultValue={clientAppConfig.accentColor ?? ""}
                       placeholder="#C56B43"
                     />
-                    <small className="muted">
-                      Opcional. Use no formato #RRGGBB.
-                    </small>
+                    <small className="muted">Opcional. Use #RRGGBB.</small>
                   </label>
                 </div>
 
@@ -847,22 +850,19 @@ export default async function SettingsPage({
                         placeholder="120"
                       />
                     </div>
-                    <small className="muted">
-                      Informe nota média e quantidade de avaliações exibidas no
-                      app.
-                    </small>
+                    <small className="muted">Nota e total de avaliações.</small>
                   </label>
                 </div>
               </SettingsFormSection>
 
               <SettingsFormSection
                 title="Capas do app"
-                description="Hero, galeria e perfil institucional que o app pode usar como fundo."
+                description="Use de 0 a 3 imagens: principal, galeria e perfil."
               >
                 <div className="settings-upload-grid">
                   <SettingsMediaCard
                     title="Imagem principal"
-                    description="Aparece na primeira dobra e sustenta a identidade visual."
+                    description="Banner principal do app."
                     urlId="clientAppHeroImageUrl"
                     urlName="clientAppHeroImageUrl"
                     urlLabel="URL da imagem principal"
@@ -870,13 +870,14 @@ export default async function SettingsPage({
                     fileId="clientAppHeroImageFile"
                     fileName="clientAppHeroImageFile"
                     fileLabel="Arquivo da imagem principal"
+                    fileHint="PNG, JPG ou WEBP • ate 3 MB • 1 por vez."
                     removeName="removeClientAppHeroImage"
                     removeLabel="Remover imagem principal atual"
                   />
 
                   <SettingsMediaCard
                     title="Capa da galeria"
-                    description="Usada como apoio visual na área de fotos e destaques."
+                    description="Imagem da area de fotos."
                     urlId="clientAppGalleryCoverImageUrl"
                     urlName="clientAppGalleryCoverImageUrl"
                     urlLabel="URL da capa da galeria"
@@ -884,13 +885,14 @@ export default async function SettingsPage({
                     fileId="clientAppGalleryCoverImageFile"
                     fileName="clientAppGalleryCoverImageFile"
                     fileLabel="Arquivo da capa da galeria"
+                    fileHint="PNG, JPG ou WEBP • ate 3 MB • 1 por vez."
                     removeName="removeClientAppGalleryCoverImage"
                     removeLabel="Remover capa da galeria atual"
                   />
 
                   <SettingsMediaCard
                     title="Capa do perfil"
-                    description="Ajuda a apresentar a marca na área institucional do salão."
+                    description="Imagem da area institucional."
                     urlId="clientAppProfileCoverImageUrl"
                     urlName="clientAppProfileCoverImageUrl"
                     urlLabel="URL da capa do perfil"
@@ -898,6 +900,7 @@ export default async function SettingsPage({
                     fileId="clientAppProfileCoverImageFile"
                     fileName="clientAppProfileCoverImageFile"
                     fileLabel="Arquivo da capa do perfil"
+                    fileHint="PNG, JPG ou WEBP • ate 3 MB • 1 por vez."
                     removeName="removeClientAppProfileCoverImage"
                     removeLabel="Remover capa do perfil atual"
                   />
@@ -906,7 +909,7 @@ export default async function SettingsPage({
 
               <SettingsFormSection
                 title="Campanhas da central"
-                description="Defina até três campanhas para aparecer no topo da home do app cliente com CTA direto."
+                description="Ate 3 campanhas na home."
               >
                 <div className="settings-upload-grid">
                   {campaignDrafts.map((campaign) => (
@@ -920,7 +923,7 @@ export default async function SettingsPage({
 
               <SettingsFormSection
                 title="Links e presença pública"
-                description="Centralize os links que o app mostra para clientes: rede social, endereço, suporte e documentos."
+                description="Instagram, suporte e documentos."
               >
                 <div className="split-grid">
                   <label className="field">
@@ -1001,7 +1004,7 @@ export default async function SettingsPage({
 
               <SettingsFormSection
                 title="Blocos visíveis na home"
-                description="Marque o que pode aparecer na home do app cliente e deixe a primeira dobra menos carregada."
+                description="Escolha o que aparece na home."
               >
                 <div className="settings-module-grid">
                   {supportedHomeModules.map((module) => (
@@ -1026,7 +1029,7 @@ export default async function SettingsPage({
                 Salvar identidade
               </button>
             </div>
-          </form>
+          </SettingsBrandingForm>
         </details>
       </section>
 
@@ -1445,6 +1448,51 @@ export default async function SettingsPage({
               </button>
             </div>
           </form>
+        </details>
+      </section>
+
+      <section id="panel-security" className="card content-card accordion">
+        <details>
+          <summary>
+            <div>
+              <h2>Segurança do painel</h2>
+              <p className="muted">MFA, países permitidos e proteção do acesso.</p>
+            </div>
+            <span className="accordion__cta">Editar</span>
+          </summary>
+
+          <div className="settings-summary-grid settings-summary-grid--three">
+            <SettingsSummaryCard
+              eyebrow="MFA"
+              title={
+                securityPolicy.mfaTotpEnabled
+                  ? "Obrigatório no painel"
+                  : "Opcional"
+              }
+              description="Use um autenticador TOTP para exigir uma segunda etapa no login."
+            />
+            <SettingsSummaryCard
+              eyebrow="Países"
+              title={
+                securityPolicy.geoAllowlistEnabled
+                  ? "Allowlist ativa"
+                  : "Sem bloqueio geográfico"
+              }
+              description={allowedCountryLabel}
+            />
+            <SettingsSummaryCard
+              eyebrow="Sessão"
+              title="Dispositivo e IP monitorados"
+              description="O painel mantém vínculo de sessão com dispositivo, IP e sinais de risco."
+            />
+          </div>
+
+          <SalonSecuritySettingsPanel
+            action={updateSalonSecurityPolicyAction}
+            initialAllowedCountryCodes={securityPolicy.allowedCountryCodes}
+            initialGeoAllowlistEnabled={securityPolicy.geoAllowlistEnabled}
+            initialMfaTotpEnabled={securityPolicy.mfaTotpEnabled}
+          />
         </details>
       </section>
 

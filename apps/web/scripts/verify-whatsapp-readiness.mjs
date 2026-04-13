@@ -3,6 +3,15 @@ import path from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 
+const AUTO_PILOT_NOTIFICATION_TYPES = [
+  "appointment_reminder_1h",
+  "appointment_confirmation_required",
+  "winback_offer",
+  "smart_rebook_prompt",
+  "birthday_campaign",
+  "manual_reactivation",
+];
+
 function parseEnvFile(filePath) {
   const env = {};
   const text = fs.readFileSync(filePath, "utf8");
@@ -84,6 +93,17 @@ async function loadSalonWhatsAppRows(supabase) {
   return data ?? [];
 }
 
+async function countPendingWhatsAppDispatches(supabase) {
+  return countRows(
+    supabase
+      .from("salon_customer_notifications")
+      .select("*", { count: "exact", head: true })
+      .not("customer_id", "is", null)
+      .is("whatsapp_sent_at", null)
+      .in("notification_type", AUTO_PILOT_NOTIFICATION_TYPES),
+  );
+}
+
 async function readMetaPhoneRuntime(env) {
   const token = env.META_PERMANENT_TOKEN?.trim();
   const phoneNumberId = env.WHATSAPP_PHONE_NUMBER_ID?.trim();
@@ -118,6 +138,44 @@ async function readMetaPhoneRuntime(env) {
   };
 }
 
+async function readSubscribedApps(env) {
+  const token = env.META_PERMANENT_TOKEN?.trim();
+  const businessAccountId = env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim();
+  const appId = env.META_APP_ID?.trim();
+
+  if (!token || !businessAccountId) {
+    return null;
+  }
+
+  const response = await fetch(
+    `https://graph.facebook.com/v18.0/${businessAccountId}/subscribed_apps`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      detail: await response.text(),
+    };
+  }
+
+  const data = await response.json();
+  const apps = Array.isArray(data.data) ? data.data : [];
+  const subscribedAppIds = apps
+    .map((entry) => entry?.whatsapp_business_api_data?.id?.trim?.())
+    .filter(Boolean);
+
+  return {
+    ok: true,
+    count: subscribedAppIds.length,
+    currentAppSubscribed: appId ? subscribedAppIds.includes(appId) : null,
+  };
+}
+
 async function main() {
   const env = readEnv();
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -133,16 +191,10 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const [salonRows, pendingNotifications, recentInboundMessages] =
+  const [salonRows, pendingNotifications, recentInboundMessages, subscribedApps] =
     await Promise.all([
       loadSalonWhatsAppRows(supabase),
-      countRows(
-      supabase
-        .from("salon_customer_notifications")
-        .select("*", { count: "exact", head: true })
-        .not("customer_id", "is", null)
-        .is("whatsapp_sent_at", null),
-    ),
+      countPendingWhatsAppDispatches(supabase),
       countRows(
       supabase
         .from("whatsapp_inbound_messages")
@@ -152,6 +204,7 @@ async function main() {
           new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         ),
     ),
+      readSubscribedApps(env),
     ]);
 
   const salonsWithPublicPhone = salonRows.filter((row) =>
@@ -172,6 +225,11 @@ async function main() {
     env.WHATSAPP_DISPATCH_SECRET?.trim() || env.CRON_SECRET?.trim(),
   );
   const metaPhoneRuntime = await readMetaPhoneRuntime(env);
+  const hasWebhookSubscription = subscribedApps?.ok === true
+    ? subscribedApps.currentAppSubscribed === null
+      ? subscribedApps.count > 0
+      : subscribedApps.currentAppSubscribed
+    : false;
   const runtimePhoneReady =
     metaPhoneRuntime?.ok === true &&
     metaPhoneRuntime.status &&
@@ -181,12 +239,28 @@ async function main() {
   const productionReady =
     hasFallbackRuntime &&
     hasDispatchSecret &&
+    hasWebhookSubscription &&
     runtimePhoneReady &&
     salonsWithDispatchEnabled > 0;
 
   console.log("Prontidao do WhatsApp");
   console.log(`- Runtime fallback configurado: ${hasFallbackRuntime ? "sim" : "nao"}`);
   console.log(`- Segredo do dispatcher/cron: ${hasDispatchSecret ? "sim" : "nao"}`);
+  if (subscribedApps?.ok === true) {
+    const subscriptionLabel =
+      subscribedApps.currentAppSubscribed === false
+        ? "nao"
+        : subscribedApps.currentAppSubscribed === true
+          ? "sim"
+          : subscribedApps.count > 0
+            ? "sim"
+            : "nao";
+    console.log(`- App inscrito na WABA: ${subscriptionLabel}`);
+  } else if (subscribedApps?.ok === false) {
+    console.log(`- App inscrito na WABA: erro ao consultar (${subscribedApps.detail})`);
+  } else {
+    console.log("- App inscrito na WABA: nao consultado");
+  }
   if (metaPhoneRuntime?.ok === true) {
     console.log(
       `- Numero tecnico Meta: ${metaPhoneRuntime.displayPhoneNumber ?? "sem numero"} • status ${metaPhoneRuntime.status ?? "desconhecido"} • verificacao ${metaPhoneRuntime.codeVerificationStatus ?? "desconhecida"}`,
@@ -201,7 +275,7 @@ async function main() {
   console.log(
     `- Saloes com numero proprio da Meta: ${salonsWithDedicatedMetaPhoneId}`,
   );
-  console.log(`- Notificacoes pendentes de envio: ${pendingNotifications}`);
+  console.log(`- Notificacoes pendentes na fila de WhatsApp: ${pendingNotifications}`);
   console.log(`- Mensagens inbound nos ultimos 30 dias: ${recentInboundMessages}`);
   console.log(
     `- Resultado: ${

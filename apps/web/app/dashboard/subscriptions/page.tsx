@@ -1,6 +1,8 @@
 import {
+  approveCustomerMembershipRequestAction,
   createSalonOfferAction,
   deleteSalonOfferAction,
+  rejectCustomerMembershipRequestAction,
   updateSalonOfferAction,
 } from "@/app/actions";
 import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
@@ -12,10 +14,10 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import { createClient } from "@/lib/supabase/server";
 
 type SubscriptionsPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 type MembershipOfferRow = {
@@ -23,6 +25,7 @@ type MembershipOfferRow = {
   title: string;
   description: string | null;
   highlight_text: string | null;
+  image_path: string | null;
   membership_service_id: string | null;
   membership_sessions_included: number | null;
   membership_validity_days: number | null;
@@ -54,18 +57,37 @@ type ServiceOption = {
   category: string | null;
 };
 
+type PendingMembershipRequest = {
+  id: string;
+  customer_id: string;
+  offer_id: string;
+  offer_title_snapshot: string;
+  price_snapshot: number | string | null;
+  notes: string | null;
+  status: string;
+  requested_at: string;
+  customers?: { name: string } | { name: string }[] | null;
+};
+
 function firstRelation<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
 function resolveMembershipStatus(membership: MembershipRecord, today: string) {
   if (membership.status === "cancelled") return "cancelled";
-  if (membership.status === "expired" || membership.expires_at < today) return "expired";
-  if (membership.status === "completed" || membership.sessions_used >= membership.sessions_included) return "completed";
+  if (membership.status === "expired" || membership.expires_at < today)
+    return "expired";
+  if (
+    membership.status === "completed" ||
+    membership.sessions_used >= membership.sessions_included
+  )
+    return "completed";
   return "active";
 }
 
-function membershipStatusBadge(status: ReturnType<typeof resolveMembershipStatus>) {
+function membershipStatusBadge(
+  status: ReturnType<typeof resolveMembershipStatus>,
+) {
   switch (status) {
     case "active":
       return "badge badge--confirmed";
@@ -78,7 +100,9 @@ function membershipStatusBadge(status: ReturnType<typeof resolveMembershipStatus
   }
 }
 
-function membershipStatusLabel(status: ReturnType<typeof resolveMembershipStatus>) {
+function membershipStatusLabel(
+  status: ReturnType<typeof resolveMembershipStatus>,
+) {
   switch (status) {
     case "active":
       return "Ativa";
@@ -91,28 +115,59 @@ function membershipStatusLabel(status: ReturnType<typeof resolveMembershipStatus
   }
 }
 
-function formatOperationalSummary(offer: MembershipOfferRow, serviceName: string | null | undefined) {
-  if (!offer.membership_service_id || offer.membership_sessions_included == null || offer.membership_validity_days == null) {
+function formatOperationalSummary(
+  offer: MembershipOfferRow,
+  serviceName: string | null | undefined,
+) {
+  if (
+    !offer.membership_service_id ||
+    offer.membership_sessions_included == null ||
+    offer.membership_validity_days == null
+  ) {
     return "Defina serviço, sessões e validade para operar.";
   }
 
   const serviceLabel = serviceName?.trim() || "serviço configurado";
-  const sessionsLabel = offer.membership_sessions_included === 1 ? "1 sessão" : `${offer.membership_sessions_included} sessões`;
-  const validityLabel = offer.membership_validity_days === 1 ? "1 dia" : `${offer.membership_validity_days} dias`;
+  const sessionsLabel =
+    offer.membership_sessions_included === 1
+      ? "1 sessão"
+      : `${offer.membership_sessions_included} sessões`;
+  const validityLabel =
+    offer.membership_validity_days === 1
+      ? "1 dia"
+      : `${offer.membership_validity_days} dias`;
 
   return `${sessionsLabel} de ${serviceLabel} com validade de ${validityLabel}.`;
 }
 
-export default async function SubscriptionsPage({ searchParams }: SubscriptionsPageProps) {
+function formatMembershipActivationGuidance(validityDays: number | null) {
+  if (validityDays == null || validityDays <= 0) {
+    return "A validade real começa na data de ativação escolhida pelo salão.";
+  }
+
+  return validityDays === 1
+    ? "A validade real deste pacote é de 1 dia a partir da data de ativação."
+    : `A validade real deste pacote é de ${validityDays} dias a partir da data de ativação.`;
+}
+
+export default async function SubscriptionsPage({
+  searchParams: searchParamsPromise,
+}: SubscriptionsPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const [offersResult, membershipsResult, servicesResult] = await Promise.all([
+  const [
+    offersResult,
+    membershipsResult,
+    servicesResult,
+    membershipRequestsResult,
+  ] = await Promise.all([
     supabase
       .from("salon_offers")
       .select(
-        "id, title, description, highlight_text, membership_service_id, membership_sessions_included, membership_validity_days, price, starts_on, ends_on, is_active, sort_order",
+        "id, title, description, highlight_text, image_path, membership_service_id, membership_sessions_included, membership_validity_days, price, starts_on, ends_on, is_active, sort_order",
       )
       .eq("salon_id", salon.id)
       .eq("kind", "membership")
@@ -125,13 +180,34 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
       )
       .eq("salon_id", salon.id)
       .order("created_at", { ascending: false }),
-    supabase.from("services").select("id, name, category").eq("salon_id", salon.id).order("sort_order").order("name"),
+    supabase
+      .from("services")
+      .select("id, name, category")
+      .eq("salon_id", salon.id)
+      .order("sort_order")
+      .order("name"),
+    (supabase as any)
+      .from("customer_membership_requests")
+      .select(
+        "id, customer_id, offer_id, offer_title_snapshot, price_snapshot, notes, status, requested_at, customers(name)",
+      )
+      .eq("salon_id", salon.id)
+      .eq("status", "pending")
+      .order("requested_at", { ascending: false }),
   ]);
 
   const offers = (offersResult.data ?? []) as MembershipOfferRow[];
   const memberships = (membershipsResult.data ?? []) as MembershipRecord[];
   const serviceOptions = (servicesResult.data ?? []) as ServiceOption[];
-  const serviceNameById = new Map(serviceOptions.map((service) => [service.id, service.category ? `${service.category} • ${service.name}` : service.name]));
+  const pendingMembershipRequests = (membershipRequestsResult.data ?? []) as
+    PendingMembershipRequest[];
+  const serviceNameById = new Map(
+    serviceOptions.map((service) => [
+      service.id,
+      service.category ? `${service.category} • ${service.name}` : service.name,
+    ]),
+  );
+  const offerById = new Map(offers.map((offer) => [offer.id, offer]));
 
   const offerStats = new Map<
     string,
@@ -147,7 +223,11 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
   }
 
   for (const membership of memberships) {
-    const current = offerStats.get(membership.offer_id) ?? { active: 0, total: 0, projectedRevenue: 0 };
+    const current = offerStats.get(membership.offer_id) ?? {
+      active: 0,
+      total: 0,
+      projectedRevenue: 0,
+    };
     const status = resolveMembershipStatus(membership, today);
     current.total += 1;
     if (status === "active") {
@@ -157,7 +237,9 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
     offerStats.set(membership.offer_id, current);
   }
 
-  const activeMemberships = memberships.filter((membership) => resolveMembershipStatus(membership, today) === "active");
+  const activeMemberships = memberships.filter(
+    (membership) => resolveMembershipStatus(membership, today) === "active",
+  );
   const activeOffers = offers.filter((offer) => offer.is_active);
   const configuredOffers = offers.filter(
     (offer) =>
@@ -168,26 +250,43 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
   const expiringSoonMemberships = activeMemberships.filter((membership) => {
     const expiration = new Date(`${membership.expires_at}T00:00:00`);
     const currentDay = new Date(`${today}T00:00:00`);
-    const diffInDays = Math.ceil((expiration.getTime() - currentDay.getTime()) / 86_400_000);
+    const diffInDays = Math.ceil(
+      (expiration.getTime() - currentDay.getTime()) / 86_400_000,
+    );
 
     return diffInDays >= 0 && diffInDays <= 7;
   });
-  const projectedRevenue = activeMemberships.reduce((sum, membership) => sum + Number(membership.price_snapshot ?? 0), 0);
-  const averageTicket = activeMemberships.length ? projectedRevenue / activeMemberships.length : 0;
+  const projectedRevenue = activeMemberships.reduce(
+    (sum, membership) => sum + Number(membership.price_snapshot ?? 0),
+    0,
+  );
+  const averageTicket = activeMemberships.length
+    ? projectedRevenue / activeMemberships.length
+    : 0;
   const leadingOffer =
     [...offers]
-      .sort((left, right) => (offerStats.get(right.id)?.active ?? 0) - (offerStats.get(left.id)?.active ?? 0))
+      .sort(
+        (left, right) =>
+          (offerStats.get(right.id)?.active ?? 0) -
+          (offerStats.get(left.id)?.active ?? 0),
+      )
       .find((offer) => (offerStats.get(offer.id)?.active ?? 0) > 0) ??
     offers[0] ??
     null;
-  const leadingOfferStats = leadingOffer ? offerStats.get(leadingOffer.id) ?? null : null;
+  const leadingOfferStats = leadingOffer
+    ? (offerStats.get(leadingOffer.id) ?? null)
+    : null;
   const nextMembershipToExpire =
-    [...activeMemberships].sort((left, right) => left.expires_at.localeCompare(right.expires_at))[0] ?? null;
+    [...activeMemberships].sort((left, right) =>
+      left.expires_at.localeCompare(right.expires_at),
+    )[0] ?? null;
   const recentMemberships = memberships.slice(0, 12);
 
   return (
     <div className="page-grid workspace-page subscriptions-page subscriptions-simple">
-      {searchParams?.message ? <FlashMessage message={searchParams.message} tone={searchParams.tone} /> : null}
+      {searchParams?.message ? (
+        <FlashMessage message={searchParams.message} tone={searchParams.tone} />
+      ) : null}
 
       <DashboardWorkspaceHero
         id="subscription-overview"
@@ -223,12 +322,17 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
           {
             label: "Planos no catálogo",
             value: offers.length,
-            note: configuredOffers.length === offers.length ? "Todos operacionais." : `${configuredOffers.length} completos para venda.`,
+            note:
+              configuredOffers.length === offers.length
+                ? "Todos operacionais."
+                : `${configuredOffers.length} completos para venda.`,
             tone: offers.length ? "soft" : "neutral",
           },
           {
             label: "Ticket médio",
-            value: activeMemberships.length ? formatCurrency(averageTicket) : "Sem base",
+            value: activeMemberships.length
+              ? formatCurrency(averageTicket)
+              : "Sem base",
             note: "Média por assinatura ativa.",
             tone: activeMemberships.length ? "accent" : "soft",
           },
@@ -241,7 +345,9 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
           {
             label: "Plano forte",
             value: leadingOffer?.title ?? "Sem destaque",
-            note: leadingOfferStats?.active ? `${leadingOfferStats.active} cliente${leadingOfferStats.active === 1 ? "" : "s"} ativo${leadingOfferStats.active === 1 ? "" : "s"}.` : "Publique o primeiro plano para começar.",
+            note: leadingOfferStats?.active
+              ? `${leadingOfferStats.active} cliente${leadingOfferStats.active === 1 ? "" : "s"} ativo${leadingOfferStats.active === 1 ? "" : "s"}.`
+              : "Publique o primeiro plano para começar.",
             tone: leadingOfferStats?.active ? "warm" : "soft",
           },
         ]}
@@ -267,11 +373,17 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
             <div className="subscriptions-page__hero-grid">
               <div className="workspace-signal-pill workspace-hero__stat--soft">
                 <span>Próximo vencimento</span>
-                <strong>{nextMembershipToExpire ? formatDate(nextMembershipToExpire.expires_at) : "Sem alertas"}</strong>
+                <strong>
+                  {nextMembershipToExpire
+                    ? formatDate(nextMembershipToExpire.expires_at)
+                    : "Sem alertas"}
+                </strong>
               </div>
               <div className="workspace-signal-pill workspace-hero__stat--accent">
                 <span>Plano completo</span>
-                <strong>{configuredOffers.length}/{offers.length || 0}</strong>
+                <strong>
+                  {configuredOffers.length}/{offers.length || 0}
+                </strong>
               </div>
             </div>
           </>
@@ -281,16 +393,40 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
       <WorkspaceSectionNav
         label="Atalhos da recorrência"
         items={[
-          { href: "#subscription-catalog", label: "Catálogo", meta: "Planos ativos e edição" },
-          { href: "#subscription-create", label: "Novo plano", meta: "Criar pacote ou clube" },
-          { href: "#subscription-base", label: "Carteira", meta: "Clientes e saldo" },
+          {
+            href: "#subscription-requests",
+            label: "Pedidos do app",
+            meta: "Aprovar com data real",
+          },
+          {
+            href: "#subscription-catalog",
+            label: "Catálogo",
+            meta: "Planos ativos e edição",
+          },
+          {
+            href: "#subscription-create",
+            label: "Novo plano",
+            meta: "Criar pacote ou clube",
+          },
+          {
+            href: "#subscription-base",
+            label: "Carteira",
+            meta: "Clientes e saldo",
+          },
         ]}
       />
 
-      <section className="workspace-subgrid subscriptions-page__summary-grid" aria-label="Resumo comercial da recorrência">
+      <section
+        className="workspace-subgrid subscriptions-page__summary-grid"
+        aria-label="Resumo comercial da recorrência"
+      >
         <article className="workspace-panel">
           <span className="workspace-panel__eyebrow">Catálogo pronto</span>
-          <h3>{configuredOffers.length} plano{configuredOffers.length === 1 ? "" : "s"} operacional{configuredOffers.length === 1 ? "" : "is"}</h3>
+          <h3>
+            {configuredOffers.length} plano
+            {configuredOffers.length === 1 ? "" : "s"} operacional
+            {configuredOffers.length === 1 ? "" : "is"}
+          </h3>
           <p>
             {offers.length
               ? configuredOffers.length === offers.length
@@ -321,38 +457,190 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
         </article>
       </section>
 
+      <section id="subscription-requests" className="card content-card">
+        <div className="section-heading">
+          <div>
+            <h2>Pedidos vindos do app cliente</h2>
+            <p className="muted">
+              Aprove com data real de início para a validade do pacote valer de
+              verdade no app e na operação do salão.
+            </p>
+          </div>
+        </div>
+
+        {!pendingMembershipRequests.length ? (
+          <EmptyStateCard
+            eyebrow="Fila vazia"
+            title="Nenhum pedido pendente agora"
+            description="Quando uma cliente pedir um pacote pelo app, a aprovação aparece aqui e também na home do painel."
+          />
+        ) : (
+          <div className="simple-list">
+            {pendingMembershipRequests.map((request) => {
+              const customer = firstRelation(request.customers);
+              const offer = offerById.get(request.offer_id) ?? null;
+              const activationGuidance = formatMembershipActivationGuidance(
+                offer?.membership_validity_days ?? null,
+              );
+
+              return (
+                <article key={request.id} className="simple-row">
+                  <div
+                    className="inline-actions"
+                    style={{ marginBottom: 6, flexWrap: "wrap" }}
+                  >
+                    <span className="badge badge--pending">Pedido do app</span>
+                    <span className="badge badge--soft">
+                      {customer?.name ?? "Cliente sem nome"}
+                    </span>
+                    <span className="badge badge--soft">
+                      {formatDate(request.requested_at)}
+                    </span>
+                  </div>
+                  <h3>{request.offer_title_snapshot}</h3>
+                  <p className="muted">
+                    {request.price_snapshot == null
+                      ? "Pedido feito no app cliente."
+                      : `${formatCurrency(Number(request.price_snapshot))} • pedido feito no app cliente.`}
+                  </p>
+                  <p className="list-meta">{activationGuidance}</p>
+                  <small className="list-meta">
+                    {request.notes?.trim()
+                      ? `Mensagem da cliente: ${request.notes.trim()}`
+                      : "Sem observacao enviada pela cliente."}
+                  </small>
+                  <div
+                    className="simple-row__actions"
+                    style={{ flexWrap: "wrap", gap: 12 }}
+                  >
+                    <form
+                      action={approveCustomerMembershipRequestAction}
+                      className="simple-form"
+                      style={{ marginTop: 0 }}
+                    >
+                      <input
+                        type="hidden"
+                        name="returnPath"
+                        value="/dashboard/subscriptions"
+                      />
+                      <input
+                        type="hidden"
+                        name="requestId"
+                        value={request.id}
+                      />
+                      <div className="field">
+                        <label htmlFor={`membership-request-start-${request.id}`}>
+                          Inicio real da assinatura
+                        </label>
+                        <input
+                          id={`membership-request-start-${request.id}`}
+                          name="startsOn"
+                          type="date"
+                          defaultValue={today}
+                          required
+                        />
+                      </div>
+                      <div className="row-actions">
+                        <button type="submit" className="primary-button">
+                          Aprovar pedido
+                        </button>
+                      </div>
+                    </form>
+
+                    <form action={rejectCustomerMembershipRequestAction}>
+                      <input
+                        type="hidden"
+                        name="returnPath"
+                        value="/dashboard/subscriptions"
+                      />
+                      <input
+                        type="hidden"
+                        name="requestId"
+                        value={request.id}
+                      />
+                      <button type="submit" className="secondary-button">
+                        Recusar pedido
+                      </button>
+                    </form>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <section id="subscription-catalog" className="card content-card">
         <div className="section-heading">
           <div>
             <h2>Planos do salão</h2>
-            <p className="muted">Clubes e pacotes com edição simples.</p>
+            <p className="muted">
+              Clubes e pacotes com edição simples. Pedidos feitos no app cliente
+              aparecem aqui e também na home do painel.
+            </p>
           </div>
         </div>
 
         {!offers.length ? (
-          <EmptyStateCard eyebrow="Sem planos" title="Crie o primeiro plano" description="Assim que um plano for publicado, ele aparece aqui." />
+          <EmptyStateCard
+            eyebrow="Sem planos"
+            title="Crie o primeiro plano"
+            description="Assim que um plano for publicado, ele aparece aqui."
+          />
         ) : (
           <div className="simple-list">
             {offers.map((offer) => {
-              const stats = offerStats.get(offer.id) ?? { active: 0, total: 0, projectedRevenue: 0 };
-              const serviceName = offer.membership_service_id ? serviceNameById.get(offer.membership_service_id) : null;
-              const isPopular = leadingOffer?.id === offer.id && stats.active > 0;
+              const stats = offerStats.get(offer.id) ?? {
+                active: 0,
+                total: 0,
+                projectedRevenue: 0,
+              };
+              const serviceName = offer.membership_service_id
+                ? serviceNameById.get(offer.membership_service_id)
+                : null;
+              const isPopular =
+                leadingOffer?.id === offer.id && stats.active > 0;
 
               return (
                 <article key={offer.id} className="simple-row">
-                  <div className="inline-actions" style={{ marginBottom: 6, flexWrap: "wrap" }}>
-                    <span className={offer.is_active ? "badge badge--confirmed" : "badge badge--soft"}>{offer.is_active ? "Ativo" : "Pausado"}</span>
-                    {isPopular ? <span className="badge badge--pending">Mais vendido</span> : null}
-                    <span className="badge badge--soft">Ordem {offer.sort_order}</span>
+                  <div
+                    className="inline-actions"
+                    style={{ marginBottom: 6, flexWrap: "wrap" }}
+                  >
+                    <span
+                      className={
+                        offer.is_active
+                          ? "badge badge--confirmed"
+                          : "badge badge--soft"
+                      }
+                    >
+                      {offer.is_active ? "Ativo" : "Pausado"}
+                    </span>
+                    {isPopular ? (
+                      <span className="badge badge--pending">Mais vendido</span>
+                    ) : null}
+                    <span className="badge badge--soft">
+                      Ordem {offer.sort_order}
+                    </span>
                   </div>
                   <h3>{offer.title}</h3>
-                  <p className="muted">{offer.highlight_text?.trim() || formatOperationalSummary(offer, serviceName)}</p>
-                  <p className="list-meta">
-                    {offer.price == null ? "Sob consulta" : `${formatCurrency(Number(offer.price))}/mês`} • {formatOperationalSummary(offer, serviceName)}
+                  <p className="muted">
+                    {offer.highlight_text?.trim() ||
+                      formatOperationalSummary(offer, serviceName)}
                   </p>
                   <p className="list-meta">
-                    {stats.active} ativo{stats.active === 1 ? "" : "s"} • {stats.total} vendido{stats.total === 1 ? "" : "s"}
-                    {offer.starts_on ? ` • vigência de ${formatDate(offer.starts_on)}` : ""} {offer.ends_on ? ` até ${formatDate(offer.ends_on)}` : ""}
+                    {offer.price == null
+                      ? "Sob consulta"
+                      : `${formatCurrency(Number(offer.price))}/mês`}{" "}
+                    • {formatOperationalSummary(offer, serviceName)}
+                  </p>
+                  <p className="list-meta">
+                    {stats.active} ativo{stats.active === 1 ? "" : "s"} •{" "}
+                    {stats.total} vendido{stats.total === 1 ? "" : "s"}
+                    {offer.starts_on
+                      ? ` • vigência de ${formatDate(offer.starts_on)}`
+                      : ""}{" "}
+                    {offer.ends_on ? ` até ${formatDate(offer.ends_on)}` : ""}
                   </p>
 
                   <details className="accordion" style={{ marginTop: 12 }}>
@@ -360,65 +648,110 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
                       <span>Editar plano</span>
                       <span className="accordion__cta">ajustar</span>
                     </summary>
-                    <form action={updateSalonOfferAction} className="simple-form" style={{ marginTop: 10 }}>
-                      <input type="hidden" name="returnPath" value="/dashboard/subscriptions" />
+                    <form
+                      action={updateSalonOfferAction}
+                      className="simple-form"
+                      style={{ marginTop: 10 }}
+                      encType="multipart/form-data"
+                    >
+                      <input
+                        type="hidden"
+                        name="returnPath"
+                        value="/dashboard/subscriptions"
+                      />
                       <input type="hidden" name="offerId" value={offer.id} />
                       <input type="hidden" name="kind" value="membership" />
 
                       <div className="field">
-                        <label htmlFor={`subscription-title-${offer.id}`}>Título</label>
-                        <input id={`subscription-title-${offer.id}`} name="title" defaultValue={offer.title} required />
+                        <label htmlFor={`subscription-title-${offer.id}`}>
+                          Título
+                        </label>
+                        <input
+                          id={`subscription-title-${offer.id}`}
+                          name="title"
+                          defaultValue={offer.title}
+                          required
+                        />
                       </div>
 
                       <div className="field">
-                        <label htmlFor={`subscription-highlight-${offer.id}`}>Chamada</label>
-                        <input id={`subscription-highlight-${offer.id}`} name="highlightText" defaultValue={offer.highlight_text ?? ""} />
+                        <label htmlFor={`subscription-highlight-${offer.id}`}>
+                          Chamada
+                        </label>
+                        <input
+                          id={`subscription-highlight-${offer.id}`}
+                          name="highlightText"
+                          defaultValue={offer.highlight_text ?? ""}
+                        />
                       </div>
 
                       <div className="field">
-                        <label htmlFor={`subscription-description-${offer.id}`}>Descrição</label>
-                        <textarea id={`subscription-description-${offer.id}`} name="description" rows={3} defaultValue={offer.description ?? ""} />
+                        <label htmlFor={`subscription-description-${offer.id}`}>
+                          Descrição
+                        </label>
+                        <textarea
+                          id={`subscription-description-${offer.id}`}
+                          name="description"
+                          rows={3}
+                          defaultValue={offer.description ?? ""}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label htmlFor={`subscription-image-${offer.id}`}>
+                          Foto da assinatura
+                        </label>
+                        <input
+                          id={`subscription-image-${offer.id}`}
+                          name="offerImage"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                        />
+                        <small className="muted">
+                          Opcional. JPG, PNG ou WEBP. Aparece na home do app.
+                        </small>
+                        {offer.image_path ? (
+                          <label
+                            className="checkbox-field"
+                            style={{ marginTop: 10 }}
+                          >
+                            <input type="checkbox" name="removeImage" />
+                            Remover foto atual da home
+                          </label>
+                        ) : (
+                          <small className="muted">
+                            Sem foto cadastrada ainda.
+                          </small>
+                        )}
                       </div>
 
                       <div className="split-grid">
                         <div className="field">
-                          <label htmlFor={`subscription-price-${offer.id}`}>Valor</label>
+                          <label htmlFor={`subscription-price-${offer.id}`}>
+                            Valor
+                          </label>
                           <input
                             id={`subscription-price-${offer.id}`}
                             name="price"
                             type="number"
                             min="0"
                             step="0.01"
-                            defaultValue={offer.price == null ? "" : Number(offer.price)}
+                            defaultValue={
+                              offer.price == null ? "" : Number(offer.price)
+                            }
                           />
                         </div>
                         <div className="field">
-                          <label htmlFor={`subscription-order-${offer.id}`}>Ordem</label>
-                          <input id={`subscription-order-${offer.id}`} name="sortOrder" type="number" min="0" step="1" defaultValue={offer.sort_order} required />
-                        </div>
-                      </div>
-
-                      <div className="split-grid">
-                        <div className="field">
-                          <label htmlFor={`subscription-service-${offer.id}`}>Serviço</label>
-                          <select id={`subscription-service-${offer.id}`} name="membershipServiceId" defaultValue={offer.membership_service_id ?? ""}>
-                            <option value="">Selecione</option>
-                            {serviceOptions.map((service) => (
-                              <option key={service.id} value={service.id}>
-                                {service.category ? `${service.category} • ${service.name}` : service.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="field">
-                          <label htmlFor={`subscription-sessions-${offer.id}`}>Sessões</label>
+                          <label htmlFor={`subscription-order-${offer.id}`}>
+                            Ordem
+                          </label>
                           <input
-                            id={`subscription-sessions-${offer.id}`}
-                            name="membershipSessionsIncluded"
+                            id={`subscription-order-${offer.id}`}
+                            name="sortOrder"
                             type="number"
-                            min="1"
+                            min="0"
                             step="1"
-                            defaultValue={offer.membership_sessions_included ?? ""}
+                            defaultValue={offer.sort_order}
                             required
                           />
                         </div>
@@ -426,7 +759,47 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
 
                       <div className="split-grid">
                         <div className="field">
-                          <label htmlFor={`subscription-validity-${offer.id}`}>Validade (dias)</label>
+                          <label htmlFor={`subscription-service-${offer.id}`}>
+                            Serviço
+                          </label>
+                          <select
+                            id={`subscription-service-${offer.id}`}
+                            name="membershipServiceId"
+                            defaultValue={offer.membership_service_id ?? ""}
+                          >
+                            <option value="">Selecione</option>
+                            {serviceOptions.map((service) => (
+                              <option key={service.id} value={service.id}>
+                                {service.category
+                                  ? `${service.category} • ${service.name}`
+                                  : service.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="field">
+                          <label htmlFor={`subscription-sessions-${offer.id}`}>
+                            Sessões
+                          </label>
+                          <input
+                            id={`subscription-sessions-${offer.id}`}
+                            name="membershipSessionsIncluded"
+                            type="number"
+                            min="1"
+                            step="1"
+                            defaultValue={
+                              offer.membership_sessions_included ?? ""
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="split-grid">
+                        <div className="field">
+                          <label htmlFor={`subscription-validity-${offer.id}`}>
+                            Validade (dias)
+                          </label>
                           <input
                             id={`subscription-validity-${offer.id}`}
                             name="membershipValidityDays"
@@ -439,8 +812,15 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
                         </div>
                         <div className="field">
                           <label>Status</label>
-                          <label className="checkbox-field" style={{ marginTop: 10 }}>
-                            <input type="checkbox" name="isActive" defaultChecked={offer.is_active} />
+                          <label
+                            className="checkbox-field"
+                            style={{ marginTop: 10 }}
+                          >
+                            <input
+                              type="checkbox"
+                              name="isActive"
+                              defaultChecked={offer.is_active}
+                            />
                             Plano visível
                           </label>
                         </div>
@@ -448,23 +828,47 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
 
                       <div className="split-grid">
                         <div className="field">
-                          <label htmlFor={`subscription-start-${offer.id}`}>Válido a partir de</label>
-                          <input id={`subscription-start-${offer.id}`} name="startsOn" type="date" defaultValue={offer.starts_on ?? ""} />
+                          <label htmlFor={`subscription-start-${offer.id}`}>
+                            Válido a partir de
+                          </label>
+                          <input
+                            id={`subscription-start-${offer.id}`}
+                            name="startsOn"
+                            type="date"
+                            defaultValue={offer.starts_on ?? ""}
+                          />
                         </div>
                         <div className="field">
-                          <label htmlFor={`subscription-end-${offer.id}`}>Válido até</label>
-                          <input id={`subscription-end-${offer.id}`} name="endsOn" type="date" defaultValue={offer.ends_on ?? ""} />
+                          <label htmlFor={`subscription-end-${offer.id}`}>
+                            Válido até
+                          </label>
+                          <input
+                            id={`subscription-end-${offer.id}`}
+                            name="endsOn"
+                            type="date"
+                            defaultValue={offer.ends_on ?? ""}
+                          />
                         </div>
                       </div>
 
-                      <div className="simple-row__actions" style={{ flexWrap: "wrap" }}>
+                      <div
+                        className="simple-row__actions"
+                        style={{ flexWrap: "wrap" }}
+                      >
                         <button type="submit" className="secondary-button">
                           Salvar plano
                         </button>
                       </div>
                     </form>
-                    <form action={deleteSalonOfferAction} style={{ marginTop: 8 }}>
-                      <input type="hidden" name="returnPath" value="/dashboard/subscriptions" />
+                    <form
+                      action={deleteSalonOfferAction}
+                      style={{ marginTop: 8 }}
+                    >
+                      <input
+                        type="hidden"
+                        name="returnPath"
+                        value="/dashboard/subscriptions"
+                      />
                       <input type="hidden" name="offerId" value={offer.id} />
                       <button type="submit" className="danger-button">
                         Remover
@@ -482,62 +886,136 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
         <div className="section-heading">
           <div>
             <h2>Novo plano</h2>
-            <p className="muted">Cadastre rapidamente um novo clube ou pacote.</p>
+            <p className="muted">
+              Cadastre rapidamente um novo clube ou pacote.
+            </p>
           </div>
         </div>
 
-        <form action={createSalonOfferAction} className="simple-form">
-          <input type="hidden" name="returnPath" value="/dashboard/subscriptions" />
+        <form
+          action={createSalonOfferAction}
+          className="simple-form"
+          encType="multipart/form-data"
+        >
+          <input
+            type="hidden"
+            name="returnPath"
+            value="/dashboard/subscriptions"
+          />
           <input type="hidden" name="kind" value="membership" />
 
           <div className="field">
             <label htmlFor="subscription-title">Título</label>
-            <input id="subscription-title" name="title" placeholder="Ex.: Clube mensal de hidratação" required />
+            <input
+              id="subscription-title"
+              name="title"
+              placeholder="Ex.: Clube mensal de hidratação"
+              required
+            />
           </div>
 
           <div className="field">
             <label htmlFor="subscription-highlight">Chamada</label>
-            <input id="subscription-highlight" name="highlightText" placeholder="Ex.: 2 hidratações por mês com preço fixo" />
+            <input
+              id="subscription-highlight"
+              name="highlightText"
+              placeholder="Ex.: 2 hidratações por mês com preço fixo"
+            />
           </div>
 
           <div className="field">
             <label htmlFor="subscription-description">Descrição</label>
-            <textarea id="subscription-description" name="description" rows={3} placeholder="Explique o que entra no plano." />
+            <textarea
+              id="subscription-description"
+              name="description"
+              rows={3}
+              placeholder="Explique o que entra no plano."
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="subscription-image">Foto da assinatura</label>
+            <input
+              id="subscription-image"
+              name="offerImage"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+            />
+            <small className="muted">
+              Opcional. JPG, PNG ou WEBP. Aparece na home do app.
+            </small>
           </div>
 
           <div className="split-grid">
             <div className="field">
               <label htmlFor="subscription-price">Valor</label>
-              <input id="subscription-price" name="price" type="number" min="0" step="0.01" placeholder="149.90" />
+              <input
+                id="subscription-price"
+                name="price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="149.90"
+              />
             </div>
             <div className="field">
               <label htmlFor="subscription-order">Ordem</label>
-              <input id="subscription-order" name="sortOrder" type="number" min="0" step="1" defaultValue="0" required />
+              <input
+                id="subscription-order"
+                name="sortOrder"
+                type="number"
+                min="0"
+                step="1"
+                defaultValue="0"
+                required
+              />
             </div>
           </div>
 
           <div className="split-grid">
             <div className="field">
               <label htmlFor="subscription-service">Serviço vinculado</label>
-              <select id="subscription-service" name="membershipServiceId" defaultValue="">
+              <select
+                id="subscription-service"
+                name="membershipServiceId"
+                defaultValue=""
+              >
                 <option value="">Selecione</option>
                 {serviceOptions.map((service) => (
                   <option key={service.id} value={service.id}>
-                    {service.category ? `${service.category} • ${service.name}` : service.name}
+                    {service.category
+                      ? `${service.category} • ${service.name}`
+                      : service.name}
                   </option>
                 ))}
               </select>
             </div>
             <div className="field">
               <label htmlFor="subscription-sessions">Sessões incluídas</label>
-              <input id="subscription-sessions" name="membershipSessionsIncluded" type="number" min="1" step="1" placeholder="2" required />
+              <input
+                id="subscription-sessions"
+                name="membershipSessionsIncluded"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="2"
+                required
+              />
             </div>
           </div>
 
           <div className="split-grid">
             <div className="field">
               <label htmlFor="subscription-validity">Validade em dias</label>
-              <input id="subscription-validity" name="membershipValidityDays" type="number" min="1" step="1" placeholder="30" required />
+              <input
+                id="subscription-validity"
+                name="membershipValidityDays"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="30"
+                required
+              />
             </div>
             <div className="field">
               <label>Status</label>
@@ -575,26 +1053,47 @@ export default async function SubscriptionsPage({ searchParams }: SubscriptionsP
 
         <div className="simple-list">
           {!recentMemberships.length ? (
-            <EmptyStateCard eyebrow="Sem clientes ainda" title="A base aparece aqui" description="Quando vender planos, os clientes ficam nesta lista." />
+            <EmptyStateCard
+              eyebrow="Sem clientes ainda"
+              title="A base aparece aqui"
+              description="Quando vender planos, os clientes ficam nesta lista."
+            />
           ) : (
             recentMemberships.map((membership) => {
-              const membershipStatus = resolveMembershipStatus(membership, today);
+              const membershipStatus = resolveMembershipStatus(
+                membership,
+                today,
+              );
               const customer = firstRelation(membership.customers);
-              const remainingSessions = Math.max(membership.sessions_included - membership.sessions_used, 0);
+              const remainingSessions = Math.max(
+                membership.sessions_included - membership.sessions_used,
+                0,
+              );
 
               return (
                 <article key={membership.id} className="simple-row">
-                  <div className="inline-actions" style={{ marginBottom: 6, flexWrap: "wrap" }}>
-                    <span className={membershipStatusBadge(membershipStatus)}>{membershipStatusLabel(membershipStatus)}</span>
-                    {customer?.name ? <span className="badge badge--soft">{customer.name}</span> : null}
+                  <div
+                    className="inline-actions"
+                    style={{ marginBottom: 6, flexWrap: "wrap" }}
+                  >
+                    <span className={membershipStatusBadge(membershipStatus)}>
+                      {membershipStatusLabel(membershipStatus)}
+                    </span>
+                    {customer?.name ? (
+                      <span className="badge badge--soft">{customer.name}</span>
+                    ) : null}
                   </div>
                   <h3>{membership.title}</h3>
                   <p className="muted">
-                    {membership.service_name_snapshot} • {remainingSessions} restante{remainingSessions === 1 ? "" : "s"}
+                    {membership.service_name_snapshot} • {remainingSessions}{" "}
+                    restante{remainingSessions === 1 ? "" : "s"}
                   </p>
                   <small className="list-meta">
-                    Iniciado em {formatDate(membership.started_at)} • até {formatDate(membership.expires_at)}.
-                    {membership.price_snapshot != null ? ` ${formatCurrency(Number(membership.price_snapshot))}.` : ""}
+                    Iniciado em {formatDate(membership.started_at)} • até{" "}
+                    {formatDate(membership.expires_at)}.
+                    {membership.price_snapshot != null
+                      ? ` ${formatCurrency(Number(membership.price_snapshot))}.`
+                      : ""}
                   </small>
                 </article>
               );

@@ -4,8 +4,13 @@ const supabaseHostname = process.env.NEXT_PUBLIC_SUPABASE_URL
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
+  reactStrictMode: true,
   images: supabaseHostname
     ? {
+        dangerouslyAllowSVG: false,
+        contentDispositionType: "attachment",
+        contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
         remotePatterns: [
           {
             protocol: "https",

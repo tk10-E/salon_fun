@@ -40,7 +40,7 @@ describe("auth actions", () => {
     headersMock.mockReturnValue({
       get(name: string) {
         if (name === "origin") {
-          return "https://painel.jc7desenvolvimento.online";
+          return "https://painel.jc7desenvovimento.online";
         }
 
         return null;
@@ -99,8 +99,8 @@ describe("auth actions", () => {
       signUpActionImpl(
         makeFormData({
           email: "new@salon.fun",
-          password: "123456",
-          passwordConfirmation: "123456",
+          password: "SenhaForte123!",
+          passwordConfirmation: "SenhaForte123!",
         }),
       ),
       redirectMock,
@@ -108,9 +108,9 @@ describe("auth actions", () => {
 
     expect(signUp).toHaveBeenCalledWith({
       email: "new@salon.fun",
-      password: "123456",
+      password: "SenhaForte123!",
       options: {
-        emailRedirectTo: "https://painel.jc7desenvolvimento.online/login",
+        emailRedirectTo: "https://painel.jc7desenvovimento.online/login",
       },
     });
     expect(location).toBe("/onboarding");
@@ -165,7 +165,7 @@ describe("auth actions", () => {
     expect(signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: "https://painel.jc7desenvolvimento.online/auth/callback?next=%2Fdashboard",
+        redirectTo: "https://painel.jc7desenvovimento.online/auth/callback?next=%2Fdashboard",
         scopes: "https://www.googleapis.com/auth/userinfo.email",
       },
     });
@@ -194,7 +194,7 @@ describe("auth actions", () => {
     );
 
     expect(resetPasswordForEmail).toHaveBeenCalledWith("owner@salon.fun", {
-      redirectTo: "https://painel.jc7desenvolvimento.online/auth/recovery",
+      redirectTo: "https://painel.jc7desenvovimento.online/auth/recovery",
     });
     expect(location).toBe(
       "/login?message=Enviamos+um+link+de+recupera%C3%A7%C3%A3o+para+seu+e-mail.+Abra+a+mensagem+mais+recente+para+redefinir+a+senha.&tone=success",
@@ -228,15 +228,15 @@ describe("auth actions", () => {
     const location = await captureRedirect(
       updatePasswordActionImpl(
         makeFormData({
-          password: "123456",
-          passwordConfirmation: "123456",
+          password: "SenhaForte123!",
+          passwordConfirmation: "SenhaForte123!",
         }),
       ),
       redirectMock,
     );
 
     expect(updateUser).toHaveBeenCalledWith({
-      password: "123456",
+      password: "SenhaForte123!",
     });
     expect(location).toBe(
       "/login?message=Senha+atualizada+com+sucesso.+Entre+com+sua+nova+senha.&tone=success",

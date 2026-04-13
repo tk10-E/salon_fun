@@ -241,7 +241,7 @@ function verifyMetaSignature(rawBody: string, signatureHeader: string | null) {
   const appSecret = getMetaAppSecret();
 
   if (!appSecret) {
-    return true;
+    return false;
   }
 
   if (!signatureHeader?.startsWith("sha256=")) {

@@ -15,17 +15,18 @@ import {
 } from "@/lib/management";
 
 type ClientesPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     q?: string;
     clientId?: string;
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 export default async function ClientesPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: ClientesPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const timeZone = salon.timezone ?? "America/Sao_Paulo";
   const query = searchParams?.q?.trim() ?? "";

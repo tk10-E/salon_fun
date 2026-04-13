@@ -37,8 +37,16 @@ export function buildRequestOriginFromHeaders(headerStore: HeaderStore) {
   return `${protocol}://${host.replace(/\/+$/, "")}`;
 }
 
-export function buildRequestOrigin() {
-  return getConfiguredAppOrigin() ?? buildRequestOriginFromHeaders(headers());
+export async function buildRequestOrigin() {
+  const configuredOrigin = getConfiguredAppOrigin();
+  if (configuredOrigin) {
+    return configuredOrigin;
+  }
+
+  const headerStore = await headers();
+  return (
+    getConfiguredAppOrigin() ?? buildRequestOriginFromHeaders(headerStore)
+  );
 }
 
 export function resolveRequestOriginFromRequest(request: Request) {
@@ -49,8 +57,8 @@ export function resolveRequestOriginFromRequest(request: Request) {
   );
 }
 
-export function buildAbsoluteUrl(path: string) {
-  const origin = buildRequestOrigin();
+export async function buildAbsoluteUrl(path: string) {
+  const origin = await buildRequestOrigin();
   if (!origin) {
     return undefined;
   }

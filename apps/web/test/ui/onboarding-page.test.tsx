@@ -38,6 +38,13 @@ describe("onboarding page UI", () => {
 
     createClientMock.mockReturnValue({
       auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: {
+            session: {
+              user: { id: "user-1" },
+            },
+          },
+        }),
         getUser: vi.fn().mockResolvedValue({
           data: {
             user: { id: "user-1" },

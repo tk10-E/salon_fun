@@ -4,22 +4,30 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  approveCustomerMembershipRequestActionPath,
   createClientMock,
   createSalonOfferActionPath,
   deleteSalonOfferActionPath,
+  rejectCustomerMembershipRequestActionPath,
   requireOwnerSalonMock,
   updateSalonOfferActionPath,
 } = vi.hoisted(() => ({
+  approveCustomerMembershipRequestActionPath: "/__test/approve-request",
   createClientMock: vi.fn(),
   createSalonOfferActionPath: "/__test/create-offer",
   deleteSalonOfferActionPath: "/__test/delete-offer",
+  rejectCustomerMembershipRequestActionPath: "/__test/reject-request",
   requireOwnerSalonMock: vi.fn(),
   updateSalonOfferActionPath: "/__test/update-offer",
 }));
 
 vi.mock("@/app/actions", () => ({
+  approveCustomerMembershipRequestAction:
+    approveCustomerMembershipRequestActionPath,
   createSalonOfferAction: createSalonOfferActionPath,
   deleteSalonOfferAction: deleteSalonOfferActionPath,
+  rejectCustomerMembershipRequestAction:
+    rejectCustomerMembershipRequestActionPath,
   updateSalonOfferAction: updateSalonOfferActionPath,
 }));
 
@@ -57,6 +65,7 @@ describe("subscriptions page UI", () => {
                           title: "Clube Glow",
                           description: "Plano para hidratação e corte.",
                           highlight_text: "2 sessões por mês com valor fixo",
+                          image_path: null,
                           membership_service_id: "service-1",
                           membership_sessions_included: 2,
                           membership_validity_days: 30,
@@ -125,6 +134,33 @@ describe("subscriptions page UI", () => {
           };
         }
 
+        if (table === "customer_membership_requests") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  order: vi.fn().mockResolvedValue({
+                    data: [
+                      {
+                        id: "request-1",
+                        customer_id: "customer-2",
+                        offer_id: "offer-1",
+                        offer_title_snapshot: "Clube Glow",
+                        price_snapshot: 149.9,
+                        notes: "Quero ativar ainda este mês.",
+                        status: "pending",
+                        requested_at: "2026-04-10T13:00:00.000Z",
+                        customers: { name: "Joana" },
+                      },
+                    ],
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+
         throw new Error(`Unexpected table ${table}`);
       }),
     });
@@ -141,18 +177,41 @@ describe("subscriptions page UI", () => {
         name: "Assinaturas e planos para vender mais vezes.",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Receita recorrente projetada")).toBeInTheDocument();
+    expect(
+      screen.getByText("Receita recorrente projetada"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Catálogo pronto")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Planos do salão" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Planos do salão" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Clube Glow").length).toBeGreaterThan(0);
-    expect(screen.getByText(/2 sessões por mês com valor fixo/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Carteira ativa" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 sessões por mês com valor fixo/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Carteira ativa" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Maria")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Novo plano" })).toHaveAttribute(
       "href",
       "#subscription-create",
     );
-    expect(screen.getByRole("heading", { name: "Novo plano" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Novo plano" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Pedidos feitos no app cliente aparecem aqui e também na home do painel/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Pedidos vindos do app cliente" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Aprovar pedido" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Inicio real da assinatura"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Sessões incluídas")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Foto da assinatura")).toHaveLength(2);
   });
 });

@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 
+import { validatePasswordStrength } from "@/lib/passwordPolicy";
 import { createClient } from "@/lib/supabase/server";
 import { buildRequestOrigin } from "@/lib/requestOrigin";
 
 import { buildRedirectNotice } from "./shared";
 
-function buildAppOrigin() {
+async function buildAppOrigin() {
   return buildRequestOrigin();
 }
 
@@ -13,8 +14,8 @@ function normalizeEmailAddress(value: FormDataEntryValue | null) {
   return String(value ?? "").trim().toLowerCase();
 }
 
-function buildEmailRedirectUrl() {
-  const origin = buildAppOrigin();
+async function buildEmailRedirectUrl() {
+  const origin = await buildAppOrigin();
   if (!origin) {
     return undefined;
   }
@@ -22,8 +23,8 @@ function buildEmailRedirectUrl() {
   return `${origin}/login`;
 }
 
-function buildPasswordRecoveryUrl() {
-  const origin = buildAppOrigin();
+async function buildPasswordRecoveryUrl() {
+  const origin = await buildAppOrigin();
   if (!origin) {
     return undefined;
   }
@@ -39,8 +40,8 @@ function sanitizeNextPath(value: string | null | undefined) {
   return value;
 }
 
-function buildGoogleCallbackUrl(nextPath = "/dashboard") {
-  const origin = buildAppOrigin();
+async function buildGoogleCallbackUrl(nextPath = "/dashboard") {
+  const origin = await buildAppOrigin();
   if (!origin) {
     return undefined;
   }
@@ -69,7 +70,7 @@ export async function signInActionImpl(formData: FormData) {
 
 export async function signInWithGoogleActionImpl(formData: FormData) {
   const nextPath = sanitizeNextPath(String(formData.get("next") ?? ""));
-  const redirectTo = buildGoogleCallbackUrl(nextPath);
+  const redirectTo = await buildGoogleCallbackUrl(nextPath);
 
   if (!redirectTo) {
     redirect(buildRedirectNotice("/login", "Não foi possível iniciar o login com Google agora.", "error"));
@@ -96,10 +97,15 @@ export async function signUpActionImpl(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const passwordConfirmation = String(formData.get("passwordConfirmation") ?? "");
   const supabase = createClient();
-  const emailRedirectTo = buildEmailRedirectUrl();
+  const emailRedirectTo = await buildEmailRedirectUrl();
 
   if (password !== passwordConfirmation) {
     redirect(buildRedirectNotice("/login", "Confirme a mesma senha nos dois campos para criar a conta.", "error"));
+  }
+
+  const signUpPasswordError = validatePasswordStrength(password);
+  if (signUpPasswordError) {
+    redirect(buildRedirectNotice("/login", signUpPasswordError, "error"));
   }
 
   const { data, error } = await supabase.auth.signUp({
@@ -132,7 +138,7 @@ export async function signUpActionImpl(formData: FormData) {
 export async function sendPasswordResetActionImpl(formData: FormData) {
   const email = normalizeEmailAddress(formData.get("email"));
   const supabase = createClient();
-  const redirectTo = buildPasswordRecoveryUrl();
+  const redirectTo = await buildPasswordRecoveryUrl();
 
   if (!email) {
     redirect(buildRedirectNotice("/login", "Informe o e-mail da conta para recuperar o acesso.", "error"));
@@ -174,8 +180,9 @@ export async function updatePasswordActionImpl(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const passwordConfirmation = String(formData.get("passwordConfirmation") ?? "");
 
-  if (password.length < 6) {
-    redirect(buildRedirectNotice("/auth/recovery", "Use uma senha com pelo menos 6 caracteres.", "error"));
+  const updatePasswordError = validatePasswordStrength(password);
+  if (updatePasswordError) {
+    redirect(buildRedirectNotice("/auth/recovery", updatePasswordError, "error"));
   }
 
   if (password !== passwordConfirmation) {

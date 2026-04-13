@@ -3,14 +3,15 @@ import { OperationsPageContent } from "./_components";
 import { loadOperationsPageData } from "./_lib";
 
 export type OperationsPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 export default async function OperationsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: OperationsPageProps) {
+  const searchParams = await searchParamsPromise;
   const operationsPageData = await loadOperationsPageData();
 
   return (

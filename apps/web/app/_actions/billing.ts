@@ -53,8 +53,8 @@ function revalidateBillingWorkspace() {
   revalidatePath("/dashboard/settings");
 }
 
-function buildBillingAbsoluteUrl() {
-  const billingUrl = buildAbsoluteUrl(BILLING_PATH);
+async function buildBillingAbsoluteUrl() {
+  const billingUrl = await buildAbsoluteUrl(BILLING_PATH);
 
   if (!billingUrl) {
     throw new Error("Configure APP_URL para habilitar o checkout absoluto do Stripe.");
@@ -281,7 +281,7 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
 
   try {
     const stripe = getStripeClient();
-    const billingUrl = buildBillingAbsoluteUrl();
+    const billingUrl = await buildBillingAbsoluteUrl();
     const customerId = await ensureStripeCustomer({
       salonId: salon.id,
       salonName: salon.name,
@@ -386,7 +386,7 @@ export async function startStripeBillingPortalActionImpl() {
     const stripe = getStripeClient();
     const session = await stripe.billingPortal.sessions.create({
       customer: billingSnapshot.subscription.providerCustomerId,
-      return_url: buildBillingAbsoluteUrl(),
+      return_url: await buildBillingAbsoluteUrl(),
     });
     portalUrl = session.url;
   } catch (error) {

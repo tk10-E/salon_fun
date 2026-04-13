@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 import { getStripeClient } from "@/lib/stripeBilling";
 import { getStripeWebhookSecret } from "@/lib/serverEnv";
 import { syncStripeSubscriptionRecord } from "@/lib/stripeBillingSync";
+import { recordSecurityAuditEvent } from "@/lib/security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,8 +73,16 @@ async function handleStripeWebhookEvent(event: Stripe.Event) {
 
 export async function POST(request: Request) {
   const webhookSecret = getStripeWebhookSecret();
+  const requestPath = new URL(request.url).pathname;
 
   if (!webhookSecret) {
+    await recordSecurityAuditEvent({
+      eventType: "stripe.webhook_missing_secret",
+      requestPath,
+      severity: "critical",
+      userAgent: request.headers.get("user-agent"),
+    });
+
     return NextResponse.json(
       { error: "missing_stripe_webhook_secret" },
       { status: 500 },
@@ -83,6 +92,13 @@ export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
 
   if (!signature) {
+    await recordSecurityAuditEvent({
+      eventType: "stripe.webhook_missing_signature",
+      requestPath,
+      severity: "warn",
+      userAgent: request.headers.get("user-agent"),
+    });
+
     return NextResponse.json({ error: "missing_stripe_signature" }, { status: 400 });
   }
 
@@ -96,13 +112,21 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
+    await recordSecurityAuditEvent({
+      eventType: "stripe.webhook_failed",
+      metadata: {
+        detail:
+          error instanceof Error ? error.message.slice(0, 500) : "unknown_stripe_webhook_error",
+      },
+      requestPath,
+      severity: "warn",
+      userAgent: request.headers.get("user-agent"),
+    });
+
     console.error("stripe-webhook failed", error);
 
     return NextResponse.json(
-      {
-        error: "stripe_webhook_failed",
-        detail: error instanceof Error ? error.message : "unknown_stripe_webhook_error",
-      },
+      { error: "stripe_webhook_failed" },
       { status: 400 },
     );
   }

@@ -1,9 +1,16 @@
+import { randomUUID } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { getSalonBillingEntitlements } from "@/lib/billing";
+import {
+  MEDIA_UPLOAD_PRESETS,
+  formatPresetMegabytes,
+} from "@/lib/mediaUploadPresets";
 import { createClient } from "@/lib/supabase/server";
+import { optimizeUploadedImage } from "@/lib/uploadedImageOptimization";
 
 import {
   buildRedirectNotice,
@@ -23,6 +30,88 @@ const COMMERCIAL_OFFER_PATHS = [
   COMMERCIAL_PROMOTIONS_PATH,
   SUBSCRIPTIONS_PATH,
 ] as const;
+const OFFER_IMAGE_PRESET = MEDIA_UPLOAD_PRESETS.offer;
+
+function readUploadedFile(formData: FormData, field: string) {
+  const entry = formData.get(field);
+  return entry instanceof File && entry.size > 0 ? entry : null;
+}
+
+function buildOfferImagePath(
+  salonId: string,
+  fileId: string,
+  extension: string,
+) {
+  return `${salonId}/offers/${fileId}.${extension}`;
+}
+
+async function uploadOfferImage(args: {
+  imageFile: File;
+  redirectPath: string;
+  salonId: string;
+  supabase: ReturnType<typeof createClient>;
+}) {
+  if (!args.imageFile.type.startsWith("image/")) {
+    redirect(
+      buildRedirectNotice(
+        args.redirectPath,
+        "Envie uma imagem valida para a assinatura.",
+        "error",
+      ),
+    );
+  }
+
+  if (args.imageFile.size > OFFER_IMAGE_PRESET.maxInputBytes) {
+    redirect(
+      buildRedirectNotice(
+        args.redirectPath,
+        `A foto da assinatura deve ter no maximo ${formatPresetMegabytes(
+          OFFER_IMAGE_PRESET.maxInputBytes,
+        )} MB.`,
+        "error",
+      ),
+    );
+  }
+
+  let optimizedImage;
+
+  try {
+    optimizedImage = await optimizeUploadedImage(args.imageFile, "offer");
+  } catch {
+    redirect(
+      buildRedirectNotice(
+        args.redirectPath,
+        "Nao foi possivel processar a foto da assinatura.",
+        "error",
+      ),
+    );
+  }
+
+  const imagePath = buildOfferImagePath(
+    args.salonId,
+    randomUUID(),
+    optimizedImage.extension,
+  );
+
+  const { error: uploadError } = await args.supabase.storage
+    .from("salon-assets")
+    .upload(imagePath, optimizedImage.buffer, {
+      contentType: optimizedImage.contentType,
+      upsert: true,
+    });
+
+  if (uploadError) {
+    redirect(
+      buildRedirectNotice(
+        args.redirectPath,
+        "Nao foi possivel enviar a foto da assinatura.",
+        "error",
+      ),
+    );
+  }
+
+  return imagePath;
+}
 
 function normalizeDateInput(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -114,6 +203,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   const membershipValidityDays = normalizePositiveInteger(
     formData.get("membershipValidityDays"),
   );
+  const imageFile = readUploadedFile(formData, "offerImage");
   const priceValue = String(formData.get("price") ?? "").trim();
   const startsOnValue = String(formData.get("startsOn") ?? "").trim();
   const endsOnValue = String(formData.get("endsOn") ?? "").trim();
@@ -121,6 +211,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   const isActive = formData.get("isActive") === "on";
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  let imagePath: string | null = null;
 
   if (
     !["promotion", "membership"].includes(kind) ||
@@ -195,13 +286,23 @@ export async function createSalonOfferActionImpl(formData: FormData) {
     );
   }
 
+  if (imageFile) {
+    imagePath = await uploadOfferImage({
+      imageFile,
+      redirectPath,
+      salonId: salon.id,
+      supabase,
+    });
+  }
+
   const { error } = await supabase.from("salon_offers").insert({
     salon_id: salon.id,
     kind,
     title,
     description: description || null,
     highlight_text: highlightText || null,
-    membership_service_id: kind === "membership" ? membershipServiceId : null,
+    image_path: imagePath,
+    membership_service_id: membershipServiceId || null,
     membership_sessions_included:
       kind === "membership" ? membershipSessionsIncluded : null,
     membership_validity_days:
@@ -214,6 +315,12 @@ export async function createSalonOfferActionImpl(formData: FormData) {
   });
 
   if (error) {
+    if (imagePath) {
+      await supabase.storage
+        .from("salon-assets")
+        .remove([imagePath])
+        .catch(() => undefined);
+    }
     redirect(
       buildRedirectNotice(
         redirectPath,
@@ -272,6 +379,8 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
   const membershipValidityDays = normalizePositiveInteger(
     formData.get("membershipValidityDays"),
   );
+  const removeImage = formData.get("removeImage") === "on";
+  const imageFile = readUploadedFile(formData, "offerImage");
   const priceValue = String(formData.get("price") ?? "").trim();
   const startsOnValue = String(formData.get("startsOn") ?? "").trim();
   const endsOnValue = String(formData.get("endsOn") ?? "").trim();
@@ -354,6 +463,39 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
     );
   }
 
+  const { data: currentOffer, error: currentOfferError } = await supabase
+    .from("salon_offers")
+    .select("id, image_path")
+    .eq("id", offerId)
+    .eq("salon_id", salon.id)
+    .maybeSingle();
+
+  if (currentOfferError || !currentOffer) {
+    redirect(
+      buildRedirectNotice(
+        redirectPath,
+        "Nao foi possivel localizar essa assinatura.",
+        "error",
+      ),
+    );
+  }
+
+  const previousImagePath = currentOffer.image_path ?? null;
+  let nextImagePath = previousImagePath;
+  let uploadedImagePath: string | null = null;
+
+  if (imageFile) {
+    uploadedImagePath = await uploadOfferImage({
+      imageFile,
+      redirectPath,
+      salonId: salon.id,
+      supabase,
+    });
+    nextImagePath = uploadedImagePath;
+  } else if (removeImage) {
+    nextImagePath = null;
+  }
+
   const { error } = await supabase
     .from("salon_offers")
     .update({
@@ -361,7 +503,8 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
       title,
       description: description || null,
       highlight_text: highlightText || null,
-      membership_service_id: kind === "membership" ? membershipServiceId : null,
+      image_path: nextImagePath,
+      membership_service_id: membershipServiceId || null,
       membership_sessions_included:
         kind === "membership" ? membershipSessionsIncluded : null,
       membership_validity_days:
@@ -376,6 +519,12 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
     .eq("salon_id", salon.id);
 
   if (error) {
+    if (uploadedImagePath) {
+      await supabase.storage
+        .from("salon-assets")
+        .remove([uploadedImagePath])
+        .catch(() => undefined);
+    }
     redirect(
       buildRedirectNotice(
         redirectPath,
@@ -383,6 +532,13 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
         "error",
       ),
     );
+  }
+
+  if (previousImagePath && previousImagePath !== nextImagePath) {
+    await supabase.storage
+      .from("salon-assets")
+      .remove([previousImagePath])
+      .catch(() => undefined);
   }
 
   if (isActive) {
@@ -433,6 +589,23 @@ export async function deleteSalonOfferActionImpl(formData: FormData) {
     redirect(buildRedirectNotice(redirectPath, "Oferta inválida.", "error"));
   }
 
+  const { data: currentOffer, error: currentOfferError } = await supabase
+    .from("salon_offers")
+    .select("id, image_path")
+    .eq("id", offerId)
+    .eq("salon_id", salon.id)
+    .maybeSingle();
+
+  if (currentOfferError || !currentOffer) {
+    redirect(
+      buildRedirectNotice(
+        redirectPath,
+        "Nao foi possivel localizar essa oferta.",
+        "error",
+      ),
+    );
+  }
+
   const { error } = await supabase
     .from("salon_offers")
     .delete()
@@ -447,6 +620,13 @@ export async function deleteSalonOfferActionImpl(formData: FormData) {
         "error",
       ),
     );
+  }
+
+  if (currentOffer.image_path) {
+    await supabase.storage
+      .from("salon-assets")
+      .remove([currentOffer.image_path])
+      .catch(() => undefined);
   }
 
   revalidateCommercialPaths(COMMERCIAL_PROMOTIONS_PATH, SUBSCRIPTIONS_PATH);

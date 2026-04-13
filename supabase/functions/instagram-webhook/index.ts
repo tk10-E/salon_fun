@@ -124,7 +124,7 @@ async function verifyMetaSignature(rawBody: string, signature: string | null): P
   const appSecret = Deno.env.get("INSTAGRAM_WEBHOOK_SECRET")?.trim();
 
   if (!appSecret) {
-    return true;
+    return false;
   }
 
   if (!signature?.startsWith("sha256=")) {
@@ -1110,8 +1110,7 @@ Deno.serve(async (request: Request) => {
       posts_published: result.postsPublished,
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    console.error("instagram-webhook failed", detail);
-    return jsonResponse({ error: "instagram_webhook_failed", detail }, 500);
+    console.error("instagram-webhook failed");
+    return jsonResponse({ error: "instagram_webhook_failed" }, 500);
   }
 });

@@ -6,9 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 
-const { createClientMock, requireOwnerSalonMock } = vi.hoisted(() => ({
+const {
+  approveCustomerMembershipRequestActionPath,
+  createClientMock,
+  rejectCustomerMembershipRequestActionPath,
+  requireOwnerSalonMock,
+  updateCustomerProductOrderStatusActionPath,
+  updateManagementAppointmentStatusActionPath,
+} = vi.hoisted(() => ({
+  approveCustomerMembershipRequestActionPath: "/__test/dashboard-approve",
   createClientMock: vi.fn(),
+  rejectCustomerMembershipRequestActionPath: "/__test/dashboard-reject",
   requireOwnerSalonMock: vi.fn(),
+  updateCustomerProductOrderStatusActionPath: "/__test/dashboard-order-status",
+  updateManagementAppointmentStatusActionPath:
+    "/__test/dashboard-appointment-status",
 }));
 
 vi.mock("next/link", () => ({
@@ -26,6 +38,20 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/lib/auth", () => ({
   requireOwnerSalon: requireOwnerSalonMock,
+}));
+
+vi.mock("@/app/actions", () => ({
+  approveCustomerMembershipRequestAction:
+    approveCustomerMembershipRequestActionPath,
+  rejectCustomerMembershipRequestAction:
+    rejectCustomerMembershipRequestActionPath,
+  updateCustomerProductOrderStatusAction:
+    updateCustomerProductOrderStatusActionPath,
+}));
+
+vi.mock("@/app/_actions/management", () => ({
+  updateManagementAppointmentStatusAction:
+    updateManagementAppointmentStatusActionPath,
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -82,41 +108,55 @@ describe("dashboard page UI", () => {
 
                 return {
                   eq: vi.fn(() => ({
-                    eq: vi.fn(() => ({
-                      order: vi.fn(() => ({
+                    eq: vi.fn(() => {
+                      if (_columns?.includes("membership_validity_days")) {
+                        return Promise.resolve({
+                          data: [
+                            {
+                              id: "offer-1",
+                              membership_validity_days: 30,
+                            },
+                          ],
+                          error: null,
+                        });
+                      }
+
+                      return {
                         order: vi.fn(() => ({
-                          limit: vi.fn().mockResolvedValue({
-                            data: [
-                              {
-                                id: "offer-1",
-                                kind: "membership",
-                                title: "Clube Glow Mensal",
-                                highlight_text:
-                                  "2 atendimentos por mes com valor fixo",
-                                price: 149.9,
-                                starts_on: "2026-03-25",
-                                ends_on: null,
-                                is_active: true,
-                                sort_order: 0,
-                              },
-                              {
-                                id: "offer-2",
-                                kind: "promotion",
-                                title: "Escova da Semana",
-                                highlight_text:
-                                  "Janela pensada para ocupar horarios ociosos",
-                                price: 89.9,
-                                starts_on: "2026-03-29",
-                                ends_on: "2026-04-05",
-                                is_active: true,
-                                sort_order: 1,
-                              },
-                            ],
-                            error: null,
-                          }),
+                          order: vi.fn(() => ({
+                            limit: vi.fn().mockResolvedValue({
+                              data: [
+                                {
+                                  id: "offer-1",
+                                  kind: "membership",
+                                  title: "Clube Glow Mensal",
+                                  highlight_text:
+                                    "2 atendimentos por mes com valor fixo",
+                                  price: 149.9,
+                                  starts_on: "2026-03-25",
+                                  ends_on: null,
+                                  is_active: true,
+                                  sort_order: 0,
+                                },
+                                {
+                                  id: "offer-2",
+                                  kind: "promotion",
+                                  title: "Escova da Semana",
+                                  highlight_text:
+                                    "Janela pensada para ocupar horarios ociosos",
+                                  price: 89.9,
+                                  starts_on: "2026-03-29",
+                                  ends_on: "2026-04-05",
+                                  is_active: true,
+                                  sort_order: 1,
+                                },
+                              ],
+                              error: null,
+                            }),
+                          })),
                         })),
-                      })),
-                    })),
+                      };
+                    }),
                   })),
                 };
               },
@@ -279,6 +319,96 @@ describe("dashboard page UI", () => {
           };
         }
 
+        if (table === "customer_membership_requests") {
+          return {
+            select: vi.fn(
+              (
+                _columns?: string,
+                options?: { count?: string; head?: boolean },
+              ) => {
+                if (options?.head) {
+                  return {
+                    eq: vi.fn(() => ({
+                      eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
+                    })),
+                  };
+                }
+
+                return {
+                  eq: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                      order: vi.fn(() => ({
+                        limit: vi.fn().mockResolvedValue({
+                          data: [
+                            {
+                              id: "request-1",
+                              offer_id: "offer-1",
+                              offer_title_snapshot: "Clube Glow Mensal",
+                              requested_at: "2026-03-30T12:00:00.000Z",
+                              notes: "Quero ativar ainda hoje.",
+                              price_snapshot: 149.9,
+                              customers: { name: "Carla Mendes" },
+                            },
+                          ],
+                          count: 1,
+                          error: null,
+                        }),
+                      })),
+                    })),
+                  })),
+                };
+              },
+            ),
+          };
+        }
+
+        if (table === "customer_product_orders") {
+          return {
+            select: vi.fn(
+              (
+                _columns?: string,
+                options?: { count?: string; head?: boolean },
+              ) => {
+                if (options?.head) {
+                  return {
+                    eq: vi.fn(() => ({
+                      eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
+                    })),
+                  };
+                }
+
+                return {
+                  eq: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                      order: vi.fn(() => ({
+                        limit: vi.fn().mockResolvedValue({
+                          data: [
+                            {
+                              id: "order-1",
+                              order_number: 12,
+                              status: "pending",
+                              total_items: 2,
+                              subtotal_amount: 55,
+                              notes: "Separar para retirada hoje.",
+                              created_at: "2026-03-30T11:30:00.000Z",
+                              customers: {
+                                name: "Wesley",
+                                phone: "11999998888",
+                              },
+                            },
+                          ],
+                          count: 1,
+                          error: null,
+                        }),
+                      })),
+                    })),
+                  })),
+                };
+              },
+            ),
+          };
+        }
+
         if (table === "appointments") {
           return {
             select: vi.fn(
@@ -294,7 +424,37 @@ describe("dashboard page UI", () => {
                   };
                 }
 
-                if (columns.includes("customers(name)")) {
+                if (
+                  columns ===
+                  "id, date, status, customers(name), services(name)"
+                ) {
+                  return {
+                    eq: vi.fn(() => ({
+                      eq: vi.fn(() => ({
+                        order: vi.fn(() => ({
+                          limit: vi.fn().mockResolvedValue({
+                            data: [
+                              {
+                                id: "appointment-pending-1",
+                                date: "2026-03-30T14:30:00.000Z",
+                                status: "pending",
+                                customers: { name: "Carla Mendes" },
+                                services: { name: "Escova premium" },
+                              },
+                            ],
+                            count: 1,
+                            error: null,
+                          }),
+                        })),
+                      })),
+                    })),
+                  };
+                }
+
+                if (
+                  columns ===
+                  "id, date, status, customer_id, customers(name), services(name, price), staff_members(name)"
+                ) {
                   return {
                     eq: vi.fn(() => ({
                       gte: vi.fn(() => ({
@@ -617,10 +777,14 @@ describe("dashboard page UI", () => {
       screen.getByRole("heading", { name: "Financeiro rapido" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { name: "Pedidos do app cliente" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", { name: "Hoje precisa de atencao" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Horarios hoje")).toBeInTheDocument();
     expect(screen.getByText("Pendencias")).toBeInTheDocument();
+    expect(screen.getAllByText("Pedidos do app").length).toBeGreaterThan(0);
     expect(screen.getByText("Receita do mes")).toBeInTheDocument();
     expect(screen.getByText("Proximo horario")).toBeInTheDocument();
     expect(screen.getAllByText("09:00").length).toBeGreaterThan(0);
@@ -634,19 +798,33 @@ describe("dashboard page UI", () => {
       screen.getByRole("heading", { name: "Entrada de clientes" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Corte feminino")).toBeInTheDocument();
-    expect(screen.getByText("Escova premium")).toBeInTheDocument();
+    expect(screen.getAllByText("Escova premium").length).toBeGreaterThan(0);
     expect(screen.getByText(/R\$\s?470,00/)).toBeInTheDocument();
     expect(screen.getAllByText(/R\$\s?156,67/).length).toBeGreaterThan(0);
     expect(screen.getByText("Concluidos no mes")).toBeInTheDocument();
     expect(screen.getByText("Comandas abertas")).toBeInTheDocument();
     expect(screen.getByText(/R\$\s?90,00 em aberto/)).toBeInTheDocument();
+    expect(screen.getByText("Clube Glow Mensal")).toBeInTheDocument();
+    expect(screen.getAllByText("Carla Mendes").length).toBeGreaterThan(0);
+    expect(screen.getByText("Pedido #12")).toBeInTheDocument();
+    expect(screen.getByText("2 itens")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirmar horário" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirmar pedido" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Aprovar e ativar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Inicio real da assinatura")).toBeInTheDocument();
     expect(screen.getByText("Confirmacoes pendentes")).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Atalhos essenciais" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Abrir agenda" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("link", { name: "Abrir agenda" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Ver clientes" }),
     ).not.toBeInTheDocument();

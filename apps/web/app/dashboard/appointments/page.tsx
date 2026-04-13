@@ -6,12 +6,13 @@ import {
 } from "@/lib/management-navigation";
 
 type AppointmentsPageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default function AppointmentsPage({
-  searchParams,
+export default async function AppointmentsPage({
+  searchParams: searchParamsPromise,
 }: AppointmentsPageProps) {
+  const searchParams = await searchParamsPromise;
   redirect(
     buildLegacyManagementRedirectPath(
       LEGACY_MANAGEMENT_ROUTES.appointments,

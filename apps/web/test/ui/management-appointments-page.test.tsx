@@ -7,10 +7,12 @@ const {
   requireOwnerSalonMock,
   loadManagementAppointmentsMock,
   loadManagementSelectOptionsMock,
+  sendAppointmentWhatsAppActionPath,
 } = vi.hoisted(() => ({
   requireOwnerSalonMock: vi.fn(),
   loadManagementAppointmentsMock: vi.fn(),
   loadManagementSelectOptionsMock: vi.fn(),
+  sendAppointmentWhatsAppActionPath: "/actions/send-appointment-whatsapp",
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -22,6 +24,10 @@ vi.mock("@/app/_actions/management", () => ({
   updateManagementAppointmentAction: "/actions/management/update-appointment",
   updateManagementAppointmentStatusAction:
     "/actions/management/update-appointment-status",
+}));
+
+vi.mock("@/app/actions", () => ({
+  sendAppointmentWhatsAppAction: sendAppointmentWhatsAppActionPath,
 }));
 
 vi.mock("@/lib/management", () => ({
@@ -65,6 +71,7 @@ describe("management appointments page", () => {
       salon: {
         id: "salon-1",
         timezone: "America/Sao_Paulo",
+        whatsapp_dispatch_enabled: true,
       },
     });
 
@@ -162,6 +169,23 @@ describe("management appointments page", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("Ana Paula").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Carla Mendes").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("WhatsApp do atendimento").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen
+        .getAllByText("WhatsApp do atendimento")
+        .every((element) => element.tagName.toLowerCase() === "strong"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Enviar lembrete" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Enviar confirmação" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Pedir reagendamento" }).length,
+    ).toBeGreaterThan(0);
     expect(
       screen.getAllByText("Cliente prefere atendimento silencioso.").length,
     ).toBeGreaterThan(0);

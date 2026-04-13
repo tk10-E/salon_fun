@@ -6,12 +6,13 @@ import {
 } from "./_lib";
 
 export type NotificationsPageProps = {
-  searchParams?: NotificationsPageSearchParams;
+  searchParams?: Promise<NotificationsPageSearchParams>;
 };
 
 export default async function NotificationsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: NotificationsPageProps) {
+  const searchParams = await searchParamsPromise;
   const notificationsPageData = await loadNotificationsPageData(searchParams);
 
   return (

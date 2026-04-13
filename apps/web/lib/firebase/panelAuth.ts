@@ -5,7 +5,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from "firebase/auth";
@@ -14,10 +14,18 @@ import { getFirebasePanelAuth } from "@/lib/firebase/client";
 import { getRuntimeFirebaseWebConfig } from "@/lib/firebase/runtimeConfig";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { validatePasswordStrength } from "@/lib/passwordPolicy";
 
 type BridgeCredentials = {
   email: string;
   password: string;
+};
+
+export type PanelSessionSnapshot = {
+  user: {
+    email?: string | null;
+    id: string;
+  } | null;
 };
 
 type SignUpOutcome = {
@@ -25,8 +33,54 @@ type SignUpOutcome = {
   email: string;
 };
 
+const AUTH_NETWORK_TIMEOUT_MS = 12000;
+
 function normalizeEmailAddress(value: string) {
   return value.trim().toLowerCase();
+}
+
+async function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function getGoogleAccountConflictMessage(error: unknown) {
+  const code =
+    typeof error === "object" && error != null && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+
+  if (
+    code === "auth/account-exists-with-different-credential" &&
+    typeof error === "object" &&
+    error != null &&
+    "customData" in error &&
+    (error as { customData?: { email?: string } }).customData?.email
+  ) {
+    const email =
+      (error as { customData?: { email?: string } }).customData?.email ?? "";
+
+    return `Esta conta ja existe com outro metodo. Entre usando ${email}.`;
+  }
+
+  return null;
 }
 
 function formatFirebaseError(error: unknown) {
@@ -42,6 +96,17 @@ function formatFirebaseError(error: unknown) {
 
   switch (errorCode) {
     case "auth/invalid-api-key":
+    case "auth/app-deleted":
+    case "auth/auth-domain-config-required":
+    case "auth/invalid-app-credential":
+    case "auth/project-not-found":
+      return "A configuração do Firebase Web do painel precisa ser atualizada no deploy.";
+    case "auth/unauthorized-domain":
+      return "O domínio do painel ainda não foi autorizado no Firebase. Atualize a configuração do projeto.";
+    case "auth/operation-not-allowed":
+    case "auth/operation-not-supported-in-this-environment":
+      return "O método de autenticação ainda não foi liberado no Firebase.";
+    case "auth/configuration-not-found":
       return "O Firebase Web do painel está com chave inválida. Atualize a configuração do deploy.";
     case "auth/invalid-credential":
     case "auth/wrong-password":
@@ -49,7 +114,7 @@ function formatFirebaseError(error: unknown) {
     case "auth/invalid-email":
       return "E-mail ou senha inválidos.";
     case "auth/email-already-in-use":
-      return "Este e-mail já está em uso.";
+      return "Não foi possível criar a conta agora.";
     case "auth/weak-password":
       return "Use uma senha mais forte para criar a conta.";
     case "auth/too-many-requests":
@@ -77,25 +142,26 @@ function formatFirebaseError(error: unknown) {
 
 function formatBridgeError(errorCode: string | null, detail?: string | null) {
   switch (errorCode) {
+    case "bridge_timeout":
+      return "A conexão com o painel demorou demais. Tente entrar novamente.";
     case "email_not_verified":
       return "Confirme o e-mail antes de entrar no painel.";
     case "missing_server_secrets":
       return "A bridge de autenticação ainda não foi configurada no Supabase.";
+    case "origin_not_allowed":
+      return "A origem do painel ainda não foi autorizada na bridge de autenticação.";
     case "missing_firebase_context":
+    case "invalid_firebase_context":
     case "invalid_payload":
       return "A configuração atual do painel não conseguiu validar sua conta do Firebase.";
     case "invalid_firebase_session":
     case "firebase_lookup_failed":
-      return detail?.trim().length
-        ? detail.trim()
-        : "O Firebase autenticou a conta, mas o painel não conseguiu sincronizar a sessão com o Supabase.";
+      return "O Firebase autenticou a conta, mas o painel não conseguiu sincronizar a sessão com o Supabase.";
     case "email_missing":
       return "A conta autenticada precisa ter um e-mail válido para continuar.";
     case "user_lookup_failed":
     case "user_sync_failed":
-      return detail?.trim().length
-        ? detail.trim()
-        : "Não foi possível preparar sua conta no Supabase.";
+      return "Não foi possível preparar sua conta no Supabase.";
     default:
       return detail?.trim().length
         ? detail.trim()
@@ -103,15 +169,16 @@ function formatBridgeError(errorCode: string | null, detail?: string | null) {
   }
 }
 
-async function provisionSupabaseBridgeCredentials(
+async function requestSupabaseBridgeCredentials(
   firebaseUser: User,
+  forceRefresh: boolean,
 ): Promise<BridgeCredentials> {
   const config = getRuntimeFirebaseWebConfig();
   if (config == null) {
     throw new Error("missing_firebase_web_config");
   }
 
-  const firebaseIdToken = await firebaseUser.getIdToken(true);
+  const firebaseIdToken = await firebaseUser.getIdToken(forceRefresh);
   if (firebaseIdToken.trim().length === 0) {
     throw new Error("invalid_firebase_session");
   }
@@ -130,7 +197,9 @@ async function provisionSupabaseBridgeCredentials(
         firebase_id_token: firebaseIdToken,
       }),
     },
-  );
+  ).catch((error) => {
+    throw error;
+  });
 
   const payload = (await response.json().catch(() => ({}))) as Record<
     string,
@@ -165,17 +234,63 @@ async function provisionSupabaseBridgeCredentials(
   };
 }
 
-async function signInToSupabaseWithFirebaseIdentity(firebaseUser: User) {
+async function provisionSupabaseBridgeCredentials(
+  firebaseUser: User,
+): Promise<BridgeCredentials> {
+  try {
+    return await requestSupabaseBridgeCredentials(firebaseUser, false);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Confirme o e-mail antes de entrar no painel." &&
+      firebaseUser.emailVerified
+    ) {
+      return await requestSupabaseBridgeCredentials(firebaseUser, true);
+    }
+
+    throw error;
+  }
+}
+
+async function signInToSupabaseWithFirebaseIdentity(
+  firebaseUser: User,
+): Promise<PanelSessionSnapshot> {
   const bridgeCredentials =
-    await provisionSupabaseBridgeCredentials(firebaseUser);
+    await withTimeout(
+      provisionSupabaseBridgeCredentials(firebaseUser),
+      AUTH_NETWORK_TIMEOUT_MS,
+      "A conexão com o painel demorou demais. Tente entrar novamente.",
+    );
   const supabase = createSupabaseBrowserClient();
+  const {
+    data: { session: currentSession },
+  } = await supabase.auth.getSession().catch(() => ({
+    data: {
+      session: null,
+    },
+  }));
+  const currentSessionEmail = currentSession?.user?.email
+    ?.trim()
+    .toLowerCase();
+  if (
+    currentSession?.user &&
+    currentSessionEmail !== normalizeEmailAddress(bridgeCredentials.email)
+  ) {
+    await withTimeout(
+      supabase.auth.signOut({ scope: "local" }),
+      5000,
+      "supabase_signout_timeout",
+    ).catch(() => undefined);
+  }
 
-  await supabase.auth.signOut();
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: bridgeCredentials.email,
-    password: bridgeCredentials.password,
-  });
+  const { data, error } = await withTimeout(
+    supabase.auth.signInWithPassword({
+      email: bridgeCredentials.email,
+      password: bridgeCredentials.password,
+    }),
+    AUTH_NETWORK_TIMEOUT_MS,
+    "O painel demorou demais para concluir o login.",
+  );
 
   if (error || data.user == null || data.session == null) {
     throw new Error(
@@ -183,13 +298,24 @@ async function signInToSupabaseWithFirebaseIdentity(firebaseUser: User) {
         "O Supabase não retornou uma sessão válida para o painel.",
     );
   }
+
+  return {
+    user: {
+      email: data.user.email ?? null,
+      id: data.user.id,
+    },
+  };
 }
 
 async function ensureEmailVerified(
   firebaseUser: User,
   resendIfNeeded: boolean,
 ) {
-  await firebaseUser.reload();
+  await withTimeout(
+    firebaseUser.reload(),
+    AUTH_NETWORK_TIMEOUT_MS,
+    "O Firebase demorou demais para validar sua conta.",
+  );
   const auth = getFirebasePanelAuth();
   const refreshedUser = auth.currentUser ?? firebaseUser;
 
@@ -212,17 +338,21 @@ async function ensureEmailVerified(
 export async function signInWithFirebasePassword(input: {
   email: string;
   password: string;
-}) {
+}): Promise<PanelSessionSnapshot> {
   const auth = getFirebasePanelAuth();
 
   try {
-    const credentials = await signInWithEmailAndPassword(
-      auth,
-      normalizeEmailAddress(input.email),
-      input.password,
+    const credentials = await withTimeout(
+      signInWithEmailAndPassword(
+        auth,
+        normalizeEmailAddress(input.email),
+        input.password,
+      ),
+      AUTH_NETWORK_TIMEOUT_MS,
+      "O Firebase demorou demais para responder. Tente entrar novamente.",
     );
     const firebaseUser = await ensureEmailVerified(credentials.user, true);
-    await signInToSupabaseWithFirebaseIdentity(firebaseUser);
+    return await signInToSupabaseWithFirebaseIdentity(firebaseUser);
   } catch (error) {
     throw new Error(formatFirebaseError(error));
   }
@@ -237,13 +367,22 @@ export async function signUpWithFirebasePassword(input: {
     throw new Error("Confirme a mesma senha nos dois campos.");
   }
 
+  const passwordError = validatePasswordStrength(input.password);
+  if (passwordError) {
+    throw new Error(passwordError);
+  }
+
   const auth = getFirebasePanelAuth();
 
   try {
-    const credentials = await createUserWithEmailAndPassword(
-      auth,
-      normalizeEmailAddress(input.email),
-      input.password,
+    const credentials = await withTimeout(
+      createUserWithEmailAndPassword(
+        auth,
+        normalizeEmailAddress(input.email),
+        input.password,
+      ),
+      AUTH_NETWORK_TIMEOUT_MS,
+      "O Firebase demorou demais para criar a conta.",
     );
     await sendEmailVerification(credentials.user).catch(() => undefined);
     await signOut(auth).catch(() => undefined);
@@ -261,31 +400,40 @@ export async function sendFirebasePasswordResetEmail(email: string) {
   const auth = getFirebasePanelAuth();
 
   try {
-    await sendPasswordResetEmail(auth, normalizeEmailAddress(email));
+    await withTimeout(
+      sendPasswordResetEmail(auth, normalizeEmailAddress(email)),
+      AUTH_NETWORK_TIMEOUT_MS,
+      "O Firebase demorou demais para enviar a recuperação.",
+    );
   } catch (error) {
     throw new Error(formatFirebaseError(error));
   }
 }
 
-export async function restorePanelSessionFromFirebaseIfNeeded() {
+export async function restorePanelSessionFromFirebaseIfNeeded(): Promise<
+  PanelSessionSnapshot | null
+> {
   if (getRuntimeFirebaseWebConfig() == null) {
-    return false;
+    return null;
   }
 
   const auth = getFirebasePanelAuth();
 
   if ("authStateReady" in auth && typeof auth.authStateReady === "function") {
-    await auth.authStateReady().catch(() => undefined);
+    await withTimeout(
+      auth.authStateReady().catch(() => undefined),
+      5000,
+      "firebase_auth_state_timeout",
+    ).catch(() => undefined);
   }
 
   const firebaseUser = auth.currentUser;
   if (firebaseUser == null) {
-    return false;
+    return null;
   }
 
   const verifiedUser = await ensureEmailVerified(firebaseUser, false);
-  await signInToSupabaseWithFirebaseIdentity(verifiedUser);
-  return true;
+  return await signInToSupabaseWithFirebaseIdentity(verifiedUser);
 }
 
 export async function signInWithFirebaseGoogle() {
@@ -296,66 +444,39 @@ export async function signInWithFirebaseGoogle() {
   });
 
   try {
-    let firebaseUser: User | null = null;
-
-    try {
-      const credentials = await signInWithPopup(auth, provider);
-      firebaseUser = credentials.user;
-    } catch (error) {
-      const code =
-        typeof error === "object" && error != null && "code" in error
-          ? String((error as { code?: unknown }).code ?? "")
-          : "";
-
-      if (
-        code === "auth/popup-blocked" ||
-        code === "auth/web-storage-unsupported"
-      ) {
-        throw new Error(
-          "O navegador bloqueou a janela do Google. Libere os pop-ups para continuar.",
-        );
-      }
-
-      if (
-        code === "auth/account-exists-with-different-credential" &&
-        typeof error === "object" &&
-        error != null &&
-        "customData" in error &&
-        (error as { customData?: { email?: string } }).customData?.email
-      ) {
-        const email =
-          (error as { customData?: { email?: string } }).customData?.email ??
-          "";
-        throw new Error(
-          `Esta conta já existe com outro método. Entre usando ${email}.`,
-        );
-      }
-
-      throw error;
-    }
-
-    if (firebaseUser == null) {
-      throw new Error("O login com Google foi cancelado.");
-    }
-
-    await signInToSupabaseWithFirebaseIdentity(firebaseUser);
+    await signInWithRedirect(auth, provider);
   } catch (error) {
+    const accountConflictMessage = getGoogleAccountConflictMessage(error);
+    if (accountConflictMessage) {
+      throw new Error(accountConflictMessage);
+    }
+
     throw new Error(formatFirebaseError(error));
   }
 }
 
-export async function completeFirebaseRedirectLoginIfNeeded() {
+export async function completeFirebaseRedirectLoginIfNeeded(): Promise<
+  PanelSessionSnapshot | null
+> {
   const auth = getFirebasePanelAuth();
 
   try {
-    const credentials = await getRedirectResult(auth);
+    const credentials = await withTimeout(
+      getRedirectResult(auth),
+      AUTH_NETWORK_TIMEOUT_MS,
+      "O Firebase demorou demais para concluir o login com Google.",
+    );
     if (credentials?.user == null) {
-      return false;
+      return null;
     }
 
-    await signInToSupabaseWithFirebaseIdentity(credentials.user);
-    return true;
+    return await signInToSupabaseWithFirebaseIdentity(credentials.user);
   } catch (error) {
+    const accountConflictMessage = getGoogleAccountConflictMessage(error);
+    if (accountConflictMessage) {
+      throw new Error(accountConflictMessage);
+    }
+
     throw new Error(formatFirebaseError(error));
   }
 }

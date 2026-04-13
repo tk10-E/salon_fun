@@ -6,6 +6,10 @@ type AuthErrorPageProps = {
 };
 
 export default function AuthErrorPage({ reset }: AuthErrorPageProps) {
+  function openLogin() {
+    window.location.assign("/login");
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-shell">
@@ -31,7 +35,7 @@ export default function AuthErrorPage({ reset }: AuthErrorPageProps) {
             <div className="auth-form-card__meta">
               <h3>Tentar novamente</h3>
               <p className="muted">
-                Use sempre <strong>painel.jc7desenvovimento.online</strong> e recarregue o login para seguir.
+                Reabra o login no domínio oficial do painel para continuar com a sessão correta.
               </p>
             </div>
             <div className="form-grid">
@@ -41,7 +45,7 @@ export default function AuthErrorPage({ reset }: AuthErrorPageProps) {
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => window.location.assign("https://painel.jc7desenvovimento.online/login")}
+                onClick={openLogin}
               >
                 Abrir domínio oficial
               </button>

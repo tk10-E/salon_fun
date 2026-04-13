@@ -16,13 +16,13 @@ import {
 import { formatCurrency } from "@/lib/formatters";
 
 type ServicosPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     q?: string;
     categoryId?: string;
     status?: string;
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 function buildServiceCategoryChoices(args: {
@@ -53,8 +53,9 @@ function buildServiceCategoryChoices(args: {
 }
 
 export default async function ServicosPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: ServicosPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const query = searchParams?.q?.trim() ?? "";
   const selectedCategoryId = searchParams?.categoryId ?? "";

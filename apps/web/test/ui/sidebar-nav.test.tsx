@@ -79,11 +79,14 @@ describe("SidebarNav", () => {
       screen.getByText(/Acesso rápido ao que move atendimento, agenda e operação\./i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Dia a dia do salão/i)).toBeInTheDocument();
-    expect(screen.getAllByText("6").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("7").length).toBeGreaterThan(0);
 
     expect(screen.getByRole("link", { name: /feed/i })).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /lembretes/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /whatsapp/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /caixa/i }),

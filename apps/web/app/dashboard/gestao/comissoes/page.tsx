@@ -11,18 +11,19 @@ import {
 import { formatCurrency } from "@/lib/formatters";
 
 type ComissoesPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     professionalId?: string;
     dateFrom?: string;
     dateTo?: string;
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 export default async function ComissoesPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: ComissoesPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const timeZone = salon.timezone ?? "America/Sao_Paulo";
   const todayKey = getLocalDateKey(new Date(), timeZone);

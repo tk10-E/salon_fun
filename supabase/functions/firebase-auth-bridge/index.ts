@@ -3,10 +3,37 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const firebaseLookupEndpoint =
   "https://identitytoolkit.googleapis.com/v1/accounts:lookup";
 
-const allowedOriginsRaw = Deno.env.get("ALLOWED_BRIDGE_ORIGINS")?.trim();
+const allowedOriginsRaw = [
+  Deno.env.get("ALLOWED_BRIDGE_ORIGINS")?.trim(),
+  Deno.env.get("APP_URL")?.trim(),
+  Deno.env.get("NEXT_PUBLIC_APP_URL")?.trim(),
+]
+  .filter((value): value is string => Boolean(value))
+  .join(",");
 const ALLOWED_BRIDGE_ORIGINS = allowedOriginsRaw
-  ? allowedOriginsRaw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-  : null;
+  ? allowedOriginsRaw
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  : [];
+const expectedFirebaseApiKeysRaw = [
+  Deno.env.get("EXPECTED_FIREBASE_API_KEYS")?.trim(),
+  Deno.env.get("EXPECTED_FIREBASE_API_KEY")?.trim(),
+  Deno.env.get("FIREBASE_API_KEY")?.trim(),
+]
+  .filter((value): value is string => Boolean(value))
+  .join(",");
+const EXPECTED_FIREBASE_API_KEYS = expectedFirebaseApiKeysRaw
+  ? expectedFirebaseApiKeysRaw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  : [];
+const TRUSTED_FEDERATED_PROVIDERS = new Set([
+  "facebook.com",
+  "google.com",
+  "apple.com",
+]);
 
 // Prefer a staged/rotated key when present, otherwise fall back to the legacy name.
 const resolvedServiceRoleKey =
@@ -35,17 +62,33 @@ type BridgeRequest = {
   firebase_id_token?: unknown;
 };
 
+function isOriginAllowed(origin: string | null) {
+  if (!origin) {
+    return false;
+  }
+
+  if (!ALLOWED_BRIDGE_ORIGINS.length) {
+    return false;
+  }
+
+  return ALLOWED_BRIDGE_ORIGINS.includes(origin.toLowerCase());
+}
+
 function corsHeaders(request: Request): HeadersInit {
   const origin = request.headers.get("origin")?.trim();
-
-  return {
-    "Access-Control-Allow-Origin": origin && origin.length > 0 ? origin : "*",
+  const headers: HeadersInit = {
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
+
+  if (origin && isOriginAllowed(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+
+  return headers;
 }
 
 function jsonResponse(request: Request, body: unknown, status = 200): Response {
@@ -150,9 +193,8 @@ Deno.serve(async (request) => {
   try {
     const originHeader = request.headers.get("origin")?.trim() || "";
 
-    // If ALLOWED_BRIDGE_ORIGINS is configured, enforce it for all requests.
-    if (ALLOWED_BRIDGE_ORIGINS && ALLOWED_BRIDGE_ORIGINS.length > 0) {
-      if (!originHeader || !ALLOWED_BRIDGE_ORIGINS.includes(originHeader.toLowerCase())) {
+    if (originHeader && ALLOWED_BRIDGE_ORIGINS.length > 0) {
+      if (!isOriginAllowed(originHeader)) {
         return jsonResponse(request, { error: "origin_not_allowed" }, 403);
       }
     }
@@ -173,6 +215,13 @@ Deno.serve(async (request) => {
 
     if (firebaseApiKey == null || firebaseIdToken == null) {
       return jsonResponse(request, { error: "missing_firebase_context" }, 400);
+    }
+
+    if (
+      EXPECTED_FIREBASE_API_KEYS.length > 0 &&
+      !EXPECTED_FIREBASE_API_KEYS.includes(firebaseApiKey)
+    ) {
+      return jsonResponse(request, { error: "invalid_firebase_context" }, 403);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
@@ -196,7 +245,14 @@ Deno.serve(async (request) => {
       return jsonResponse(request, { error: "email_missing" }, 409);
     }
 
-    if (firebaseUser.emailVerified != true) {
+    const providerIds = (firebaseUser.providerUserInfo ?? [])
+      .map((provider) => normalizeNonEmptyString(provider.providerId))
+      .filter((providerId): providerId is string => providerId !== null);
+    const canTrustFederatedEmail = providerIds.some((providerId) =>
+      TRUSTED_FEDERATED_PROVIDERS.has(providerId)
+    );
+
+    if (firebaseUser.emailVerified != true && !canTrustFederatedEmail) {
       return jsonResponse(request, { error: "email_not_verified" }, 409);
     }
 
@@ -204,9 +260,6 @@ Deno.serve(async (request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const ephemeralPassword = randomPassword();
-    const providerIds = (firebaseUser.providerUserInfo ?? [])
-      .map((provider) => normalizeNonEmptyString(provider.providerId))
-      .filter((providerId): providerId is string => providerId !== null);
 
     const existingUser = await findSupabaseUserByEmail(adminClient, email).catch((
       error,
@@ -228,10 +281,8 @@ Deno.serve(async (request) => {
         },
       );
       if (error != null) {
-        return jsonResponse(request, {
-          error: "user_sync_failed",
-          detail: error.message,
-        }, 500);
+        console.error("firebase-auth-bridge user sync failed for existing user");
+        return jsonResponse(request, { error: "user_sync_failed" }, 500);
       }
     } else {
       const { error } = await adminClient.auth.admin.createUser({
@@ -244,10 +295,8 @@ Deno.serve(async (request) => {
         },
       });
       if (error != null) {
-        return jsonResponse(request, {
-          error: "user_sync_failed",
-          detail: error.message,
-        }, 500);
+        console.error("firebase-auth-bridge user sync failed for new user");
+        return jsonResponse(request, { error: "user_sync_failed" }, 500);
       }
     }
 
@@ -257,11 +306,10 @@ Deno.serve(async (request) => {
     });
   } catch (error) {
     const detail = detailMessage(error);
-    const [errorCode, errorDetail] = detail.split(":", 2);
+    const [errorCode] = detail.split(":", 2);
 
     return jsonResponse(request, {
       error: errorCode.length == 0 ? "unexpected_error" : errorCode,
-      detail: errorDetail != null && errorDetail.length > 0 ? errorDetail : detail,
     }, 500);
   }
 });

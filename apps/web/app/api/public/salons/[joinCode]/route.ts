@@ -1,25 +1,47 @@
 import { NextResponse } from "next/server";
 
 import { fetchPublicSalonLandingData } from "@/lib/publicSalonShare";
+import {
+  getClientIp,
+  guardApiRequest,
+  hashSecurityIdentifier,
+} from "@/lib/security";
 
 type PublicSalonRouteProps = {
-  params: {
+  params: Promise<{
     joinCode: string;
-  };
+  }>;
 };
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(
-  _request: Request,
-  { params }: PublicSalonRouteProps,
+  request: Request,
+  { params: paramsPromise }: PublicSalonRouteProps,
 ) {
+  const params = await paramsPromise;
   const joinCode = params.joinCode.trim().toUpperCase();
 
-  if (!joinCode) {
+  const guardResponse = await guardApiRequest(request, {
+    actionName: "public_salon_preview",
+    blockSeconds: 180,
+    limit: 90,
+    rateLimitKey:
+      hashSecurityIdentifier(
+        `${getClientIp(request.headers) ?? "unknown"}:${joinCode}`,
+      ) ?? undefined,
+    windowSeconds: 60,
+  });
+
+  if (guardResponse) {
+    return guardResponse;
+  }
+
+  if (!/^[A-Z0-9]{4,12}$/.test(joinCode)) {
     return NextResponse.json(
-      { error: "join_code_required" },
-      { status: 400 },
+      { error: "salon_not_found" },
+      { status: 404 },
     );
   }
 
@@ -54,7 +76,12 @@ export async function GET(
     },
     {
       headers: {
-        "Cache-Control": "no-store, max-age=0",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+        "CDN-Cache-Control": "no-store",
+        "Vercel-CDN-Cache-Control": "no-store",
+        Pragma: "no-cache",
+        Expires: "0",
+        "X-Robots-Tag": "noindex, nofollow",
       },
     },
   );

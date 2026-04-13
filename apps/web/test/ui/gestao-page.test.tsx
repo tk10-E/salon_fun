@@ -11,28 +11,29 @@ vi.mock("next/navigation", () => ({
 import GestaoPage from "@/app/dashboard/gestao/page";
 
 describe("gestao page", () => {
-  it("redirects the management landing route to agendamentos", () => {
+  it("redirects the management landing route to agendamentos", async () => {
     redirectMock.mockImplementation((location: string) => {
       throw new Error(`REDIRECT:${location}`);
     });
 
-    expect(() => GestaoPage({})).toThrow(
+    await expect(GestaoPage({})).rejects.toThrow(
       "REDIRECT:/dashboard/gestao/agendamentos",
     );
   });
 
-  it("preserves flash message params when redirecting", () => {
+  it("preserves flash message params when redirecting", async () => {
     redirectMock.mockImplementation((location: string) => {
       throw new Error(`REDIRECT:${location}`);
     });
 
-    expect(() =>
+    await expect(
       GestaoPage({
-        searchParams: {
+        searchParams: Promise.resolve({
           message: "Conta atualizada",
           tone: "success",
-        },
-      })).toThrow(
+        }),
+      }),
+    ).rejects.toThrow(
       "REDIRECT:/dashboard/gestao/agendamentos?message=Conta+atualizada&tone=success",
     );
   });

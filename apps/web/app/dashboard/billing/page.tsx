@@ -19,10 +19,10 @@ import { requireOwnerSalon } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 type BillingPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 function formatPlanFeature(value: boolean, enabledLabel: string, disabledLabel: string) {
@@ -40,7 +40,8 @@ function getAccessBadgeClass(accessState: "healthy" | "attention" | "locked") {
   }
 }
 
-export default async function BillingPage({ searchParams }: BillingPageProps) {
+export default async function BillingPage({ searchParams: searchParamsPromise }: BillingPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const billingSnapshot = await getSalonBillingWorkspaceSnapshot(salon.id);
   const stripeReadiness = getStripeBillingReadiness();

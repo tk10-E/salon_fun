@@ -3,8 +3,13 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
 
+type SupabaseCookieStore = {
+  get(name: string): { value: string } | undefined;
+  set(options: { name: string; value: string } & CookieOptions): void;
+};
+
 export function createClient() {
-  const cookieStore = cookies();
+  const cookieStore = cookies() as unknown as SupabaseCookieStore;
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {

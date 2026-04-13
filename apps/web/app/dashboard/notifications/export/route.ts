@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getOwnerSalon } from "@/lib/auth";
+import {
+  getClientIp,
+  guardApiRequest,
+  hashSecurityIdentifier,
+  recordSecurityAuditEvent,
+} from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
 import {
@@ -33,6 +39,14 @@ function normalizeCategory(value: string): NotificationCategory | "" {
   }
 
   return "";
+}
+
+function sanitizeSearchQuery(value: string) {
+  return value
+    .replace(/[()%*,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
 }
 
 function applyNotificationFilters(
@@ -92,6 +106,22 @@ function chunkArray<T>(items: T[], size: number) {
 }
 
 export async function GET(request: NextRequest) {
+  const guardResponse = await guardApiRequest(request, {
+    actionName: "notification_export",
+    allowMissingOrigin: true,
+    blockSeconds: 900,
+    limit: 8,
+    rateLimitKey:
+      hashSecurityIdentifier(
+        `${getClientIp(request.headers) ?? "unknown"}:${request.nextUrl.search}`,
+      ) ?? undefined,
+    windowSeconds: 600,
+  });
+
+  if (guardResponse) {
+    return guardResponse;
+  }
+
   const supabase = createClient();
   const {
     data: { user },
@@ -107,7 +137,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding", request.url));
   }
 
-  const q = request.nextUrl.searchParams.get("q")?.trim() ?? "";
+  const q = sanitizeSearchQuery(
+    request.nextUrl.searchParams.get("q")?.trim() ?? "",
+  );
   const audienceFilter = request.nextUrl.searchParams.get("audience")?.trim() ?? "";
   const categoryFilter = normalizeCategory(
     request.nextUrl.searchParams.get("category")?.trim() ?? "",
@@ -213,12 +245,29 @@ export async function GET(request: NextRequest) {
 
   const csvContent = `\ufeff${[header, ...lines].join("\n")}`;
 
+  await recordSecurityAuditEvent({
+    actorUserId: user.id,
+    eventType: "notification_export.generated",
+    ipAddress: getClientIp(request.headers),
+    metadata: {
+      audienceFilter,
+      categoryFilter,
+      exportedRows: allRows.length,
+      q,
+    },
+    requestPath: request.nextUrl.pathname,
+    salonId: salon.id,
+    severity: "info",
+    userAgent: request.headers.get("user-agent"),
+  });
+
   return new NextResponse(csvContent, {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="avisos-enviados-${salon.id}.csv"`,
       "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow",
     },
   });
 }

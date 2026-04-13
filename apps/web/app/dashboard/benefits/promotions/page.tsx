@@ -4,10 +4,11 @@ import { PromotionsPageContent } from "../_promotions-components";
 import { firstParam, loadPromotionsPageData, type OfferSearchParams } from "../_lib";
 
 export type PromotionsPageProps = {
-  searchParams?: OfferSearchParams;
+  searchParams?: Promise<OfferSearchParams>;
 };
 
-export default async function PromotionsPage({ searchParams }: PromotionsPageProps) {
+export default async function PromotionsPage({ searchParams: searchParamsPromise }: PromotionsPageProps) {
+  const searchParams = await searchParamsPromise;
   const data = await loadPromotionsPageData(searchParams);
   const offerQ = firstParam(searchParams?.offerQ);
   const offerKind = firstParam(searchParams?.offerKind);

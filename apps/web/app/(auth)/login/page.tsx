@@ -8,15 +8,22 @@ import { getFirebaseWebConfig } from "@/lib/firebase/config";
 export const dynamic = "force-dynamic";
 
 type LoginPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
-export default async function LoginPage({ searchParams }: LoginPageProps) {
+const DEFAULT_LOGIN_SECURITY_MESSAGE =
+  "No primeiro acesso, pode ser necessário configurar o autenticador.";
+
+export default async function LoginPage({ searchParams: searchParamsPromise }: LoginPageProps) {
+  const searchParams = await searchParamsPromise;
   const entryPath = await getAuthenticatedPanelEntryPath();
   const firebaseConfig = getFirebaseWebConfig();
+  const initialMessage =
+    searchParams?.message?.trim() || DEFAULT_LOGIN_SECURITY_MESSAGE;
+  const initialTone = searchParams?.tone ?? "info";
 
   if (entryPath) {
     redirect(entryPath);
@@ -29,43 +36,32 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <div className="auth-hero-copy auth-hero-copy--compact">
             <div className="hero-badges">
               <span className="eyebrow">Painel do salão</span>
-              <span className="hero-note">Acesso profissional</span>
+              <span className="hero-note">Acesso seguro</span>
             </div>
 
-            <p className="auth-hero-kicker">Login simples para uma operação forte</p>
-            <h1>Entrar no painel do salão</h1>
+            <p className="auth-hero-kicker">Gestão diária</p>
+            <h1>Acessar o painel</h1>
             <p className="auth-hero-summary">
-              Agenda, clientes, equipe e crescimento em um só fluxo.
+              Entre para acompanhar agenda, clientes, equipe e pagamentos.
             </p>
           </div>
-
-          <div className="auth-hero-points">
-            <div className="auth-hero-point">
-              <strong>Agenda em dia</strong>
-              <span>Confirmações e encaixes com leitura rápida.</span>
-            </div>
-            <div className="auth-hero-point">
-              <strong>Equipe alinhada</strong>
-              <span>Profissionais, serviços e operação no mesmo ritmo.</span>
-            </div>
-            <div className="auth-hero-point">
-              <strong>Clientes por perto</strong>
-              <span>Retenção, avisos e crescimento no mesmo painel.</span>
-            </div>
-          </div>
+          <p className="auth-hero-caption">
+            Acesso protegido com autenticação adicional e monitoramento de
+            sessão.
+          </p>
         </section>
 
         <section className="auth-panel-column auth-panel-column--compact">
           <div className="auth-panel-intro auth-panel-intro--compact">
             <span className="eyebrow">Acesso</span>
-            <h2>Use o login do salão</h2>
-            <p className="muted">Entre com Google ou com o e-mail da sua conta.</p>
+            <h2>Entre com sua conta</h2>
+            <p className="muted">Use Google, Facebook ou o e-mail principal do salão.</p>
           </div>
 
           <FirebaseWebRuntimeConfig config={firebaseConfig} />
           <PanelAuthClient
-            initialMessage={searchParams?.message}
-            initialTone={searchParams?.tone}
+            initialMessage={initialMessage}
+            initialTone={initialTone}
             firebaseConfig={firebaseConfig}
           />
         </section>

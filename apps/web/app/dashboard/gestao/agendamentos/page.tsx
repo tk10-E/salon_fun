@@ -1,6 +1,7 @@
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
 import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
+import { sendAppointmentWhatsAppAction } from "@/app/actions";
 import {
   createManagementAppointmentAction,
   updateManagementAppointmentAction,
@@ -22,19 +23,21 @@ import {
 import { formatCurrency } from "@/lib/formatters";
 
 type AgendamentosPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     day?: string;
     professionalId?: string;
     status?: string;
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 export default async function AgendamentosPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: AgendamentosPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
+  const whatsappAutomationReady = salon.whatsapp_dispatch_enabled === true;
   const timeZone = salon.timezone ?? "America/Sao_Paulo";
   const selectedDay =
     searchParams?.day && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.day)
@@ -386,6 +389,85 @@ export default async function AgendamentosPage({
 
                 {appointment.notes ? (
                   <p className="management-inline-note">{appointment.notes}</p>
+                ) : null}
+
+                {appointment.status === "pending" ||
+                appointment.status === "confirmed" ? (
+                  <section className="management-appointment-card__whatsapp">
+                    <div className="management-appointment-card__whatsapp-copy">
+                      <strong>WhatsApp do atendimento</strong>
+                      <p className="muted">
+                        {whatsappAutomationReady
+                          ? "Envie confirmação, lembrete ou reagendamento sem sair da agenda."
+                          : "Ative o canal técnico do WhatsApp nas configurações para usar os envios automáticos da agenda."}
+                      </p>
+                    </div>
+
+                    {whatsappAutomationReady ? (
+                      <div className="inline-actions">
+                        {appointment.status === "pending" ? (
+                          <form action={sendAppointmentWhatsAppAction}>
+                            <input
+                              type="hidden"
+                              name="appointmentId"
+                              value={appointment.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="mode"
+                              value="confirmation"
+                            />
+                            <button type="submit" className="secondary-button">
+                              Enviar confirmação
+                            </button>
+                          </form>
+                        ) : null}
+
+                        {appointment.status === "confirmed" ? (
+                          <form action={sendAppointmentWhatsAppAction}>
+                            <input
+                              type="hidden"
+                              name="appointmentId"
+                              value={appointment.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="mode"
+                              value="reminder"
+                            />
+                            <button type="submit" className="secondary-button">
+                              Enviar lembrete
+                            </button>
+                          </form>
+                        ) : null}
+
+                        <form action={sendAppointmentWhatsAppAction}>
+                          <input
+                            type="hidden"
+                            name="appointmentId"
+                            value={appointment.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="mode"
+                            value="reschedule"
+                          />
+                          <button type="submit" className="secondary-button">
+                            Pedir reagendamento
+                          </button>
+                        </form>
+                      </div>
+                    ) : (
+                      <div className="inline-actions">
+                        <a
+                          href="/dashboard/whatsapp"
+                          className="secondary-button"
+                        >
+                          Configurar WhatsApp
+                        </a>
+                      </div>
+                    )}
+                  </section>
                 ) : null}
 
                 <div className="inline-actions">

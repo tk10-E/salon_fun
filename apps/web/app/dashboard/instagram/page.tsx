@@ -18,10 +18,10 @@ import { formatDateTime } from "@/lib/formatters";
 import { createClient } from "@/lib/supabase/server";
 
 type InstagramPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 type InstagramConnectionRecord = {
@@ -222,7 +222,8 @@ function getInstagramConnectionAlert(
   };
 }
 
-export default async function InstagramPage({ searchParams }: InstagramPageProps) {
+export default async function InstagramPage({ searchParams: searchParamsPromise }: InstagramPageProps) {
+  const searchParams = await searchParamsPromise;
   const { salon } = await requireOwnerSalon();
   const supabase = createClient() as any;
   const canUseAutomaticMetaConnect = Boolean(

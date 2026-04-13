@@ -84,10 +84,10 @@ describe("instagram oauth helpers", () => {
   });
 
   it("prefers the configured redirect origin for OAuth callbacks", () => {
-    process.env.INSTAGRAM_META_REDIRECT_ORIGIN = "https://painel.jc7desenvolvimento.online/";
+    process.env.INSTAGRAM_META_REDIRECT_ORIGIN = "https://painel.jc7desenvovimento.online/";
 
     expect(buildInstagramMetaRedirectUri("/dashboard/instagram/connect/callback")).toBe(
-      "https://painel.jc7desenvolvimento.online/dashboard/instagram/connect/callback",
+      "https://painel.jc7desenvovimento.online/dashboard/instagram/connect/callback",
     );
   });
 

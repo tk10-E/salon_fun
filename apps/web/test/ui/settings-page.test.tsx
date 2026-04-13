@@ -10,6 +10,7 @@ const {
   requireOwnerSalonMock,
   updateSalonBookingPolicyActionPath,
   updateSalonBrandingActionPath,
+  updateSalonSecurityPolicyActionPath,
   updateSalonScheduleActionPath,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   requireOwnerSalonMock: vi.fn(),
   updateSalonBookingPolicyActionPath: "/__test/update-booking-policy",
   updateSalonBrandingActionPath: "/__test/update-branding",
+  updateSalonSecurityPolicyActionPath: "/__test/update-security-policy",
   updateSalonScheduleActionPath: "/__test/update-schedule",
 }));
 
@@ -41,7 +43,19 @@ vi.mock("@/app/actions", () => ({
   regenerateSalonCodeAction: regenerateSalonCodeActionPath,
   updateSalonBookingPolicyAction: updateSalonBookingPolicyActionPath,
   updateSalonBrandingAction: updateSalonBrandingActionPath,
+  updateSalonSecurityPolicyAction: updateSalonSecurityPolicyActionPath,
   updateSalonScheduleAction: updateSalonScheduleActionPath,
+}));
+
+vi.mock("@/components/SalonSecuritySettingsPanel", () => ({
+  SalonSecuritySettingsPanel: () => (
+    <div>
+      <h3>Autenticador do painel</h3>
+      <label htmlFor="allowed-country-codes">Países permitidos</label>
+      <input id="allowed-country-codes" />
+      <button type="button">Salvar segurança do painel</button>
+    </div>
+  ),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -57,6 +71,28 @@ import SettingsPage from "@/app/dashboard/settings/page";
 describe("settings page UI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salon_security_settings") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    mfa_totp_enabled: true,
+                    geo_allowlist_enabled: true,
+                    allowed_country_codes: ["BR", "US"],
+                  },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
     requireOwnerSalonMock.mockResolvedValue({
       salon: {
         id: "salon-1",
@@ -87,6 +123,9 @@ describe("settings page UI", () => {
         booking_policy_summary: "Sinal para segurar horarios premium.",
         booking_policy_title: "Reserva protegida",
         booking_policy_version: "booking-policy-20260403193000",
+        whatsapp_dispatch_enabled: true,
+        whatsapp_meta_business_account_id: "210248555053210",
+        whatsapp_meta_phone_number_id: "123456789012345",
         whatsapp_phone: "5511999999999",
         timezone: "America/Sao_Paulo",
         slot_step_minutes: 30,
@@ -155,10 +194,10 @@ describe("settings page UI", () => {
     expect(screen.getByLabelText("Nome exibido no app")).toBeInTheDocument();
     expect(screen.getByLabelText(/Endereço da vitrine/)).toBeInTheDocument();
     expect(
-      screen.getByLabelText(/WhatsApp público do salão/i),
-    ).toBeInTheDocument();
+      screen.queryByLabelText(/WhatsApp público do salão/i),
+    ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Configuração técnica da plataforma"),
+      screen.queryByRole("heading", { name: "WhatsApp do salão" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Headline principal")).toBeInTheDocument();
     expect(screen.getByLabelText("Título de boas-vindas")).toBeInTheDocument();
@@ -169,6 +208,12 @@ describe("settings page UI", () => {
     expect(
       screen.getByRole("checkbox", { name: "White-label ativo" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("Imagens do app"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("PNG, JPG ou WEBP • ate 3 MB • 1 por vez.").length,
+    ).toBeGreaterThan(0);
     expect(
       screen.getByRole("checkbox", {
         name: "Piloto automático comercial ativo",
@@ -233,6 +278,16 @@ describe("settings page UI", () => {
     expect(screen.getByLabelText(/Valor do sinal/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Salvar política" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Segurança do painel" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Autenticador do painel" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Países permitidos")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Salvar segurança do painel" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Código para clientes" }),

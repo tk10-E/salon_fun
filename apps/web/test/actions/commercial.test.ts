@@ -1,20 +1,25 @@
+import { Buffer } from "node:buffer";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   captureRedirect,
   makeFormData,
+  makeImageFile,
   TEST_REDIRECT_PREFIX,
 } from "@/test/server-action-test-helpers";
 
 const {
   createClientMock,
   getSalonBillingEntitlementsMock,
+  optimizeUploadedImageMock,
   redirectMock,
   revalidatePathMock,
   requireOwnerSalonMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   getSalonBillingEntitlementsMock: vi.fn(),
+  optimizeUploadedImageMock: vi.fn(),
   redirectMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
@@ -30,6 +35,10 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/billing", () => ({
   getSalonBillingEntitlements: getSalonBillingEntitlementsMock,
+}));
+
+vi.mock("@/lib/uploadedImageOptimization", () => ({
+  optimizeUploadedImage: optimizeUploadedImageMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -87,6 +96,7 @@ describe("commercial actions", () => {
           title: "Combo de inverno",
           description: "Corte + hidratação",
           highlightText: "Combo especial da semana",
+          membershipServiceId: "service-1",
           price: "129.9",
           startsOn: "2026-03-25",
           endsOn: "2026-03-31",
@@ -103,7 +113,8 @@ describe("commercial actions", () => {
       title: "Combo de inverno",
       description: "Corte + hidratação",
       highlight_text: "Combo especial da semana",
-      membership_service_id: null,
+      image_path: null,
+      membership_service_id: "service-1",
       membership_sessions_included: null,
       membership_validity_days: null,
       price: 129.9,
@@ -123,6 +134,78 @@ describe("commercial actions", () => {
         "/dashboard/benefits",
         "/dashboard/benefits/promotions",
       ]),
+    );
+    expect(location).toBe(
+      "/dashboard/benefits/promotions?message=Oferta+salva+com+sucesso.&tone=success",
+    );
+  });
+
+  it("uploads an offer image before creating a membership plan", async () => {
+    optimizeUploadedImageMock.mockResolvedValue({
+      buffer: Buffer.from("optimized-image"),
+      contentType: "image/jpeg",
+      extension: "jpg",
+      width: 1200,
+      height: 900,
+    });
+
+    const insertOffer = vi.fn().mockResolvedValue({ error: null });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+    const uploadImage = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salon_offers") {
+          return { insert: insertOffer };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return { insert: insertNotification };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          upload: uploadImage,
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      createSalonOfferActionImpl(
+        makeFormData({
+          kind: "membership",
+          title: "Clube premium",
+          description: "Plano recorrente com 2 atendimentos.",
+          highlightText: "Beneficio principal em destaque",
+          membershipServiceId: "service-1",
+          membershipSessionsIncluded: "2",
+          membershipValidityDays: "30",
+          price: "199.9",
+          sortOrder: "0",
+          isActive: "on",
+          offerImage: makeImageFile("membership.jpg"),
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(optimizeUploadedImageMock).toHaveBeenCalled();
+    expect(uploadImage).toHaveBeenCalledWith(
+      expect.stringMatching(/^salon-1\/offers\/.+\.jpg$/),
+      expect.any(Buffer),
+      {
+        contentType: "image/jpeg",
+        upsert: true,
+      },
+    );
+    expect(insertOffer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        salon_id: "salon-1",
+        kind: "membership",
+        image_path: expect.stringMatching(/^salon-1\/offers\/.+\.jpg$/),
+      }),
     );
     expect(location).toBe(
       "/dashboard/benefits/promotions?message=Oferta+salva+com+sucesso.&tone=success",

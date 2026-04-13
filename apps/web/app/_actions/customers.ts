@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 import { requireOwnerSalon } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
-import { buildRedirectNotice } from "./shared";
+import {
+  buildRedirectNotice,
+  queueCustomerNotification,
+  resolveDashboardReturnPath,
+  SUBSCRIPTIONS_PATH,
+} from "./shared";
 
 const CUSTOMERS_PATH = "/dashboard/customers";
 const NOTIFICATIONS_PATH = "/dashboard/notifications";
@@ -83,6 +88,57 @@ function resolveCustomersReturnPath(value: FormDataEntryValue | null) {
   }
 
   return path;
+}
+
+function resolveMembershipManagementReturnPath(formData: FormData) {
+  return resolveDashboardReturnPath(formData, SUBSCRIPTIONS_PATH, [
+    "/dashboard",
+    CUSTOMERS_PATH,
+    SUBSCRIPTIONS_PATH,
+  ]);
+}
+
+function normalizeOptionalNotes(value: FormDataEntryValue | null, maxLength = 1000) {
+  return normalizeText(value, maxLength);
+}
+
+function formatMembershipRequestError(message: string) {
+  if (message.includes("membership_request_not_found")) {
+    return "Não foi possível localizar esse pedido de assinatura.";
+  }
+
+  if (message.includes("membership_request_not_pending")) {
+    return "Esse pedido já foi tratado pelo salão.";
+  }
+
+  if (message.includes("membership_offer_not_operational")) {
+    return "Esse plano ainda não está pronto para ativação. Revise serviço, sessões e validade.";
+  }
+
+  if (message.includes("offer_not_found")) {
+    return "Não foi possível localizar o plano selecionado para esse pedido.";
+  }
+
+  return `Não foi possível tratar a assinatura agora. ${message}`;
+}
+
+function formatNotificationDate(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "America/Sao_Paulo",
+  }).format(parsed);
 }
 
 export async function saveOwnerCustomerProfileActionImpl(formData: FormData) {
@@ -288,6 +344,188 @@ export async function assignCustomerMembershipPackageActionImpl(
     buildRedirectNotice(
       returnPath,
       "Pacote ativado com saldo operacional para essa cliente.",
+      "success",
+    ),
+  );
+}
+
+export async function approveCustomerMembershipRequestActionImpl(
+  formData: FormData,
+) {
+  const requestId = String(formData.get("requestId") ?? "").trim();
+  const startsOn = normalizeDate(formData.get("startsOn"));
+  const notes = normalizeOptionalNotes(formData.get("notes"));
+  const returnPath = resolveMembershipManagementReturnPath(formData);
+
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (!requestId) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Selecione um pedido antes de aprovar a assinatura.",
+        "error",
+      ),
+    );
+  }
+
+  const { data: requestRecord } = await (supabase as any)
+    .from("customer_membership_requests")
+    .select(
+      "id, salon_id, customer_id, offer_id, offer_title_snapshot, status",
+    )
+    .eq("id", requestId)
+    .eq("salon_id", salon.id)
+    .maybeSingle();
+
+  if (!requestRecord || requestRecord.status !== "pending") {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Esse pedido não está mais pendente no painel.",
+        "error",
+      ),
+    );
+  }
+
+  const { data: approvedMembership, error } = await (supabase as any).rpc(
+    "approve_customer_membership_request",
+    {
+      request_uuid: requestId,
+      starts_on_input: startsOn,
+      notes_input: notes,
+    },
+  );
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        formatMembershipRequestError(error.message),
+        "error",
+      ),
+    );
+  }
+
+  const expiresAtLabel = formatNotificationDate(
+    approvedMembership?.expires_at ?? null,
+  );
+
+  await queueCustomerNotification({
+    supabase,
+    salonId: salon.id,
+    customerId: requestRecord.customer_id,
+    audience: "single_customer",
+    notificationType: "membership_request_approved",
+    title: "Seu plano foi ativado",
+    body: expiresAtLabel
+      ? `${requestRecord.offer_title_snapshot} foi aceito pelo salão e está ativo até ${expiresAtLabel}.`
+      : `${requestRecord.offer_title_snapshot} foi aceito pelo salão e já está ativo no app.`,
+    payload: {
+      type: "membership_request_approved",
+      ctaTarget: "profile",
+      offerId: requestRecord.offer_id,
+      membershipId: approvedMembership?.id ?? null,
+      expiresAt: approvedMembership?.expires_at ?? null,
+    },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/appointments");
+  revalidatePath(CUSTOMERS_PATH);
+  revalidatePath(SUBSCRIPTIONS_PATH);
+  revalidatePath(NOTIFICATIONS_PATH);
+  redirect(
+    buildRedirectNotice(
+      returnPath,
+      "Assinatura aprovada e ativada para a cliente.",
+      "success",
+    ),
+  );
+}
+
+export async function rejectCustomerMembershipRequestActionImpl(
+  formData: FormData,
+) {
+  const requestId = String(formData.get("requestId") ?? "").trim();
+  const notes = normalizeOptionalNotes(formData.get("notes"));
+  const returnPath = resolveMembershipManagementReturnPath(formData);
+
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (!requestId) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Selecione um pedido antes de recusar a assinatura.",
+        "error",
+      ),
+    );
+  }
+
+  const { data: requestRecord } = await (supabase as any)
+    .from("customer_membership_requests")
+    .select(
+      "id, salon_id, customer_id, offer_id, offer_title_snapshot, status",
+    )
+    .eq("id", requestId)
+    .eq("salon_id", salon.id)
+    .maybeSingle();
+
+  if (!requestRecord || requestRecord.status !== "pending") {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Esse pedido não está mais pendente no painel.",
+        "error",
+      ),
+    );
+  }
+
+  const { error } = await (supabase as any).rpc(
+    "reject_customer_membership_request",
+    {
+      request_uuid: requestId,
+      notes_input: notes,
+    },
+  );
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        formatMembershipRequestError(error.message),
+        "error",
+      ),
+    );
+  }
+
+  await queueCustomerNotification({
+    supabase,
+    salonId: salon.id,
+    customerId: requestRecord.customer_id,
+    audience: "single_customer",
+    notificationType: "membership_request_rejected",
+    title: "Seu pedido de plano foi respondido",
+    body: (notes?.trim().length ?? 0) > 0
+      ? `O salão respondeu o pedido de ${requestRecord.offer_title_snapshot}: ${notes!.trim()}`
+      : `O salão respondeu o pedido de ${requestRecord.offer_title_snapshot}. Se quiser, você pode pedir novamente mais tarde.`,
+    payload: {
+      type: "membership_request_rejected",
+      ctaTarget: "profile",
+      offerId: requestRecord.offer_id,
+    },
+  });
+
+  revalidatePath(CUSTOMERS_PATH);
+  revalidatePath(SUBSCRIPTIONS_PATH);
+  revalidatePath(NOTIFICATIONS_PATH);
+  redirect(
+    buildRedirectNotice(
+      returnPath,
+      "Pedido recusado e cliente avisada no app.",
       "success",
     ),
   );

@@ -4,13 +4,14 @@ import { loadGrowthAutomationPageData } from "../_lib";
 import { AutomationsPageContent } from "../_automations-components";
 
 type AutomationsPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
-export default async function AutomationsPage({ searchParams }: AutomationsPageProps) {
+export default async function AutomationsPage({ searchParams: searchParamsPromise }: AutomationsPageProps) {
+  const searchParams = await searchParamsPromise;
   const data = await loadGrowthAutomationPageData();
 
   return (

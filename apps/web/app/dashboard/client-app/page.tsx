@@ -3,15 +3,16 @@ import { ClientAppPageContent } from "./_components";
 import { loadClientAppHubData } from "./_lib";
 
 export type ClientAppPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     message?: string;
     tone?: string;
-  };
+  }>;
 };
 
 export default async function ClientAppPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: ClientAppPageProps) {
+  const searchParams = await searchParamsPromise;
   const data = await loadClientAppHubData();
 
   return (
