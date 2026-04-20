@@ -20,10 +20,17 @@ import {
   getStripeOperationalStatus,
 } from "@/lib/stripeBilling";
 import { createClient } from "@/lib/supabase/server";
+import jc7BrandLogo from "@/assets/minha_empresa.png";
 
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
+
+const jc7BrandLogoAsset = jc7BrandLogo as { src?: string } | string;
+const jc7BrandLogoSrc =
+  typeof jc7BrandLogoAsset === "string"
+    ? jc7BrandLogoAsset
+    : jc7BrandLogoAsset.src ?? "";
 
 type PublicBillingPageProps = {
   searchParams?: Promise<{
@@ -392,6 +399,28 @@ export default async function PublicBillingPage({
               })}
             </div>
           </section>
+
+          <footer
+            className={styles.brandSignature}
+            aria-label="Desenvolvido por JC7 Desenvolvimentos"
+          >
+            <div className={styles.brandLogoFrame}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={jc7BrandLogoSrc}
+                alt="Marca JC7 Desenvolvimentos"
+                className={styles.brandLogo}
+              />
+            </div>
+
+            <div className={styles.brandSignatureCopy}>
+              <span>Projeto, tecnologia e automação</span>
+              <strong>Desenvolvido por JC7 Desenvolvimentos</strong>
+              <p>
+                Arquitetura, programação e operação digital para o Salon Fun.
+              </p>
+            </div>
+          </footer>
         </div>
       </div>
     );

@@ -51,6 +51,10 @@ vi.mock("@/components/FlashMessage", () => ({
   FlashMessage: (props: { message: string }) => <div>{props.message}</div>,
 }));
 
+vi.mock("@/assets/minha_empresa.png", () => ({
+  default: { src: "/jc7-desenvolvimentos.png" },
+}));
+
 vi.mock("@/lib/serverPerformance", () => ({
   measureServerRender: async (_name: string, renderFn: () => unknown) =>
     renderFn(),
@@ -184,6 +188,13 @@ describe("public billing page", () => {
     ).toBe(true);
     expect(screen.getByText("Starter")).toBeInTheDocument();
     expect(screen.getByText("Growth")).toBeInTheDocument();
+    expect(
+      screen.getByText("Desenvolvido por JC7 Desenvolvimentos"),
+    ).toBeInTheDocument();
+    expect(screen.getByAltText("Marca JC7 Desenvolvimentos")).toHaveAttribute(
+      "src",
+      "/jc7-desenvolvimentos.png",
+    );
   });
 
   it("renders checkout actions for locked salons", async () => {
