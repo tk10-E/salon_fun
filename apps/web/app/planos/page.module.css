@@ -413,8 +413,13 @@
 
 .panelHeader :global(.muted),
 .panelHeader :global(.public-billing-panel__aside span) {
+  color: #4f3424;
   font-size: 0.95rem;
   line-height: 1.5;
+}
+
+.panelHeader :global(.public-billing-panel__aside strong) {
+  color: #24130b;
 }
 
 .planGrid {
@@ -435,8 +440,8 @@
   border: 1px solid rgba(134, 78, 45, 0.16);
   border-radius: 30px;
   background:
-    radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.84), transparent 24%),
-    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 244, 230, 0.9));
+    radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.88), transparent 24%),
+    linear-gradient(180deg, rgba(255, 253, 249, 0.99), rgba(255, 244, 230, 0.95));
   box-shadow:
     0 18px 44px rgba(65, 35, 18, 0.09),
     inset 0 1px 0 rgba(255, 255, 255, 0.86);
@@ -503,6 +508,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .planName {
@@ -519,12 +525,16 @@
   text-wrap: balance;
 }
 
+.planHeader > div {
+  min-width: 0;
+}
+
 .planHighlight,
 .planFootnote {
   position: relative;
   z-index: 1;
   margin: 0;
-  color: #6b4c38;
+  color: #4d3323;
   font-size: 0.92rem;
   line-height: 1.48;
 }
@@ -534,22 +544,25 @@
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
+  min-width: 0;
 }
 
 .planPrices > div {
   display: grid;
   gap: 4px;
-  min-height: 82px;
+  min-width: 0;
+  min-height: 78px;
   align-content: center;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(134, 78, 45, 0.12);
-  background: rgba(255, 255, 255, 0.58);
+  padding: 11px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(134, 78, 45, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+  overflow: hidden;
 }
 
 .planPrices span {
-  color: #7a5a44;
+  color: #583824;
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.05em;
@@ -558,8 +571,10 @@
 
 .planPrices strong {
   color: #24130b;
-  font-size: clamp(1.7rem, 2.3vw, 2.45rem);
-  line-height: 0.96;
+  font-size: clamp(1.42rem, 1.85vw, 2rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -572,10 +587,12 @@
 }
 
 .planLimits :global(.badge) {
-  border: 1px solid rgba(134, 78, 45, 0.08);
-  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(134, 78, 45, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+  color: #4a2f1e;
   padding: 6px 10px;
   font-size: 0.72rem;
+  font-weight: 850;
 }
 
 .planActions {
@@ -596,13 +613,16 @@
   justify-content: center;
   border-radius: 16px;
   font-weight: 900;
+  color: #fffaf4;
 }
 
 .secondaryAction {
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.82);
+  color: #24130b;
 }
 
 .planFootnote {
+  color: #4d3323;
   font-size: 0.86rem;
 }
 
