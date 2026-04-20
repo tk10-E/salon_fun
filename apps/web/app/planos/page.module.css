@@ -1,0 +1,719 @@
+.page {
+  position: relative;
+  isolation: isolate;
+  align-items: start;
+  min-height: 100vh;
+  padding: 48px 24px 72px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 10% 8%, rgba(189, 91, 45, 0.18), transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(251, 186, 112, 0.28), transparent 30%),
+    linear-gradient(135deg, #fff9f1 0%, #f4e4d3 48%, #f8efe7 100%);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.backdropOrbPrimary,
+.backdropOrbSecondary,
+.backdropGrid {
+  position: absolute;
+  display: block;
+}
+
+.backdropOrbPrimary {
+  top: -180px;
+  right: -120px;
+  width: min(48vw, 640px);
+  height: min(48vw, 640px);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(168, 86, 45, 0.28), transparent 64%),
+    radial-gradient(circle at 38% 38%, rgba(255, 255, 255, 0.42), transparent 34%);
+  filter: blur(2px);
+  animation: billingFloat 11s ease-in-out infinite;
+}
+
+.backdropOrbSecondary {
+  left: -190px;
+  bottom: 8%;
+  width: min(42vw, 520px);
+  height: min(42vw, 520px);
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(88, 47, 26, 0.14), transparent 68%);
+  animation: billingFloat 13s ease-in-out infinite reverse;
+}
+
+.backdropGrid {
+  inset: 0;
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(122, 73, 43, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 73, 43, 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(circle at 52% 42%, black 0%, transparent 72%);
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  width: min(1380px, 100%);
+  display: grid;
+  gap: 28px;
+}
+
+.hero,
+.panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(132, 76, 43, 0.16);
+  border-radius: 34px;
+  background:
+    linear-gradient(135deg, rgba(255, 253, 248, 0.94), rgba(255, 244, 230, 0.82)),
+    rgba(255, 250, 244, 0.9);
+  box-shadow:
+    0 34px 90px rgba(65, 35, 18, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  backdrop-filter: blur(18px);
+  animation: billingRise 720ms cubic-bezier(0.2, 0.86, 0.22, 1) both;
+}
+
+.hero {
+  padding: clamp(28px, 4vw, 58px);
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background:
+    linear-gradient(120deg, transparent 8%, rgba(255, 255, 255, 0.48) 18%, transparent 31%),
+    linear-gradient(145deg, transparent, rgba(168, 86, 45, 0.08));
+  transform: translateX(-72%);
+  animation: billingSweep 1500ms ease-out 280ms both;
+  pointer-events: none;
+}
+
+.heroHalo {
+  position: absolute;
+  top: 18px;
+  right: 22%;
+  width: 240px;
+  height: 240px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(168, 86, 45, 0.16), transparent 68%);
+  animation: billingPulse 4.8s ease-in-out infinite;
+}
+
+.heroGrid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+  gap: clamp(22px, 4vw, 52px);
+  align-items: center;
+}
+
+.heroCopy {
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  max-width: 720px;
+}
+
+.heroBadges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.eyebrow,
+.planName {
+  border: 1px solid rgba(160, 87, 44, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 236, 212, 0.94), rgba(255, 249, 241, 0.72));
+  color: #873d1f;
+  box-shadow: 0 10px 24px rgba(168, 86, 45, 0.1);
+}
+
+.heroNote,
+.secureNote,
+.activationLabel {
+  color: #8d5a3b;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  max-width: 12ch;
+  margin: 0;
+  color: #25140b;
+  font-size: clamp(3rem, 6.8vw, 6.5rem);
+  line-height: 0.86;
+  letter-spacing: -0.07em;
+  text-wrap: balance;
+}
+
+.hero p {
+  color: #684b39;
+}
+
+.heroActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.heroCta,
+.actionButton {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+.heroCta {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #9d4d27, #c26736);
+  color: #fffaf4;
+  font-weight: 900;
+  box-shadow: 0 18px 32px rgba(168, 86, 45, 0.28);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.heroCta::after,
+.actionButton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(110deg, transparent 18%, rgba(255, 255, 255, 0.34), transparent 58%);
+  transform: translateX(-120%);
+  transition: transform 520ms ease;
+}
+
+.heroCta:hover,
+.actionButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 42px rgba(168, 86, 45, 0.34);
+}
+
+.heroCta:hover::after,
+.actionButton:hover::after {
+  transform: translateX(120%);
+}
+
+.secureNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.secureNote::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #37a267;
+  box-shadow: 0 0 0 8px rgba(55, 162, 103, 0.12);
+}
+
+.heroStatus {
+  display: grid;
+  gap: 14px;
+  animation: billingRise 760ms cubic-bezier(0.2, 0.86, 0.22, 1) 120ms both;
+}
+
+.statusCard,
+.activationCard,
+.proofItem,
+.planCard,
+.panelHeader,
+.panel {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.statusCard {
+  border-color: rgba(160, 87, 44, 0.14);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(255, 245, 233, 0.62));
+  box-shadow: 0 18px 42px rgba(65, 35, 18, 0.08);
+}
+
+.statusCard:hover,
+.proofItem:hover {
+  transform: translateY(-3px);
+  border-color: rgba(160, 87, 44, 0.28);
+  box-shadow: 0 24px 48px rgba(65, 35, 18, 0.12);
+}
+
+.activationCard {
+  position: relative;
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 20px;
+  border-radius: 26px;
+  border: 1px solid rgba(168, 86, 45, 0.22);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.76), transparent 42%),
+    linear-gradient(135deg, rgba(76, 38, 21, 0.94), rgba(149, 73, 36, 0.9));
+  color: #fff8ee;
+  box-shadow: 0 24px 58px rgba(83, 41, 20, 0.24);
+}
+
+.activationCard strong {
+  display: block;
+  margin: 5px 0;
+  color: #fffaf4;
+  font-size: 1.18rem;
+}
+
+.activationCard p {
+  margin: 0;
+  color: rgba(255, 248, 237, 0.78);
+  line-height: 1.55;
+}
+
+.activationLabel {
+  color: rgba(255, 234, 205, 0.9);
+}
+
+.activationOrbit {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 241, 219, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.activationOrbit::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: inherit;
+  background: #f7b267;
+  box-shadow:
+    0 0 34px rgba(247, 178, 103, 0.74),
+    0 0 0 12px rgba(247, 178, 103, 0.12);
+}
+
+.activationOrbit span {
+  position: absolute;
+  inset: 7px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 241, 219, 0.36);
+  animation: billingOrbit 4.2s linear infinite;
+}
+
+.activationOrbit span:last-child {
+  inset: 0;
+  animation-duration: 6.2s;
+  animation-direction: reverse;
+}
+
+.activationOrbit span::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #fffaf4;
+}
+
+.proofStrip {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.proofItem {
+  animation: billingRise 620ms cubic-bezier(0.2, 0.86, 0.22, 1) both;
+}
+
+.proofItem:nth-child(1) {
+  animation-delay: 140ms;
+}
+
+.proofItem:nth-child(2) {
+  animation-delay: 210ms;
+}
+
+.proofItem:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+.heroCaption {
+  position: relative;
+  z-index: 1;
+}
+
+.panel {
+  display: grid;
+  gap: 26px;
+  padding: clamp(26px, 3.5vw, 48px);
+  animation-delay: 180ms;
+}
+
+.panelHeader {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.16fr) minmax(280px, 0.84fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.panelHeader h2 {
+  max-width: 11ch;
+  margin: 12px 0 0;
+  color: #24130b;
+  font-size: clamp(2.4rem, 4vw, 4.4rem);
+  line-height: 0.9;
+  letter-spacing: -0.06em;
+}
+
+.planGrid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
+.planCard {
+  position: relative;
+  display: grid;
+  min-height: 100%;
+  gap: 18px;
+  padding: clamp(20px, 2vw, 28px);
+  border: 1px solid rgba(134, 78, 45, 0.16);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.84), transparent 24%),
+    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 244, 230, 0.9));
+  box-shadow:
+    0 24px 62px rgba(65, 35, 18, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  animation: billingCardIn 700ms cubic-bezier(0.2, 0.86, 0.22, 1) both;
+  overflow: hidden;
+}
+
+.planCard:nth-child(1) {
+  animation-delay: 260ms;
+}
+
+.planCard:nth-child(2) {
+  animation-delay: 340ms;
+}
+
+.planCard:nth-child(3) {
+  animation-delay: 420ms;
+}
+
+.planCard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(140deg, transparent 14%, rgba(255, 255, 255, 0.56), transparent 36%);
+  transform: translateX(-120%);
+  transition: transform 680ms ease;
+}
+
+.planCard::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  top: -70px;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(168, 86, 45, 0.16), transparent 72%);
+}
+
+.planCard:hover {
+  transform: translateY(-8px);
+  border-color: rgba(168, 86, 45, 0.32);
+  box-shadow:
+    0 34px 82px rgba(65, 35, 18, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.planCard:hover::before {
+  transform: translateX(120%);
+}
+
+.planCardCurrent,
+.planCard:nth-child(2) {
+  background:
+    radial-gradient(circle at 22% 12%, rgba(255, 255, 255, 0.78), transparent 26%),
+    linear-gradient(180deg, rgba(255, 248, 238, 0.98), rgba(255, 232, 205, 0.9));
+  border-color: rgba(168, 86, 45, 0.28);
+}
+
+.planHeader {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.planHeader h3 {
+  margin: 14px 0 0;
+  color: #27170f;
+  font-size: clamp(1.35rem, 2vw, 1.82rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.planHighlight,
+.planFootnote {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: #6b4c38;
+  line-height: 1.58;
+}
+
+.planPrices {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.planPrices > div {
+  display: grid;
+  gap: 6px;
+  min-height: 108px;
+  align-content: center;
+  padding: 15px;
+  border-radius: 22px;
+  border: 1px solid rgba(134, 78, 45, 0.12);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.planPrices span {
+  color: #7a5a44;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.planPrices strong {
+  color: #24130b;
+  font-size: clamp(2rem, 3.4vw, 3.4rem);
+  line-height: 0.92;
+}
+
+.planLimits {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planLimits :global(.badge) {
+  border: 1px solid rgba(134, 78, 45, 0.08);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.planActions {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.planActions form {
+  margin: 0;
+}
+
+.actionButton {
+  width: 100%;
+  min-height: 48px;
+  justify-content: center;
+  border-radius: 16px;
+  font-weight: 900;
+}
+
+.secondaryAction {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.planFootnote {
+  font-size: 0.95rem;
+}
+
+@media (max-width: 1120px) {
+  .planGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .heroGrid,
+  .panelHeader,
+  .proofStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .hero h1,
+  .panelHeader h2 {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 24px 14px 44px;
+  }
+
+  .hero,
+  .panel {
+    border-radius: 26px;
+  }
+
+  .hero {
+    padding: 24px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.55rem, 14vw, 4rem);
+  }
+
+  .activationCard {
+    grid-template-columns: 1fr;
+  }
+
+  .activationOrbit {
+    width: 70px;
+    height: 70px;
+  }
+
+  .planPrices {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdropOrbPrimary,
+  .backdropOrbSecondary,
+  .hero,
+  .hero::after,
+  .heroHalo,
+  .heroStatus,
+  .proofItem,
+  .panel,
+  .planCard,
+  .activationOrbit span {
+    animation: none !important;
+  }
+
+  .heroCta,
+  .actionButton,
+  .statusCard,
+  .activationCard,
+  .proofItem,
+  .planCard {
+    transition: none !important;
+  }
+}
+
+@keyframes billingRise {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes billingCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes billingSweep {
+  from {
+    transform: translateX(-72%);
+  }
+
+  to {
+    transform: translateX(72%);
+  }
+}
+
+@keyframes billingFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(-18px, 16px, 0) scale(1.04);
+  }
+}
+
+@keyframes billingPulse {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes billingOrbit {
+  to {
+    transform: rotate(360deg);
+  }
+}

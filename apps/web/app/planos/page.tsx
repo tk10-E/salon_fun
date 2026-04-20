@@ -21,6 +21,8 @@ import {
 } from "@/lib/stripeBilling";
 import { createClient } from "@/lib/supabase/server";
 
+import styles from "./page.module.css";
+
 export const dynamic = "force-dynamic";
 
 type PublicBillingPageProps = {
@@ -161,8 +163,14 @@ export default async function PublicBillingPage({
           ];
 
     return (
-      <div className="setup-page public-billing-page">
-        <div className="public-billing-shell">
+      <div className={`${styles.page} setup-page public-billing-page`}>
+        <div className={styles.backdrop} aria-hidden="true">
+          <span className={styles.backdropOrbPrimary} />
+          <span className={styles.backdropOrbSecondary} />
+          <span className={styles.backdropGrid} />
+        </div>
+
+        <div className={`${styles.shell} public-billing-shell`}>
           {searchParams?.message ? (
             <FlashMessage
               message={searchParams.message}
@@ -170,12 +178,13 @@ export default async function PublicBillingPage({
             />
           ) : null}
 
-          <section className="hero-card auth-hero-panel public-billing-hero">
-            <div className="public-billing-hero__grid">
-              <div className="auth-hero-copy">
-                <div className="hero-badges">
-                  <span className="eyebrow">{content.badge}</span>
-                  <span className="hero-note">
+          <section className={`${styles.hero} hero-card auth-hero-panel public-billing-hero`}>
+            <span className={styles.heroHalo} aria-hidden="true" />
+            <div className={`${styles.heroGrid} public-billing-hero__grid`}>
+              <div className={`${styles.heroCopy} auth-hero-copy`}>
+                <div className={`${styles.heroBadges} hero-badges`}>
+                  <span className={`${styles.eyebrow} eyebrow`}>{content.badge}</span>
+                  <span className={`${styles.heroNote} hero-note`}>
                     {user ? "Assinatura antes do uso" : "Venda com checkout seguro"}
                   </span>
                 </div>
@@ -183,10 +192,21 @@ export default async function PublicBillingPage({
                 <p className="auth-hero-kicker">{content.kicker}</p>
                 <h1>{content.title}</h1>
                 <p className="auth-hero-summary">{content.summary}</p>
+
+                <div className={styles.heroActions}>
+                  <a href="#public-billing-plans" className={styles.heroCta}>
+                    Escolher plano
+                  </a>
+                  <span className={styles.secureNote}>
+                    {checkoutEnabled
+                      ? "Stripe Checkout, portal e webhook ativos"
+                      : "Checkout será liberado após a revisão final"}
+                  </span>
+                </div>
               </div>
 
-              <div className="auth-capability-grid public-billing-hero__status">
-                <article className="auth-capability-card">
+              <div className={`${styles.heroStatus} auth-capability-grid public-billing-hero__status`}>
+                <article className={`${styles.statusCard} auth-capability-card`}>
                   <strong>{salonName ? "Painel bloqueado até a assinatura" : "Planos fora do painel"}</strong>
                   <span>
                     {salonName
@@ -195,7 +215,7 @@ export default async function PublicBillingPage({
                   </span>
                 </article>
 
-                <article className="auth-capability-card">
+                <article className={`${styles.statusCard} auth-capability-card`}>
                   <strong>{checkoutEnabled ? "Cobrança pronta para vender" : "Cobrança em preparação"}</strong>
                   <span>
                     {checkoutEnabled
@@ -203,25 +223,46 @@ export default async function PublicBillingPage({
                       : "A página já está pronta. Assim que a cobrança online estiver concluída, o fluxo ativa o painel automaticamente."}
                   </span>
                 </article>
+
+                <article className={styles.activationCard}>
+                  <div className={styles.activationOrbit} aria-hidden="true">
+                    <span />
+                    <span />
+                  </div>
+                  <div>
+                    <span className={styles.activationLabel}>
+                      {checkoutEnabled ? "Operação live" : "Modo vitrine"}
+                    </span>
+                    <strong>
+                      {checkoutEnabled ? "Checkout pronto para receber" : "Planos preparados"}
+                    </strong>
+                    <p>
+                      A assinatura volta para o painel e libera as áreas operacionais depois da confirmação.
+                    </p>
+                  </div>
+                </article>
               </div>
             </div>
 
-            <div className="auth-proof-strip">
+            <div className={`${styles.proofStrip} auth-proof-strip`}>
               {readinessNotes.map((item, index) => (
-                <article key={item} className="auth-proof-item">
+                <article key={item} className={`${styles.proofItem} auth-proof-item`}>
                   <span className="auth-proof-label">Etapa {index + 1}</span>
                   <strong>{item}</strong>
                 </article>
               ))}
             </div>
 
-            <p className="auth-hero-caption">{content.note}</p>
+            <p className={`${styles.heroCaption} auth-hero-caption`}>{content.note}</p>
           </section>
 
-          <section className="panel-card public-billing-panel">
-            <div className="public-billing-panel__header">
+          <section
+            id="public-billing-plans"
+            className={`${styles.panel} panel-card public-billing-panel`}
+          >
+            <div className={`${styles.panelHeader} public-billing-panel__header`}>
               <div>
-                <span className="eyebrow">Escolha do plano</span>
+                <span className={`${styles.eyebrow} eyebrow`}>Escolha do plano</span>
                 <h2>Ative o painel do jeito certo</h2>
                 <p className="muted">
                   {salonName
@@ -239,18 +280,18 @@ export default async function PublicBillingPage({
               </div>
             </div>
 
-            <div className="billing-page__plans subscriptions-plan-grid">
+            <div className={`${styles.planGrid} billing-page__plans subscriptions-plan-grid`}>
               {plans.map((plan) => {
                 const isCurrentPlan = currentPlanId === plan.id;
                 const cardClassName = isCurrentPlan
-                  ? "subscription-plan-card billing-plan-card billing-plan-card--current"
-                  : "subscription-plan-card billing-plan-card";
+                  ? `${styles.planCard} ${styles.planCardCurrent} subscription-plan-card billing-plan-card billing-plan-card--current`
+                  : `${styles.planCard} subscription-plan-card billing-plan-card`;
 
                 return (
                   <article key={plan.id} className={cardClassName}>
-                    <div className="billing-plan-card__header">
+                    <div className={`${styles.planHeader} billing-plan-card__header`}>
                       <div>
-                        <span className="eyebrow">{plan.displayName}</span>
+                        <span className={`${styles.planName} eyebrow`}>{plan.displayName}</span>
                         <h3>{plan.tagline ?? plan.description}</h3>
                       </div>
                       {isCurrentPlan ? (
@@ -260,11 +301,11 @@ export default async function PublicBillingPage({
                       ) : null}
                     </div>
 
-                    <p className="billing-plan-card__highlight">
+                    <p className={`${styles.planHighlight} billing-plan-card__highlight`}>
                       {plan.highlight ?? plan.description}
                     </p>
 
-                    <div className="billing-plan-card__prices">
+                    <div className={`${styles.planPrices} billing-plan-card__prices`}>
                       <div>
                         <span>Mensal</span>
                         <strong className="subscription-plan-card__price">
@@ -279,7 +320,7 @@ export default async function PublicBillingPage({
                       </div>
                     </div>
 
-                    <div className="billing-plan-card__limits">
+                    <div className={`${styles.planLimits} billing-plan-card__limits`}>
                       {buildPlanHighlights(plan).map((item) => (
                         <span key={item} className="badge badge--soft">
                           {item}
@@ -287,7 +328,7 @@ export default async function PublicBillingPage({
                       ))}
                     </div>
 
-                    <div className="billing-plan-card__actions">
+                    <div className={`${styles.planActions} billing-plan-card__actions`}>
                       {user && salonName ? (
                         <>
                           <form action={startStripeCheckoutAction}>
@@ -304,7 +345,7 @@ export default async function PublicBillingPage({
                             />
                             <button
                               type="submit"
-                              className="primary-button"
+                              className={`${styles.actionButton} primary-button`}
                               disabled={!checkoutEnabled}
                             >
                               Assinar mensal
@@ -325,7 +366,7 @@ export default async function PublicBillingPage({
                             />
                             <button
                               type="submit"
-                              className="secondary-button"
+                              className={`${styles.actionButton} ${styles.secondaryAction} secondary-button`}
                               disabled={!checkoutEnabled}
                             >
                               Assinar anual
@@ -333,13 +374,13 @@ export default async function PublicBillingPage({
                           </form>
                         </>
                       ) : (
-                        <Link href="/login" className="primary-button">
+                        <Link href="/login" className={`${styles.actionButton} primary-button`}>
                           Entrar para assinar
                         </Link>
                       )}
                     </div>
 
-                    <p className="billing-plan-card__footnote">
+                    <p className={`${styles.planFootnote} billing-plan-card__footnote`}>
                       {user && salonName
                         ? checkoutEnabled
                           ? "Ao concluir o pagamento, o painel completo é liberado automaticamente."
