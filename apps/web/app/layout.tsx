@@ -22,6 +22,10 @@ const dashboardFont = Outfit({
 export const metadata: Metadata = {
   title: "Salon Fun",
   description: "Agenda digital para salões",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

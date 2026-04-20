@@ -630,12 +630,12 @@
   position: relative;
   z-index: 1;
   display: flex;
-  width: min(680px, 100%);
+  width: min(760px, 100%);
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 18px;
   margin: 0 auto;
-  padding: 13px 16px;
+  padding: 14px 18px;
   border: 1px solid rgba(21, 54, 94, 0.14);
   border-radius: 24px;
   background:
@@ -651,24 +651,25 @@
 .brandSignature::before {
   content: "";
   position: absolute;
-  inset: 10px auto 10px 10px;
-  width: 76px;
+  inset: 9px;
   border-radius: 20px;
-  background: radial-gradient(circle, rgba(18, 74, 132, 0.16), transparent 68%);
+  border: 1px solid rgba(255, 255, 255, 0.52);
   pointer-events: none;
 }
 
 .brandLogoFrame {
   position: relative;
   z-index: 1;
-  flex: 0 0 62px;
-  width: 62px;
-  height: 62px;
+  flex: 0 0 190px;
+  width: 190px;
+  height: 70px;
   overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  border: 1px solid rgba(16, 44, 84, 0.18);
   background: #0d315f;
-  box-shadow: 0 12px 26px rgba(10, 37, 74, 0.2);
+  box-shadow:
+    0 14px 30px rgba(10, 37, 74, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .brandLogo {
@@ -676,6 +677,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 
 .brandSignatureCopy {
@@ -766,10 +768,10 @@
   }
 
   .brandLogoFrame {
-    flex-basis: 52px;
-    width: 52px;
-    height: 52px;
-    border-radius: 15px;
+    flex-basis: 132px;
+    width: 132px;
+    height: 54px;
+    border-radius: 16px;
   }
 
   .brandSignatureCopy span {
