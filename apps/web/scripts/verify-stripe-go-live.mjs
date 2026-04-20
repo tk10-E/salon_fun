@@ -3,6 +3,15 @@ import path from "node:path";
 
 import Stripe from "stripe";
 
+const REQUIRED_WEBHOOK_EVENTS = [
+  "checkout.session.completed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "invoice.paid",
+  "invoice.payment_failed",
+];
+
 function parseEnvFile(filePath) {
   const env = {};
   const text = fs.readFileSync(filePath, "utf8");
@@ -170,11 +179,28 @@ async function main() {
   let webhookConfigured = false;
   try {
     const endpoints = await stripe.webhookEndpoints.list({ limit: 20 });
-    webhookConfigured = Boolean(
-      expectedWebhookUrl &&
-        endpoints.data.some((endpoint) => endpoint.url === expectedWebhookUrl && endpoint.status === "enabled"),
+    const matchingEndpoint = endpoints.data.find((endpoint) =>
+      endpoint.url === expectedWebhookUrl &&
+      endpoint.status === "enabled" &&
+      (endpoint.enabled_events.includes("*") ||
+        REQUIRED_WEBHOOK_EVENTS.every((eventType) =>
+          endpoint.enabled_events.includes(eventType),
+        ))
     );
-    console.log(`- Webhook: ${webhookConfigured ? "ok" : "nao configurado"} (${expectedWebhookUrl ?? "sem APP_URL"})`);
+    webhookConfigured = Boolean(expectedWebhookUrl && matchingEndpoint);
+    console.log(
+      `- Webhook: ${webhookConfigured ? "ok" : "nao configurado"} (${expectedWebhookUrl ?? "sem APP_URL"})`,
+    );
+
+    if (!webhookConfigured && expectedWebhookUrl) {
+      const endpointWithMissingEvents = endpoints.data.find((endpoint) =>
+        endpoint.url === expectedWebhookUrl && endpoint.status === "enabled"
+      );
+
+      if (endpointWithMissingEvents) {
+        console.log(`- Webhook eventos: faltando (${REQUIRED_WEBHOOK_EVENTS.join(", ")})`);
+      }
+    }
   } catch (error) {
     console.log(`- Webhook: erro (${error instanceof Error ? error.message : String(error)})`);
   }

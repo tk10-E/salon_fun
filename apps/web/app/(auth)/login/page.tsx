@@ -18,16 +18,17 @@ const DEFAULT_LOGIN_SECURITY_MESSAGE =
   "No primeiro acesso, pode ser necessário configurar o autenticador.";
 
 export default async function LoginPage({ searchParams: searchParamsPromise }: LoginPageProps) {
-  const searchParams = await searchParamsPromise;
   const entryPath = await getAuthenticatedPanelEntryPath();
-  const firebaseConfig = getFirebaseWebConfig();
-  const initialMessage =
-    searchParams?.message?.trim() || DEFAULT_LOGIN_SECURITY_MESSAGE;
-  const initialTone = searchParams?.tone ?? "info";
 
   if (entryPath) {
     redirect(entryPath);
   }
+
+  const searchParams = await searchParamsPromise;
+  const firebaseConfig = getFirebaseWebConfig();
+  const initialMessage =
+    searchParams?.message?.trim() || DEFAULT_LOGIN_SECURITY_MESSAGE;
+  const initialTone = searchParams?.tone ?? "info";
 
   return (
     <div className="auth-page">

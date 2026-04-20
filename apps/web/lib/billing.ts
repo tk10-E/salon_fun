@@ -1,13 +1,40 @@
 import { cache as reactCache } from "react";
 
-// O workspace de billing pode existir, mas o bloqueio automático do painel segue desligado
-// até a operação do Stripe estar pronta em produção.
-export const BILLING_DISABLED = true;
-
 import { createClient } from "@/lib/supabase/server";
+import {
+  getSaasBillingEnabledFlag,
+  getStripePriceId,
+  getStripeSecretKey,
+  getStripeWebhookSecret,
+} from "@/lib/serverEnv";
+
+function hasStripeLiveSecret() {
+  return getStripeSecretKey()?.startsWith("sk_live_") ?? false;
+}
+
+function hasStripeBillingCatalogConfigured() {
+  const planIds = ["starter", "growth", "premium"] as const;
+  const billingIntervals = ["monthly", "yearly"] as const;
+
+  return planIds.every((planId) =>
+    billingIntervals.every((billingInterval) =>
+      Boolean(getStripePriceId(planId, billingInterval)),
+    ),
+  );
+}
+
+// O bloqueio automático do painel só entra quando o ambiente já está apto a cobrar de verdade.
+// Enquanto o Stripe estiver em modo de teste, o workspace segue visível, mas sem travar a operação.
+export const BILLING_DISABLED = !(
+  getSaasBillingEnabledFlag() &&
+  hasStripeLiveSecret() &&
+  Boolean(getStripeWebhookSecret()) &&
+  hasStripeBillingCatalogConfigured()
+);
 
 export const BILLING_PATH = "/dashboard/billing";
-export const BILLING_ALLOWED_PATHS = [BILLING_PATH, "/dashboard/settings"] as const;
+export const PUBLIC_BILLING_PATH = "/planos";
+export const BILLING_ALLOWED_PATHS = [BILLING_PATH, PUBLIC_BILLING_PATH] as const;
 
 export type BillingPlanId = "starter" | "growth" | "premium";
 export type BillingInterval = "monthly" | "yearly";
@@ -83,7 +110,7 @@ const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [
     monthlyPrice: 79,
     yearlyPrice: 790,
     currencyCode: "BRL",
-    trialDays: 14,
+    trialDays: 0,
     maxStaffMembers: 3,
     maxServices: 25,
     maxMonthlyNotifications: 1500,
@@ -94,8 +121,8 @@ const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [
     isDefault: true,
     isPublic: true,
     sortOrder: 10,
-    highlight: "Entrada rápida com trial automático",
-    tagline: "Operação base e app do cliente no ar",
+    highlight: "Liberação do painel logo após o pagamento",
+    tagline: "Base operacional para entrar no ar com segurança",
   },
   {
     id: "growth",
@@ -104,7 +131,7 @@ const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [
     monthlyPrice: 149,
     yearlyPrice: 1490,
     currencyCode: "BRL",
-    trialDays: 7,
+    trialDays: 0,
     maxStaffMembers: 8,
     maxServices: 80,
     maxMonthlyNotifications: 10000,
@@ -115,7 +142,7 @@ const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [
     isDefault: false,
     isPublic: true,
     sortOrder: 20,
-    highlight: "Vídeo no feed e automação inteligente",
+    highlight: "Mais equipe, campanhas e retenção ativa",
     tagline: "Mais equipe, mais campanhas, mais retenção",
   },
   {
@@ -125,7 +152,7 @@ const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [
     monthlyPrice: 249,
     yearlyPrice: 2490,
     currencyCode: "BRL",
-    trialDays: 7,
+    trialDays: 0,
     maxStaffMembers: 25,
     maxServices: 250,
     maxMonthlyNotifications: 50000,
@@ -202,7 +229,7 @@ function buildDisabledSnapshot(salonId: string): SalonBillingSnapshot {
     statusDetail: "Cobrança desligada temporariamente.",
     trialDaysRemaining: null,
     graceDaysRemaining: null,
-    allowedPathsWhenLocked: ["/dashboard", "/dashboard/settings"],
+    allowedPathsWhenLocked: BILLING_ALLOWED_PATHS,
     isUsingFallback: true,
   } satisfies SalonBillingSnapshot;
 }
@@ -301,24 +328,18 @@ function normalizeSubscription(
   };
 }
 
-function addDays(baseDate: Date, days: number) {
-  const nextDate = new Date(baseDate);
-  nextDate.setUTCDate(nextDate.getUTCDate() + days);
-  return nextDate;
-}
-
 function buildFallbackSubscription(salonId: string, plans: SalonBillingPlan[]): SalonBillingSubscription {
-  const now = new Date();
   const defaultPlan = plans.find((plan) => plan.isDefault) ?? plans[0] ?? DEFAULT_BILLING_PLANS[0];
+  const now = new Date();
 
   return {
     id: `virtual-${salonId}`,
     salonId,
     planId: defaultPlan.id,
-    status: defaultPlan.trialDays > 0 ? "trialing" : "active",
+    status: "paused",
     billingInterval: "monthly" as const,
-    trialStartedAt: now.toISOString(),
-    trialEndsAt: defaultPlan.trialDays > 0 ? addDays(now, defaultPlan.trialDays).toISOString() : null,
+    trialStartedAt: null,
+    trialEndsAt: null,
     currentPeriodStartedAt: null,
     currentPeriodEndsAt: null,
     graceEndsAt: null,
@@ -376,6 +397,17 @@ function getStatusLabel(status: BillingStatus) {
   }
 }
 
+function isPendingActivationSubscription(subscription: SalonBillingSubscription) {
+  return (
+    subscription.status === "paused" &&
+    !subscription.activatedAt &&
+    !subscription.currentPeriodStartedAt &&
+    !subscription.currentPeriodEndsAt &&
+    !subscription.trialStartedAt &&
+    !subscription.trialEndsAt
+  );
+}
+
 function buildSnapshot(plans: SalonBillingPlan[], subscription: SalonBillingSubscription, isUsingFallback: boolean) {
   const currentPlan =
     plans.find((plan) => plan.id === subscription.planId) ??
@@ -383,8 +415,11 @@ function buildSnapshot(plans: SalonBillingPlan[], subscription: SalonBillingSubs
     DEFAULT_BILLING_PLANS[0];
   const trialDaysRemaining = getDaysRemaining(subscription.trialEndsAt);
   const graceDaysRemaining = getDaysRemaining(subscription.graceEndsAt);
+  const pendingActivation = isPendingActivationSubscription(subscription);
   const accessState =
-    subscription.status === "active"
+    pendingActivation
+      ? "locked"
+      : subscription.status === "active"
       ? "healthy"
       : subscription.status === "trialing"
         ? trialDaysRemaining !== null && trialDaysRemaining <= 5
@@ -405,9 +440,18 @@ function buildSnapshot(plans: SalonBillingPlan[], subscription: SalonBillingSubs
   let bannerTone: SalonBillingSnapshot["bannerTone"] = "soft";
   let shouldShowBanner = false;
   let nextBillingDateLabel = formatBillingDate(subscription.currentPeriodEndsAt ?? subscription.trialEndsAt);
-  let statusDetail = `Plano ${currentPlan.displayName} em ${getStatusLabel(subscription.status).toLowerCase()}.`;
+  let statusDetail = pendingActivation
+    ? `Conta criada. Escolha um plano e conclua o pagamento para liberar o painel ${currentPlan.displayName}.`
+    : `Plano ${currentPlan.displayName} em ${getStatusLabel(subscription.status).toLowerCase()}.`;
 
-  if (subscription.status === "trialing" && trialDaysRemaining !== null && trialDaysRemaining <= 5) {
+  if (pendingActivation) {
+    shouldShowBanner = true;
+    bannerTone = "accent";
+    bannerTitle = "Ative o painel para começar";
+    bannerMessage =
+      "Escolha um plano e conclua a assinatura para liberar agenda, clientes, equipe, caixa e demais áreas operacionais.";
+    nextBillingDateLabel = null;
+  } else if (subscription.status === "trialing" && trialDaysRemaining !== null && trialDaysRemaining <= 5) {
     shouldShowBanner = true;
     bannerTone = "warm";
     bannerTitle = "Seu trial está perto do fim";
@@ -460,7 +504,7 @@ function buildSnapshot(plans: SalonBillingPlan[], subscription: SalonBillingSubs
     accessState,
     isLocked: accessState === "locked",
     shouldShowBanner,
-    statusLabel: getStatusLabel(subscription.status),
+    statusLabel: pendingActivation ? "Aguardando assinatura" : getStatusLabel(subscription.status),
     bannerTitle,
     bannerMessage,
     bannerTone,
@@ -484,10 +528,10 @@ async function createDefaultSubscriptionRow(params: {
   const payload = {
     salon_id: salonId,
     plan_id: defaultPlan.id,
-    status: defaultPlan.trialDays > 0 ? "trialing" : "active",
+    status: "paused",
     billing_interval: "monthly",
-    trial_started_at: now.toISOString(),
-    trial_ends_at: defaultPlan.trialDays > 0 ? addDays(now, defaultPlan.trialDays).toISOString() : null,
+    trial_started_at: null,
+    trial_ends_at: null,
   };
 
   const { data, error } = await supabase
@@ -539,12 +583,31 @@ async function loadSalonBillingSnapshot(
   return buildSnapshot(plans, ensuredSubscription ?? buildFallbackSubscription(salonId, plans), !ensuredSubscription);
 }
 
+async function loadPublicBillingPlans(): Promise<SalonBillingPlan[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("saas_plan_catalog")
+    .select("*")
+    .eq("is_public", true)
+    .order("sort_order");
+
+  if (relationIsMissing(error) || error || !Array.isArray(data) || data.length === 0) {
+    return DEFAULT_BILLING_PLANS;
+  }
+
+  return data.map((row) => normalizePlan(row as Record<string, unknown>));
+}
+
 export const getSalonBillingSnapshot = cache(async (salonId: string): Promise<SalonBillingSnapshot> => {
   return loadSalonBillingSnapshot(salonId);
 });
 
 export const getSalonBillingWorkspaceSnapshot = cache(async (salonId: string): Promise<SalonBillingSnapshot> => {
   return loadSalonBillingSnapshot(salonId, { includeWorkspaceDataWhenDisabled: true });
+});
+
+export const getPublicBillingPlans = cache(async (): Promise<SalonBillingPlan[]> => {
+  return loadPublicBillingPlans();
 });
 
 export async function getSalonBillingEntitlements(salonId: string) {

@@ -20,6 +20,11 @@ export function getStripeSecretKey() {
   return readOptionalEnv("STRIPE_SECRET_KEY");
 }
 
+export function getSaasBillingEnabledFlag() {
+  const value = readOptionalEnv("ENABLE_SAAS_BILLING");
+  return value === "true";
+}
+
 export function getStripeWebhookSecret() {
   return readOptionalEnv("STRIPE_WEBHOOK_SECRET");
 }

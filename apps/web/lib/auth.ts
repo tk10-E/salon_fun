@@ -1,8 +1,14 @@
 import { cache } from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 
 import { evaluatePanelAccessPolicy } from "@/lib/sessionSecurity";
+import {
+  BILLING_PATH,
+  PUBLIC_BILLING_PATH,
+  getSalonBillingSnapshot,
+} from "@/lib/billing";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 
@@ -10,9 +16,18 @@ type Salon = Database["public"]["Tables"]["salons"]["Row"];
 type FlashTone = "success" | "error" | "info";
 
 const SESSION_EXPIRED_MESSAGE = "Sessao expirada. Entre novamente para continuar.";
+const SUPABASE_AUTH_COOKIE_PATTERN =
+  /^(sb-.+-auth-token(?:\.\d+)?|sb-access-token|sb-refresh-token|supabase-auth-token)$/;
 const withCache = typeof cache === "function"
   ? cache
   : (<T extends (...args: never[]) => unknown>(fn: T) => fn);
+
+async function hasSupabaseAuthCookie() {
+  const cookieStore = await cookies();
+  return cookieStore
+    .getAll()
+    .some((cookie) => SUPABASE_AUTH_COOKIE_PATTERN.test(cookie.name));
+}
 
 const getAuthenticatedUser = withCache(async () => {
   const supabase = createClient();
@@ -75,9 +90,7 @@ export async function requireUser() {
   return { supabase: createClient(), user };
 }
 
-// Salon data changes often from server actions in the dashboard.
-// Keep this read uncached so redirects after "save" always render fresh data.
-export async function getOwnerSalon(userId: string) {
+const getOwnerSalonCached = withCache(async (userId: string) => {
   const supabase = createClient();
   const { data } = await supabase
     .from("salons")
@@ -86,9 +99,19 @@ export async function getOwnerSalon(userId: string) {
     .maybeSingle();
 
   return data as Salon | null;
+});
+
+// Cache only within a single request so the dashboard shell and page loaders
+// can share the same salon lookup without showing stale data after redirects.
+export async function getOwnerSalon(userId: string) {
+  return getOwnerSalonCached(userId);
 }
 
 export async function getAuthenticatedPanelEntryPath() {
+  if (!(await hasSupabaseAuthCookie())) {
+    return null;
+  }
+
   const user = await getAuthenticatedUser();
 
   if (!user) {
@@ -118,13 +141,82 @@ export async function getAuthenticatedPanelEntryPath() {
   }
 
   const salon = await getOwnerSalon(user.id);
-  return salon ? "/dashboard" : "/onboarding";
+
+  if (!salon) {
+    return "/onboarding";
+  }
+
+  const billingSnapshot = await getSalonBillingSnapshot(salon.id);
+  return billingSnapshot.isLocked ? PUBLIC_BILLING_PATH : "/dashboard";
+}
+
+function readUserMetadataValue(
+  user: User,
+  keys: string[],
+) {
+  const metadata =
+    user.user_metadata && typeof user.user_metadata === "object"
+      ? user.user_metadata as Record<string, unknown>
+      : null;
+
+  if (!metadata) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getAuthenticatedUserDisplayName(user: User) {
+  return readUserMetadataValue(user, [
+    "full_name",
+    "name",
+    "display_name",
+    "user_name",
+    "preferred_username",
+  ]);
+}
+
+function getAuthenticatedUserAvatarUrl(user: User) {
+  return readUserMetadataValue(user, [
+    "avatar_url",
+    "picture",
+    "picture_url",
+    "image",
+    "photoURL",
+    "profile_image_url",
+  ]);
 }
 
 export async function requireOwnerSalon(): Promise<{
   salon: Salon;
-  user: { id: string; email?: string | null };
-}> {
+  user: {
+    id: string;
+    email?: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  };
+}>;
+export async function requireOwnerSalon(options: {
+  allowLocked?: boolean;
+}): Promise<{
+  salon: Salon;
+  user: {
+    id: string;
+    email?: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  };
+}>;
+export async function requireOwnerSalon(options?: {
+  allowLocked?: boolean;
+}) {
   const { user } = await requireUser();
   const salon = await getOwnerSalon(user.id);
 
@@ -132,11 +224,26 @@ export async function requireOwnerSalon(): Promise<{
     redirect("/onboarding");
   }
 
+  if (!options?.allowLocked) {
+    const billingSnapshot = await getSalonBillingSnapshot(salon.id);
+
+    if (billingSnapshot.isLocked) {
+      redirect(
+        buildRedirectPath(PUBLIC_BILLING_PATH, {
+          message: "Escolha um plano para liberar as áreas operacionais do painel.",
+          tone: "info",
+        }),
+      );
+    }
+  }
+
   return {
     salon,
     user: {
       id: user.id,
       email: user.email,
+      displayName: getAuthenticatedUserDisplayName(user),
+      avatarUrl: getAuthenticatedUserAvatarUrl(user),
     },
   };
 }

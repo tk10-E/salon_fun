@@ -35,8 +35,10 @@ vi.mock("@/lib/env", () => ({
 import { updateSession } from "@/lib/supabase/middleware";
 
 const originalAppUrl = process.env.APP_URL;
+const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const originalVercel = process.env.VERCEL;
 const originalVercelEnv = process.env.VERCEL_ENV;
+const authenticatedCookie = "sb-test-auth-token=session-token";
 
 describe("supabase middleware", () => {
   beforeEach(() => {
@@ -69,6 +71,12 @@ describe("supabase middleware", () => {
       delete process.env.APP_URL;
     } else {
       process.env.APP_URL = originalAppUrl;
+    }
+
+    if (originalServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceRoleKey;
     }
 
     if (originalVercel === undefined) {
@@ -125,6 +133,9 @@ describe("supabase middleware", () => {
     });
 
     const request = new NextRequest("https://painel.jc7desenvovimento.online/login", {
+      headers: {
+        cookie: authenticatedCookie,
+      },
       method: "POST",
     });
 
@@ -146,6 +157,74 @@ describe("supabase middleware", () => {
         userId: "user-1",
       }),
     );
+  });
+
+  it("skips the Supabase auth refresh when the request has no auth cookie", async () => {
+    const request = new NextRequest("https://painel.jc7desenvovimento.online/login");
+
+    const response = await updateSession(request);
+
+    expect(response.status).toBe(200);
+    expect(createServerClientMock).not.toHaveBeenCalled();
+    expect(evaluateSessionSecurityMock).not.toHaveBeenCalled();
+    expect(evaluatePanelAccessPolicyMock).not.toHaveBeenCalled();
+  });
+
+  it("reuses a short signed security cache for repeated authenticated GET requests", async () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-cache-secret";
+
+    const getUser = vi.fn().mockResolvedValue({
+      data: { user: { id: "user-1" } },
+      error: null,
+    });
+    const getSession = vi.fn().mockResolvedValue({
+      data: {
+        session: {
+          access_token: "header.payload.signature",
+        },
+      },
+      error: null,
+    });
+    createServerClientMock.mockReturnValue({
+      auth: {
+        getSession,
+        getUser,
+      },
+    });
+
+    const firstRequest = new NextRequest("https://painel.jc7desenvovimento.online/dashboard", {
+      headers: {
+        cookie: authenticatedCookie,
+        "user-agent": "Vitest",
+        "x-vercel-ip-country": "BR",
+      },
+    });
+    const firstResponse = await updateSession(firstRequest);
+    const cacheCookie = firstResponse.cookies.get("sf_panel_security_ok");
+
+    expect(cacheCookie?.value).toBeTruthy();
+    expect(firstResponse.headers.get("X-Panel-Security-Cache")).toBe("miss");
+    expect(evaluateSessionSecurityMock).toHaveBeenCalledTimes(1);
+    expect(evaluatePanelAccessPolicyMock).toHaveBeenCalledTimes(1);
+
+    evaluateSessionSecurityMock.mockClear();
+    evaluatePanelAccessPolicyMock.mockClear();
+
+    const secondRequest = new NextRequest(
+      "https://painel.jc7desenvovimento.online/dashboard/appointments",
+      {
+        headers: {
+          cookie: `${authenticatedCookie}; sf_device_id=device-123; sf_panel_security_ok=${cacheCookie?.value}`,
+          "user-agent": "Vitest",
+          "x-vercel-ip-country": "BR",
+        },
+      },
+    );
+    const secondResponse = await updateSession(secondRequest);
+
+    expect(secondResponse.headers.get("X-Panel-Security-Cache")).toBe("hit");
+    expect(evaluateSessionSecurityMock).not.toHaveBeenCalled();
+    expect(evaluatePanelAccessPolicyMock).not.toHaveBeenCalled();
   });
 
   it("redirects to login when the active session is blocked by session security", async () => {
@@ -181,7 +260,11 @@ describe("supabase middleware", () => {
       },
     });
 
-    const request = new NextRequest("https://painel.jc7desenvovimento.online/dashboard");
+    const request = new NextRequest("https://painel.jc7desenvovimento.online/dashboard", {
+      headers: {
+        cookie: authenticatedCookie,
+      },
+    });
     const response = await updateSession(request);
 
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });
@@ -224,7 +307,11 @@ describe("supabase middleware", () => {
       },
     });
 
-    const request = new NextRequest("https://painel.jc7desenvovimento.online/dashboard");
+    const request = new NextRequest("https://painel.jc7desenvovimento.online/dashboard", {
+      headers: {
+        cookie: authenticatedCookie,
+      },
+    });
     const response = await updateSession(request);
 
     expect(signOut).not.toHaveBeenCalled();
@@ -268,7 +355,11 @@ describe("supabase middleware", () => {
       },
     });
 
-    const request = new NextRequest("https://painel.jc7desenvovimento.online/dashboard");
+    const request = new NextRequest("https://painel.jc7desenvovimento.online/dashboard", {
+      headers: {
+        cookie: authenticatedCookie,
+      },
+    });
     const response = await updateSession(request);
 
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });

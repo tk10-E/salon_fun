@@ -8,13 +8,22 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: createClientMock,
 }));
 
-import {
-  formatBillingPrice,
-  formatLimitLabel,
-  getSalonBillingSnapshot,
-} from "@/lib/billing";
+async function importBillingModule() {
+  vi.resetModules();
+  vi.stubEnv("ENABLE_SAAS_BILLING", "true");
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_123");
+  vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_123");
+  vi.stubEnv("STRIPE_PRICE_STARTER_MONTHLY", "price_starter_m");
+  vi.stubEnv("STRIPE_PRICE_STARTER_YEARLY", "price_starter_y");
+  vi.stubEnv("STRIPE_PRICE_GROWTH_MONTHLY", "price_growth_m");
+  vi.stubEnv("STRIPE_PRICE_GROWTH_YEARLY", "price_growth_y");
+  vi.stubEnv("STRIPE_PRICE_PREMIUM_MONTHLY", "price_premium_m");
+  vi.stubEnv("STRIPE_PRICE_PREMIUM_YEARLY", "price_premium_y");
 
-describe.skip("billing helpers (desativado no painel)", () => {
+  return import("@/lib/billing");
+}
+
+describe("billing helpers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -23,9 +32,12 @@ describe.skip("billing helpers (desativado no painel)", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
-  it("falls back to a virtual starter trial when billing tables are missing", async () => {
+  it("falls back to a locked starter subscription when billing tables are missing", async () => {
+    const { getSalonBillingSnapshot } = await importBillingModule();
+
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "saas_plan_catalog") {
@@ -68,12 +80,14 @@ describe.skip("billing helpers (desativado no painel)", () => {
 
     expect(snapshot.isUsingFallback).toBe(true);
     expect(snapshot.currentPlan.id).toBe("starter");
-    expect(snapshot.subscription.status).toBe("trialing");
-    expect(snapshot.isLocked).toBe(false);
-    expect(snapshot.statusLabel).toBe("Em trial");
+    expect(snapshot.subscription.status).toBe("paused");
+    expect(snapshot.isLocked).toBe(true);
+    expect(snapshot.statusLabel).toBe("Aguardando assinatura");
   });
 
   it("hydrates the current plan and access state from billing tables", async () => {
+    const { getSalonBillingSnapshot } = await importBillingModule();
+
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "saas_plan_catalog") {
@@ -148,7 +162,7 @@ describe.skip("billing helpers (desativado no painel)", () => {
                     grace_ends_at: null,
                     activated_at: "2026-04-01T12:00:00.000Z",
                     canceled_at: null,
-                    payment_provider: "manual",
+                    payment_provider: "stripe",
                     provider_customer_id: "cust-1",
                     provider_subscription_id: "sub-ext-1",
                     created_at: "2026-04-01T12:00:00.000Z",
@@ -175,7 +189,9 @@ describe.skip("billing helpers (desativado no painel)", () => {
     expect(snapshot.nextBillingDateLabel).toBeTruthy();
   });
 
-  it("formats price and limits for the billing UI", () => {
+  it("formats price and limits for the billing UI", async () => {
+    const { formatBillingPrice, formatLimitLabel } = await importBillingModule();
+
     expect(formatBillingPrice(149)).toMatch(/149/);
     expect(formatLimitLabel(null, "serviço", "serviços")).toBe("Ilimitado");
     expect(formatLimitLabel(3, "profissional", "profissionais")).toBe("3 profissionais");

@@ -12,6 +12,14 @@ import {
 const PLAN_IDS = ["starter", "growth", "premium"] as const;
 const BILLING_INTERVALS = ["monthly", "yearly"] as const;
 const STRIPE_BILLING_RETURN_PATH = "/dashboard/billing";
+export const STRIPE_REQUIRED_WEBHOOK_EVENTS = [
+  "checkout.session.completed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "invoice.paid",
+  "invoice.payment_failed",
+] as const;
 
 let stripeClient: Stripe | null = null;
 
@@ -164,12 +172,24 @@ export async function getStripeOperationalStatus(): Promise<StripeOperationalSta
 
   try {
     const webhookEndpoints = await stripe.webhookEndpoints.list({ limit: 20 });
-    webhookConfigured = Boolean(
-      webhookUrl &&
-        webhookEndpoints.data.some((endpoint) => endpoint.url === webhookUrl && endpoint.status === "enabled"),
+    const matchedEndpoint = webhookEndpoints.data.find((endpoint) =>
+      endpoint.url === webhookUrl &&
+      endpoint.status === "enabled" &&
+      webhookEndpointHandlesRequiredBillingEvents(endpoint)
     );
+    webhookConfigured = Boolean(webhookUrl && matchedEndpoint);
 
-    if (!webhookConfigured) {
+    if (!webhookConfigured && webhookUrl) {
+      const enabledEndpointWithMissingEvents = webhookEndpoints.data.find((endpoint) =>
+        endpoint.url === webhookUrl && endpoint.status === "enabled"
+      );
+
+      if (enabledEndpointWithMissingEvents) {
+        issues.push("Webhook do Stripe ainda não está ouvindo todos os eventos de cobrança necessários.");
+      } else {
+        issues.push("Webhook do Stripe ainda não aponta para /api/stripe/webhook no domínio ativo.");
+      }
+    } else if (!webhookConfigured) {
       issues.push("Webhook do Stripe ainda não aponta para /api/stripe/webhook no domínio ativo.");
     }
   } catch (error) {
@@ -218,6 +238,24 @@ export function resolvePlanIdFromStripePriceId(priceId: string) {
   return null;
 }
 
+export function isTerminalStripeSubscriptionStatus(
+  status: Stripe.Subscription.Status,
+) {
+  return status === "canceled" || status === "incomplete_expired";
+}
+
+export function webhookEndpointHandlesRequiredBillingEvents(
+  endpoint: Pick<Stripe.WebhookEndpoint, "enabled_events">,
+) {
+  if (endpoint.enabled_events.includes("*")) {
+    return true;
+  }
+
+  return STRIPE_REQUIRED_WEBHOOK_EVENTS.every((eventType) =>
+    endpoint.enabled_events.includes(eventType),
+  );
+}
+
 export function mapStripeSubscriptionStatus(status: Stripe.Subscription.Status): BillingStatus {
   switch (status) {
     case "trialing":
@@ -225,10 +263,11 @@ export function mapStripeSubscriptionStatus(status: Stripe.Subscription.Status):
     case "active":
       return "active";
     case "past_due":
+      return "past_due";
     case "unpaid":
     case "incomplete":
     case "incomplete_expired":
-      return "past_due";
+      return "paused";
     case "paused":
       return "paused";
     case "canceled":

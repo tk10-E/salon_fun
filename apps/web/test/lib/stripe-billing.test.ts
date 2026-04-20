@@ -4,6 +4,7 @@ import {
   getStripeBillingReadiness,
   mapStripeSubscriptionStatus,
   resolvePlanIdFromStripePriceId,
+  webhookEndpointHandlesRequiredBillingEvents,
 } from "@/lib/stripeBilling";
 
 describe("stripe billing helpers", () => {
@@ -44,6 +45,32 @@ describe("stripe billing helpers", () => {
     expect(mapStripeSubscriptionStatus("active")).toBe("active");
     expect(mapStripeSubscriptionStatus("trialing")).toBe("trialing");
     expect(mapStripeSubscriptionStatus("past_due")).toBe("past_due");
+    expect(mapStripeSubscriptionStatus("incomplete")).toBe("paused");
+    expect(mapStripeSubscriptionStatus("unpaid")).toBe("paused");
     expect(mapStripeSubscriptionStatus("canceled")).toBe("canceled");
+  });
+
+  it("checks whether the webhook listens to every billing event we depend on", () => {
+    expect(
+      webhookEndpointHandlesRequiredBillingEvents({
+        enabled_events: [
+          "checkout.session.completed",
+          "customer.subscription.created",
+          "customer.subscription.updated",
+          "customer.subscription.deleted",
+          "invoice.paid",
+          "invoice.payment_failed",
+        ],
+      }),
+    ).toBe(true);
+
+    expect(
+      webhookEndpointHandlesRequiredBillingEvents({
+        enabled_events: [
+          "checkout.session.completed",
+          "customer.subscription.updated",
+        ],
+      }),
+    ).toBe(false);
   });
 });

@@ -9,9 +9,10 @@ import {
 const {
   buildAbsoluteUrlMock,
   createClientMock,
-  getSalonBillingSnapshotMock,
+  getSalonBillingWorkspaceSnapshotMock,
   getStripeBillingReadinessMock,
   getStripeClientMock,
+  getStripeOperationalStatusMock,
   resolveStripePriceIdMock,
   redirectMock,
   revalidatePathMock,
@@ -19,9 +20,10 @@ const {
 } = vi.hoisted(() => ({
   buildAbsoluteUrlMock: vi.fn(),
   createClientMock: vi.fn(),
-  getSalonBillingSnapshotMock: vi.fn(),
+  getSalonBillingWorkspaceSnapshotMock: vi.fn(),
   getStripeBillingReadinessMock: vi.fn(),
   getStripeClientMock: vi.fn(),
+  getStripeOperationalStatusMock: vi.fn(),
   resolveStripePriceIdMock: vi.fn(),
   redirectMock: vi.fn(),
   revalidatePathMock: vi.fn(),
@@ -36,14 +38,12 @@ vi.mock("@/lib/auth", () => ({
   requireOwnerSalon: requireOwnerSalonMock,
 }));
 
-vi.mock("@/lib/billing", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/billing")>("@/lib/billing");
-
-  return {
-    ...actual,
-    getSalonBillingSnapshot: getSalonBillingSnapshotMock,
-  };
-});
+vi.mock("@/lib/billing", () => ({
+  BILLING_DISABLED: false,
+  BILLING_PATH: "/dashboard/billing",
+  PUBLIC_BILLING_PATH: "/planos",
+  getSalonBillingWorkspaceSnapshot: getSalonBillingWorkspaceSnapshotMock,
+}));
 
 vi.mock("@/lib/requestOrigin", () => ({
   buildAbsoluteUrl: buildAbsoluteUrlMock,
@@ -52,6 +52,9 @@ vi.mock("@/lib/requestOrigin", () => ({
 vi.mock("@/lib/stripeBilling", () => ({
   getStripeBillingReadiness: getStripeBillingReadinessMock,
   getStripeClient: getStripeClientMock,
+  getStripeOperationalStatus: getStripeOperationalStatusMock,
+  isTerminalStripeSubscriptionStatus: (status: string) =>
+    status === "canceled" || status === "incomplete_expired",
   resolveStripePriceId: resolveStripePriceIdMock,
 }));
 
@@ -64,13 +67,36 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
-  cancelSalonSubscriptionActionImpl,
   changeSalonPlanActionImpl,
   startStripeBillingPortalActionImpl,
   startStripeCheckoutActionImpl,
 } from "@/app/_actions/billing";
 
-describe.skip("billing actions (desativado no painel)", () => {
+function makeWorkspaceSnapshot(overrides?: Record<string, unknown>) {
+  return {
+    currentPlan: {
+      id: "starter",
+      displayName: "Starter",
+    },
+    subscription: {
+      status: "paused",
+      billingInterval: "monthly",
+      paymentProvider: null,
+      providerCustomerId: null,
+      providerSubscriptionId: null,
+      trialStartedAt: null,
+      trialEndsAt: null,
+      currentPeriodStartedAt: null,
+      currentPeriodEndsAt: null,
+      graceEndsAt: null,
+      activatedAt: null,
+      canceledAt: null,
+      ...overrides,
+    },
+  };
+}
+
+describe("billing actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     redirectMock.mockImplementation((location: string) => {
@@ -82,115 +108,22 @@ describe.skip("billing actions (desativado no painel)", () => {
     });
     buildAbsoluteUrlMock.mockReturnValue("https://painel.salon.fun/dashboard/billing");
     getStripeBillingReadinessMock.mockReturnValue({ configured: true, missing: [] });
-    getSalonBillingSnapshotMock.mockResolvedValue({
-      currentPlan: { id: "starter", displayName: "Starter" },
-      subscription: {
-        status: "trialing",
-        billingInterval: "monthly",
-        paymentProvider: null,
-        providerCustomerId: null,
-        providerSubscriptionId: null,
-        trialStartedAt: "2026-04-01T12:00:00.000Z",
-        trialEndsAt: "2026-04-15T12:00:00.000Z",
-        currentPeriodStartedAt: null,
-        currentPeriodEndsAt: null,
-        graceEndsAt: null,
-        activatedAt: null,
-        canceledAt: null,
-      },
+    getStripeOperationalStatusMock.mockResolvedValue({
+      configured: true,
+      mode: "live",
+      liveReady: true,
+      issues: [],
+      activePortalConfigCount: 1,
+      portalConfigured: true,
+      billingPortalReturnUrl: "https://painel.salon.fun/dashboard/billing",
+      webhookConfigured: true,
+      webhookUrl: "https://painel.salon.fun/api/stripe/webhook",
     });
     resolveStripePriceIdMock.mockReturnValue("price_growth_yearly");
+    getSalonBillingWorkspaceSnapshotMock.mockResolvedValue(makeWorkspaceSnapshot());
   });
 
-  it("activates the selected plan and revalidates the dashboard layout", async () => {
-    const upsertSubscription = vi.fn().mockResolvedValue({ error: null });
-
-    createClientMock.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === "saas_plan_catalog") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  maybeSingle: vi.fn().mockResolvedValue({
-                    data: {
-                      id: "growth",
-                      display_name: "Growth",
-                    },
-                    error: null,
-                  }),
-                })),
-              })),
-            })),
-          };
-        }
-
-        if (table === "salon_subscriptions") {
-          return {
-            upsert: upsertSubscription,
-          };
-        }
-
-        throw new Error(`Unexpected table ${table}`);
-      }),
-    });
-
-    const location = await captureRedirect(
-      changeSalonPlanActionImpl(
-        makeFormData({
-          planId: "growth",
-          billingInterval: "yearly",
-        }),
-      ),
-      redirectMock,
-    );
-
-    expect(upsertSubscription).toHaveBeenCalledWith(
-      expect.objectContaining({
-        salon_id: "salon-1",
-        plan_id: "growth",
-        status: "active",
-        billing_interval: "yearly",
-        canceled_at: null,
-        grace_ends_at: null,
-      }),
-      { onConflict: "salon_id" },
-    );
-    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard", "layout");
-    expect(location).toBe("/dashboard/billing?message=Growth+ativado+com+cobran%C3%A7a+anual.&tone=success");
-  });
-
-  it("marks the subscription for cancellation at the end of the cycle", async () => {
-    const eq = vi.fn().mockResolvedValue({ error: null });
-    const updateSubscription = vi.fn(() => ({ eq }));
-
-    createClientMock.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table !== "salon_subscriptions") {
-          throw new Error(`Unexpected table ${table}`);
-        }
-
-        return {
-          update: updateSubscription,
-        };
-      }),
-    });
-
-    const location = await captureRedirect(cancelSalonSubscriptionActionImpl(), redirectMock);
-
-    expect(updateSubscription).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "canceled",
-        grace_ends_at: null,
-      }),
-    );
-    expect(eq).toHaveBeenCalledWith("salon_id", "salon-1");
-    expect(location).toBe(
-      "/dashboard/billing?message=Assinatura+marcada+para+cancelamento+ao+fim+do+ciclo.&tone=success",
-    );
-  });
-
-  it("creates a Stripe checkout session for the selected plan", async () => {
+  it("creates a Stripe checkout session for a new subscription", async () => {
     const upsertSubscription = vi.fn().mockResolvedValue({ error: null });
     const stripeCustomerCreate = vi.fn().mockResolvedValue({ id: "cus_123" });
     const stripeCheckoutCreate = vi.fn().mockResolvedValue({
@@ -270,28 +203,106 @@ describe.skip("billing actions (desativado no painel)", () => {
     expect(location).toBe("https://checkout.stripe.com/session_123");
   });
 
+  it("redirects to the billing portal instead of creating a duplicate subscription", async () => {
+    const stripeCheckoutCreate = vi.fn();
+    const stripePortalCreate = vi.fn().mockResolvedValue({
+      url: "https://billing.stripe.com/session_existing",
+    });
+    const stripeRetrieveSubscription = vi.fn().mockResolvedValue({
+      id: "sub_123",
+      status: "active",
+    });
+
+    getSalonBillingWorkspaceSnapshotMock.mockResolvedValue(
+      makeWorkspaceSnapshot({
+        status: "active",
+        paymentProvider: "stripe",
+        providerCustomerId: "cus_123",
+        providerSubscriptionId: "sub_123",
+        activatedAt: "2026-04-01T12:00:00.000Z",
+      }),
+    );
+    getStripeClientMock.mockReturnValue({
+      subscriptions: {
+        retrieve: stripeRetrieveSubscription,
+      },
+      billingPortal: {
+        sessions: {
+          create: stripePortalCreate,
+        },
+      },
+      checkout: {
+        sessions: {
+          create: stripeCheckoutCreate,
+        },
+      },
+    });
+    createClientMock.mockReturnValue({
+      from: vi.fn(() => {
+        throw new Error("Supabase should not be queried before portal redirection.");
+      }),
+    });
+
+    const location = await captureRedirect(
+      startStripeCheckoutActionImpl(
+        makeFormData({
+          planId: "growth",
+          billingInterval: "yearly",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(stripeRetrieveSubscription).toHaveBeenCalledWith("sub_123");
+    expect(stripePortalCreate).toHaveBeenCalledWith({
+      customer: "cus_123",
+      return_url: "https://painel.salon.fun/dashboard/billing",
+    });
+    expect(stripeCheckoutCreate).not.toHaveBeenCalled();
+    expect(location).toBe("https://billing.stripe.com/session_existing");
+  });
+
+  it("blocks direct local plan changes when the Stripe subscription is already linked", async () => {
+    getSalonBillingWorkspaceSnapshotMock.mockResolvedValue(
+      makeWorkspaceSnapshot({
+        status: "active",
+        paymentProvider: "stripe",
+        providerCustomerId: "cus_123",
+        providerSubscriptionId: "sub_123",
+      }),
+    );
+
+    const location = await captureRedirect(
+      changeSalonPlanActionImpl(
+        makeFormData({
+          planId: "growth",
+          billingInterval: "yearly",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/billing?message=Use+a+gest%C3%A3o+da+assinatura+para+trocar+o+plano+sem+criar+cobran%C3%A7a+duplicada.&tone=info",
+    );
+  });
+
   it("opens the Stripe billing portal for linked customers", async () => {
     const stripePortalCreate = vi.fn().mockResolvedValue({
       url: "https://billing.stripe.com/session_123",
     });
 
-    getSalonBillingSnapshotMock.mockResolvedValue({
-      currentPlan: { id: "growth", displayName: "Growth" },
-      subscription: {
+    getSalonBillingWorkspaceSnapshotMock.mockResolvedValue(
+      makeWorkspaceSnapshot({
         status: "active",
-        billingInterval: "monthly",
         paymentProvider: "stripe",
         providerCustomerId: "cus_123",
         providerSubscriptionId: "sub_123",
-        trialStartedAt: null,
-        trialEndsAt: null,
         currentPeriodStartedAt: "2026-04-01T12:00:00.000Z",
         currentPeriodEndsAt: "2026-05-01T12:00:00.000Z",
-        graceEndsAt: null,
         activatedAt: "2026-04-01T12:00:00.000Z",
-        canceledAt: null,
-      },
-    });
+      }),
+    );
     getStripeClientMock.mockReturnValue({
       billingPortal: {
         sessions: {

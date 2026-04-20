@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { PUBLIC_BILLING_PATH } from "@/lib/billing";
 import { getSalonSegmentPreset, normalizeSalonBusinessSegment } from "@/lib/salonSegments";
 
 import { buildRedirectNotice } from "./shared";
@@ -39,5 +40,12 @@ export async function createSalonActionImpl(formData: FormData) {
   }
 
   revalidatePath("/dashboard");
-  redirect(buildRedirectNotice("/dashboard", "Salão criado com sucesso.", "success"));
+  revalidatePath(PUBLIC_BILLING_PATH);
+  redirect(
+    buildRedirectNotice(
+      PUBLIC_BILLING_PATH,
+      "Salão criado com sucesso. Agora escolha o plano para liberar o painel.",
+      "success",
+    ),
+  );
 }

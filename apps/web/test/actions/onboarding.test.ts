@@ -34,7 +34,7 @@ describe("onboarding actions", () => {
     });
   });
 
-  it("creates the salon and redirects to the dashboard", async () => {
+  it("creates the salon and redirects to billing activation", async () => {
     const maybeSingle = vi.fn().mockResolvedValue({ data: null });
     const match = vi.fn(() => ({ maybeSingle }));
     const select = vi.fn(() => ({ match }));
@@ -67,7 +67,10 @@ describe("onboarding actions", () => {
       owner_user_id: "owner-1",
     });
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard");
-    expect(location).toBe("/dashboard?message=Sal%C3%A3o+criado+com+sucesso.&tone=success");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/planos");
+    expect(location).toBe(
+      "/planos?message=Sal%C3%A3o+criado+com+sucesso.+Agora+escolha+o+plano+para+liberar+o+painel.&tone=success",
+    );
   });
 
   it("sends existing owners straight to the dashboard", async () => {
