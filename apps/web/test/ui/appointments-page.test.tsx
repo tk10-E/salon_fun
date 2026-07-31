@@ -28,13 +28,13 @@ describe("appointments page UI", () => {
     const location = await captureRedirect(
       Promise.resolve().then(() =>
         AppointmentsPage({
-          searchParams: {
+          searchParams: Promise.resolve({
             dateFrom: "2026-03-22",
             message: "Agenda atualizada.",
             staffMemberId: "staff-1",
             status: "confirmed",
             tone: "success",
-          },
+          }),
         }),
       ),
       redirectMock,

@@ -5,26 +5,19 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  createAdminClientMock,
   createClientMock,
-  registerInventoryMovementActionPath,
   requireOwnerSalonMock,
-  runSalonAutoPilotActionPath,
   saveSalonMonthlyTargetsActionPath,
-  saveInventoryProductActionPath,
   saveStaffCommissionSettingsActionPath,
-  sendCustomerReactivationActionPath,
   updateCustomerProductOrderStatusActionPath,
 } = vi.hoisted(() => ({
+  createAdminClientMock: vi.fn(),
   createClientMock: vi.fn(),
-  registerInventoryMovementActionPath: "/__test/register-inventory-movement",
   requireOwnerSalonMock: vi.fn(),
-  runSalonAutoPilotActionPath: "/__test/run-salon-auto-pilot",
   saveSalonMonthlyTargetsActionPath: "/__test/save-salon-monthly-targets",
-  saveInventoryProductActionPath: "/__test/save-inventory-product",
   saveStaffCommissionSettingsActionPath: "/__test/save-staff-commission",
-  sendCustomerReactivationActionPath: "/__test/send-customer-reactivation",
-  updateCustomerProductOrderStatusActionPath:
-    "/__test/update-store-order-status",
+  updateCustomerProductOrderStatusActionPath: "/__test/update-store-order-status",
 }));
 
 vi.mock("next/link", () => ({
@@ -41,12 +34,8 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/app/actions", () => ({
-  registerInventoryMovementAction: registerInventoryMovementActionPath,
-  runSalonAutoPilotAction: runSalonAutoPilotActionPath,
   saveSalonMonthlyTargetsAction: saveSalonMonthlyTargetsActionPath,
-  saveInventoryProductAction: saveInventoryProductActionPath,
   saveStaffCommissionSettingsAction: saveStaffCommissionSettingsActionPath,
-  sendCustomerReactivationAction: sendCustomerReactivationActionPath,
   updateCustomerProductOrderStatusAction:
     updateCustomerProductOrderStatusActionPath,
 }));
@@ -59,6 +48,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: createClientMock,
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: createAdminClientMock,
+}));
+
 import OperationsPage from "@/app/dashboard/operations/page";
 
 describe("operations page UI", () => {
@@ -67,14 +60,43 @@ describe("operations page UI", () => {
     requireOwnerSalonMock.mockResolvedValue({
       salon: {
         id: "salon-1",
+        booking_policy_auto_cancel_lead_minutes: 10,
+        booking_policy_auto_cancel_pending_deposit: true,
+        booking_policy_auto_cancel_unconfirmed: true,
+        booking_policy_auto_confirm_new_appointments: true,
+        booking_policy_confirmation_required: true,
+        booking_policy_enabled: true,
+        booking_policy_requires_deposit: true,
         client_app_config: {
           autoPilotEnabled: true,
         },
       },
     });
+    createAdminClientMock.mockReturnValue({
+      schema: vi.fn(() => ({
+        from: vi.fn(() => ({
+          select: vi.fn(() => ({
+            in: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  key: "operations_autopilot_job_url",
+                  value:
+                    "https://panel.example.com/api/internal/operations/autopilot",
+                },
+                {
+                  key: "operations_autopilot_job_secret",
+                  value: "secret",
+                },
+              ],
+              error: null,
+            }),
+          })),
+        })),
+      })),
+    });
   });
 
-  it("separates salon operations from the virtual store with compact store management", async () => {
+  it("renders the redesigned operations workspace with real store order actions", async () => {
     const storageFrom = vi.fn(() => ({
       getPublicUrl: vi.fn((path: string) => ({
         data: { publicUrl: `https://cdn.example.com/${path}` },
@@ -217,12 +239,6 @@ describe("operations page UI", () => {
                           {
                             id: "order-item-1",
                             product_name_snapshot: "Shampoo reconstrutor",
-                            product_brand_snapshot: "Wella",
-                            product_image_path: "salon-1/product-1.webp",
-                            unit_snapshot: "un",
-                            quantity: 2,
-                            unit_price_snapshot: 44.9,
-                            line_total_amount: 89.8,
                           },
                         ],
                       },
@@ -237,48 +253,132 @@ describe("operations page UI", () => {
 
         if (table === "appointments") {
           return {
-            select: vi.fn(() => ({
+            select: vi.fn((columns: string) => ({
               eq: vi.fn(() => ({
+                eq:
+                  columns === "customer_id, date"
+                    ? vi.fn(() => ({
+                        gte: vi.fn(() => ({
+                          order: vi.fn(() => ({
+                            limit: vi.fn().mockResolvedValue({
+                              data: [
+                                {
+                                  customer_id: "customer-1",
+                                  date: "2026-04-04T10:00:00.000Z",
+                                },
+                                {
+                                  customer_id: "customer-1",
+                                  date: "2026-03-05T10:00:00.000Z",
+                                },
+                              ],
+                              error: null,
+                            }),
+                          })),
+                        })),
+                      }))
+                    : undefined,
+                in: columns.includes("customer_confirmation_requested_at")
+                  ? vi.fn(() => ({
+                      gte: vi.fn(() => ({
+                        lt: vi.fn(() => ({
+                          order: vi.fn(() => ({
+                            limit: vi.fn().mockResolvedValue({
+                              data: [
+                                {
+                                  id: "autopilot-1",
+                                  date: "2026-04-04T10:00:00.000Z",
+                                  ends_at: "2026-04-04T10:45:00.000Z",
+                                  status: "confirmed",
+                                  customer_confirmation_requested_at:
+                                    "2026-04-04T08:00:00.000Z",
+                                  customer_presence_confirmed_at:
+                                    "2026-04-04T09:10:00.000Z",
+                                  deposit_paid_at: null,
+                                  deposit_customer_reported_paid_at: null,
+                                  deposit_status: "not_required",
+                                  protection_confirmation_required: true,
+                                  customers: { id: "customer-1", name: "Ana" },
+                                  services: {
+                                    id: "service-1",
+                                    name: "Escova",
+                                  },
+                                  staff_members: {
+                                    id: "staff-1",
+                                    name: "Ana",
+                                  },
+                                },
+                                {
+                                  id: "autopilot-2",
+                                  date: "2026-04-04T11:00:00.000Z",
+                                  ends_at: "2026-04-04T11:45:00.000Z",
+                                  status: "pending",
+                                  customer_confirmation_requested_at:
+                                    "2026-04-04T08:20:00.000Z",
+                                  customer_presence_confirmed_at: null,
+                                  deposit_paid_at: null,
+                                  deposit_customer_reported_paid_at: null,
+                                  deposit_status: "pending",
+                                  protection_confirmation_required: true,
+                                  customers: { id: "customer-2", name: "Bianca" },
+                                  services: {
+                                    id: "service-2",
+                                    name: "Coloracao",
+                                  },
+                                  staff_members: {
+                                    id: "staff-2",
+                                    name: "Bruna",
+                                  },
+                                },
+                              ],
+                              error: null,
+                            }),
+                          })),
+                        })),
+                      })),
+                    }))
+                  : undefined,
                 gte: vi.fn(() => ({
-                  order: vi.fn(() => ({
-                    limit: vi.fn().mockResolvedValue({
-                      data: [
-                        {
-                          id: "appointment-1",
-                          date: "2026-04-04T10:00:00.000Z",
-                          status: "completed",
-                          customers: { id: "customer-1", name: "Ana" },
-                          services: {
-                            id: "service-1",
-                            name: "Escova",
-                            price: 95,
+                  lt: vi.fn(() => ({
+                    order: vi.fn(() => ({
+                      limit: vi.fn().mockResolvedValue({
+                        data: [
+                          {
+                            id: "appointment-1",
+                            date: "2026-04-04T10:00:00.000Z",
+                            status: "completed",
+                            customers: { id: "customer-1", name: "Ana" },
+                            services: {
+                              id: "service-1",
+                              name: "Escova",
+                              price: 95,
+                            },
                           },
-                        },
-                        {
-                          id: "appointment-2",
-                          date: "2026-04-01T10:00:00.000Z",
-                          status: "confirmed",
-                          customers: { id: "customer-2", name: "Bianca" },
-                          services: {
-                            id: "service-2",
-                            name: "Coloracao",
-                            price: 180,
+                          {
+                            id: "appointment-2",
+                            date: "2026-04-01T10:00:00.000Z",
+                            status: "confirmed",
+                            customers: { id: "customer-2", name: "Bianca" },
+                            services: {
+                              id: "service-2",
+                              name: "Coloracao",
+                              price: 180,
+                            },
                           },
-                        },
-                        {
-                          id: "appointment-3",
-                          date: "2026-02-01T10:00:00.000Z",
-                          status: "cancelled",
-                          customers: { id: "customer-1", name: "Ana" },
-                          services: {
-                            id: "service-1",
-                            name: "Escova",
-                            price: 95,
+                          {
+                            id: "appointment-3",
+                            date: "2026-03-01T10:00:00.000Z",
+                            status: "cancelled",
+                            customers: { id: "customer-1", name: "Ana" },
+                            services: {
+                              id: "service-1",
+                              name: "Escova",
+                              price: 95,
+                            },
                           },
-                        },
-                      ],
-                      error: null,
-                    }),
+                        ],
+                        error: null,
+                      }),
+                    })),
                   })),
                 })),
               })),
@@ -316,25 +416,6 @@ describe("operations page UI", () => {
           };
         }
 
-        if (table === "staff_members") {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                order: vi.fn().mockResolvedValue({
-                  data: [
-                    {
-                      id: "staff-1",
-                      name: "Ana",
-                      is_active: true,
-                    },
-                  ],
-                  error: null,
-                }),
-              })),
-            })),
-          };
-        }
-
         if (table === "salon_monthly_targets") {
           return {
             select: vi.fn(() => ({
@@ -358,49 +439,46 @@ describe("operations page UI", () => {
     });
 
     const ui = await OperationsPage({
-      searchParams: { message: "Operação atualizada.", tone: "success" },
+      searchParams: Promise.resolve({ message: "Operacao atualizada.", tone: "success" }),
     });
 
-    render(ui);
+    const { container } = render(ui);
 
-    expect(screen.getByText("Operação atualizada.")).toBeInTheDocument();
+    expect(screen.getByText("Operacao atualizada.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Agenda automática" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Agendador pronto")).toBeInTheDocument();
+    expect(screen.getAllByText("Concluir sozinho").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Virar falta").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Horários do app entram aceitos automaticamente/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Visão executiva das operações do salão",
+        name: "Pedidos, equipe e rotina do salão",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Metas do mês" }),
+      screen.getByRole("heading", { name: "Fila comercial do app" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Leitura rápida do mês" }),
+      screen.getByRole("heading", { name: "Profissionais em foco" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ritmo operacional" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sinais executivos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Base e reativação" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Estoque sob vigia" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Clientes que pedem atenção" }),
+      screen.getByRole("heading", { name: "Entrada, saida e ajuste" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Equipe em foco" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Pedidos da loja" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Produtos em alerta" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Movimentos recentes" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Atualizar prioridades agora" })).toBeInTheDocument();
-    expect(screen.getByText("Sugestões automáticas ativas")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Loja e estoque" })).toHaveAttribute(
+      "href",
+      "/dashboard/inventory",
+    );
     expect(screen.getAllByText(/Ticket médio/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Serviço e cliente destaque")).toBeInTheDocument();
-    expect(screen.getByText("Clientes para reativar agora")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enviar pelo painel" })).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("heading", { name: "Ana" }).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText(/R\$\s*780,00/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/R\$\s*234,00/)).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Ana" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/R\$\s*234,00/).length).toBeGreaterThan(0);
     expect(
       screen.getAllByRole("button", { name: "Salvar comissão" }).length,
     ).toBeGreaterThan(0);
@@ -411,9 +489,21 @@ describe("operations page UI", () => {
     expect(
       screen.getByText(/Separar para retirada na recepcao/i),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar" })).toBeInTheDocument();
+    expect(container.textContent).toContain("Uso no atendimento");
+    expect(screen.getByRole("button", { name: "Salvar metas do mês" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Confirmar" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Uso no atendimento")).toBeInTheDocument();
+      container.querySelectorAll(
+        'form[action="/__test/update-store-order-status"] input[name="returnPath"][value="/dashboard/operations#store-orders"]',
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      container.querySelector('a[href="/dashboard/operations#store-orders"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        'a[href="/dashboard/operations?orderState=pending#store-orders"]',
+      ),
+    ).not.toBeNull();
   });
 });

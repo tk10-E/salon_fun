@@ -3,6 +3,7 @@ export const MANAGEMENT_BASE_PATH = "/dashboard/gestao";
 export const MANAGEMENT_ROUTES = {
   dashboard: MANAGEMENT_BASE_PATH,
   appointments: `${MANAGEMENT_BASE_PATH}/agendamentos`,
+  smartAgenda: `${MANAGEMENT_BASE_PATH}/agendamentos/inteligente`,
   clients: `${MANAGEMENT_BASE_PATH}/clientes`,
   professionals: `${MANAGEMENT_BASE_PATH}/profissionais`,
   categories: `${MANAGEMENT_BASE_PATH}/categorias`,

@@ -3,6 +3,15 @@ import path from "node:path";
 
 import Stripe from "stripe";
 
+const REQUIRED_WEBHOOK_EVENTS = [
+  "checkout.session.completed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "invoice.paid",
+  "invoice.payment_failed",
+];
+
 function parseEnvFile(filePath) {
   const env = {};
   const text = fs.readFileSync(filePath, "utf8");
@@ -85,11 +94,6 @@ async function main() {
   const expectedPortalReturnUrl = appOrigin ? `${appOrigin}/dashboard/billing` : null;
   const priceEnvNames = [
     "STRIPE_PRICE_STARTER_MONTHLY",
-    "STRIPE_PRICE_STARTER_YEARLY",
-    "STRIPE_PRICE_GROWTH_MONTHLY",
-    "STRIPE_PRICE_GROWTH_YEARLY",
-    "STRIPE_PRICE_PREMIUM_MONTHLY",
-    "STRIPE_PRICE_PREMIUM_YEARLY",
   ];
 
   const missing = [];
@@ -116,7 +120,7 @@ async function main() {
   console.log(`- APP_URL: ${appOrigin ?? "invalido ou ausente"}`);
   console.log(`- Secret mode: ${inferSecretMode(secretKey)}`);
   console.log(`- Webhook secret: ${boolLabel(Boolean(env.STRIPE_WEBHOOK_SECRET?.trim()))}`);
-  console.log(`- Price IDs: ${priceEnvNames.every((name) => Boolean(env[name]?.trim())) ? "ok" : "faltando"}`);
+  console.log(`- Preço ativo: ${priceEnvNames.every((name) => Boolean(env[name]?.trim())) ? "ok" : "faltando"}`);
 
   if (missing.length > 0) {
     console.log(`- Missing envs: ${missing.join(", ")}`);
@@ -170,11 +174,28 @@ async function main() {
   let webhookConfigured = false;
   try {
     const endpoints = await stripe.webhookEndpoints.list({ limit: 20 });
-    webhookConfigured = Boolean(
-      expectedWebhookUrl &&
-        endpoints.data.some((endpoint) => endpoint.url === expectedWebhookUrl && endpoint.status === "enabled"),
+    const matchingEndpoint = endpoints.data.find((endpoint) =>
+      endpoint.url === expectedWebhookUrl &&
+      endpoint.status === "enabled" &&
+      (endpoint.enabled_events.includes("*") ||
+        REQUIRED_WEBHOOK_EVENTS.every((eventType) =>
+          endpoint.enabled_events.includes(eventType),
+        ))
     );
-    console.log(`- Webhook: ${webhookConfigured ? "ok" : "nao configurado"} (${expectedWebhookUrl ?? "sem APP_URL"})`);
+    webhookConfigured = Boolean(expectedWebhookUrl && matchingEndpoint);
+    console.log(
+      `- Webhook: ${webhookConfigured ? "ok" : "nao configurado"} (${expectedWebhookUrl ?? "sem APP_URL"})`,
+    );
+
+    if (!webhookConfigured && expectedWebhookUrl) {
+      const endpointWithMissingEvents = endpoints.data.find((endpoint) =>
+        endpoint.url === expectedWebhookUrl && endpoint.status === "enabled"
+      );
+
+      if (endpointWithMissingEvents) {
+        console.log(`- Webhook eventos: faltando (${REQUIRED_WEBHOOK_EVENTS.join(", ")})`);
+      }
+    }
   } catch (error) {
     console.log(`- Webhook: erro (${error instanceof Error ? error.message : String(error)})`);
   }

@@ -89,33 +89,33 @@ export async function loadBenefitsOverviewSnapshot(): Promise<BenefitsOverviewSn
       .limit(8),
     supabase
       .from("salon_offers")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("is_active", true),
     supabase
       .from("salon_offers")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("is_active", true)
       .eq("kind", "membership"),
     supabase
       .from("salon_referral_reward_unlocks")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("status", "available"),
     supabase
       .from("salon_referral_reward_unlocks")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("status", "redeemed"),
     supabase
       .from("salon_referral_events")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("status", "qualified"),
     supabase
       .from("salon_referral_events")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("status", "pending"),
   ]);
@@ -131,19 +131,19 @@ export async function loadBenefitsOverviewSnapshot(): Promise<BenefitsOverviewSn
 
   if (!loyaltyDashboardReady) {
     warnings.push(
-      "Fidelizacao do app indisponivel agora. O painel nao esta tratando isso como zero real.",
+      "Fidelização do app indisponível agora. O painel não está tratando isso como zero real.",
     );
   }
 
   if (!growthAutomationDashboardReady) {
     warnings.push(
-      "Automacoes do app nao responderam agora. Revise o bloco de automacoes antes de confiar nos numeros.",
+      "Automações do app não responderam agora. Revise o bloco de automações antes de confiar nos números.",
     );
   }
 
   if (!marketingDashboardReady) {
     warnings.push(
-      "Painel comercial do app sem resposta agora. Ideias e sinais de marketing nao estao vindo do dado real.",
+      "Painel comercial do app sem resposta agora. Ideias e sinais de marketing não estão vindo do dado real.",
     );
   }
 

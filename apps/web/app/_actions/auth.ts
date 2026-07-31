@@ -40,6 +40,18 @@ function sanitizeNextPath(value: string | null | undefined) {
   return value;
 }
 
+function buildSignUpErrorMessage(error: { code?: string | null; message?: string | null }) {
+  switch (error.code) {
+    case "email_exists":
+    case "user_already_exists":
+      return "Este e-mail já está cadastrado. Entre no painel ou use Recuperar senha.";
+    case "over_email_send_rate_limit":
+      return "Muitos pedidos foram feitos em sequência. Aguarde alguns minutos e tente de novo.";
+    default:
+      return "Não foi possível criar a conta.";
+  }
+}
+
 async function buildGoogleCallbackUrl(nextPath = "/dashboard") {
   const origin = await buildAppOrigin();
   if (!origin) {
@@ -119,7 +131,7 @@ export async function signUpActionImpl(formData: FormData) {
   });
 
   if (error) {
-    redirect(buildRedirectNotice("/login", "Não foi possível criar a conta.", "error"));
+    redirect(buildRedirectNotice("/login", buildSignUpErrorMessage(error), "error"));
   }
 
   if (data.session) {

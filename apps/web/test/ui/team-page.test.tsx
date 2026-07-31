@@ -28,10 +28,10 @@ describe("team page UI", () => {
     const location = await captureRedirect(
       Promise.resolve().then(() =>
         TeamPage({
-          searchParams: {
+          searchParams: Promise.resolve({
             message: "Equipe atualizada.",
             tone: "success",
-          },
+          }),
         }),
       ),
       redirectMock,

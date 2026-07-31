@@ -42,7 +42,17 @@ vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
 }));
 
-import { createSalonPostActionImpl } from "@/app/_actions/feed";
+import {
+  createSalonPostActionImpl,
+  deleteSalonPostActionImpl,
+} from "@/app/_actions/feed";
+
+function buildFeedSuccessLocation(message: string) {
+  return `/dashboard/feed?${new URLSearchParams({
+    message,
+    tone: "success",
+  }).toString()}`;
+}
 
 describe("feed actions", () => {
   beforeEach(() => {
@@ -180,7 +190,9 @@ describe("feed actions", () => {
       }),
     );
     expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
-    expect(location).toBe("/dashboard/feed?message=Publica%C3%A7%C3%A3o+criada+com+sucesso.&tone=success");
+    expect(location).toBe(
+      buildFeedSuccessLocation("Publicação criada com sucesso."),
+    );
   });
 
   it("creates a reel with highlighted professional and video payload", async () => {
@@ -310,6 +322,281 @@ describe("feed actions", () => {
         }),
       }),
     );
-    expect(location).toBe("/dashboard/feed?message=V%C3%ADdeo+curto+publicado+com+sucesso.&tone=success");
+    expect(location).toBe(
+      buildFeedSuccessLocation("Vídeo curto publicado com sucesso."),
+    );
+  });
+
+  it("creates a story without customer push notification", async () => {
+    const serviceLookup = vi.fn().mockResolvedValue({
+      data: {
+        id: "service-1",
+        name: "Corte premium",
+      },
+      error: null,
+    });
+    const selectService = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: serviceLookup,
+        })),
+      })),
+    }));
+    const createdPost = {
+      id: "story-1",
+      created_at: "2026-03-22T15:00:00.000Z",
+    };
+    const selectCreatedPost = vi.fn(() => ({
+      single: vi.fn().mockResolvedValue({
+        data: createdPost,
+        error: null,
+      }),
+    }));
+    const insertPost = vi.fn(() => ({
+      select: selectCreatedPost,
+    }));
+    const insertGallery = vi.fn().mockResolvedValue({ error: null });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+    const uploadImage = vi.fn().mockResolvedValue({ error: null });
+    const removeAssets = vi.fn().mockResolvedValue(undefined);
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "services") {
+          return { select: selectService };
+        }
+
+        if (table === "salon_posts") {
+          return {
+            insert: insertPost,
+          };
+        }
+
+        if (table === "salon_post_images") {
+          return { insert: insertGallery };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return { insert: insertNotification };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          upload: uploadImage,
+          remove: removeAssets,
+          getPublicUrl: vi.fn((path: string) => ({
+            data: { publicUrl: `https://cdn.example.com/${path}` },
+          })),
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      createSalonPostActionImpl(
+        makeFormData({
+          postType: "story",
+          title: "Vaga relampago",
+          caption: "Hoje ainda tem encaixe.",
+          serviceId: "service-1",
+          storyDurationHours: "12",
+          images: [makeImageFile("story.jpg")],
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(insertPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        post_type: "story",
+        expires_at: expect.any(String),
+      }),
+    );
+    expect(insertGallery).toHaveBeenCalledWith([
+      {
+        post_id: "story-1",
+        image_path: expect.stringMatching(/^salon-1\//),
+        sort_order: 0,
+      },
+    ]);
+    expect(insertNotification).not.toHaveBeenCalled();
+    expect(location).toBe(
+      "/dashboard/feed?message=Story+publicado+com+sucesso.&tone=success",
+    );
+  });
+
+  it("falls back to the production-safe legacy story format when the story schema is missing", async () => {
+    const missingSchemaError = {
+      code: "42703",
+      details: null,
+      hint: null,
+      message: "column salon_posts.expires_at does not exist",
+    };
+    const primarySelectCreatedPost = vi.fn(() => ({
+      single: vi.fn().mockResolvedValue({
+        data: null,
+        error: missingSchemaError,
+      }),
+    }));
+    const fallbackSelectCreatedPost = vi.fn(() => ({
+      single: vi.fn().mockResolvedValue({
+        data: {
+          id: "story-legacy-1",
+          created_at: "2026-03-22T15:00:00.000Z",
+        },
+        error: null,
+      }),
+    }));
+    const insertPost = vi
+      .fn()
+      .mockReturnValueOnce({
+        select: primarySelectCreatedPost,
+      })
+      .mockReturnValueOnce({
+        select: fallbackSelectCreatedPost,
+      });
+    const insertGallery = vi.fn().mockResolvedValue({ error: null });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+    const uploadImage = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salon_posts") {
+          return {
+            insert: insertPost,
+          };
+        }
+
+        if (table === "salon_post_images") {
+          return { insert: insertGallery };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return { insert: insertNotification };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          upload: uploadImage,
+          remove: vi.fn().mockResolvedValue(undefined),
+          getPublicUrl: vi.fn((path: string) => ({
+            data: { publicUrl: `https://cdn.example.com/${path}` },
+          })),
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      createSalonPostActionImpl(
+        makeFormData({
+          postType: "story",
+          title: "Ultimo encaixe",
+          caption: "A cliente ainda consegue entrar hoje.",
+          storyDurationHours: "48",
+          images: [makeImageFile("story-fallback.jpg")],
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(insertPost).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        expires_at: expect.any(String),
+        post_type: "story",
+        title: "Ultimo encaixe",
+      }),
+    );
+    expect(insertPost).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        post_type: "standard",
+        title: "[story|48h] Ultimo encaixe",
+      }),
+    );
+    expect(insertNotification).not.toHaveBeenCalled();
+    expect(location).toBe(
+      "/dashboard/feed?message=Story+publicado+com+sucesso.&tone=success",
+    );
+  });
+
+  it("deletes an instagram-linked post and returns the mention to the moderation queue", async () => {
+    const maybeSinglePost = vi.fn().mockResolvedValue({
+      data: {
+        id: "post-1",
+        image_path: "cover.jpg",
+        video_path: null,
+        instagram_mention_id: "mention-1",
+        salon_post_images: [{ image_path: "detail.jpg" }],
+      },
+      error: null,
+    });
+    const deletePost = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })),
+    }));
+    const updateMention = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })),
+    }));
+    const removeAssets = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salon_posts") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: maybeSinglePost,
+                })),
+              })),
+            })),
+            delete: deletePost,
+          };
+        }
+
+        if (table === "instagram_mentions") {
+          return {
+            update: updateMention,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          remove: removeAssets,
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      deleteSalonPostActionImpl(
+        makeFormData({
+          postId: "post-1",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(deletePost).toHaveBeenCalled();
+    expect(removeAssets).toHaveBeenCalledWith(["cover.jpg", "detail.jpg"]);
+    expect(updateMention).toHaveBeenCalledWith({
+      moderation_note: "Removida do feed pelo painel.",
+      moderation_status: "rejected",
+      published_at: null,
+      published_post_id: null,
+    });
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/feed");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/instagram");
+    expect(location).toBe(
+      buildFeedSuccessLocation("Publicação removida com sucesso."),
+    );
   });
 });

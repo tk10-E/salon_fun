@@ -61,15 +61,16 @@ describe("onboarding page UI", () => {
     });
 
     const ui = await OnboardingPage({
-      searchParams: { message: "Tudo certo para continuar.", tone: "info" },
+      searchParams: Promise.resolve({ message: "Tudo certo para continuar.", tone: "info" }),
     });
 
     render(ui);
 
     expect(screen.getByText("Primeiros passos")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Falta pouco para o seu salão ficar pronto." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Falta pouco para o seu salão começar." })).toBeInTheDocument();
     expect(screen.getByLabelText("Nome do salão")).toBeInTheDocument();
     expect(screen.getByLabelText("Segmento do salão")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("/planos")).toHaveAttribute("name", "returnPath");
     expect(screen.getByRole("button", { name: "Salvar e continuar" })).toBeInTheDocument();
     expect(screen.getByText("Tudo certo para continuar.")).toBeInTheDocument();
     expect(select).toHaveBeenCalledWith("*");

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { createClientMock } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
@@ -8,13 +8,18 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: createClientMock,
 }));
 
-import {
-  formatBillingPrice,
-  formatLimitLabel,
-  getSalonBillingSnapshot,
-} from "@/lib/billing";
+async function importBillingModule() {
+  vi.resetModules();
+  vi.stubEnv("ENABLE_SAAS_BILLING", "true");
+  vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_123");
+  vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_123");
+  vi.stubEnv("STRIPE_PRICE_STARTER_MONTHLY", "price_starter_m");
+  vi.stubEnv("STRIPE_PRICE_STARTER_YEARLY", "price_starter_y");
 
-describe.skip("billing helpers (desativado no painel)", () => {
+  return import("@/lib/billing");
+}
+
+describe("billing helpers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -23,9 +28,12 @@ describe.skip("billing helpers (desativado no painel)", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
-  it("falls back to a virtual starter trial when billing tables are missing", async () => {
+  it("falls back to a locked starter subscription when billing tables are missing", async () => {
+    const { getSalonBillingSnapshot } = await importBillingModule();
+
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "saas_plan_catalog") {
@@ -68,12 +76,15 @@ describe.skip("billing helpers (desativado no painel)", () => {
 
     expect(snapshot.isUsingFallback).toBe(true);
     expect(snapshot.currentPlan.id).toBe("starter");
-    expect(snapshot.subscription.status).toBe("trialing");
-    expect(snapshot.isLocked).toBe(false);
-    expect(snapshot.statusLabel).toBe("Em trial");
+    expect(snapshot.currentPlan.displayName).toBe("Plano Único");
+    expect(snapshot.subscription.status).toBe("paused");
+    expect(snapshot.isLocked).toBe(true);
+    expect(snapshot.statusLabel).toBe("Aguardando assinatura");
   });
 
-  it("hydrates the current plan and access state from billing tables", async () => {
+  it("collapses public catalog data into a single commercial plan", async () => {
+    const { getSalonBillingSnapshot } = await importBillingModule();
+
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
         if (table === "saas_plan_catalog") {
@@ -86,8 +97,8 @@ describe.skip("billing helpers (desativado no painel)", () => {
                       id: "starter",
                       display_name: "Starter",
                       description: "Base",
-                      monthly_price: 79,
-                      yearly_price: 790,
+                      monthly_price: 89,
+                      yearly_price: 1068,
                       currency_code: "BRL",
                       trial_days: 14,
                       max_staff_members: 3,
@@ -148,7 +159,7 @@ describe.skip("billing helpers (desativado no painel)", () => {
                     grace_ends_at: null,
                     activated_at: "2026-04-01T12:00:00.000Z",
                     canceled_at: null,
-                    payment_provider: "manual",
+                    payment_provider: "stripe",
                     provider_customer_id: "cust-1",
                     provider_subscription_id: "sub-ext-1",
                     created_at: "2026-04-01T12:00:00.000Z",
@@ -168,16 +179,120 @@ describe.skip("billing helpers (desativado no painel)", () => {
     const snapshot = await getSalonBillingSnapshot("salon-growth");
 
     expect(snapshot.isUsingFallback).toBe(false);
-    expect(snapshot.currentPlan.id).toBe("growth");
+    expect(snapshot.plans).toHaveLength(1);
+    expect(snapshot.currentPlan.id).toBe("starter");
+    expect(snapshot.currentPlan.displayName).toBe("Plano Único");
+    expect(snapshot.currentPlan.monthlyPrice).toBe(89);
+    expect(snapshot.currentPlan.maxStaffMembers).toBeNull();
     expect(snapshot.currentPlan.includesFeedVideo).toBe(true);
+    expect(snapshot.subscription.billingInterval).toBe("yearly");
     expect(snapshot.accessState).toBe("healthy");
     expect(snapshot.statusLabel).toBe("Ativa");
     expect(snapshot.nextBillingDateLabel).toBeTruthy();
   });
 
-  it("formats price and limits for the billing UI", () => {
-    expect(formatBillingPrice(149)).toMatch(/149/);
+  it("formats price and limits for the billing UI", async () => {
+    const { formatBillingPrice, formatLimitLabel } = await importBillingModule();
+
+    expect(formatBillingPrice(89)).toMatch(/89/);
     expect(formatLimitLabel(null, "serviço", "serviços")).toBe("Ilimitado");
     expect(formatLimitLabel(3, "profissional", "profissionais")).toBe("3 profissionais");
   });
+
+  it("ignores raw catalog limits and keeps the unified commercial offer", async () => {
+    const { getSalonBillingSnapshot } = await importBillingModule();
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "saas_plan_catalog") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    {
+                      id: "starter",
+                      display_name: "Starter",
+                      description: "Base",
+                      monthly_price: -89,
+                      yearly_price: -1068,
+                      currency_code: "BRL",
+                      trial_days: -14,
+                      max_staff_members: -3,
+                      max_services: -25,
+                      max_monthly_notifications: -1500,
+                      includes_growth_automation: false,
+                      includes_feed_video: false,
+                      includes_custom_branding: false,
+                      includes_priority_support: false,
+                      is_default: true,
+                      is_public: true,
+                      sort_order: -10,
+                      metadata: { highlight: "Starter" },
+                    },
+                  ],
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_subscriptions") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              })),
+            })),
+            upsert: vi.fn(() => ({
+              select: vi.fn(() => ({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: "sub-sanitized",
+                    salon_id: "salon-sanitized",
+                    plan_id: "starter",
+                    status: "paused",
+                    billing_interval: "monthly",
+                    trial_started_at: null,
+                    trial_ends_at: null,
+                    current_period_started_at: null,
+                    current_period_ends_at: null,
+                    grace_ends_at: null,
+                    activated_at: null,
+                    canceled_at: null,
+                    payment_provider: null,
+                    provider_customer_id: null,
+                    provider_subscription_id: null,
+                    created_at: "2026-04-02T12:00:00.000Z",
+                    updated_at: "2026-04-02T12:00:00.000Z",
+                  },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const snapshot = await getSalonBillingSnapshot("salon-sanitized");
+
+    expect(snapshot.currentPlan.displayName).toBe("Plano Único");
+    expect(snapshot.currentPlan.monthlyPrice).toBe(89);
+    expect(snapshot.currentPlan.yearlyPrice).toBe(890);
+    expect(snapshot.currentPlan.maxStaffMembers).toBeNull();
+    expect(snapshot.currentPlan.maxServices).toBeNull();
+    expect(snapshot.currentPlan.maxMonthlyNotifications).toBeNull();
+    expect(snapshot.currentPlan.includesGrowthAutomation).toBe(true);
+    expect(snapshot.currentPlan.includesFeedVideo).toBe(true);
+    expect(snapshot.currentPlan.includesPrioritySupport).toBe(true);
+  });
 });
+
+

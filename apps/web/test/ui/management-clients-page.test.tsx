@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { requireOwnerSalonMock, loadManagementClientsMock } = vi.hoisted(() => ({
@@ -22,6 +22,15 @@ vi.mock("@/lib/management", () => ({
   buildFilterHref: vi.fn(() => "/dashboard/gestao/clientes"),
   formatDateLabel: vi.fn((value: string) => value.slice(0, 10)),
   loadManagementClients: loadManagementClientsMock,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  }),
 }));
 
 import ClientesPage from "@/app/dashboard/gestao/clientes/page";
@@ -46,6 +55,7 @@ describe("management clients page", () => {
         email: "ana@example.com",
         birth_date: "1993-05-10",
         notes: "Prefere contato pelo WhatsApp.",
+        profileImageUrl: "https://example.com/ana.png",
         created_at: "2026-01-01T10:00:00.000Z",
         updated_at: "2026-04-08T10:00:00.000Z",
         upcomingCount: 2,
@@ -69,6 +79,7 @@ describe("management clients page", () => {
         email: "bruna@example.com",
         birth_date: null,
         notes: null,
+        profileImageUrl: null,
         created_at: "2026-02-01T10:00:00.000Z",
         updated_at: "2026-04-08T10:00:00.000Z",
         upcomingCount: 0,
@@ -79,34 +90,69 @@ describe("management clients page", () => {
     ]);
   });
 
-  it("renders a stronger client overview without changing the management workflow", async () => {
+  it("renders the clearer client board without losing the management workflow", async () => {
     const ui = await ClientesPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         clientId: "client-1",
         message: "Cliente atualizado.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);
 
     expect(screen.getByText("Cliente atualizado.")).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { name: "Clientes" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Lista de clientes" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", {
-        name: "Clientes em ordem para atender e reativar.",
+        name: "Busca rapida",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Base de clientes")).toBeInTheDocument();
-    expect(screen.getByText("Cliente em foco")).toBeInTheDocument();
-    expect(screen.getByText("Relacionamento")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Novo cliente" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Busca rápida" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Clientes cadastrados" })).toBeInTheDocument();
     expect(screen.getAllByText("Ana Paula").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Prefere contato pelo WhatsApp.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Escova premium").length).toBeGreaterThan(0);
     expect(screen.getByText(/Camila/)).toBeInTheDocument();
+    expect(screen.getAllByText("Ver resumo").length).toBeGreaterThan(0);
+    expect(screen.getAllByAltText("Foto de Ana Paula").length).toBeGreaterThan(0);
+    expect(screen.getByText("Foto enviada pela cliente no app.")).toBeInTheDocument();
+    expect(screen.getByText("Sem foto enviada pela cliente.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Cadastro rÃ¡pido para recepÃ§Ã£o",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Novo cliente" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Salvar cliente" })).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Salvar alteraÃ§Ãµes" }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Cliente forte").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Com histÃ³rico").length).toBeGreaterThan(0);
+
+    cleanup();
+
+    const uiWithComposer = await ClientesPage({
+      searchParams: Promise.resolve({
+        clientId: "client-1",
+        composer: "1",
+      }),
+    });
+
+    render(uiWithComposer);
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Cadastro rÃ¡pido para recepÃ§Ã£o",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Salvar cliente" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Salvar alterações" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Fechar cadastro" })).toBeInTheDocument();
   });
 });
+
+

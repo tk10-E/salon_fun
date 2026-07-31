@@ -72,6 +72,36 @@ export type ClientAppCampaign = {
   ctaTarget: ClientAppCampaignTarget;
 };
 
+export function normalizeClientAppCustomDomainInput(
+  value: string | null | undefined,
+) {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  let hostnameCandidate = normalized;
+
+  try {
+    const parsed = normalized.includes("://")
+      ? new URL(normalized)
+      : new URL(`https://${normalized}`);
+    hostnameCandidate = parsed.hostname;
+  } catch {
+    hostnameCandidate = normalized
+      .replace(/^https?:\/\//i, "")
+      .split(/[/?#]/, 1)[0] ?? "";
+  }
+
+  const sanitized = hostnameCandidate
+    .toLowerCase()
+    .replace(/:\d+$/, "")
+    .replace(/^www\./, "")
+    .replace(/\.+$/, "");
+
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(sanitized) ? sanitized : null;
+}
+
 export type SalonClientAppConfig = {
   experienceModel: ClientExperienceModel;
   visualStyle: ClientAppVisualStyle;
@@ -113,7 +143,6 @@ export type SalonClientAppConfig = {
   profileCoverImageFocusX: number | null;
   profileCoverImageFocusY: number | null;
   profileCoverImageZoom: number | null;
-  instagramUrl: string | null;
   addressLabel: string | null;
   mapUrl: string | null;
   privacyPolicyUrl: string | null;
@@ -631,7 +660,6 @@ const DEFAULT_CLIENT_APP_CONFIG: SalonClientAppConfig = {
   profileCoverImageFocusX: 50,
   profileCoverImageFocusY: 50,
   profileCoverImageZoom: 1,
-  instagramUrl: null,
   addressLabel: null,
   mapUrl: null,
   privacyPolicyUrl: null,
@@ -753,7 +781,6 @@ export function normalizeSalonClientAppConfig(
         minimum: 1,
         maximum: 1.8,
       }) ?? DEFAULT_CLIENT_APP_CONFIG.profileCoverImageZoom,
-    instagramUrl: normalizeNullableUrl(raw.instagramUrl),
     addressLabel: normalizeNullableText(raw.addressLabel),
     mapUrl: normalizeNullableUrl(raw.mapUrl),
     privacyPolicyUrl: normalizeNullableUrl(raw.privacyPolicyUrl),
@@ -911,7 +938,6 @@ export function serializeSalonClientAppConfig(
     "profileCoverImageSourceUrl",
     normalizeNullableText(raw.profileCoverImageSourceUrl),
   );
-  setNullableText(raw, "instagramUrl", value.instagramUrl);
   setNullableText(raw, "addressLabel", value.addressLabel);
   setNullableText(raw, "mapUrl", value.mapUrl);
   setNullableText(raw, "privacyPolicyUrl", value.privacyPolicyUrl);
@@ -1155,18 +1181,7 @@ function normalizeNullableUrl(
 
 function normalizeNullableDomain(value: Json | undefined) {
   const normalized = normalizeNullableText(value);
-  if (!normalized) {
-    return null;
-  }
-
-  const sanitized = normalized
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .replace(/:\d+$/, "")
-    .replace(/^www\./, "");
-
-  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(sanitized) ? sanitized : null;
+  return normalizeClientAppCustomDomainInput(normalized);
 }
 
 function normalizeNullableDateTimeText(value: Json | undefined) {

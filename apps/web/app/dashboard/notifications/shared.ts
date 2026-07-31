@@ -43,6 +43,7 @@ export const CATEGORY_NOTIFICATION_TYPES = {
     "membership_published",
     "membership_updated",
     "membership_request_approved",
+    "membership_request_paid",
     "membership_request_rejected",
     "birthday_campaign",
     "loyalty_program_updated",
@@ -59,11 +60,16 @@ export const CATEGORY_NOTIFICATION_TYPES = {
   appointment: [
     "appointment_confirmed",
     "appointment_deposit_required",
+    "appointment_reminder_24h",
+    "appointment_reminder_3h",
     "appointment_reminder_1h",
+    "appointment_reminder_15m",
     "appointment_confirmation_required",
     "appointment_auto_cancelled_deposit_pending",
     "appointment_auto_cancelled_unconfirmed",
     "appointment_cancelled",
+    "appointment_rescheduled",
+    "appointment_no_show",
     "appointment_completed",
     "vacancy_alert",
   ],
@@ -215,13 +221,13 @@ export function formatNotificationType(type: string) {
     case "membership_renewal_reminder":
       return "Lembrete de renovação do plano";
     case "membership_request_approved":
+      return "Pedido de plano aprovado";
+    case "membership_request_paid":
       return "Plano ativado para cliente";
     case "membership_request_rejected":
       return "Pedido de plano recusado";
     case "manual_reactivation":
       return "Reativação manual";
-    case "manual_whatsapp_message":
-      return "Mensagem manual de WhatsApp";
     case "referral_program_updated":
       return "Programa de indicação atualizado";
     case "referral_qualified":
@@ -250,16 +256,26 @@ export function formatNotificationType(type: string) {
       return "Sinal da reserva pendente";
     case "appointment_reminder_1h":
       return "Lembrete de 1 hora";
+    case "appointment_reminder_24h":
+      return "Lembrete de 24 horas";
+    case "appointment_reminder_3h":
+      return "Lembrete de 3 horas";
+    case "appointment_reminder_15m":
+      return "Lembrete de 15 minutos";
     case "appointment_confirmation_required":
       return "Confirmação de presença solicitada";
     case "appointment_auto_cancelled_deposit_pending":
-      return "Horario liberado por sinal pendente";
+      return "Horário liberado por sinal pendente";
     case "appointment_auto_cancelled_unconfirmed":
       return "Horário liberado por falta de confirmação";
     case "appointment_cancelled":
       return "Agendamento cancelado";
+    case "appointment_rescheduled":
+      return "Agendamento reagendado";
+    case "appointment_no_show":
+      return "Cliente marcado como falta";
     case "appointment_completed":
-      return "Atendimento concluido";
+      return "Atendimento concluído";
     case "vacancy_alert":
       return "Horário liberado";
     default:

@@ -1,4 +1,9 @@
 import { formatDate } from "@/lib/formatters";
+import {
+  isMonthlyMembershipPlan,
+  resolveMembershipLifecycleCopy,
+  resolveMembershipOfferLabel,
+} from "@/lib/membershipOffers";
 import { requireOwnerSalon } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,8 +35,10 @@ export function getOfferLifecycle(
   return "active";
 }
 
-export function formatOfferKind(kind: OfferRow["kind"]) {
-  return kind === "membership" ? "Clube / pacote" : "Promoção";
+export function formatOfferKind(offer: Pick<OfferRow, "kind" | "membership_validity_days">) {
+  return offer.kind === "membership"
+    ? resolveMembershipOfferLabel(offer.membership_validity_days)
+    : "Promoção";
 }
 
 export function formatOfferPeriod(offer: OfferRow) {
@@ -71,7 +78,11 @@ export function formatOfferOperationalSummary(
       ? "1 dia"
       : `${offer.membership_validity_days} dias`;
 
-  return `${sessionsLabel} de ${serviceLabel} com validade de ${validityLabel}.`;
+  const membershipLabel = resolveMembershipLifecycleCopy(
+    offer.membership_validity_days,
+  );
+
+  return `${sessionsLabel} de ${serviceLabel} com validade real de ${validityLabel} para este ${membershipLabel}.`;
 }
 
 export function formatPercent(value: number | string) {
@@ -113,6 +124,13 @@ export function lifecycleHint(
   today: string,
 ) {
   if (lifecycle === "scheduled" && offer.starts_on) {
+    if (
+      offer.kind === "membership" &&
+      isMonthlyMembershipPlan(offer.membership_validity_days)
+    ) {
+      return `Pedido já pode ser feito no app. A ativação real começa na data que o salão aprovar.`;
+    }
+
     return `Entra no app em ${formatDate(offer.starts_on)}.`;
   }
 
@@ -173,12 +191,12 @@ export async function loadPromotionsPageData(
     offersQuery,
     supabase
       .from("salon_offers")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("is_active", true),
     supabase
       .from("salon_offers")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("is_active", true)
       .eq("kind", "membership"),
@@ -190,7 +208,19 @@ export async function loadPromotionsPageData(
       .order("name"),
   ]);
 
-  const offers = ((offersResult.data ?? []) as OfferRow[]).filter((offer) => {
+  const allOffers = (offersResult.data ?? []) as OfferRow[];
+  const lifecycleCounts: Record<OfferLifecycle, number> = {
+    active: 0,
+    expired: 0,
+    paused: 0,
+    scheduled: 0,
+  };
+
+  for (const offer of allOffers) {
+    lifecycleCounts[getOfferLifecycle(offer, today)] += 1;
+  }
+
+  const offers = allOffers.filter((offer) => {
     if (!offerStateFilter) {
       return true;
     }
@@ -198,10 +228,24 @@ export async function loadPromotionsPageData(
     return getOfferLifecycle(offer, today) === offerStateFilter;
   });
 
+  const scheduledOffers = allOffers
+    .filter((offer) => getOfferLifecycle(offer, today) === "scheduled")
+    .sort((left, right) => {
+      const leftDate = left.starts_on ?? "9999-12-31";
+      const rightDate = right.starts_on ?? "9999-12-31";
+      return leftDate.localeCompare(rightDate);
+    })
+    .slice(0, 4);
+
+  const featuredOffer =
+    allOffers.find((offer) => getOfferLifecycle(offer, today) === "active") ??
+    allOffers[0] ??
+    null;
+
   const groupedOffers = offers.reduce<Record<string, OfferRow[]>>(
     (groups, offer) => {
       const key =
-        offer.kind === "membership" ? "Clubes e pacotes" : "Promoções";
+        offer.kind === "membership" ? "Planos e pacotes" : "Promoções";
       groups[key] ??= [];
       groups[key].push(offer);
       return groups;
@@ -212,12 +256,15 @@ export async function loadPromotionsPageData(
   return {
     activeOffersCount: activeOffersCountResult.count ?? 0,
     activeMembershipsCount: activeMembershipsCountResult.count ?? 0,
+    featuredOffer,
     groupedOffers,
     hasOfferFilters,
+    lifecycleCounts,
     offerKindFilter,
     offerQuery,
     offerStateFilter,
     offers,
+    scheduledOffers,
     serviceOptions: mapServiceOptions(
       (serviceOptionsResult.data ?? []) as ReferralServiceOption[],
     ),

@@ -4,6 +4,15 @@ import {
   resolveClientExperienceModel,
   resolveClientHomeEmphasis,
 } from "@/lib/clientAppConfig";
+import {
+  isMonthlyMembershipPlan,
+  resolveMembershipOfferLabel,
+} from "@/lib/membershipOffers";
+import { listResolvedAppointmentReviews } from "@/lib/appointmentReviews";
+import {
+  isLegacyStoryTitle,
+  resolveFeedStoryRecord,
+} from "@/lib/feedStorySupport";
 import { getSalonSegmentPreset } from "@/lib/salonSegments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -13,9 +22,9 @@ type PublicSalonPreviewRow = {
   salon_id?: string;
   name?: string;
   tagline?: string | null;
+  whatsapp_phone?: string | null;
   brand_color?: string | null;
   business_segment?: string | null;
-  whatsapp_phone?: string | null;
   logo_path?: string | null;
   booking_policy_enabled?: boolean | null;
   booking_policy_title?: string | null;
@@ -99,7 +108,6 @@ export type PublicSalonSharePreview = {
   experienceModel: string;
   homeEmphasis: string;
   businessSegment: string | null;
-  whatsappPhone: string | null;
   logoUrl: string | null;
   heroImageUrl: string | null;
   galleryCoverImageUrl: string | null;
@@ -116,9 +124,8 @@ export type PublicSalonSharePreview = {
   welcomeHeadline: string | null;
   welcomeMessage: string | null;
   promotionHeadline: string | null;
-  instagramUrl: string | null;
-  instagramProfileImageUrl: string | null;
   addressLabel: string | null;
+  whatsappPhone: string | null;
   mapUrl: string | null;
   privacyPolicyUrl: string | null;
   termsOfUseUrl: string | null;
@@ -206,11 +213,22 @@ export type PublicSalonGalleryHighlight = {
   sourceLabel: string | null;
 };
 
+export type PublicSalonReviewHighlight = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  serviceName: string | null;
+  staffName: string | null;
+  staffImageUrl: string | null;
+};
+
 export type PublicSalonLandingData = {
   preview: PublicSalonSharePreview;
   featuredServices: PublicSalonServiceHighlight[];
   activeOffers: PublicSalonOfferHighlight[];
   recentPosts: PublicSalonGalleryHighlight[];
+  recentReviews: PublicSalonReviewHighlight[];
   centralCampaigns: PublicSalonCampaign[];
   stats: {
     servicesCount: number;
@@ -223,10 +241,80 @@ export async function fetchPublicSalonSharePreview(
   joinCode: string,
 ): Promise<PublicSalonSharePreview | null> {
   const context = await resolvePublicSalonPreviewContext(joinCode);
-  return context?.preview ?? null;
+  if (!context) {
+    return null;
+  }
+
+  try {
+    const reviewSnapshot = await loadPublicSalonReviewSnapshot(
+      context.preview.salonId,
+    );
+    return applyReviewSnapshotToPreview(context.preview, reviewSnapshot);
+  } catch {
+    return context.preview;
+  }
 }
 
 export async function fetchPublicSalonLandingData(
+  joinCode: string,
+): Promise<PublicSalonLandingData | null> {
+  const rpcLanding = await loadPublicLandingFromRpc(joinCode);
+  if (rpcLanding) {
+    return enrichPublicLandingWithReviews(rpcLanding);
+  }
+
+  const previewLanding = await loadPublicLandingFromPreview(joinCode);
+  if (!previewLanding) {
+    return null;
+  }
+
+  return enrichPublicLandingWithReviews(previewLanding);
+}
+
+async function loadPublicLandingFromRpc(joinCode: string) {
+  const normalizedJoinCode = joinCode.trim().toUpperCase();
+  if (!normalizedJoinCode) {
+    return null;
+  }
+
+  try {
+    const supabase = createClient();
+    const payload = await supabase.rpc(
+      "get_public_salon_landing_by_join_code",
+      {
+        input_join_code: normalizedJoinCode,
+      },
+    );
+    const normalizedPayload = coerceLandingPayload(payload);
+    if (!normalizedPayload) {
+      return null;
+    }
+
+    const recentPosts = normalizedPayload.recentPosts
+      .filter((post) => !isLegacyStoryTitle(post.title))
+      .map((post) => ({
+        ...post,
+        title: post.title?.trim() || "Trabalho recente",
+      }));
+
+    return {
+      ...normalizedPayload,
+      recentPosts,
+      stats: {
+        ...normalizedPayload.stats,
+        recentPostsCount: recentPosts.length,
+      },
+    };
+  } catch (error) {
+    console.error("Failed to load public landing from canonical RPC", {
+      joinCode: normalizedJoinCode,
+      error,
+    });
+    return null;
+  }
+}
+
+async function loadPublicLandingFromPreview(
   joinCode: string,
 ): Promise<PublicSalonLandingData | null> {
   const context = await resolvePublicSalonPreviewContext(joinCode);
@@ -234,17 +322,19 @@ export async function fetchPublicSalonLandingData(
     return null;
   }
 
+  const supabase = context.supabase as ReturnType<typeof createClient>;
   const [featuredServices, activeOffers, recentPosts] = await Promise.all([
-    loadPublicServices(context.supabase, context.preview.salonId),
-    loadPublicOffers(context.supabase, context.preview.salonId),
-    loadPublicPosts(context.supabase, context.preview.salonId),
+    loadPublicServices(supabase, context.preview.salonId),
+    loadPublicOffers(supabase, context.preview.salonId),
+    loadPublicPosts(supabase, context.preview.salonId),
   ]);
 
   return {
     preview: context.preview,
-    featuredServices,
-    activeOffers,
-    recentPosts,
+    featuredServices: featuredServices.slice(0, 12),
+    activeOffers: activeOffers.slice(0, 12),
+    recentPosts: recentPosts.slice(0, 6),
+    recentReviews: [],
     centralCampaigns: context.centralCampaigns,
     stats: {
       servicesCount: featuredServices.length,
@@ -299,11 +389,6 @@ async function resolvePublicSalonPreviewContext(joinCode: string) {
     ? supabase.storage.from("salon-assets").getPublicUrl(logoPath).data
         .publicUrl
     : null;
-  const { data: instagramConnection } = await supabase
-    .from("instagram_connections")
-    .select("profile_picture_url")
-    .eq("salon_id", salonId)
-    .maybeSingle();
   const resolvedHeroImageUrl =
     clientAppConfig.heroImageTabletVariantUrl ??
     clientAppConfig.heroImageVariantUrl ??
@@ -339,7 +424,6 @@ async function resolvePublicSalonPreviewContext(joinCode: string) {
     experienceModel: resolvedExperienceModel,
     homeEmphasis: resolvedHomeEmphasis,
     businessSegment: normalizeText(previewRow.business_segment),
-    whatsappPhone: normalizeText(previewRow.whatsapp_phone),
     logoUrl,
     heroImageUrl: resolvedHeroImageUrl,
     galleryCoverImageUrl: resolvedGalleryCoverImageUrl,
@@ -364,12 +448,8 @@ async function resolvePublicSalonPreviewContext(joinCode: string) {
       segmentPreset.mobileSupport,
     promotionHeadline:
       clientAppConfig.promotionHeadline ?? segmentPreset.mobileSupport,
-    instagramUrl: clientAppConfig.instagramUrl,
-    instagramProfileImageUrl: normalizeText(
-      (instagramConnection as { profile_picture_url?: string | null } | null)
-        ?.profile_picture_url,
-    ),
     addressLabel: clientAppConfig.addressLabel,
+    whatsappPhone: normalizeText(previewRow.whatsapp_phone),
     mapUrl: clientAppConfig.mapUrl,
     privacyPolicyUrl: clientAppConfig.privacyPolicyUrl,
     termsOfUseUrl: clientAppConfig.termsOfUseUrl,
@@ -412,9 +492,231 @@ async function resolvePublicSalonPreviewContext(joinCode: string) {
 
   return {
     preview,
-    centralCampaigns: clientAppConfig.centralCampaigns,
+    centralCampaigns: filterPublicCentralCampaigns(
+      clientAppConfig.centralCampaigns,
+    ),
     supabase,
   };
+}
+
+async function enrichPublicLandingWithReviews(
+  landing: PublicSalonLandingData,
+): Promise<PublicSalonLandingData> {
+  let reviewSnapshot: {
+    ratingCount: number;
+    ratingValue: number | null;
+    recentReviews: PublicSalonReviewHighlight[];
+  };
+
+  try {
+    reviewSnapshot = await loadPublicSalonReviewSnapshot(
+      landing.preview.salonId,
+    );
+  } catch {
+    return landing;
+  }
+
+  return {
+    ...landing,
+    preview: applyReviewSnapshotToPreview(landing.preview, reviewSnapshot),
+    recentReviews: reviewSnapshot.recentReviews,
+  };
+}
+
+function applyReviewSnapshotToPreview(
+  preview: PublicSalonSharePreview,
+  snapshot: {
+    ratingCount: number;
+    ratingValue: number | null;
+  },
+): PublicSalonSharePreview {
+  if (!snapshot.ratingCount || snapshot.ratingValue == null) {
+    return preview;
+  }
+
+  return {
+    ...preview,
+    ratingCount: snapshot.ratingCount,
+    ratingValue: snapshot.ratingValue,
+  };
+}
+
+async function loadPublicSalonReviewSnapshot(salonId: string): Promise<{
+  ratingCount: number;
+  ratingValue: number | null;
+  recentReviews: PublicSalonReviewHighlight[];
+}> {
+  const reviews = await listResolvedAppointmentReviews({ salonId });
+  if (!reviews.length) {
+    return {
+      ratingCount: 0,
+      ratingValue: null,
+      recentReviews: [],
+    };
+  }
+
+  const serviceIds = [
+    ...new Set(
+      reviews
+        .map((review) => review.serviceId.trim())
+        .filter((value) => value.length > 0),
+    ),
+  ];
+  const staffMemberIds = [
+    ...new Set(
+      reviews
+        .map((review) => review.staffMemberId.trim())
+        .filter((value) => value.length > 0),
+    ),
+  ];
+  const admin = createAdminClient();
+  const [servicesResult, staffMembersResult] = await Promise.all([
+    serviceIds.length
+      ? admin.from("services").select("id, name").in("id", serviceIds)
+      : Promise.resolve({ data: [], error: null }),
+    loadPublicReviewStaffMembers(admin, staffMemberIds),
+  ]);
+  const serviceNameById = new Map<string, string>();
+  const staffNameById = new Map<string, string>();
+  const staffImageUrlById = new Map<string, string>();
+
+  for (const service of (servicesResult.data ?? []) as Array<{
+    id: string;
+    name: string | null;
+  }>) {
+    if (service.id && service.name) {
+      serviceNameById.set(service.id, service.name);
+    }
+  }
+
+  for (const staffMember of (staffMembersResult.data ?? []) as Array<{
+    id: string;
+    name: string | null;
+    image_path?: string | null;
+  }>) {
+    if (staffMember.id && staffMember.name) {
+      staffNameById.set(staffMember.id, staffMember.name);
+    }
+    const imagePath = normalizeText(staffMember.image_path);
+    if (staffMember.id && imagePath) {
+      staffImageUrlById.set(
+        staffMember.id,
+        admin.storage.from("salon-assets").getPublicUrl(imagePath).data
+          .publicUrl,
+      );
+    }
+  }
+
+  const ratingSum = reviews.reduce((sum, review) => sum + review.rating, 0);
+
+  return {
+    ratingCount: reviews.length,
+    ratingValue: Number((ratingSum / reviews.length).toFixed(1)),
+    recentReviews: reviews
+      .filter((review) => review.comment?.trim().length)
+      .slice(0, 6)
+      .map((review) => ({
+        id: review.appointmentId,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.createdAt,
+        serviceName: serviceNameById.get(review.serviceId) ?? null,
+        staffName: staffNameById.get(review.staffMemberId) ?? null,
+        staffImageUrl: staffImageUrlById.get(review.staffMemberId) ?? null,
+      })),
+  };
+}
+
+async function loadPublicReviewStaffMembers(
+  admin: any,
+  staffMemberIds: string[],
+) {
+  if (!staffMemberIds.length) {
+    return { data: [], error: null };
+  }
+
+  const response = await admin
+    .from("staff_members")
+    .select("id, name, image_path")
+    .in("id", staffMemberIds);
+  if (
+    response.error &&
+    response.error.message?.toLowerCase().includes("image_path")
+  ) {
+    return admin
+      .from("staff_members")
+      .select("id, name")
+      .in("id", staffMemberIds);
+  }
+
+  return response;
+}
+
+const PUBLIC_CAMPAIGN_PRIORITY_RANK: Record<
+  PublicSalonCampaign["priority"],
+  number
+> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+function filterPublicCentralCampaigns(
+  campaigns: readonly PublicSalonCampaign[],
+) {
+  const now = Date.now();
+
+  return [...campaigns]
+    .filter((campaign) => isPublicCampaignLive(campaign, now))
+    .sort((left, right) => {
+      const priorityDelta =
+        (PUBLIC_CAMPAIGN_PRIORITY_RANK[left.priority] ?? 99) -
+        (PUBLIC_CAMPAIGN_PRIORITY_RANK[right.priority] ?? 99);
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
+      const leftStartsAt = parsePublicCampaignTimestamp(left.startsAt);
+      const rightStartsAt = parsePublicCampaignTimestamp(right.startsAt);
+      if (leftStartsAt !== rightStartsAt) {
+        if (leftStartsAt === null) {
+          return -1;
+        }
+        if (rightStartsAt === null) {
+          return 1;
+        }
+        return leftStartsAt - rightStartsAt;
+      }
+
+      return left.title.localeCompare(right.title, "pt-BR");
+    });
+}
+
+function isPublicCampaignLive(campaign: PublicSalonCampaign, now: number) {
+  if (!campaign.isActive) {
+    return false;
+  }
+
+  const startsAt = parsePublicCampaignTimestamp(campaign.startsAt);
+  if (startsAt !== null && startsAt > now) {
+    return false;
+  }
+
+  const endsAt = parsePublicCampaignTimestamp(campaign.endsAt);
+  if (endsAt !== null && endsAt < now) {
+    return false;
+  }
+
+  return true;
+}
+
+function parsePublicCampaignTimestamp(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 function tryCreateAdminPublicSalonClient() {
@@ -432,7 +734,7 @@ async function loadJoinPreviewFromAdminTable(
   const { data, error } = await supabase
     .from("salons")
     .select(
-      "id, name, tagline, brand_color, business_segment, whatsapp_phone, logo_path, booking_policy_enabled, booking_policy_title, booking_policy_summary, booking_policy_payment_mode, booking_policy_pix_key, booking_policy_pix_recipient_name, booking_policy_pix_recipient_city, booking_policy_external_checkout_url, booking_policy_requires_deposit, booking_policy_deposit_amount, booking_policy_payment_instructions, client_app_config",
+      "id, name, tagline, whatsapp_phone, brand_color, business_segment, logo_path, booking_policy_enabled, booking_policy_title, booking_policy_summary, booking_policy_payment_mode, booking_policy_pix_key, booking_policy_pix_recipient_name, booking_policy_pix_recipient_city, booking_policy_external_checkout_url, booking_policy_requires_deposit, booking_policy_deposit_amount, booking_policy_payment_instructions, client_app_config",
     )
     .eq("join_code", joinCode)
     .maybeSingle();
@@ -455,11 +757,19 @@ async function loadJoinPreviewFromRpc(
   joinCode: string,
 ) {
   try {
-    const data = await supabase.rpc("get_salon_join_preview", {
+    const data = await supabase.rpc("get_public_salon_by_join_code", {
       input_join_code: joinCode,
     });
 
-    return coercePreviewRow(data);
+    const normalized = coercePreviewRow(data);
+    if (normalized) {
+      return normalized;
+    }
+
+    const legacyData = await supabase.rpc("get_salon_join_preview", {
+      input_join_code: joinCode,
+    });
+    return coercePreviewRow(legacyData);
   } catch (error) {
     console.error("Failed to load public join preview from RPC", {
       joinCode,
@@ -476,7 +786,7 @@ async function loadJoinPreviewFromTable(
   const { data, error } = await supabase
     .from("salons")
     .select(
-      "id, name, tagline, brand_color, business_segment, whatsapp_phone, logo_path, booking_policy_enabled, booking_policy_title, booking_policy_summary, booking_policy_payment_mode, booking_policy_pix_key, booking_policy_pix_recipient_name, booking_policy_pix_recipient_city, booking_policy_external_checkout_url, booking_policy_requires_deposit, booking_policy_deposit_amount, booking_policy_payment_instructions, client_app_config",
+      "id, name, tagline, whatsapp_phone, brand_color, business_segment, logo_path, booking_policy_enabled, booking_policy_title, booking_policy_summary, booking_policy_payment_mode, booking_policy_pix_key, booking_policy_pix_recipient_name, booking_policy_pix_recipient_city, booking_policy_external_checkout_url, booking_policy_requires_deposit, booking_policy_deposit_amount, booking_policy_payment_instructions, client_app_config",
     )
     .eq("join_code", joinCode)
     .maybeSingle();
@@ -589,38 +899,14 @@ async function loadPublicOffers(
       )
       .eq("salon_id", salonId)
       .eq("is_active", true)
-      .order("sort_order")
-      .limit(12);
+      .order("sort_order");
 
     if (error) {
       return [];
     }
 
-    const offers = ((data ?? []) as PublicOfferRow[])
-      .filter((offer) => {
-        const startsOn = normalizeText(offer.starts_on);
-        const endsOn = normalizeText(offer.ends_on);
-        const insideWindow =
-          (!startsOn || startsOn <= today) && (!endsOn || endsOn >= today);
-
-        if (!insideWindow) {
-          return false;
-        }
-
-        if (offer.kind !== "membership") {
-          return true;
-        }
-
-        return Boolean(
-          normalizeText(offer.membership_service_id) &&
-            offer.membership_sessions_included != null &&
-            offer.membership_sessions_included > 0 &&
-            offer.membership_validity_days != null &&
-            offer.membership_validity_days > 0,
-        );
-      })
-      .slice(0, 3);
-    const serviceIds = offers
+    const rawOffers = (data ?? []) as PublicOfferRow[];
+    const serviceIds = rawOffers
       .map((offer) => normalizeText(offer.membership_service_id))
       .filter((serviceId): serviceId is string => Boolean(serviceId));
     const serviceMetaById = new Map<
@@ -631,34 +917,65 @@ async function loadPublicOffers(
     if (serviceIds.length > 0) {
       const { data: servicesData } = await supabase
         .from("services")
-        .select("id, image_path, name")
+        .select("id, image_path, name, is_active")
         .in("id", serviceIds);
 
-      for (const service of ((servicesData ?? []) as {
+      for (const service of (servicesData ?? []) as {
         id?: string | null;
         image_path?: string | null;
         name?: string | null;
-      }[])) {
+        is_active?: boolean | null;
+      }[]) {
         const serviceId = normalizeText(service.id);
-        if (serviceId) {
-          serviceMetaById.set(serviceId, {
-            imagePath: normalizeText(service.image_path),
-            name: normalizeText(service.name),
-          });
+        if (!serviceId || service.is_active === false) {
+          continue;
         }
+
+        serviceMetaById.set(serviceId, {
+          imagePath: normalizeText(service.image_path),
+          name: normalizeText(service.name),
+        });
       }
     }
+
+    const offers = rawOffers.filter((offer) => {
+      const startsOn = normalizeText(offer.starts_on);
+      const endsOn = normalizeText(offer.ends_on);
+      const isMembershipPlan =
+        offer.kind === "membership" &&
+        isMonthlyMembershipPlan(offer.membership_validity_days);
+      const insideWindow = isMembershipPlan
+        ? !endsOn || endsOn >= today
+        : (!startsOn || startsOn <= today) && (!endsOn || endsOn >= today);
+
+      if (!insideWindow) {
+        return false;
+      }
+
+      if (offer.kind !== "membership") {
+        return true;
+      }
+
+      const membershipServiceId = normalizeText(offer.membership_service_id);
+      return Boolean(
+        membershipServiceId &&
+        serviceMetaById.has(membershipServiceId) &&
+        offer.membership_sessions_included != null &&
+        offer.membership_sessions_included > 0 &&
+        offer.membership_validity_days != null &&
+        offer.membership_validity_days > 0,
+      );
+    });
 
     return offers.map((offer) => {
       const kind: PublicSalonOfferHighlight["kind"] =
         offer.kind === "membership" ? "membership" : "promotion";
       const bookingServiceId = normalizeText(offer.membership_service_id);
       const bookingService = bookingServiceId
-        ? serviceMetaById.get(bookingServiceId) ?? null
+        ? (serviceMetaById.get(bookingServiceId) ?? null)
         : null;
       const imagePath =
-        normalizeText(offer.image_path) ??
-        bookingService?.imagePath;
+        normalizeText(offer.image_path) ?? bookingService?.imagePath;
       const actionKind: PublicSalonOfferHighlight["actionKind"] =
         kind === "membership"
           ? "request_membership"
@@ -673,16 +990,19 @@ async function loadPublicOffers(
         description: normalizeText(offer.description),
         highlightText: normalizeText(offer.highlight_text),
         imageUrl: imagePath
-          ? supabase.storage.from("salon-assets").getPublicUrl(imagePath)
-              .data.publicUrl
+          ? supabase.storage.from("salon-assets").getPublicUrl(imagePath).data
+              .publicUrl
           : null,
         bookingServiceId,
         bookingServiceName: bookingService?.name ?? null,
         actionKind,
-        kindLabel: kind === "membership" ? "Clube" : "Oferta ativa",
+        kindLabel:
+          kind === "membership"
+            ? resolveMembershipOfferLabel(offer.membership_validity_days)
+            : "Oferta ativa",
         priceLabel:
           offer.price == null ? null : formatCurrency(Number(offer.price ?? 0)),
-        lifecycleLabel: resolveOfferLifecycleLabel(offer),
+        lifecycleLabel: resolveOfferLifecycleLabel(offer, today),
       };
     });
   } catch {
@@ -701,6 +1021,7 @@ async function loadPublicPosts(
         "id, title, caption, image_path, created_at, post_type, source_type, external_author_avatar_url, external_author_username, services(name), staff_members(name, role), salon_post_images(image_path, sort_order), salon_post_likes(customer_id), salon_post_comments(id)",
       )
       .eq("salon_id", salonId)
+      .neq("post_type", "story")
       .order("created_at", { ascending: false })
       .limit(12);
 
@@ -710,6 +1031,11 @@ async function loadPublicPosts(
 
     return ((data ?? []) as PublicFeedPostRow[])
       .map((post) => {
+        const storyState = resolveFeedStoryRecord({
+          createdAt: post.created_at,
+          postType: post.post_type,
+          title: post.title,
+        });
         const gallerySource = post.salon_post_images?.length
           ? [...post.salon_post_images].sort(
               (left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0),
@@ -728,7 +1054,7 @@ async function loadPublicPosts(
 
         return {
           id: post.id,
-          title: normalizeText(post.title) ?? "Trabalho recente",
+          title: storyState.cleanTitle,
           caption: normalizeText(post.caption),
           imageUrl: coverPath
             ? supabase.storage.from("salon-posts").getPublicUrl(coverPath).data
@@ -752,8 +1078,10 @@ async function loadPublicPosts(
             (coverPath != null ? 1 : 0) +
             48 / ageInHours,
           createdAt: post.created_at,
+          isStory: storyState.isStory,
         };
       })
+      .filter((post) => !post.isStory)
       .sort((left, right) => {
         if (right.engagementScore !== left.engagementScore) {
           return right.engagementScore - left.engagementScore;
@@ -765,6 +1093,7 @@ async function loadPublicPosts(
         ({
           engagementScore: _engagementScore,
           createdAt: _createdAt,
+          isStory: _isStory,
           ...post
         }) => post,
       );
@@ -783,6 +1112,19 @@ function coercePreviewRow(value: unknown): PublicSalonPreviewRow | null {
   }
 
   return value as PublicSalonPreviewRow;
+}
+
+function coerceLandingPayload(value: unknown): PublicSalonLandingData | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Partial<PublicSalonLandingData>;
+  if (!candidate.preview || !candidate.stats) {
+    return null;
+  }
+
+  return candidate as PublicSalonLandingData;
 }
 
 function normalizeText(value: unknown) {
@@ -818,7 +1160,15 @@ function firstRelation<T>(value: T | T[] | null | undefined) {
   return value ?? null;
 }
 
-function resolveOfferLifecycleLabel(offer: PublicOfferRow) {
+function resolveOfferLifecycleLabel(offer: PublicOfferRow, today: string) {
+  const isMembershipPlan =
+    offer.kind === "membership" &&
+    isMonthlyMembershipPlan(offer.membership_validity_days);
+
+  if (isMembershipPlan && offer.starts_on && offer.starts_on > today) {
+    return "Pedido disponível";
+  }
+
   if (offer.starts_on && offer.ends_on) {
     return `${formatDateShort(offer.starts_on)} até ${formatDateShort(offer.ends_on)}`;
   }
@@ -849,17 +1199,8 @@ function resolvePublicPostSourceLabel(args: {
   sourceType: string | null;
   authorUsername: string | null;
 }) {
-  const authorUsername = normalizeText(args.authorUsername);
-
-  if (
-    args.sourceType === "instagram_mention" ||
-    args.sourceType === "instagram_owned_post"
-  ) {
-    return authorUsername
-      ? `Instagram • @${authorUsername.replace(/^@+/, "")}`
-      : "Instagram";
-  }
-
+  void args.sourceType;
+  void args.authorUsername;
   return null;
 }
 

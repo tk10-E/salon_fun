@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WEEKDAY_OPTIONS } from "@/lib/schedule";
 import {
@@ -16,7 +16,6 @@ const {
   redirectMock,
   revalidatePathMock,
   requireOwnerSalonMock,
-  sendSalonWhatsAppTextMessageMock,
 } = vi.hoisted(() => ({
   createAdminClientMock: vi.fn(),
   createClientMock: vi.fn(),
@@ -25,7 +24,6 @@ const {
   redirectMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
-  sendSalonWhatsAppTextMessageMock: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -38,12 +36,6 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 vi.mock("@/lib/auth", () => ({
   requireOwnerSalon: requireOwnerSalonMock,
-}));
-
-vi.mock("@/lib/whatsapp", () => ({
-  sanitizePhone: (value: string | null | undefined) =>
-    (value ?? "").replace(/\D+/g, "") || null,
-  sendSalonWhatsAppTextMessage: sendSalonWhatsAppTextMessageMock,
 }));
 
 vi.mock("@/lib/clientAppImageVariants", async () => {
@@ -68,12 +60,10 @@ vi.mock("next/cache", () => ({
 
 import {
   regenerateSalonCodeActionImpl,
-  sendSalonManualWhatsAppActionImpl,
   updateSalonBookingPolicyActionImpl,
   updateSalonBrandingActionImpl,
   updateSalonSecurityPolicyActionImpl,
   updateSalonScheduleActionImpl,
-  updateSalonWhatsAppSettingsActionImpl,
 } from "@/app/_actions/settings";
 
 describe("settings actions", () => {
@@ -92,6 +82,13 @@ describe("settings actions", () => {
           },
         },
       },
+      schema: vi.fn(() => ({
+        from: vi.fn(() => ({
+          upsert: vi.fn().mockResolvedValue({
+            error: null,
+          }),
+        })),
+      })),
     });
     fetchRemoteClientAppImageMock.mockResolvedValue({
       buffer: Buffer.from("remote-image"),
@@ -117,10 +114,6 @@ describe("settings actions", () => {
     redirectMock.mockImplementation((location: string) => {
       throw new Error(`${TEST_REDIRECT_PREFIX}${location}`);
     });
-    sendSalonWhatsAppTextMessageMock.mockResolvedValue({
-      ok: true,
-      id: "wamid.123",
-    });
     requireOwnerSalonMock.mockResolvedValue({
       salon: {
         id: "salon-1",
@@ -130,6 +123,7 @@ describe("settings actions", () => {
         booking_policy_deposit_amount: 0,
         booking_policy_deposit_reminder_lead_hours: 6,
         booking_policy_enabled: false,
+        booking_policy_auto_confirm_new_appointments: false,
         booking_policy_asaas_api_key: null,
         booking_policy_asaas_environment: "sandbox",
         booking_policy_asaas_webhook_token: null,
@@ -193,7 +187,7 @@ describe("settings actions", () => {
     );
   });
 
-  it("rejects invalid whatsapp numbers before updating branding", async () => {
+  it("rejects an invalid map link before saving client app info", async () => {
     const from = vi.fn();
     const storageFrom = vi.fn();
 
@@ -208,7 +202,7 @@ describe("settings actions", () => {
       updateSalonBrandingActionImpl(
         makeFormData({
           name: "Studio Centro",
-          whatsappPhone: "123",
+          clientAppMapUrl: "notaurl",
         }),
       ),
       redirectMock,
@@ -217,10 +211,10 @@ describe("settings actions", () => {
     expect(from).not.toHaveBeenCalled();
     expect(storageFrom).not.toHaveBeenCalled();
     expect(location).toContain("/dashboard/settings?");
-    expect(location).toContain("WhatsApp+v%C3%A1lido");
+    expect(location).toContain("URL+v%C3%A1lida+de+mapa");
   });
 
-  it("rejects invalid public links and support email before saving the client app", async () => {
+  it("rejects an invalid support email before saving the client app", async () => {
     const from = vi.fn();
     const storageFrom = vi.fn();
 
@@ -235,7 +229,7 @@ describe("settings actions", () => {
       updateSalonBrandingActionImpl(
         makeFormData({
           name: "Studio Centro",
-          clientAppInstagramUrl: "instagram.com/studio-centro",
+          clientAppSupportEmail: "suporte-studio.example.com",
         }),
       ),
       redirectMock,
@@ -244,154 +238,19 @@ describe("settings actions", () => {
     expect(from).not.toHaveBeenCalled();
     expect(storageFrom).not.toHaveBeenCalled();
     expect(location).toContain("/dashboard/settings?");
-    expect(location).toContain("Instagram+do+sal%C3%A3o");
+    expect(location).toContain("e-mail+de+suporte");
   });
 
-  it("rejects invalid whatsapp numbers before updating the dedicated whatsapp page", async () => {
-    const from = vi.fn();
-
-    createClientMock.mockReturnValue({
-      from,
-    });
-
-    const location = await captureRedirect(
-      updateSalonWhatsAppSettingsActionImpl(
-        makeFormData({
-          whatsappPhone: "123",
-        }),
-      ),
-      redirectMock,
-    );
-
-    expect(from).not.toHaveBeenCalled();
-    expect(location).toContain("/dashboard/whatsapp?");
-    expect(location).toContain("WhatsApp+v%C3%A1lido");
-  });
-
-  it("updates the dedicated whatsapp settings and revalidates related views", async () => {
+  it("accepts a full storefront URL and stores only the custom domain", async () => {
     const eq = vi.fn().mockResolvedValue({ error: null });
     const updateSalon = vi.fn(() => ({ eq }));
-
-    createClientMock.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === "salons") {
-          return {
-            update: updateSalon,
-          };
-        }
-
-        throw new Error(`Unexpected table ${table}`);
-      }),
-    });
-
-    const location = await captureRedirect(
-      updateSalonWhatsAppSettingsActionImpl(
-        makeFormData({
-          whatsappPhone: "55 11 98888-7777",
-          whatsappDispatchEnabled: "on",
-          whatsappMetaPhoneNumberId: "123 456 789 012 345",
-          whatsappMetaBusinessAccountId: "210 248 555 053 210",
-        }),
-      ),
-      redirectMock,
-    );
-
-    expect(location).toBe(
-      "/dashboard/whatsapp?message=WhatsApp+do+sal%C3%A3o+atualizado+com+sucesso.&tone=success",
-    );
-    expect(updateSalon).toHaveBeenCalledWith({
-      whatsapp_dispatch_enabled: true,
-      whatsapp_meta_business_account_id: "210248555053210",
-      whatsapp_meta_phone_number_id: "123456789012345",
-      whatsapp_phone: "5511988887777",
-    });
-    expect(eq).toHaveBeenCalledWith("id", "salon-1");
-    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
-      expect.arrayContaining([
-        "/dashboard",
-        "/dashboard/settings",
-        "/dashboard/whatsapp",
-        "/dashboard/client-app",
-        "/dashboard/gestao/agendamentos",
-        "/dashboard/operations",
-        "/s/ABCD1234",
-      ]),
-    );
-  });
-
-  it("preserves technical whatsapp ids when the simplified UI saves only end-user fields", async () => {
-    const eq = vi.fn().mockResolvedValue({ error: null });
-    const updateSalon = vi.fn(() => ({ eq }));
-
-    requireOwnerSalonMock.mockResolvedValueOnce({
-      salon: {
-        id: "salon-1",
-        join_code: "ABCD1234",
-        whatsapp_meta_business_account_id: "210248555053210",
-        whatsapp_meta_phone_number_id: "123456789012345",
-      },
-      user: {
-        id: "user-1",
-        email: "owner@studio.com",
-      },
-    });
-
-    createClientMock.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === "salons") {
-          return {
-            update: updateSalon,
-          };
-        }
-
-        throw new Error(`Unexpected table ${table}`);
-      }),
-    });
-
-    const location = await captureRedirect(
-      updateSalonWhatsAppSettingsActionImpl(
-        makeFormData({
-          whatsappPhone: "55 11 98888-7777",
-          whatsappDispatchEnabled: "on",
-        }),
-      ),
-      redirectMock,
-    );
-
-    expect(location).toBe(
-      "/dashboard/whatsapp?message=WhatsApp+do+sal%C3%A3o+atualizado+com+sucesso.&tone=success",
-    );
-    expect(updateSalon).toHaveBeenCalledWith({
-      whatsapp_dispatch_enabled: true,
-      whatsapp_meta_business_account_id: "210248555053210",
-      whatsapp_meta_phone_number_id: "123456789012345",
-      whatsapp_phone: "5511988887777",
-    });
-  });
-
-  it("sends a manual whatsapp message and stores the attempt in the notification history", async () => {
-    const maybeSingle = vi.fn().mockResolvedValue({
-      data: {
-        id: "customer-1",
-        name: "Ana Paula",
-        phone: "5511991112222",
-        whatsapp_phone: "5511991112222",
-      },
-      error: null,
-    });
     const insertNotification = vi.fn().mockResolvedValue({ error: null });
 
     createClientMock.mockReturnValue({
       from: vi.fn((table: string) => {
-        if (table === "customers") {
+        if (table === "salons") {
           return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  maybeSingle,
-                })),
-              })),
-            })),
+            update: updateSalon,
           };
         }
 
@@ -403,89 +262,37 @@ describe("settings actions", () => {
 
         throw new Error(`Unexpected table ${table}`);
       }),
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(),
+          upload: vi.fn(),
+          getPublicUrl: vi.fn((path: string) => ({
+            data: { publicUrl: `https://cdn.example.com/${path}` },
+          })),
+        })),
+      },
     });
 
     const location = await captureRedirect(
-      sendSalonManualWhatsAppActionImpl(
+      updateSalonBrandingActionImpl(
         makeFormData({
-          customerId: "customer-1",
-          message:
-            "Oi Ana, vi sua mensagem e já reservei um horário para você.",
-          returnPath: "/dashboard/whatsapp",
+          name: "Studio Centro",
+          clientAppCustomDomain:
+            "https://www.app.studiocentro.com.br/cliente/agenda?origem=painel",
         }),
       ),
       redirectMock,
     );
 
-    expect(sendSalonWhatsAppTextMessageMock).toHaveBeenCalledWith(
-      "salon-1",
-      "5511991112222",
-      "Oi Ana, vi sua mensagem e já reservei um horário para você.",
-    );
-    expect(insertNotification).toHaveBeenCalledWith(
+    expect(updateSalon).toHaveBeenCalledWith(
       expect.objectContaining({
-        audience: "single_customer",
-        customer_id: "customer-1",
-        notification_type: "manual_whatsapp_message",
-        salon_id: "salon-1",
-        whatsapp_delivery_status: "sent",
-      }),
-    );
-    expect(location).toBe(
-      "/dashboard/whatsapp?message=Mensagem+manual+enviada+pelo+WhatsApp.&tone=success",
-    );
-    expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
-      expect.arrayContaining([
-        "/dashboard",
-        "/dashboard/whatsapp",
-        "/dashboard/notifications",
-        "/dashboard/gestao/agendamentos",
-        "/dashboard/operations",
-      ]),
-    );
-  });
-
-  it("records a failed manual whatsapp send with a clear redirect message", async () => {
-    sendSalonWhatsAppTextMessageMock.mockResolvedValueOnce({
-      ok: false,
-      reason: "missing_config",
-    });
-    const insertNotification = vi.fn().mockResolvedValue({ error: null });
-
-    createClientMock.mockReturnValue({
-      from: vi.fn((table: string) => {
-        if (table === "salon_customer_notifications") {
-          return {
-            insert: insertNotification,
-          };
-        }
-
-        throw new Error(`Unexpected table ${table}`);
-      }),
-    });
-
-    const location = await captureRedirect(
-      sendSalonManualWhatsAppActionImpl(
-        makeFormData({
-          customerName: "Ana Paula",
-          customerPhone: "55 11 91111-2222",
-          message: "Oi Ana, seu horário está pronto para confirmar.",
-          returnPath: "/dashboard/whatsapp",
+        client_app_config: expect.objectContaining({
+          customDomain: "app.studiocentro.com.br",
         }),
-      ),
-      redirectMock,
-    );
-
-    expect(insertNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        customer_id: null,
-        notification_type: "manual_whatsapp_message",
-        whatsapp_delivery_status: "failed",
-        whatsapp_error: "missing_config",
       }),
     );
     expect(location).toBe(
-      "/dashboard/whatsapp?message=O+canal+t%C3%A9cnico+do+WhatsApp+ainda+n%C3%A3o+est%C3%A1+pronto+para+enviar+mensagens+manuais.&tone=error",
+      "/dashboard/settings?message=Identidade+do+sal%C3%A3o+atualizada+com+sucesso.&tone=success",
     );
   });
 
@@ -530,7 +337,6 @@ describe("settings actions", () => {
           tagline: "Atendimento elegante e direto no app.",
           brandColor: "#B35D77",
           businessSegment: "nail_studio",
-          whatsappPhone: "55 11 99999-9999",
         }),
       ),
       redirectMock,
@@ -561,11 +367,6 @@ describe("settings actions", () => {
           autoPilotEnabled: false,
           whiteLabelActive: false,
         }),
-        whatsapp_dispatch_enabled: false,
-        whatsapp_meta_business_account_id: null,
-        whatsapp_meta_phone_number_id: null,
-        whatsapp_phone: "5511999999999",
-        logo_path: "logos/current.png",
       }),
     );
     expect(eq).toHaveBeenCalledWith("id", "salon-1");
@@ -648,19 +449,18 @@ describe("settings actions", () => {
           clientAppBannerStyle: "immersive",
           clientAppSecondaryColor: "#3B3028",
           clientAppAccentColor: "#CDAA74",
-          clientAppWelcomeHeadline: "Seu próximo trato começa aqui.",
+          clientAppWelcomeHeadline: "Seu prÃ³ximo trato comeÃ§a aqui.",
           clientAppWelcomeMessage:
-            "Agenda rápida, profissionais fortes e uma vitrine com presença.",
+            "Agenda rÃ¡pida, profissionais fortes e uma vitrine com presenÃ§a.",
           clientAppPromotionHeadline:
             "Combos, clube e produtos com assinatura da casa.",
           clientAppHeroImageUrl: "https://cdn.example.com/hero.jpg",
           clientAppGalleryCoverImageUrl: "https://cdn.example.com/gallery.jpg",
-          clientAppInstagramUrl: "https://instagram.com/barbeariaelite",
           clientAppPrivacyPolicyUrl: "https://barbeariaelite.com/privacidade",
           clientAppTermsOfUseUrl: "https://barbeariaelite.com/termos",
           clientAppSupportUrl: "https://barbeariaelite.com/suporte",
           clientAppSupportEmail: "suporte@barbeariaelite.com",
-          clientAppAddressLabel: "Rua Augusta, 500 - São Paulo",
+          clientAppAddressLabel: "Rua Augusta, 500 - SÃ£o Paulo",
           clientAppMapUrl: "https://maps.example.com/barbearia",
           clientAppRatingValue: "4.9",
           clientAppRatingCount: "186",
@@ -689,9 +489,9 @@ describe("settings actions", () => {
           bannerStyle: "immersive",
           secondaryColor: "#3B3028",
           accentColor: "#CDAA74",
-          welcomeHeadline: "Seu próximo trato começa aqui.",
+          welcomeHeadline: "Seu prÃ³ximo trato comeÃ§a aqui.",
           welcomeMessage:
-            "Agenda rápida, profissionais fortes e uma vitrine com presença.",
+            "Agenda rÃ¡pida, profissionais fortes e uma vitrine com presenÃ§a.",
           promotionHeadline: "Combos, clube e produtos com assinatura da casa.",
           heroImageUrl:
             "https://cdn.example.com/salon-1/client-app/hero/source",
@@ -725,12 +525,11 @@ describe("settings actions", () => {
           profileCoverImageFocusX: 50,
           profileCoverImageFocusY: 50,
           profileCoverImageZoom: 1,
-          instagramUrl: "https://instagram.com/barbeariaelite",
           privacyPolicyUrl: "https://barbeariaelite.com/privacidade",
           termsOfUseUrl: "https://barbeariaelite.com/termos",
           supportUrl: "https://barbeariaelite.com/suporte",
           supportEmail: "suporte@barbeariaelite.com",
-          addressLabel: "Rua Augusta, 500 - São Paulo",
+          addressLabel: "Rua Augusta, 500 - SÃ£o Paulo",
           mapUrl: "https://maps.example.com/barbearia",
           ratingValue: 4.9,
           ratingCount: 186,
@@ -744,11 +543,6 @@ describe("settings actions", () => {
           autoPilotEnabled: false,
           whiteLabelActive: false,
         }),
-        whatsapp_dispatch_enabled: false,
-        whatsapp_meta_business_account_id: null,
-        whatsapp_meta_phone_number_id: null,
-        whatsapp_phone: null,
-        logo_path: "logos/current.png",
       }),
     );
     expect(location).toBe(
@@ -858,6 +652,127 @@ describe("settings actions", () => {
     );
     expect(location).toBe(
       "/dashboard/settings?message=Identidade+do+sal%C3%A3o+atualizada+com+sucesso.&tone=success",
+    );
+  });
+
+  it("rejects client app campaigns with an invalid date window", async () => {
+    const updateSalon = vi.fn();
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(),
+          upload: vi.fn(),
+          getPublicUrl: vi.fn((path: string) => ({
+            data: { publicUrl: `https://cdn.example.com/${path}` },
+          })),
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      updateSalonBrandingActionImpl(
+        makeFormData({
+          name: "Studio Centro",
+          clientAppCampaignIsActive_1: "on",
+          clientAppCampaignTitle_1: "Virada de agenda",
+          clientAppCampaignMessage_1: "Essa campanha nÃ£o deveria ser salva.",
+          clientAppCampaignStartsAt_1: "2026-04-10T20:00",
+          clientAppCampaignEndsAt_1: "2026-04-09T09:00",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).not.toHaveBeenCalled();
+    expect(location).toBe(
+      "/dashboard/settings?message=A+data+final+das+campanhas+do+app+precisa+ser+igual+ou+posterior+%C3%A0+inicial.&tone=error",
+    );
+  });
+
+  it("supports a dynamic number of client app campaigns instead of stopping at three fixed slots", async () => {
+    const eq = vi.fn().mockResolvedValue({ error: null });
+    const updateSalon = vi.fn(() => ({ eq }));
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(),
+          upload: vi.fn(),
+          getPublicUrl: vi.fn((path: string) => ({
+            data: { publicUrl: `https://cdn.example.com/${path}` },
+          })),
+        })),
+      },
+    });
+
+    await captureRedirect(
+      updateSalonBrandingActionImpl(
+        makeFormData({
+          name: "Studio Centro",
+          clientAppCampaignIsActive_1: "on",
+          clientAppCampaignTitle_1: "Campanha principal",
+          clientAppCampaignMessage_1: "Primeira campanha visÃ­vel.",
+          clientAppCampaignCtaTarget_1: "explore",
+          clientAppCampaignTitle_4: "Campanha extra",
+          clientAppCampaignMessage_4: "Essa campanha veio de um slot dinÃ¢mico.",
+          clientAppCampaignPriority_4: "high",
+          clientAppCampaignAudience_4: "with_active_benefits",
+          clientAppCampaignCtaTarget_4: "support",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_app_config: expect.objectContaining({
+          centralCampaigns: [
+            expect.objectContaining({
+              id: "campaign-1",
+              title: "Campanha principal",
+            }),
+            expect.objectContaining({
+              id: "campaign-4",
+              title: "Campanha extra",
+              priority: "high",
+              audience: "with_active_benefits",
+              ctaTarget: "support",
+            }),
+          ],
+        }),
+      }),
     );
   });
 
@@ -1054,6 +969,7 @@ describe("settings actions", () => {
       updateSalonBookingPolicyActionImpl(
         makeFormData({
           bookingPolicyEnabled: "on",
+          bookingPolicyAutoConfirmNewAppointments: "on",
           bookingPolicyTitle: "Reserva protegida",
           bookingPolicySummary: "Sinal para segurar horarios premium.",
           bookingPolicyCancellationWindowHours: "12",
@@ -1079,6 +995,7 @@ describe("settings actions", () => {
     expect(updateSalon).toHaveBeenCalledWith(
       expect.objectContaining({
         booking_policy_enabled: true,
+        booking_policy_auto_confirm_new_appointments: true,
         booking_policy_title: "Reserva protegida",
         booking_policy_summary: "Sinal para segurar horarios premium.",
         booking_policy_cancellation_window_hours: 12,
@@ -1102,7 +1019,46 @@ describe("settings actions", () => {
       expect.arrayContaining(["/dashboard", "/dashboard/settings"]),
     );
     expect(location).toBe(
-      "/dashboard/settings?message=Politica+de+reserva+protegida+atualizada+com+sucesso.&tone=success",
+      "/dashboard/settings?message=Pol%C3%ADtica+de+reserva+protegida+atualizada+com+sucesso.&tone=success",
+    );
+  });
+
+  it("saves the salon autopilot flag from the booking policy form", async () => {
+    const updateSalon = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "salons") {
+          return {
+            update: updateSalon,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    await captureRedirect(
+      updateSalonBookingPolicyActionImpl(
+        makeFormData({
+          bookingPolicyEnabled: "on",
+          clientAppAutoPilotEnabled: "on",
+          bookingPolicyTitle: "Reserva protegida",
+          bookingPolicyCancellationWindowHours: "12",
+          bookingPolicyConfirmationLeadMinutes: "25",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(updateSalon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_app_config: expect.objectContaining({
+          autoPilotEnabled: true,
+        }),
+      }),
     );
   });
 
@@ -1206,7 +1162,7 @@ describe("settings actions", () => {
     );
 
     expect(location).toContain("dashboard/settings");
-    expect(location).toContain("pelo+menos+um+pais");
+    expect(location).toContain("pelo+menos+um+pa%C3%ADs");
   });
 
   it("requires a verified TOTP factor before enabling MFA", async () => {
@@ -1287,7 +1243,7 @@ describe("settings actions", () => {
       },
     );
     expect(location).toBe(
-      "/dashboard/settings?message=Politica+de+seguranca+do+painel+atualizada+com+sucesso.&tone=success",
+      "/dashboard/settings?message=Pol%C3%ADtica+de+seguran%C3%A7a+do+painel+atualizada+com+sucesso.&tone=success",
     );
   });
 });

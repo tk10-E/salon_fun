@@ -139,6 +139,38 @@ describe("auth actions", () => {
     );
   });
 
+  it("explains when the e-mail is already registered during sign up", async () => {
+    const signUp = vi.fn().mockResolvedValue({
+      data: {
+        session: null,
+      },
+      error: {
+        code: "user_already_exists",
+      },
+    });
+
+    createClientMock.mockReturnValue({
+      auth: {
+        signUp,
+      },
+    });
+
+    const location = await captureRedirect(
+      signUpActionImpl(
+        makeFormData({
+          email: "owner@salon.fun",
+          password: "SenhaForte123!",
+          passwordConfirmation: "SenhaForte123!",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/login?message=Este+e-mail+j%C3%A1+est%C3%A1+cadastrado.+Entre+no+painel+ou+use+Recuperar+senha.&tone=error",
+    );
+  });
+
   it("starts the Google OAuth flow with the panel callback", async () => {
     const signInWithOAuth = vi.fn().mockResolvedValue({
       data: {

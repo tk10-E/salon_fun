@@ -42,7 +42,7 @@ describe("feedPresentation", () => {
     });
   });
 
-  it("adds Instagram context to editorial notes when the post comes from a mention", () => {
+  it("keeps transformation notes focused on conversion even when the source is a mention", () => {
     expect(
       getFeedPostEditorialNote({
         title: "Escova glow",
@@ -51,6 +51,6 @@ describe("feedPresentation", () => {
         sourceType: "instagram_mention",
         serviceName: "Escova modelada",
       }),
-    ).toContain("Instagram");
+    ).toBe("Transformação para gerar confiança e acelerar reserva.");
   });
 });

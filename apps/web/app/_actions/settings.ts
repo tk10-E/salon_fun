@@ -12,9 +12,11 @@ import {
   type ClientAppImageAssetKey,
 } from "@/lib/clientAppImageVariants";
 import {
+  normalizeClientAppCustomDomainInput,
   normalizeSalonClientAppConfig,
   serializeSalonClientAppConfig,
 } from "@/lib/clientAppConfig";
+import { getConfiguredAppOrigin } from "@/lib/requestOrigin";
 import { normalizeCountryCodesInput } from "@/lib/panelSecurityPolicy";
 import {
   SALON_TIMEZONE_OPTIONS,
@@ -29,6 +31,7 @@ import {
   type SettingsBrandingUploadField,
 } from "@/lib/settingsBrandingUploads";
 import { normalizeSalonBusinessSegment } from "@/lib/salonSegments";
+import { getCronSecret } from "@/lib/serverEnv";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -36,7 +39,6 @@ import {
   assertSafeImageUpload,
   optimizeSalonLogoImage,
 } from "@/lib/uploadedImageOptimization";
-import { sanitizePhone, sendSalonWhatsAppTextMessage } from "@/lib/whatsapp";
 
 import {
   buildClientAppRefreshNotification,
@@ -46,12 +48,61 @@ import {
 } from "./shared";
 
 const SETTINGS_PATH = "/dashboard/settings";
-const WHATSAPP_SETTINGS_PATH = "/dashboard/whatsapp";
 const DASHBOARD_PATH = "/dashboard";
 const MANAGEMENT_APPOINTMENTS_PATH = "/dashboard/gestao/agendamentos";
 const OPERATIONS_PATH = "/dashboard/operations";
 const NOTIFICATIONS_PATH = "/dashboard/notifications";
-const CLIENT_APP_CAMPAIGN_SLOT_COUNT = 3;
+const CLIENT_APP_CAMPAIGN_FIELD_PATTERN =
+  /^clientAppCampaign(?:Id|IsActive|Priority|StartsAt|EndsAt|Audience|Eyebrow|Label|Title|Message|CtaLabel|CtaTarget)_(\d+)$/;
+
+async function syncOperationsAutopilotRuntimeConfig() {
+  const configuredOrigin = getConfiguredAppOrigin();
+  const cronSecret = getCronSecret();
+
+  if (!configuredOrigin || !cronSecret) {
+    return;
+  }
+
+  try {
+    const admin = createAdminClient() as any;
+    const autopilotJobUrl = new URL(
+      "/api/internal/operations/autopilot",
+      `${configuredOrigin}/`,
+    ).toString();
+
+    const result = await admin
+      .schema("private")
+      .from("runtime_config")
+      .upsert(
+        [
+          {
+            key: "operations_autopilot_job_url",
+            value: autopilotJobUrl,
+          },
+          {
+            key: "operations_autopilot_job_secret",
+            value: cronSecret,
+          },
+        ],
+        {
+          onConflict: "key",
+        },
+      );
+
+    if (result.error) {
+      console.error("[settings] operations_autopilot_runtime_sync_failed", {
+        error: result.error.message,
+      });
+    }
+  } catch (error) {
+    console.error("[settings] operations_autopilot_runtime_sync_failed", {
+      error:
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "operations_autopilot_runtime_sync_failed",
+    });
+  }
+}
 
 function readUploadedFile(formData: FormData, field: string) {
   const entry = formData.get(field);
@@ -64,19 +115,9 @@ function normalizeOptionalTextInput(value: FormDataEntryValue | null) {
 }
 
 function normalizeOptionalDomainInput(value: FormDataEntryValue | null) {
-  const normalized = normalizeOptionalTextInput(value);
-  if (!normalized) {
-    return null;
-  }
-
-  const sanitized = normalized
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .replace(/:\d+$/, "")
-    .replace(/^www\./, "");
-
-  return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(sanitized) ? sanitized : null;
+  return normalizeClientAppCustomDomainInput(
+    normalizeOptionalTextInput(value),
+  );
 }
 
 function normalizeOptionalHexColorInput(value: FormDataEntryValue | null) {
@@ -123,15 +164,6 @@ function normalizeOptionalDateTimeInput(value: FormDataEntryValue | null) {
   return Number.isNaN(Date.parse(normalized)) ? null : normalized;
 }
 
-function buildManualWhatsAppTitle(customerName: string | null) {
-  const normalized = customerName?.trim();
-  if (!normalized) {
-    return "Mensagem manual de WhatsApp";
-  }
-
-  return truncateNotificationText(`Mensagem manual para ${normalized}`, 80);
-}
-
 function normalizeOptionalNumberInput(value: FormDataEntryValue | null) {
   const normalized = normalizeOptionalTextInput(value);
   if (!normalized) {
@@ -167,7 +199,15 @@ function buildClientAppCampaignDrafts(formData: FormData) {
     ctaTarget: string;
   }> = [];
 
-  for (let slot = 1; slot <= CLIENT_APP_CAMPAIGN_SLOT_COUNT; slot += 1) {
+  const slots = [...new Set(
+    Array.from(formData.keys())
+      .map((key) => CLIENT_APP_CAMPAIGN_FIELD_PATTERN.exec(key)?.[1] ?? null)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => Number.parseInt(value, 10))
+      .filter((value) => Number.isInteger(value) && value > 0),
+  )].sort((left, right) => left - right);
+
+  for (const slot of slots) {
     const title = normalizeOptionalTextInput(
       formData.get(`clientAppCampaignTitle_${slot}`),
     );
@@ -218,6 +258,18 @@ function buildClientAppCampaignDrafts(formData: FormData) {
   }
 
   return campaigns;
+}
+
+function hasInvalidClientAppCampaignWindow(
+  campaigns: ReadonlyArray<{ startsAt: string | null; endsAt: string | null }>,
+) {
+  return campaigns.some((campaign) => {
+    if (!campaign.startsAt || !campaign.endsAt) {
+      return false;
+    }
+
+    return Date.parse(campaign.endsAt) < Date.parse(campaign.startsAt);
+  });
 }
 
 function buildBookingPolicyVersionTag(now = new Date()) {
@@ -633,18 +685,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   const rawBrandColor = String(formData.get("brandColor") ?? "")
     .trim()
     .toUpperCase();
-  const rawWhatsapp = String(formData.get("whatsappPhone") ?? "").trim();
-  const rawDispatchPhoneNumberId = formData.has("whatsappMetaPhoneNumberId")
-    ? String(formData.get("whatsappMetaPhoneNumberId") ?? "").trim()
-    : String(salon.whatsapp_meta_phone_number_id ?? "").trim();
-  const rawDispatchBusinessAccountId = formData.has(
-    "whatsappMetaBusinessAccountId",
-  )
-    ? String(formData.get("whatsappMetaBusinessAccountId") ?? "").trim()
-    : String(salon.whatsapp_meta_business_account_id ?? "").trim();
-  const whatsappDispatchEnabled = formData.has("whatsappDispatchEnabled")
-    ? formData.get("whatsappDispatchEnabled") === "on"
-    : (salon.whatsapp_dispatch_enabled ?? false);
   const businessSegment = normalizeSalonBusinessSegment(
     String(formData.get("businessSegment") ?? ""),
   );
@@ -987,6 +1027,15 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       "Não foi possível processar a capa institucional do perfil do salão.",
   });
   const centralCampaigns = buildClientAppCampaignDrafts(formData);
+  if (hasInvalidClientAppCampaignWindow(centralCampaigns)) {
+    redirect(
+      buildRedirectNotice(
+        SETTINGS_PATH,
+        "A data final das campanhas do app precisa ser igual ou posterior à inicial.",
+        "error",
+      ),
+    );
+  }
   const appDisplayName = normalizeOptionalTextInput(
     formData.get("clientAppAppDisplayName"),
   );
@@ -995,12 +1044,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   ).trim();
   const customDomain = normalizeOptionalDomainInput(
     formData.get("clientAppCustomDomain"),
-  );
-  const instagramUrlInput = normalizeOptionalTextInput(
-    formData.get("clientAppInstagramUrl"),
-  );
-  const instagramUrl = normalizeOptionalUrlInput(
-    formData.get("clientAppInstagramUrl"),
   );
   const mapUrlInput = normalizeOptionalTextInput(
     formData.get("clientAppMapUrl"),
@@ -1048,11 +1091,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   }
 
   for (const [input, value, message] of [
-    [
-      instagramUrlInput,
-      instagramUrl,
-      "Use uma URL válida para o Instagram do salão com http ou https.",
-    ] as const,
     [
       mapUrlInput,
       mapUrl,
@@ -1158,7 +1196,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     profileCoverImageFocusX,
     profileCoverImageFocusY,
     profileCoverImageZoom,
-    instagramUrl,
     addressLabel: normalizeOptionalTextInput(
       formData.get("clientAppAddressLabel"),
     ),
@@ -1249,53 +1286,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
   const brandColor = /^#[0-9A-F]{6}$/.test(rawBrandColor)
     ? rawBrandColor
     : "#C56B43";
-  const whatsappDigits = rawWhatsapp.replace(/\D/g, "");
-  const dispatchPhoneNumberId = rawDispatchPhoneNumberId.replace(/\D/g, "");
-  const dispatchBusinessAccountId = rawDispatchBusinessAccountId.replace(
-    /\D/g,
-    "",
-  );
-
-  if (
-    rawWhatsapp &&
-    (whatsappDigits.length < 10 || whatsappDigits.length > 15)
-  ) {
-    redirect(
-      buildRedirectNotice(
-        SETTINGS_PATH,
-        "Informe um WhatsApp válido com DDD e código do país, se necessário.",
-        "error",
-      ),
-    );
-  }
-
-  if (
-    rawDispatchPhoneNumberId &&
-    (dispatchPhoneNumberId.length < 8 || dispatchPhoneNumberId.length > 32)
-  ) {
-    redirect(
-      buildRedirectNotice(
-        SETTINGS_PATH,
-        "Informe um Phone Number ID válido da Meta para o canal técnico do WhatsApp.",
-        "error",
-      ),
-    );
-  }
-
-  if (
-    rawDispatchBusinessAccountId &&
-    (dispatchBusinessAccountId.length < 8 ||
-      dispatchBusinessAccountId.length > 32)
-  ) {
-    redirect(
-      buildRedirectNotice(
-        SETTINGS_PATH,
-        "Informe um WhatsApp Business Account ID válido da Meta.",
-        "error",
-      ),
-    );
-  }
-
   let logoPath = shouldRemoveLogo ? null : (salon.logo_path ?? null);
 
   if (shouldRemoveLogo && salon.logo_path && !logoFile) {
@@ -1430,7 +1420,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     stringifyComparison(clientAppConfig.centralCampaigns);
 
   const currentInformationSnapshot = {
-    instagramUrl: currentClientAppConfig.instagramUrl,
     addressLabel: currentClientAppConfig.addressLabel,
     mapUrl: currentClientAppConfig.mapUrl,
     supportUrl: currentClientAppConfig.supportUrl,
@@ -1442,7 +1431,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     ratingCount: currentClientAppConfig.ratingCount,
   };
   const nextInformationSnapshot = {
-    instagramUrl: clientAppConfig.instagramUrl,
     addressLabel: clientAppConfig.addressLabel,
     mapUrl: clientAppConfig.mapUrl,
     supportUrl: clientAppConfig.supportUrl,
@@ -1472,10 +1460,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       brand_color: brandColor,
       business_segment: businessSegment,
       client_app_config: serializeSalonClientAppConfig(clientAppConfig),
-      whatsapp_dispatch_enabled: whatsappDispatchEnabled,
-      whatsapp_meta_business_account_id: dispatchBusinessAccountId || null,
-      whatsapp_meta_phone_number_id: dispatchPhoneNumberId || null,
-      whatsapp_phone: whatsappDigits || null,
       logo_path: logoPath,
     })
     .eq("id", salon.id);
@@ -1504,6 +1488,7 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
     });
   }
 
+  await syncOperationsAutopilotRuntimeConfig();
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
   revalidatePath("/dashboard/client-app");
@@ -1513,247 +1498,6 @@ export async function updateSalonBrandingActionImpl(formData: FormData) {
       SETTINGS_PATH,
       "Identidade do salão atualizada com sucesso.",
       "success",
-    ),
-  );
-}
-
-export async function updateSalonWhatsAppSettingsActionImpl(
-  formData: FormData,
-) {
-  const { salon } = await requireOwnerSalon();
-  const supabase = createClient();
-  const rawWhatsapp = String(formData.get("whatsappPhone") ?? "").trim();
-  const hasDispatchPhoneNumberIdInput = formData.has(
-    "whatsappMetaPhoneNumberId",
-  );
-  const hasDispatchBusinessAccountIdInput = formData.has(
-    "whatsappMetaBusinessAccountId",
-  );
-  const rawDispatchPhoneNumberId = hasDispatchPhoneNumberIdInput
-    ? String(formData.get("whatsappMetaPhoneNumberId") ?? "").trim()
-    : null;
-  const rawDispatchBusinessAccountId = hasDispatchBusinessAccountIdInput
-    ? String(formData.get("whatsappMetaBusinessAccountId") ?? "").trim()
-    : null;
-  const whatsappDispatchEnabled =
-    formData.get("whatsappDispatchEnabled") === "on";
-  const whatsappDigits = rawWhatsapp.replace(/\D/g, "");
-  const dispatchPhoneNumberId = rawDispatchPhoneNumberId?.replace(/\D/g, "") ?? "";
-  const dispatchBusinessAccountId =
-    rawDispatchBusinessAccountId?.replace(/\D/g, "") ?? "";
-
-  if (
-    rawWhatsapp &&
-    (whatsappDigits.length < 10 || whatsappDigits.length > 15)
-  ) {
-    redirect(
-      buildRedirectNotice(
-        WHATSAPP_SETTINGS_PATH,
-        "Informe um WhatsApp válido com DDD e código do país, se necessário.",
-        "error",
-      ),
-    );
-  }
-
-  if (
-    rawDispatchPhoneNumberId &&
-    (dispatchPhoneNumberId.length < 8 || dispatchPhoneNumberId.length > 32)
-  ) {
-    redirect(
-      buildRedirectNotice(
-        WHATSAPP_SETTINGS_PATH,
-        "Informe um Phone Number ID válido da Meta para o canal técnico do WhatsApp.",
-        "error",
-      ),
-    );
-  }
-
-  if (
-    rawDispatchBusinessAccountId &&
-    (dispatchBusinessAccountId.length < 8 ||
-      dispatchBusinessAccountId.length > 32)
-  ) {
-    redirect(
-      buildRedirectNotice(
-        WHATSAPP_SETTINGS_PATH,
-        "Informe um WhatsApp Business Account ID válido da Meta.",
-        "error",
-      ),
-    );
-  }
-
-  const { error } = await supabase
-    .from("salons")
-    .update({
-      whatsapp_dispatch_enabled: whatsappDispatchEnabled,
-      whatsapp_meta_business_account_id:
-        hasDispatchBusinessAccountIdInput
-          ? dispatchBusinessAccountId || null
-          : salon.whatsapp_meta_business_account_id,
-      whatsapp_meta_phone_number_id: hasDispatchPhoneNumberIdInput
-        ? dispatchPhoneNumberId || null
-        : salon.whatsapp_meta_phone_number_id,
-      whatsapp_phone: whatsappDigits || null,
-    })
-    .eq("id", salon.id);
-
-  if (error) {
-    redirect(
-      buildRedirectNotice(
-        WHATSAPP_SETTINGS_PATH,
-        "Não foi possível atualizar o WhatsApp do salão.",
-        "error",
-      ),
-    );
-  }
-
-  revalidatePath(DASHBOARD_PATH);
-  revalidatePath(SETTINGS_PATH);
-  revalidatePath(WHATSAPP_SETTINGS_PATH);
-  revalidatePath("/dashboard/client-app");
-  revalidatePath(MANAGEMENT_APPOINTMENTS_PATH);
-  revalidatePath(OPERATIONS_PATH);
-  revalidatePath(`/s/${salon.join_code}`);
-  redirect(
-    buildRedirectNotice(
-      WHATSAPP_SETTINGS_PATH,
-      "WhatsApp do salão atualizado com sucesso.",
-      "success",
-    ),
-  );
-}
-
-export async function sendSalonManualWhatsAppActionImpl(formData: FormData) {
-  const { salon } = await requireOwnerSalon();
-  const supabase = createClient() as any;
-  const returnPath =
-    String(formData.get("returnPath") ?? WHATSAPP_SETTINGS_PATH).trim() ||
-    WHATSAPP_SETTINGS_PATH;
-  const customerId = String(formData.get("customerId") ?? "").trim();
-  const rawCustomerName = String(formData.get("customerName") ?? "").trim();
-  const rawCustomerPhone = String(formData.get("customerPhone") ?? "").trim();
-  const rawMessage = String(formData.get("message") ?? "").trim();
-
-  if (!rawMessage) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "Escreva a mensagem antes de enviar pelo WhatsApp.",
-        "error",
-      ),
-    );
-  }
-
-  if (rawMessage.length > 1200) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "A mensagem manual pode ter no máximo 1200 caracteres.",
-        "error",
-      ),
-    );
-  }
-
-  let resolvedCustomerId: string | null = customerId || null;
-  let resolvedCustomerName = rawCustomerName || null;
-  let resolvedCustomerPhone = sanitizePhone(rawCustomerPhone);
-
-  if (customerId) {
-    const { data: customer } = await supabase
-      .from("customers")
-      .select("id, name, phone, whatsapp_phone")
-      .eq("salon_id", salon.id)
-      .eq("id", customerId)
-      .maybeSingle();
-
-    if (!customer?.id) {
-      redirect(
-        buildRedirectNotice(
-          returnPath,
-          "Cliente não encontrado para responder por WhatsApp.",
-          "error",
-        ),
-      );
-    }
-
-    resolvedCustomerId = customer.id;
-    resolvedCustomerName = customer.name?.trim() || resolvedCustomerName;
-    resolvedCustomerPhone =
-      resolvedCustomerPhone ??
-      sanitizePhone(customer.whatsapp_phone ?? customer.phone ?? null);
-  }
-
-  if (!resolvedCustomerPhone) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "Esse contato não tem WhatsApp válido para envio manual.",
-        "error",
-      ),
-    );
-  }
-
-  const sentAt = new Date().toISOString();
-  const sendResult = await sendSalonWhatsAppTextMessage(
-    salon.id,
-    resolvedCustomerPhone,
-    rawMessage,
-  );
-
-  const notificationRecord = {
-    audience: "single_customer",
-    body: rawMessage,
-    customer_id: resolvedCustomerId,
-    notification_type: "manual_whatsapp_message",
-    payload: {
-      channel: "whatsapp",
-      customerName: resolvedCustomerName,
-      customerPhone: resolvedCustomerPhone,
-      source: "dashboard_whatsapp",
-      type: "manual_whatsapp_message",
-    },
-    salon_id: salon.id,
-    title: buildManualWhatsAppTitle(resolvedCustomerName),
-    whatsapp_delivery_status: sendResult.ok ? "sent" : "failed",
-    whatsapp_error: sendResult.ok
-      ? null
-      : sendResult.reason === "missing_config"
-        ? "missing_config"
-        : (sendResult.detail ?? "request_failed"),
-    whatsapp_message_id: sendResult.ok ? sendResult.id : null,
-    whatsapp_sent_at: sendResult.ok ? sentAt : null,
-    whatsapp_status_at: sentAt,
-  };
-
-  const { error } = await supabase
-    .from("salon_customer_notifications")
-    .insert(notificationRecord);
-
-  if (error) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "A mensagem foi processada, mas o histórico do canal não pôde ser salvo no painel.",
-        "error",
-      ),
-    );
-  }
-
-  revalidatePath(DASHBOARD_PATH);
-  revalidatePath(WHATSAPP_SETTINGS_PATH);
-  revalidatePath(NOTIFICATIONS_PATH);
-  revalidatePath(MANAGEMENT_APPOINTMENTS_PATH);
-  revalidatePath(OPERATIONS_PATH);
-
-  redirect(
-    buildRedirectNotice(
-      returnPath,
-      sendResult.ok
-        ? "Mensagem manual enviada pelo WhatsApp."
-        : sendResult.reason === "missing_config"
-          ? "O canal técnico do WhatsApp ainda não está pronto para enviar mensagens manuais."
-          : "O WhatsApp não aceitou esse envio agora. Revise o canal e tente novamente.",
-      sendResult.ok ? "success" : "error",
     ),
   );
 }
@@ -1870,6 +1614,7 @@ export async function updateSalonScheduleActionImpl(formData: FormData) {
     );
   }
 
+  await syncOperationsAutopilotRuntimeConfig();
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
   redirect(
@@ -1884,8 +1629,16 @@ export async function updateSalonScheduleActionImpl(formData: FormData) {
 export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  const currentClientAppConfig = normalizeSalonClientAppConfig(
+    salon.client_app_config,
+  );
 
   const bookingPolicyEnabled = formData.get("bookingPolicyEnabled") === "on";
+  const autoPilotEnabled = formData.has("clientAppAutoPilotEnabled")
+    ? formData.get("clientAppAutoPilotEnabled") === "on"
+    : currentClientAppConfig.autoPilotEnabled;
+  const bookingPolicyAutoConfirmNewAppointments =
+    formData.get("bookingPolicyAutoConfirmNewAppointments") === "on";
   const bookingPolicyRequiresDeposit =
     formData.get("bookingPolicyRequiresDeposit") === "on";
   const bookingPolicyTitle =
@@ -1981,7 +1734,7 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         SETTINGS_PATH,
-        "Defina a confirmacao entre 5 e 180 minutos antes do horario.",
+        "Defina a confirmação entre 5 e 180 minutos antes do horário.",
         "error",
       ),
     );
@@ -1994,7 +1747,7 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         SETTINGS_PATH,
-        "Defina o auto cancelamento entre 0 e 60 minutos antes do horario.",
+        "Defina o cancelamento automático entre 0 e 60 minutos antes do horário.",
         "error",
       ),
     );
@@ -2007,7 +1760,7 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         SETTINGS_PATH,
-        "Defina o lembrete de sinal entre 0 e 72 horas antes do horario.",
+        "Defina o lembrete de sinal entre 0 e 72 horas antes do horário.",
         "error",
       ),
     );
@@ -2086,7 +1839,7 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SETTINGS_PATH,
-          "Use uma URL valida de checkout externo com http ou https.",
+        "Use uma URL válida de checkout externo com http ou https.",
           "error",
         ),
       );
@@ -2117,6 +1870,8 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
 
   const hasPolicyChanged =
     (salon.booking_policy_enabled ?? false) !== bookingPolicyEnabled ||
+    (salon.booking_policy_auto_confirm_new_appointments ?? false) !==
+      bookingPolicyAutoConfirmNewAppointments ||
     (salon.booking_policy_title ?? "Reserva protegida") !==
       bookingPolicyTitle ||
     (salon.booking_policy_summary ?? null) !== bookingPolicySummary ||
@@ -2157,11 +1912,18 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
   const bookingPolicyVersion = hasPolicyChanged
     ? buildBookingPolicyVersionTag()
     : (salon.booking_policy_version ?? "2026-04-booking-policy-v1");
+  const clientAppConfig = serializeSalonClientAppConfig({
+    ...currentClientAppConfig,
+    autoPilotEnabled,
+  });
 
   const { error } = await supabase
     .from("salons")
     .update({
+      client_app_config: clientAppConfig,
       booking_policy_enabled: bookingPolicyEnabled,
+      booking_policy_auto_confirm_new_appointments:
+        bookingPolicyAutoConfirmNewAppointments,
       booking_policy_title: bookingPolicyTitle,
       booking_policy_summary: bookingPolicySummary,
       booking_policy_cancellation_window_hours:
@@ -2195,18 +1957,19 @@ export async function updateSalonBookingPolicyActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         SETTINGS_PATH,
-        "Nao foi possivel salvar a politica de reserva protegida.",
+        "Não foi possível salvar a política de reserva protegida.",
         "error",
       ),
     );
   }
 
+  await syncOperationsAutopilotRuntimeConfig();
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(SETTINGS_PATH);
   redirect(
     buildRedirectNotice(
       SETTINGS_PATH,
-      "Politica de reserva protegida atualizada com sucesso.",
+      "Política de reserva protegida atualizada com sucesso.",
       "success",
     ),
   );
@@ -2226,7 +1989,7 @@ export async function updateSalonSecurityPolicyActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         SETTINGS_PATH,
-        "Informe pelo menos um pais com codigo ISO-3166 alpha-2, como BR ou US.",
+        "Informe pelo menos um país com código ISO-3166 alpha-2, como BR ou US.",
         "error",
       ),
     );
@@ -2242,7 +2005,7 @@ export async function updateSalonSecurityPolicyActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SETTINGS_PATH,
-          "Nao foi possivel validar o autenticador antes de ligar o MFA.",
+          "Não foi possível validar o autenticador antes de ligar o MFA.",
           "error",
         ),
       );
@@ -2280,7 +2043,7 @@ export async function updateSalonSecurityPolicyActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         SETTINGS_PATH,
-        "Nao foi possivel salvar a politica de seguranca do painel.",
+        "Não foi possível salvar a política de segurança do painel.",
         "error",
       ),
     );
@@ -2291,7 +2054,7 @@ export async function updateSalonSecurityPolicyActionImpl(formData: FormData) {
   redirect(
     buildRedirectNotice(
       SETTINGS_PATH,
-      "Politica de seguranca do painel atualizada com sucesso.",
+      "Política de segurança do painel atualizada com sucesso.",
       "success",
     ),
   );

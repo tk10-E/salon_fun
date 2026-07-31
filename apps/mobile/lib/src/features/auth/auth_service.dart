@@ -1,11 +1,14 @@
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/app_environment.dart';
+import '../../core/network/network_guard.dart';
+import '../../core/security/password_policy.dart';
 import '../../core/utils/formatters.dart';
 import '../shared/app_models.dart';
 
@@ -20,12 +23,28 @@ class AuthService {
   final http.Client client;
   final SupabaseClient? supabaseClient;
   Future<void>? _googleInitFuture;
+  static const _trustedFederatedProviders = <String>{    'google.com',
+    'apple.com',
+  };
 
   bool get isConfigured =>
       environment.hasFirebase &&
       environment.hasSupabase &&
       environment.resolvedBridgeUrl.isNotEmpty &&
       supabaseClient != null;
+  bool get canUseGoogleSignIn => isConfigured;
+
+  bool get hasPersistedAuthenticatedSession {
+    if (supabaseClient?.auth.currentSession != null) {
+      return true;
+    }
+
+    if (!environment.hasFirebase) {
+      return false;
+    }
+
+    return firebase_auth.FirebaseAuth.instance.currentUser != null;
+  }
 
   Future<void> signIn({
     required String joinCode,
@@ -82,6 +101,11 @@ class AuthService {
     required String customerName,
   }) async {
     _assertConfigured();
+    final passwordError = validatePasswordStrength(password);
+    if (passwordError != null) {
+      throw Exception(passwordError);
+    }
+
     final auth = firebase_auth.FirebaseAuth.instance;
     final credentials = await auth.createUserWithEmailAndPassword(
       email: email.trim().toLowerCase(),
@@ -103,51 +127,56 @@ class AuthService {
     return 'Conta criada. Confirme o e-mail e volte para entrar.';
   }
 
-  Future<void> signInWithGoogle({required String joinCode}) async {
+  Future<void> signInWithGoogle({
+    required String joinCode,
+    String customerName = '',
+  }) async {
     _assertConfigured();
-    await _ensureGoogleInitialized();
+    try {
+      await _ensureGoogleInitialized();
 
-    final googleUser = await GoogleSignIn.instance.authenticate().catchError((
-      error,
-    ) {
-      final detail = '$error'.toLowerCase();
-      if (detail.contains('cancel') || detail.contains('canceled')) {
-        throw Exception('Login com Google cancelado.');
+      final googleUser = await GoogleSignIn.instance.authenticate();
+      final googleAuth = googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null || idToken.trim().isEmpty) {
+        throw Exception(_googleMissingTokenMessage());
       }
-      throw Exception('Não foi possível iniciar o login com Google.');
-    });
 
-    final googleAuth = googleUser.authentication;
-    final idToken = googleAuth.idToken;
-    if (idToken == null || idToken.trim().isEmpty) {
-      throw Exception('O Google não retornou um token válido.');
-    }
-
-    final credential = firebase_auth.GoogleAuthProvider.credential(
-      idToken: idToken,
-    );
-
-    final credentials = await firebase_auth.FirebaseAuth.instance
-        .signInWithCredential(credential);
-    final firebaseUser = credentials.user;
-    if (firebaseUser == null) {
-      throw Exception('O Google não retornou uma conta válida.');
-    }
-
-    await firebaseUser.reload();
-    final refreshedUser =
-        firebase_auth.FirebaseAuth.instance.currentUser ?? firebaseUser;
-    await _signInToSupabase(refreshedUser);
-
-    final safeJoinCode = normalizeJoinCode(joinCode);
-    if (safeJoinCode.isNotEmpty) {
-      await supabaseClient!.rpc(
-        'join_salon',
-        params: <String, dynamic>{
-          'input_join_code': safeJoinCode,
-          'customer_name': _resolvedCustomerName(refreshedUser),
-        },
+      final credential = firebase_auth.GoogleAuthProvider.credential(
+        idToken: idToken,
       );
+
+      final credentials = await firebase_auth.FirebaseAuth.instance
+          .signInWithCredential(credential);
+      final firebaseUser = credentials.user;
+      if (firebaseUser == null) {
+        throw Exception('O Google não retornou uma conta válida.');
+      }
+
+      await firebaseUser.reload();
+      final refreshedUser =
+          firebase_auth.FirebaseAuth.instance.currentUser ?? firebaseUser;
+      await _signInToSupabase(refreshedUser);
+
+      final safeJoinCode = normalizeJoinCode(joinCode);
+      if (safeJoinCode.isNotEmpty) {
+        await supabaseClient!.rpc(
+          'join_salon',
+          params: <String, dynamic>{
+            'input_join_code': safeJoinCode,
+            'customer_name': _resolvedCustomerName(
+              refreshedUser,
+              preferredName: customerName,
+            ),
+          },
+        );
+      }
+    } on GoogleSignInException catch (error) {
+      throw Exception(_googleExceptionMessage(error));
+    } on PlatformException catch (error) {
+      throw Exception(_googlePlatformExceptionMessage(error));
+    } on firebase_auth.FirebaseAuthException catch (error) {
+      throw Exception(_socialFirebaseAuthMessage('Google', error));
     }
   }
 
@@ -176,7 +205,7 @@ class AuthService {
     await firebaseUser.reload();
     final refreshedUser =
         firebase_auth.FirebaseAuth.instance.currentUser ?? firebaseUser;
-    if (!refreshedUser.emailVerified) {
+    if (!_canMirrorFirebaseUserToSupabase(refreshedUser)) {
       return false;
     }
 
@@ -191,17 +220,25 @@ class AuthService {
   Future<void> signOut() async {
     await supabaseClient?.auth.signOut();
     if (environment.hasFirebase) {
-      await _signOutGoogleBestEffort();
-      await firebase_auth.FirebaseAuth.instance.signOut();
+      await _signOutGoogleBestEffort();      await firebase_auth.FirebaseAuth.instance.signOut();
     }
   }
 
   Future<void> _signInToSupabase(firebase_auth.User firebaseUser) async {
     final credentials = await _bridgeCredentials(firebaseUser);
-    await supabaseClient!.auth.signOut();
-    final result = await supabaseClient!.auth.signInWithPassword(
-      email: credentials.email,
-      password: credentials.password,
+    final currentSession = supabaseClient!.auth.currentSession;
+    final currentSessionEmail = currentSession?.user.email
+        ?.trim()
+        .toLowerCase();
+    if (currentSession != null &&
+        currentSessionEmail != credentials.email.trim().toLowerCase()) {
+      await supabaseClient!.auth.signOut();
+    }
+    final result = await runGuardedWrite(
+      () => supabaseClient!.auth.signInWithPassword(
+        email: credentials.email,
+        password: credentials.password,
+      ),
     );
 
     if (result.user == null || result.session == null) {
@@ -212,21 +249,45 @@ class AuthService {
   Future<_BridgeCredentials> _bridgeCredentials(
     firebase_auth.User firebaseUser,
   ) async {
-    final firebaseToken = await firebaseUser.getIdToken(true);
+    try {
+      return await _requestBridgeCredentials(firebaseUser, forceRefresh: false);
+    } catch (error) {
+      if ('$error'.contains('Confirme o e-mail') &&
+          firebaseUser.emailVerified) {
+        return await _requestBridgeCredentials(
+          firebaseUser,
+          forceRefresh: true,
+        );
+      }
+
+      rethrow;
+    }
+  }
+
+  Future<_BridgeCredentials> _requestBridgeCredentials(
+    firebase_auth.User firebaseUser, {
+    required bool forceRefresh,
+  }) async {
+    final firebaseToken = await firebaseUser.getIdToken(forceRefresh);
     if (firebaseToken == null || firebaseToken.trim().isEmpty) {
       throw Exception('O Firebase não retornou um token válido.');
     }
 
-    final response = await client.post(
-      Uri.parse(environment.resolvedBridgeUrl),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        if (environment.apiBaseUrl.isNotEmpty) 'Origin': environment.apiBaseUrl,
-      },
-      body: jsonEncode(<String, dynamic>{
-        'firebase_api_key': environment.firebaseApiKey,
-        'firebase_id_token': firebaseToken,
-      }),
+    final response = await runGuardedRead(
+      () => client.post(
+        Uri.parse(environment.resolvedBridgeUrl),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          if (environment.apiBaseUrl.isNotEmpty)
+            'Origin': environment.apiBaseUrl,
+        },
+        body: jsonEncode(<String, dynamic>{
+          'firebase_api_key': environment.firebaseApiKey,
+          'firebase_id_token': firebaseToken,
+        }),
+      ),
+      timeout: const Duration(seconds: 12),
+      retries: 1,
     );
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
@@ -251,6 +312,7 @@ class AuthService {
       case 'missing_server_secrets':
         return 'A bridge do Firebase ainda não foi configurada.';
       case 'missing_firebase_context':
+      case 'invalid_firebase_context':
         return 'A autenticação do Firebase não conseguiu validar a conta.';
       case 'origin_not_allowed':
         return 'A origem do app ainda não foi liberada na bridge.';
@@ -268,7 +330,15 @@ class AuthService {
     }
   }
 
-  String _resolvedCustomerName(firebase_auth.User firebaseUser) {
+  String _resolvedCustomerName(
+    firebase_auth.User firebaseUser, {
+    String preferredName = '',
+  }) {
+    final normalizedPreferredName = preferredName.trim();
+    if (normalizedPreferredName.isNotEmpty) {
+      return normalizedPreferredName;
+    }
+
     final displayName = firebaseUser.displayName?.trim();
     if (displayName != null && displayName.isNotEmpty) {
       return displayName;
@@ -282,8 +352,21 @@ class AuthService {
     return 'Cliente';
   }
 
+  bool _canMirrorFirebaseUserToSupabase(firebase_auth.User firebaseUser) {
+    if (firebaseUser.emailVerified) {
+      return true;
+    }
+
+    return firebaseUser.providerData.any(
+      (provider) => _trustedFederatedProviders.contains(provider.providerId),
+    );
+  }
+
   Future<void> _ensureGoogleInitialized() {
-    return _googleInitFuture ??= GoogleSignIn.instance.initialize();
+    final serverClientId = environment.googleServerClientId.trim();
+    return _googleInitFuture ??= GoogleSignIn.instance.initialize(
+      serverClientId: serverClientId.isEmpty ? null : serverClientId,
+    );
   }
 
   Future<void> _signOutGoogleBestEffort() async {
@@ -292,6 +375,84 @@ class AuthService {
       await GoogleSignIn.instance.signOut();
     } catch (_) {
       // best effort
+    }
+  }
+
+  String _googleMissingTokenMessage() {
+    if (environment.googleServerClientId.trim().isNotEmpty) {
+      return 'O Google abriu, mas não devolveu um token válido. Confira a configuração do app no Firebase.';
+    }
+
+    return 'O Google abriu, mas não devolveu um token válido. Confira o google-services.json e o GOOGLE_SERVER_CLIENT_ID do app.';
+  }
+
+  String _googleExceptionMessage(GoogleSignInException error) {
+    switch (error.code) {
+      case GoogleSignInExceptionCode.canceled:
+        return 'Login com Google cancelado. Se a tela fechou sozinha, confira os SHA-1/SHA-256 deste build no Firebase. Se o app veio da Play Store, confirme tambem o certificado de App signing em Integridade do app e baixe o google-services.json atualizado.';
+      case GoogleSignInExceptionCode.clientConfigurationError:
+        return _googleConfigurationHelpMessage();
+      default:
+        final description = error.description?.trim();
+        if (_looksLikeGoogleConfigurationError(description)) {
+          return _googleConfigurationHelpMessage();
+        }
+
+        return description?.isNotEmpty == true
+            ? description!
+            : 'Não foi possível iniciar o login com Google.';
+    }
+  }
+
+  String _googlePlatformExceptionMessage(PlatformException error) {
+    final details = <String?>[
+      error.code,
+      error.message,
+      error.details?.toString(),
+    ].whereType<String>().join(' ');
+    if (_looksLikeGoogleConfigurationError(details)) {
+      return _googleConfigurationHelpMessage();
+    }
+
+    return error.message?.trim().isNotEmpty == true
+        ? error.message!.trim()
+        : 'Não foi possível iniciar o login com Google.';
+  }
+
+  bool _looksLikeGoogleConfigurationError(String? message) {
+    final normalized = message?.toLowerCase() ?? '';
+    return normalized.contains('api exception: 10') ||
+        normalized.contains('developer_error') ||
+        normalized.contains('clientconfiguration') ||
+        normalized.contains('configuration') ||
+        normalized.contains('sha-1') ||
+        normalized.contains('sha1');
+  }
+
+  String _googleConfigurationHelpMessage() {
+    return 'Google ainda nao configurado para este build. Confira SHA-1/SHA-256 no Firebase. Se o app veio da Play Store, confirme tambem o certificado de App signing em Integridade do app, baixe o google-services.json atualizado e gere o app novamente.';
+  }
+
+  String _socialFirebaseAuthMessage(
+    String providerLabel,
+    firebase_auth.FirebaseAuthException error,
+  ) {
+    switch (error.code) {
+      case 'account-exists-with-different-credential':
+        return 'Este e-mail já existe com outro tipo de acesso. Entre pelo método original e depois vincule o $providerLabel.';
+      case 'operation-not-allowed':
+        return '$providerLabel ainda não foi liberado no Firebase Authentication.';
+      case 'invalid-credential':
+      case 'invalid-oauth-response':
+        return 'O $providerLabel retornou uma credencial inválida. Confira a configuração do provedor.';
+      case 'network-request-failed':
+        return 'Não foi possível concluir o login com $providerLabel por causa da conexão.';
+      case 'user-disabled':
+        return 'Esta conta foi desativada.';
+      default:
+        return error.message?.trim().isNotEmpty == true
+            ? error.message!.trim()
+            : 'Não foi possível entrar com $providerLabel.';
     }
   }
 }

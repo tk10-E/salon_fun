@@ -2,8 +2,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import {
+  buildLegacyManagementRedirectPath,
+  LEGACY_MANAGEMENT_ROUTES,
+  MANAGEMENT_ROUTES,
+} from "@/lib/management-navigation";
 import { createClient } from "@/lib/supabase/server";
-import { sanitizePhone, sendSalonWhatsAppTextMessage } from "@/lib/whatsapp";
 
 import {
   buildRedirectNotice,
@@ -13,9 +17,10 @@ import {
   formatAppointmentDateTimeLabel,
   queueCustomerNotification,
   revalidateCommercialPaths,
+  resolveDashboardReturnPath,
 } from "./shared";
 
-const APPOINTMENTS_PATH = "/dashboard/appointments";
+const APPOINTMENTS_PATH = MANAGEMENT_ROUTES.appointments;
 const DASHBOARD_PATH = "/dashboard";
 
 type AppointmentStatus = "pending" | "confirmed" | "cancelled" | "completed";
@@ -31,12 +36,10 @@ type AppointmentContext = {
     | {
         name: string | null;
         phone: string | null;
-        whatsapp_phone?: string | null;
       }
     | {
         name: string | null;
         phone: string | null;
-        whatsapp_phone?: string | null;
       }[]
     | null;
   date: string;
@@ -46,7 +49,6 @@ type AppointmentContext = {
   staff_members: { name: string | null } | null;
 };
 
-type AppointmentWhatsAppMode = "confirmation" | "reminder" | "reschedule";
 
 function formatAppointmentStatusError(message: string) {
   if (message.includes("appointment_not_finished")) {
@@ -78,14 +80,14 @@ function formatAppointmentStatusError(message: string) {
 
 function formatAppointmentDepositError(message: string) {
   if (message.includes("appointment_not_found")) {
-    return "Nao foi possivel localizar esse agendamento.";
+    return "Não foi possível localizar esse agendamento.";
   }
 
   if (message.includes("unauthorized")) {
-    return "Sua conta nao tem permissao para atualizar o sinal desse agendamento.";
+    return "Sua conta não tem permissão para atualizar o sinal deste agendamento.";
   }
 
-  return `Nao foi possivel atualizar o sinal. ${message}`;
+  return `Não foi possível atualizar o sinal. ${message}`;
 }
 
 function formatAppointmentMembershipError(message: string) {
@@ -146,62 +148,22 @@ function firstAppointmentRelation<T>(value: T | T[] | null | undefined) {
   return value ?? null;
 }
 
-function buildAppointmentWhatsAppBody(params: {
-  appointmentContext: AppointmentContext;
-  mode: AppointmentWhatsAppMode;
-  salonName: string;
-}) {
-  const { appointmentContext, mode, salonName } = params;
-  const customer = firstAppointmentRelation(appointmentContext.customers);
-  const serviceName =
-    appointmentContext.services?.name?.trim() || "seu atendimento";
-  const staffName = appointmentContext.staff_members?.name?.trim();
-  const appointmentLabel = formatAppointmentDateTimeLabel(
-    appointmentContext.date,
-  );
-  const customerName = customer?.name?.trim() || "cliente";
 
-  if (mode === "confirmation") {
-    return staffName
-      ? `Oi ${customerName}, seu horario de ${serviceName} no ${salonName} foi confirmado para ${appointmentLabel} com ${staffName}. Se precisar reagendar, responda esta mensagem.`
-      : `Oi ${customerName}, seu horario de ${serviceName} no ${salonName} foi confirmado para ${appointmentLabel}. Se precisar reagendar, responda esta mensagem.`;
+function resolveAppointmentsReturnPath(formData: FormData) {
+  const returnPath = resolveDashboardReturnPath(formData, APPOINTMENTS_PATH, [
+    APPOINTMENTS_PATH,
+    LEGACY_MANAGEMENT_ROUTES.appointments,
+    DASHBOARD_PATH,
+  ]);
+  const [pathname, query = ""] = returnPath.split("?", 2);
+
+  if (pathname !== LEGACY_MANAGEMENT_ROUTES.appointments) {
+    return returnPath;
   }
 
-  if (mode === "reminder") {
-    return staffName
-      ? `Lembrete do ${salonName}: ${serviceName} com ${staffName} em ${appointmentLabel}. Se precisar ajustar o horario, fale com a gente por aqui.`
-      : `Lembrete do ${salonName}: ${serviceName} em ${appointmentLabel}. Se precisar ajustar o horario, fale com a gente por aqui.`;
-  }
-
-  return staffName
-    ? `Oi ${customerName}, o ${salonName} separou novas opcoes para reagendar seu ${serviceName} com ${staffName}. Responda esta mensagem que continuamos por aqui.`
-    : `Oi ${customerName}, o ${salonName} separou novas opcoes para reagendar seu ${serviceName}. Responda esta mensagem que continuamos por aqui.`;
-}
-
-async function sendAppointmentWhatsApp(params: {
-  appointmentContext: AppointmentContext | null;
-  mode: AppointmentWhatsAppMode;
-  salonId: string;
-  salonName: string;
-}) {
-  const { appointmentContext, mode, salonId, salonName } = params;
-  const customer = firstAppointmentRelation(appointmentContext?.customers);
-  const targetPhone = sanitizePhone(
-    customer?.whatsapp_phone ?? customer?.phone ?? null,
-  );
-
-  if (!appointmentContext || !targetPhone) {
-    return { ok: false as const, reason: "missing_phone" as const };
-  }
-
-  return sendSalonWhatsAppTextMessage(
-    salonId,
-    targetPhone,
-    buildAppointmentWhatsAppBody({
-      appointmentContext,
-      mode,
-      salonName,
-    }),
+  return buildLegacyManagementRedirectPath(
+    pathname,
+    Object.fromEntries(new URLSearchParams(query)),
   );
 }
 
@@ -249,14 +211,13 @@ async function notifyCustomerAboutAppointmentStatus(params: {
       payload: {
         type: "appointment_confirmed",
         appointmentId,
+        appointmentStartsAt: appointmentContext.date,
+        ctaTarget: "appointments",
+        openInbox: true,
+        serviceName,
+        staffMemberName: staffName ?? null,
+        targetTabIndex: 1,
       },
-    });
-
-    await sendAppointmentWhatsApp({
-      appointmentContext,
-      mode: "confirmation",
-      salonId,
-      salonName,
     });
   }
 
@@ -274,14 +235,13 @@ async function notifyCustomerAboutAppointmentStatus(params: {
       payload: {
         type: "appointment_cancelled",
         appointmentId,
+        appointmentStartsAt: appointmentContext.date,
+        ctaTarget: "appointments",
+        openInbox: true,
+        serviceName,
+        staffMemberName: staffName ?? null,
+        targetTabIndex: 1,
       },
-    });
-
-    await sendAppointmentWhatsApp({
-      appointmentContext,
-      mode: "reschedule",
-      salonId,
-      salonName,
     });
   }
 
@@ -299,6 +259,12 @@ async function notifyCustomerAboutAppointmentStatus(params: {
       payload: {
         type: "appointment_completed",
         appointmentId,
+        appointmentStartsAt: appointmentContext.date,
+        ctaTarget: "appointments",
+        openInbox: true,
+        serviceName,
+        staffMemberName: staffName ?? null,
+        targetTabIndex: 1,
       },
     });
   }
@@ -438,7 +404,7 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
     if (membershipResult.error) {
       revalidatePath(DASHBOARD_PATH);
       revalidatePath(APPOINTMENTS_PATH);
-      revalidatePath("/dashboard/customers");
+      revalidatePath(MANAGEMENT_ROUTES.clients);
       revalidateCommercialPaths(
         COMMERCIAL_LOYALTY_PATH,
         COMMERCIAL_REFERRALS_PATH,
@@ -486,79 +452,6 @@ export async function updateAppointmentStatusActionImpl(formData: FormData) {
   );
 }
 
-export async function sendAppointmentWhatsAppActionImpl(formData: FormData) {
-  const appointmentId = String(formData.get("appointmentId") ?? "").trim();
-  const requestedMode = String(formData.get("mode") ?? "").trim();
-  const { salon } = await requireOwnerSalon();
-  const supabase = createClient();
-
-  if (
-    !appointmentId ||
-    !["confirmation", "reminder", "reschedule"].includes(requestedMode)
-  ) {
-    redirect(
-      buildRedirectNotice(
-        APPOINTMENTS_PATH,
-        "Ação de WhatsApp inválida para esse atendimento.",
-        "error",
-      ),
-    );
-  }
-
-  const mode = requestedMode as AppointmentWhatsAppMode;
-  const { data: appointmentContext } = await supabase
-    .from("appointments")
-    .select(
-      "id, customer_id, date, ends_at, status, customers(name, phone), services(name), staff_members(name)",
-    )
-    .eq("id", appointmentId)
-    .eq("salon_id", salon.id)
-    .maybeSingle<AppointmentContext>();
-
-  if (!appointmentContext?.id) {
-    redirect(
-      buildRedirectNotice(
-        APPOINTMENTS_PATH,
-        "Agendamento não encontrado para enviar WhatsApp.",
-        "error",
-      ),
-    );
-  }
-
-  const result = await sendAppointmentWhatsApp({
-    appointmentContext,
-    mode,
-    salonId: salon.id,
-    salonName: salon.name,
-  });
-
-  if (!result.ok) {
-    redirect(
-      buildRedirectNotice(
-        APPOINTMENTS_PATH,
-        result.reason === "missing_config"
-          ? "Configure o canal tecnico do WhatsApp deste salão antes de enviar mensagens automáticas."
-          : result.reason === "request_failed"
-            ? "O WhatsApp nao aceitou esse envio agora. Tente novamente em instantes."
-            : "Esse atendimento não tem telefone válido para WhatsApp no cadastro.",
-        "error",
-      ),
-    );
-  }
-
-  redirect(
-    buildRedirectNotice(
-      APPOINTMENTS_PATH,
-      mode === "confirmation"
-        ? "WhatsApp de confirmação enviado."
-        : mode === "reminder"
-          ? "WhatsApp de lembrete enviado."
-          : "WhatsApp de reagendamento enviado.",
-      "success",
-    ),
-  );
-}
-
 export async function consumeAppointmentMembershipActionImpl(
   formData: FormData,
 ) {
@@ -601,7 +494,7 @@ export async function consumeAppointmentMembershipActionImpl(
 
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(APPOINTMENTS_PATH);
-  revalidatePath("/dashboard/customers");
+  revalidatePath(MANAGEMENT_ROUTES.clients);
   redirect(
     buildRedirectNotice(
       APPOINTMENTS_PATH,
@@ -648,7 +541,7 @@ export async function reverseAppointmentMembershipActionImpl(
 
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(APPOINTMENTS_PATH);
-  revalidatePath("/dashboard/customers");
+  revalidatePath(MANAGEMENT_ROUTES.clients);
   redirect(
     buildRedirectNotice(
       APPOINTMENTS_PATH,
@@ -704,7 +597,7 @@ export async function updateAppointmentDepositActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         APPOINTMENTS_PATH,
-        "Esse agendamento nao possui sinal configurado.",
+        "Este agendamento não possui sinal configurado.",
         "error",
       ),
     );

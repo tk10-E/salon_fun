@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -18,20 +19,47 @@ if (googleServicesConfig.exists()) {
 
 val keyProperties = Properties()
 val keyPropertiesFile = rootProject.file("key.properties")
+val envProperties = Properties()
+val envPropertiesFile = rootProject.file("../.env.production")
 
 if (keyPropertiesFile.exists()) {
     keyPropertiesFile.inputStream().use(keyProperties::load)
 }
 
+if (envPropertiesFile.exists()) {
+    envPropertiesFile.inputStream().use(envProperties::load)
+}
+
 fun keyProperty(name: String): String? =
     keyProperties.getProperty(name)?.trim()?.takeIf { it.isNotEmpty() }
 
+fun envProperty(name: String): String? =
+    System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: envProperties.getProperty(name)?.trim()?.takeIf { it.isNotEmpty() }
+
+fun buildProperty(name: String): String? = keyProperty(name) ?: envProperty(name)
+
 val releaseStoreFile = keyProperty("storeFile")
+val releaseStorePath = releaseStoreFile?.let(rootProject::file)
 val hasReleaseSigning =
-    releaseStoreFile != null &&
+    releaseStorePath?.exists() == true &&
         keyProperty("storePassword") != null &&
         keyProperty("keyAlias") != null &&
         keyProperty("keyPassword") != null
+val allowDebugSigningForRelease =
+    providers.gradleProperty("allowDebugSigningForRelease").orNull == "true" ||
+        (System.getenv("ALLOW_DEBUG_SIGNING_FOR_RELEASE")?.trim()?.lowercase() == "true")
+val releaseSigningHelp =
+    "Configure apps/mobile/android/key.properties para publicar ou use " +
+        "--android-project-arg=allowDebugSigningForRelease=true apenas para smoke test local."
+val releaseSigningDetails =
+    when {
+        releaseStoreFile == null -> releaseSigningHelp
+        releaseStorePath == null || !releaseStorePath.exists() ->
+            "A keystore configurada nao foi encontrada em '${releaseStorePath?.path}'. " +
+                "Revise apps/mobile/android/key.properties. $releaseSigningHelp"
+        else -> releaseSigningHelp
+    }
 
 android {
     namespace = "com.salonfun.salon_client"
@@ -50,7 +78,7 @@ android {
 
     defaultConfig {
         applicationId = "com.salonfun.salon_client"
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(flutter.minSdkVersion, 21)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -59,7 +87,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = rootProject.file(releaseStoreFile!!)
+                storeFile = releaseStorePath
                 storePassword = keyProperty("storePassword")
                 keyAlias = keyProperty("keyAlias")
                 keyPassword = keyProperty("keyPassword")
@@ -69,16 +97,22 @@ android {
 
     buildTypes {
         release {
-            signingConfig =
-                if (hasReleaseSigning) {
-                    signingConfigs.getByName("release")
-                } else {
-                    logger.lifecycle(
-                        "key.properties not found or incomplete in android/. " +
-                            "Release builds will use the debug signing key until a production keystore is configured.",
-                    )
-                    signingConfigs.getByName("debug")
+            when {
+                hasReleaseSigning -> {
+                    signingConfig = signingConfigs.getByName("release")
                 }
+                allowDebugSigningForRelease -> {
+                    logger.lifecycle(
+                        "Release build usando assinatura debug por override local. $releaseSigningDetails",
+                    )
+                    signingConfig = signingConfigs.getByName("debug")
+                }
+                else -> {
+                    throw GradleException(
+                        "Release signing nao configurado. $releaseSigningDetails",
+                    )
+                }
+            }
         }
     }
 }

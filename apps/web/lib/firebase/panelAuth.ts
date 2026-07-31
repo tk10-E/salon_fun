@@ -5,12 +5,13 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
   type User,
 } from "firebase/auth";
 
-import { getFirebasePanelAuth } from "@/lib/firebase/client";
+import { getFirebasePanelAuth, getReadyFirebasePanelAuth } from "@/lib/firebase/client";
 import { getRuntimeFirebaseWebConfig } from "@/lib/firebase/runtimeConfig";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -83,11 +84,23 @@ function getGoogleAccountConflictMessage(error: unknown) {
   return null;
 }
 
+function getFirebaseErrorCode(error: unknown) {
+  return typeof error === "object" && error != null && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+}
+
+function shouldFallbackGooglePopupToRedirect(error: unknown) {
+  const code = getFirebaseErrorCode(error);
+
+  return (
+    code === "auth/popup-blocked" ||
+    code === "auth/operation-not-supported-in-this-environment"
+  );
+}
+
 function formatFirebaseError(error: unknown) {
-  const errorCode =
-    typeof error === "object" && error != null && "code" in error
-      ? String((error as { code?: unknown }).code ?? "")
-      : "";
+  const errorCode = getFirebaseErrorCode(error);
   const message =
     typeof error === "object" && error != null && "message" in error
       ? String((error as { message?: unknown }).message ?? "").trim()
@@ -114,7 +127,7 @@ function formatFirebaseError(error: unknown) {
     case "auth/invalid-email":
       return "E-mail ou senha inválidos.";
     case "auth/email-already-in-use":
-      return "Não foi possível criar a conta agora.";
+      return "Este e-mail já está cadastrado. Entre no painel ou use Recuperar senha.";
     case "auth/weak-password":
       return "Use uma senha mais forte para criar a conta.";
     case "auth/too-many-requests":
@@ -137,6 +150,60 @@ function formatFirebaseError(error: unknown) {
       return message.length > 0
         ? message
         : "Não foi possível autenticar com o Firebase.";
+  }
+}
+
+async function buildExistingFirebaseAccountSignUpError(args: {
+  auth: Awaited<ReturnType<typeof getReadyFirebasePanelAuth>>;
+  email: string;
+  password: string;
+}): Promise<never> {
+  const normalizedEmail = normalizeEmailAddress(args.email);
+  const existingAccountMessage =
+    "Este e-mail já está cadastrado. Entre no painel ou use Recuperar senha.";
+
+  try {
+    const credentials = await withTimeout(
+      signInWithEmailAndPassword(args.auth, normalizedEmail, args.password),
+      AUTH_NETWORK_TIMEOUT_MS,
+      "O Firebase demorou demais para verificar a conta existente.",
+    );
+    let verificationEmailSent = false;
+
+    if (!credentials.user.emailVerified) {
+      try {
+        await sendEmailVerification(credentials.user);
+        verificationEmailSent = true;
+      } catch {
+        // best effort
+      }
+
+      await signOut(args.auth).catch(() => undefined);
+      throw new Error(
+        verificationEmailSent
+          ? `Esta conta já foi criada para ${normalizedEmail}. Reenviamos a confirmação por e-mail. Confirme o e-mail antes de entrar no painel.`
+          : `Esta conta já foi criada para ${normalizedEmail}. Confirme o e-mail antes de entrar no painel.`,
+      );
+    }
+
+    await signOut(args.auth).catch(() => undefined);
+    throw new Error(existingAccountMessage);
+  } catch (error) {
+    await signOut(args.auth).catch(() => undefined);
+    const errorCode = getFirebaseErrorCode(error);
+
+    if (!errorCode && error instanceof Error && error.message.trim().length > 0) {
+      throw error;
+    }
+
+    if (
+      errorCode === "auth/network-request-failed" ||
+      errorCode === "auth/too-many-requests"
+    ) {
+      throw new Error(formatFirebaseError(error));
+    }
+
+    throw new Error(existingAccountMessage);
   }
 }
 
@@ -311,6 +378,10 @@ async function ensureEmailVerified(
   firebaseUser: User,
   resendIfNeeded: boolean,
 ) {
+  if (firebaseUser.emailVerified) {
+    return firebaseUser;
+  }
+
   await withTimeout(
     firebaseUser.reload(),
     AUTH_NETWORK_TIMEOUT_MS,
@@ -339,7 +410,7 @@ export async function signInWithFirebasePassword(input: {
   email: string;
   password: string;
 }): Promise<PanelSessionSnapshot> {
-  const auth = getFirebasePanelAuth();
+  const auth = await getReadyFirebasePanelAuth();
 
   try {
     const credentials = await withTimeout(
@@ -372,7 +443,7 @@ export async function signUpWithFirebasePassword(input: {
     throw new Error(passwordError);
   }
 
-  const auth = getFirebasePanelAuth();
+  const auth = await getReadyFirebasePanelAuth();
 
   try {
     const credentials = await withTimeout(
@@ -392,12 +463,20 @@ export async function signUpWithFirebasePassword(input: {
       requiresEmailConfirmation: true,
     };
   } catch (error) {
+    if (getFirebaseErrorCode(error) === "auth/email-already-in-use") {
+      return await buildExistingFirebaseAccountSignUpError({
+        auth,
+        email: input.email,
+        password: input.password,
+      });
+    }
+
     throw new Error(formatFirebaseError(error));
   }
 }
 
 export async function sendFirebasePasswordResetEmail(email: string) {
-  const auth = getFirebasePanelAuth();
+  const auth = await getReadyFirebasePanelAuth();
 
   try {
     await withTimeout(
@@ -417,7 +496,7 @@ export async function restorePanelSessionFromFirebaseIfNeeded(): Promise<
     return null;
   }
 
-  const auth = getFirebasePanelAuth();
+  const auth = await getReadyFirebasePanelAuth();
 
   if ("authStateReady" in auth && typeof auth.authStateReady === "function") {
     await withTimeout(
@@ -436,16 +515,43 @@ export async function restorePanelSessionFromFirebaseIfNeeded(): Promise<
   return await signInToSupabaseWithFirebaseIdentity(verifiedUser);
 }
 
-export async function signInWithFirebaseGoogle() {
-  const auth = getFirebasePanelAuth();
+export async function signInWithFirebaseGoogle(): Promise<
+  PanelSessionSnapshot | null
+> {
+  const auth = await getReadyFirebasePanelAuth();
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({
     prompt: "select_account",
   });
 
   try {
-    await signInWithRedirect(auth, provider);
+    const credentials = await withTimeout(
+      signInWithPopup(auth, provider),
+      AUTH_NETWORK_TIMEOUT_MS,
+      "O Firebase demorou demais para concluir o login com Google.",
+    );
+
+    if (credentials?.user == null) {
+      return null;
+    }
+
+    return await signInToSupabaseWithFirebaseIdentity(credentials.user);
   } catch (error) {
+    if (shouldFallbackGooglePopupToRedirect(error)) {
+      try {
+        await signInWithRedirect(auth, provider);
+        return null;
+      } catch (redirectError) {
+        const accountConflictMessage =
+          getGoogleAccountConflictMessage(redirectError);
+        if (accountConflictMessage) {
+          throw new Error(accountConflictMessage);
+        }
+
+        throw new Error(formatFirebaseError(redirectError));
+      }
+    }
+
     const accountConflictMessage = getGoogleAccountConflictMessage(error);
     if (accountConflictMessage) {
       throw new Error(accountConflictMessage);
@@ -458,7 +564,7 @@ export async function signInWithFirebaseGoogle() {
 export async function completeFirebaseRedirectLoginIfNeeded(): Promise<
   PanelSessionSnapshot | null
 > {
-  const auth = getFirebasePanelAuth();
+  const auth = await getReadyFirebasePanelAuth();
 
   try {
     const credentials = await withTimeout(
@@ -486,6 +592,6 @@ export async function signOutPanelFirebaseSession() {
     return;
   }
 
-  const auth = getFirebasePanelAuth();
+  const auth = await getReadyFirebasePanelAuth();
   await signOut(auth).catch(() => undefined);
 }

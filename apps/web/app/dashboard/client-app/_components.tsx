@@ -23,6 +23,9 @@ type ClientAppPageContentProps = {
 
 type CentralCampaignStatus = "active_now" | "scheduled" | "expired" | "paused";
 
+const SETTINGS_BRAND_IDENTITY_HREF = "/dashboard/settings#brand-identity";
+const PROMOTIONS_COMPOSE_HREF = "/dashboard/benefits/promotions?compose=1";
+
 function isExternalHref(href: string) {
   return /^https?:\/\//.test(href);
 }
@@ -57,7 +60,7 @@ function formatCentralCampaignTarget(
     case "appointments":
       return "Abre agenda";
     case "feed":
-      return "Abre central";
+      return "Abre a central";
     case "profile":
       return "Abre perfil";
     case "notifications":
@@ -162,7 +165,7 @@ function buildRecommendations(data: ClientAppHubData) {
     ? "/dashboard/benefits/automations"
     : !data.commercialDataHealth.loyaltyDashboardReady
       ? "/dashboard/benefits/loyalty"
-      : "/dashboard/benefits/promotions";
+      : PROMOTIONS_COMPOSE_HREF;
 
   return [
     data.commercialDataHealth.hasFallbackData
@@ -179,9 +182,9 @@ function buildRecommendations(data: ClientAppHubData) {
       ? {
           ctaLabel: "Ajustar vitrine",
           description:
-            "Logo, hero, galeria e perfil ainda não estão completos.",
+            "Logo, capa, galeria e perfil ainda não estão completos.",
           eyebrow: "Vitrine",
-          href: "/dashboard/settings",
+          href: SETTINGS_BRAND_IDENTITY_HREF,
           title: "Completar a presença visual do app",
         }
       : null,
@@ -199,7 +202,7 @@ function buildRecommendations(data: ClientAppHubData) {
           ctaLabel: "Abrir promoções",
           description: "Sem oferta ativa, o app fica mais passivo.",
           eyebrow: "Campanhas",
-          href: "/dashboard/benefits/promotions",
+          href: PROMOTIONS_COMPOSE_HREF,
           title: "Subir campanha, clube ou pacote",
         }
       : null,
@@ -209,7 +212,7 @@ function buildRecommendations(data: ClientAppHubData) {
           description:
             "A central fica mais forte com mensagem clara e CTA.",
           eyebrow: "Publicação",
-          href: "/dashboard/settings",
+          href: SETTINGS_BRAND_IDENTITY_HREF,
           title: "Publicar o primeiro destaque da home",
         }
       : null,
@@ -218,8 +221,7 @@ function buildRecommendations(data: ClientAppHubData) {
       : !automationLive
       ? {
           ctaLabel: "Abrir automações",
-          description:
-            "Sem automações, o retorno depende mais de ação manual.",
+          description: "Sem automações, o retorno depende mais de ação manual.",
           eyebrow: "Retenção",
           href: "/dashboard/benefits/automations",
           title: "Ligar retornos automáticos",
@@ -232,7 +234,7 @@ function buildRecommendations(data: ClientAppHubData) {
             "Sem clientes com app ativo, os avisos perdem alcance.",
           eyebrow: "Entrega",
           href: "/dashboard/notifications",
-          title: "Recuperar alcance de push",
+          title: "Recuperar alcance dos avisos",
         }
       : null,
   ].filter(
@@ -276,7 +278,7 @@ function buildClientAppViewData(data: ClientAppHubData) {
       description: "Campanhas e ofertas do app.",
       eyebrow: "Campanhas",
       highlight: `${data.activeOffersCount} no ar`,
-      href: "/dashboard/benefits/promotions",
+      href: PROMOTIONS_COMPOSE_HREF,
       support:
         data.activeMembershipsCount > 0
           ? `${data.activeMembershipsCount} clube(s) ou pacote(s) já ativos.`
@@ -319,7 +321,7 @@ function buildClientAppViewData(data: ClientAppHubData) {
       href: "/dashboard/notifications",
       support:
         data.activePushTokensCount > 0
-          ? `${data.activePushTokensCount} cliente(s) com app ativo e ${data.recentPushTokensCount} com uso recente.`
+          ? `${data.activePushTokensCount} clientes com app ativo e ${data.recentPushTokensCount} com uso recente.`
           : "Ainda não há clientes com app ativo para receber avisos.",
       title: "Avisos e comunicação",
     },
@@ -327,8 +329,8 @@ function buildClientAppViewData(data: ClientAppHubData) {
       ctaLabel: "Abrir ajustes do app",
       description: "Visual, textos, links e presença da vitrine.",
       eyebrow: "Vitrine",
-      highlight: `${data.brandCoverageCount}/6 itens`,
-      href: "/dashboard/settings",
+      highlight: `${data.brandCoverageCount}/${data.brandSignals.length} itens`,
+      href: SETTINGS_BRAND_IDENTITY_HREF,
       support: data.customDomain
         ? `Endereço ativo: ${data.customDomain}.`
         : data.welcomeHeadline ??
@@ -349,7 +351,7 @@ function buildClientAppViewData(data: ClientAppHubData) {
       description: notification.body,
       href: "/dashboard/notifications",
       id: `notification-${notification.id}`,
-      meta: `${formatNotificationType(notification.notificationType)} • ${formatAudienceLabel(notification.audience)}`,
+        meta: `${formatNotificationType(notification.notificationType)} - ${formatAudienceLabel(notification.audience)}`,
       title: notification.title,
     })),
     ...data.recentPosts.map((post) => {
@@ -379,7 +381,7 @@ function buildClientAppViewData(data: ClientAppHubData) {
         }),
         href: "/dashboard/feed",
         id: `post-${post.id}`,
-        meta: `${getFeedPostTypeLabel(post.postType)}${post.serviceName ? ` • ligado a ${post.serviceName}` : ""} • ${post.likesCount} curtidas • ${post.commentsCount} comentários`,
+        meta: `${getFeedPostTypeLabel(post.postType)}${post.serviceName ? ` - ligado a ${post.serviceName}` : ""} - ${post.likesCount} curtidas - ${post.commentsCount} comentários`,
         title: post.title,
       };
     }),
@@ -449,17 +451,17 @@ function ClientAppDataHealthNotice({ warnings }: { warnings: string[] }) {
 }
 
 function ClientAppHeader({ data }: { data: ClientAppHubData }) {
+  const totalBrandSignals = data.brandSignals.length;
+
   return (
     <header className="simple-header">
       <div>
-        <p className="eyebrow">Vitrine do app</p>
-        <h1>Vitrine do app para a cliente</h1>
-        <p className="muted">
-          Veja se o app está vivo e faça ajustes rápidos sem se perder.
-        </p>
+        <p className="eyebrow">App do cliente</p>
+        <h1>App do cliente</h1>
+        <p className="muted">Veja o que a cliente enxerga e ajuste rápido sem se perder.</p>
         <div className="inline-actions" style={{ marginTop: 8, flexWrap: "wrap" }}>
           <span className="badge badge--confirmed">
-            {data.brandCoverageCount}/6 marca pronta
+            {data.brandCoverageCount}/{totalBrandSignals} marca pronta
           </span>
           <span className="badge badge--soft">{data.postsCount} posts</span>
           <span className="badge badge--soft">
@@ -484,7 +486,7 @@ function ClientAppHeader({ data }: { data: ClientAppHubData }) {
         >
           Ver app público
         </Link>
-        <Link href="/dashboard/benefits/promotions" className="secondary-button">
+        <Link href={PROMOTIONS_COMPOSE_HREF} className="secondary-button">
           Criar promoção
         </Link>
       </div>
@@ -501,8 +503,8 @@ function ClientAppActionsSection({
     <section className="card content-card">
       <div className="section-heading">
         <div>
-          <h2>Ações rápidas</h2>
-          <p className="muted">Use só o essencial do app.</p>
+          <h2>O que mexer agora</h2>
+          <p className="muted">Só o essencial para vender e manter o app vivo.</p>
         </div>
       </div>
 
@@ -537,7 +539,7 @@ function ClientAppLiveCenterSection({
     <section className="card content-card">
       <div className="section-heading">
         <div>
-          <h2>Central ao vivo</h2>
+          <h2>O que a cliente vê</h2>
           <p className="muted">Últimos avisos e posts publicados.</p>
         </div>
         <span className="badge badge--soft">{touchpoints.length} itens recentes</span>
@@ -594,12 +596,12 @@ function ClientAppStatusSection({
     <section className="card content-card">
       <div className="section-heading">
         <div>
-          <h2>Status da vitrine</h2>
-          <p className="muted">Marca, modelo e campanhas da central.</p>
+          <h2>Base do app</h2>
+          <p className="muted">Marca, campanhas e itens que deixam a vitrine pronta.</p>
         </div>
         <div className="inline-actions" style={{ flexWrap: "wrap" }}>
           <span className="badge badge--confirmed">
-            {brandCoverageCount}/6 marca
+            {brandCoverageCount}/{brandSignals.length} marca
           </span>
           <span className="badge badge--soft">
             {liveCentralCampaignsCount} no ar
@@ -642,8 +644,8 @@ function ClientAppStatusSection({
             <h3>{campaign.title}</h3>
             <p className="muted">{campaign.message}</p>
             <small className="list-meta">
-              {formatCentralCampaignAudience(campaign.audience)} •{" "}
-              {formatCentralCampaignWindow(campaign)} •{" "}
+              {formatCentralCampaignAudience(campaign.audience)} -{" "}
+              {formatCentralCampaignWindow(campaign)} -{" "}
               {formatCentralCampaignTarget(campaign.ctaTarget)}
             </small>
           </article>
@@ -658,7 +660,10 @@ function ClientAppStatusSection({
       </div>
 
       <div className="simple-row__actions" style={{ marginTop: 12 }}>
-        <Link href="/dashboard/settings" className="secondary-button">
+        <Link
+          href={SETTINGS_BRAND_IDENTITY_HREF}
+          className="secondary-button"
+        >
           Ajustar vitrine
         </Link>
         <Link href="/dashboard/notifications" className="secondary-button">
@@ -678,8 +683,8 @@ function ClientAppRecommendationsSection({
     <section className="card content-card">
       <div className="section-heading">
         <div>
-          <h2>Próximos ganhos rápidos</h2>
-          <p className="muted">Prioridades fáceis para destravar a loja.</p>
+          <h2>Próximos passos</h2>
+          <p className="muted">Ajustes simples para fazer o app vender mais.</p>
         </div>
       </div>
 

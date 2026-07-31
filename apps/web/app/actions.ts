@@ -26,7 +26,6 @@ import {
 import {
   consumeAppointmentMembershipActionImpl,
   reverseAppointmentMembershipActionImpl,
-  sendAppointmentWhatsAppActionImpl,
   updateAppointmentDepositActionImpl,
   updateAppointmentStatusActionImpl,
 } from "./_actions/appointments";
@@ -39,29 +38,28 @@ import {
 import { deleteSalonNotificationActionImpl } from "./_actions/notifications";
 import {
   regenerateSalonCodeActionImpl,
-  sendSalonManualWhatsAppActionImpl,
   updateSalonBookingPolicyActionImpl,
   updateSalonBrandingActionImpl,
   updateSalonSecurityPolicyActionImpl,
   updateSalonScheduleActionImpl,
-  updateSalonWhatsAppSettingsActionImpl,
 } from "./_actions/settings";
 import {
   createSalonPostActionImpl,
   deleteSalonPostActionImpl,
   deleteSalonPostCommentActionImpl,
 } from "./_actions/feed";
-import { createSalonFinancialTransactionActionImpl } from "./_actions/finance";
-import { sendMarketingCustomerCampaignActionImpl } from "./_actions/marketing";
 import {
-  approveInstagramMentionActionImpl,
-  disconnectInstagramConnectionActionImpl,
-  publishInstagramMentionActionImpl,
-  rejectInstagramMentionActionImpl,
-  saveInstagramConnectionActionImpl,
-  syncInstagramActivityActionImpl,
-  validateInstagramConnectionTokenActionImpl,
-} from "./_actions/instagram";
+  closeCashSessionActionImpl,
+  createRecurringExpenseRuleActionImpl,
+  createPayableActionImpl,
+  createSalonFinancialTransactionActionImpl,
+  createTeamPayoutActionImpl,
+  openCashSessionActionImpl,
+  recordRecurringExpensePostingActionImpl,
+  settlePayableActionImpl,
+  toggleRecurringExpenseRuleActionImpl,
+} from "./_actions/finance";
+import { sendMarketingCustomerCampaignActionImpl } from "./_actions/marketing";
 import {
   createStaffBlockActionImpl,
   createStaffMemberActionImpl,
@@ -74,12 +72,10 @@ import {
 } from "./_actions/staff";
 import {
   registerInventoryMovementActionImpl,
-  runSalonAutoPilotActionImpl,
   saveSalonMonthlyTargetsActionImpl,
   saveInventoryProductActionImpl,
   saveStaffCommissionSettingsActionImpl,
   updateCustomerProductOrderStatusActionImpl,
-  sendCustomerReactivationActionImpl,
 } from "./_actions/operations";
 import {
   addTabItemActionImpl,
@@ -90,6 +86,7 @@ import {
 import {
   approveCustomerMembershipRequestActionImpl,
   assignCustomerMembershipPackageActionImpl,
+  markCustomerMembershipRequestPaidActionImpl,
   rejectCustomerMembershipRequestActionImpl,
   saveOwnerCustomerProfileActionImpl,
   sendCustomerNudgeActionImpl,
@@ -103,19 +100,42 @@ import {
 const wrapOwnerFormAction = <T>(
   actionName: string,
   action: (formData: FormData) => Promise<T>,
+  options?: {
+    blockSeconds?: number;
+    fallbackPath?: string;
+    limit?: number;
+    rateLimitKey?: (formData: FormData) => string | null;
+    windowSeconds?: number;
+  },
 ) => {
   return async (formData: FormData) =>
     runProtectedFormAction(action, formData, {
       actionName,
-      fallbackPath: "/dashboard",
+      blockSeconds: options?.blockSeconds,
+      fallbackPath: options?.fallbackPath ?? "/dashboard",
+      limit: options?.limit,
+      rateLimitKey: options?.rateLimitKey?.(formData) ?? undefined,
+      windowSeconds: options?.windowSeconds,
     });
 };
 
-const wrapOwnerAction = <T>(actionName: string, action: () => Promise<T>) => {
+const wrapOwnerAction = <T>(
+  actionName: string,
+  action: () => Promise<T>,
+  options?: {
+    blockSeconds?: number;
+    fallbackPath?: string;
+    limit?: number;
+    windowSeconds?: number;
+  },
+) => {
   return async () =>
     runProtectedAction(action, {
       actionName,
-      fallbackPath: "/dashboard",
+      blockSeconds: options?.blockSeconds,
+      fallbackPath: options?.fallbackPath ?? "/dashboard",
+      limit: options?.limit,
+      windowSeconds: options?.windowSeconds,
     });
 };
 
@@ -256,26 +276,51 @@ export const saveSalonGrowthAutomationAction = wrapOwnerFormAction(
 export const changeSalonPlanAction = wrapOwnerFormAction(
   "billing.change_plan",
   changeSalonPlanActionImpl,
+  {
+    blockSeconds: 900,
+    limit: 12,
+    windowSeconds: 300,
+  },
 );
 
 export const cancelSalonSubscriptionAction = wrapOwnerAction(
   "billing.cancel_subscription",
   cancelSalonSubscriptionActionImpl,
+  {
+    blockSeconds: 900,
+    limit: 10,
+    windowSeconds: 300,
+  },
 );
 
 export const resumeSalonSubscriptionAction = wrapOwnerAction(
   "billing.resume_subscription",
   resumeSalonSubscriptionActionImpl,
+  {
+    blockSeconds: 900,
+    limit: 10,
+    windowSeconds: 300,
+  },
 );
 
 export const startStripeCheckoutAction = wrapOwnerFormAction(
   "billing.start_checkout",
   startStripeCheckoutActionImpl,
+  {
+    blockSeconds: 1200,
+    limit: 8,
+    windowSeconds: 300,
+  },
 );
 
 export const startStripeBillingPortalAction = wrapOwnerAction(
   "billing.open_portal",
   startStripeBillingPortalActionImpl,
+  {
+    blockSeconds: 900,
+    limit: 12,
+    windowSeconds: 300,
+  },
 );
 
 export const deleteSalonNotificationAction = wrapOwnerFormAction(
@@ -343,11 +388,6 @@ export const reverseAppointmentMembershipAction = wrapOwnerFormAction(
   reverseAppointmentMembershipActionImpl,
 );
 
-export const sendAppointmentWhatsAppAction = wrapOwnerFormAction(
-  "appointment.send_whatsapp",
-  sendAppointmentWhatsAppActionImpl,
-);
-
 export const saveOwnerCustomerProfileAction = wrapOwnerFormAction(
   "customer.save_profile",
   saveOwnerCustomerProfileActionImpl,
@@ -361,6 +401,11 @@ export const assignCustomerMembershipPackageAction = wrapOwnerFormAction(
 export const approveCustomerMembershipRequestAction = wrapOwnerFormAction(
   "membership.approve_request",
   approveCustomerMembershipRequestActionImpl,
+);
+
+export const markCustomerMembershipRequestPaidAction = wrapOwnerFormAction(
+  "membership.mark_request_paid",
+  markCustomerMembershipRequestPaidActionImpl,
 );
 
 export const rejectCustomerMembershipRequestAction = wrapOwnerFormAction(
@@ -381,16 +426,6 @@ export const regenerateSalonCodeAction = wrapOwnerAction(
 export const updateSalonBrandingAction = wrapOwnerFormAction(
   "salon.update_branding",
   updateSalonBrandingActionImpl,
-);
-
-export const updateSalonWhatsAppSettingsAction = wrapOwnerFormAction(
-  "salon.update_whatsapp_settings",
-  updateSalonWhatsAppSettingsActionImpl,
-);
-
-export const sendSalonManualWhatsAppAction = wrapOwnerFormAction(
-  "salon.send_manual_whatsapp",
-  sendSalonManualWhatsAppActionImpl,
 );
 
 export const updateSalonScheduleAction = wrapOwnerFormAction(
@@ -418,6 +453,46 @@ export const createSalonFinancialTransactionAction = wrapOwnerFormAction(
   createSalonFinancialTransactionActionImpl,
 );
 
+export const openCashSessionAction = wrapOwnerFormAction(
+  "finance.open_cash_session",
+  openCashSessionActionImpl,
+);
+
+export const closeCashSessionAction = wrapOwnerFormAction(
+  "finance.close_cash_session",
+  closeCashSessionActionImpl,
+);
+
+export const createTeamPayoutAction = wrapOwnerFormAction(
+  "finance.create_team_payout",
+  createTeamPayoutActionImpl,
+);
+
+export const createRecurringExpenseRuleAction = wrapOwnerFormAction(
+  "finance.create_recurring_expense_rule",
+  createRecurringExpenseRuleActionImpl,
+);
+
+export const createPayableAction = wrapOwnerFormAction(
+  "finance.create_payable",
+  createPayableActionImpl,
+);
+
+export const recordRecurringExpensePostingAction = wrapOwnerFormAction(
+  "finance.record_recurring_expense_posting",
+  recordRecurringExpensePostingActionImpl,
+);
+
+export const settlePayableAction = wrapOwnerFormAction(
+  "finance.settle_payable",
+  settlePayableActionImpl,
+);
+
+export const toggleRecurringExpenseRuleAction = wrapOwnerFormAction(
+  "finance.toggle_recurring_expense_rule",
+  toggleRecurringExpenseRuleActionImpl,
+);
+
 export const sendMarketingCustomerCampaignAction = wrapOwnerFormAction(
   "marketing.send_campaign",
   sendMarketingCustomerCampaignActionImpl,
@@ -431,41 +506,6 @@ export const deleteSalonPostAction = wrapOwnerFormAction(
 export const deleteSalonPostCommentAction = wrapOwnerFormAction(
   "feed_post_comment.delete",
   deleteSalonPostCommentActionImpl,
-);
-
-export const saveInstagramConnectionAction = wrapOwnerFormAction(
-  "instagram.save_connection",
-  saveInstagramConnectionActionImpl,
-);
-
-export const disconnectInstagramConnectionAction = wrapOwnerAction(
-  "instagram.disconnect",
-  disconnectInstagramConnectionActionImpl,
-);
-
-export const syncInstagramActivityAction = wrapOwnerAction(
-  "instagram.sync_activity",
-  syncInstagramActivityActionImpl,
-);
-
-export const validateInstagramConnectionTokenAction = wrapOwnerFormAction(
-  "instagram.validate_token",
-  validateInstagramConnectionTokenActionImpl,
-);
-
-export const approveInstagramMentionAction = wrapOwnerFormAction(
-  "instagram.approve_mention",
-  approveInstagramMentionActionImpl,
-);
-
-export const rejectInstagramMentionAction = wrapOwnerFormAction(
-  "instagram.reject_mention",
-  rejectInstagramMentionActionImpl,
-);
-
-export const publishInstagramMentionAction = wrapOwnerFormAction(
-  "instagram.publish_mention",
-  publishInstagramMentionActionImpl,
 );
 
 export const saveStaffCommissionSettingsAction = wrapOwnerFormAction(
@@ -491,16 +531,6 @@ export const updateCustomerProductOrderStatusAction = wrapOwnerFormAction(
 export const registerInventoryMovementAction = wrapOwnerFormAction(
   "inventory.register_movement",
   registerInventoryMovementActionImpl,
-);
-
-export const sendCustomerReactivationAction = wrapOwnerFormAction(
-  "customer.send_reactivation",
-  sendCustomerReactivationActionImpl,
-);
-
-export const runSalonAutoPilotAction = wrapOwnerFormAction(
-  "autopilot.run",
-  runSalonAutoPilotActionImpl,
 );
 
 export const openTabAction = wrapOwnerFormAction("tab.open", openTabActionImpl);

@@ -1,6 +1,16 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+
+const kSalonPortraitAvatarAlignment = Alignment(0, -0.68);
+
+double salonBottomActionInset(BuildContext context, {double base = 20}) {
+  final mediaQuery = MediaQuery.of(context);
+  return base +
+      math.max(mediaQuery.viewInsets.bottom, mediaQuery.viewPadding.bottom);
+}
 
 class AppGradientBackground extends StatelessWidget {
   const AppGradientBackground({
@@ -21,41 +31,94 @@ class AppGradientBackground extends StatelessWidget {
     final spec = AppTheme.spec(context);
     final tone = accentColor ?? spec.primaryColor;
     final activeBannerStyle = bannerStyle ?? spec.bannerStyle;
+    final hasBackgroundImage =
+        backgroundImageUrl != null && backgroundImageUrl!.trim().isNotEmpty;
     final overlayOpacity = switch (activeBannerStyle) {
-      'immersive' => 0.26,
-      'spotlight' => 0.2,
-      _ => 0.14,
+      'immersive' => 0.34,
+      'spotlight' => 0.28,
+      _ => 0.18,
     };
+    final middleOverlayOpacity = hasBackgroundImage
+        ? switch (activeBannerStyle) {
+            'immersive' => 0.82,
+            'spotlight' => 0.86,
+            _ => 0.9,
+          }
+        : 1.0;
+    final tailOverlayOpacity = hasBackgroundImage
+        ? switch (activeBannerStyle) {
+            'immersive' => 0.96,
+            'spotlight' => 0.97,
+            _ => 0.985,
+          }
+        : 1.0;
     final tailColor = Color.lerp(spec.backgroundColor, spec.panelColor, 0.5)!;
-    return DecoratedBox(
-      decoration: BoxDecoration(color: spec.backgroundColor),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (backgroundImageUrl != null &&
-              backgroundImageUrl!.trim().isNotEmpty)
-            Image.network(
-              backgroundImageUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const SizedBox.shrink(),
-            ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  tone.withValues(alpha: overlayOpacity),
-                  spec.backgroundColor,
-                  tailColor,
-                ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final devicePixelRatio =
+            MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
+        final cacheWidth =
+            constraints.maxWidth.isFinite && constraints.maxWidth > 0
+            ? (constraints.maxWidth * devicePixelRatio).round()
+            : null;
+        final cacheHeight =
+            constraints.maxHeight.isFinite && constraints.maxHeight > 0
+            ? (constraints.maxHeight * devicePixelRatio).round()
+            : null;
+        final strengthenedOverlayOpacity = hasBackgroundImage
+            ? switch (activeBannerStyle) {
+                'immersive' => 0.44,
+                'spotlight' => 0.36,
+                _ => 0.24,
+              }
+            : overlayOpacity;
+        final strengthenedMiddleOverlayOpacity = hasBackgroundImage
+            ? switch (activeBannerStyle) {
+                'immersive' => 0.88,
+                'spotlight' => 0.90,
+                _ => 0.94,
+              }
+            : middleOverlayOpacity;
+
+        return DecoratedBox(
+          decoration: BoxDecoration(color: spec.backgroundColor),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (hasBackgroundImage)
+                Image.network(
+                  backgroundImageUrl!,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
+                  filterQuality: FilterQuality.high,
+                  isAntiAlias: true,
+                  gaplessPlayback: true,
+                  cacheWidth: cacheWidth,
+                  cacheHeight: cacheHeight,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox.shrink(),
+                ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0, 0.46, 1],
+                    colors: [
+                      tone.withValues(alpha: strengthenedOverlayOpacity),
+                      spec.backgroundColor.withValues(
+                        alpha: strengthenedMiddleOverlayOpacity,
+                      ),
+                      tailColor.withValues(alpha: tailOverlayOpacity),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              child,
+            ],
           ),
-          child,
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -80,9 +143,9 @@ class SalonPanel extends StatelessWidget {
     final isOutlined = spec.cardStyle == 'outlined';
     final panelColor = isGlass
         ? spec.panelColor.withValues(
-            alpha: theme.brightness == Brightness.dark ? 0.76 : 0.82,
+            alpha: theme.brightness == Brightness.dark ? 0.94 : 0.985,
           )
-        : spec.panelColor.withValues(alpha: 0.96);
+        : spec.panelColor.withValues(alpha: 0.992);
     return Container(
       padding: padding,
       decoration: BoxDecoration(
@@ -90,7 +153,7 @@ class SalonPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.panelRadius),
         border: Border.all(
           color: isGlass
-              ? spec.lineColor.withValues(alpha: 0.72)
+              ? spec.lineColor.withValues(alpha: 0.88)
               : spec.lineColor,
           width: isOutlined ? 1.25 : 1,
         ),
@@ -98,9 +161,9 @@ class SalonPanel extends StatelessWidget {
             ? const []
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isGlass ? 0.06 : 0.05),
-                  blurRadius: isGlass ? 34 : 30,
-                  offset: const Offset(0, 16),
+                  color: Colors.black.withValues(alpha: isGlass ? 0.08 : 0.05),
+                  blurRadius: isGlass ? 30 : 30,
+                  offset: const Offset(0, 14),
                 ),
               ],
         gradient: accent == null
@@ -175,15 +238,26 @@ class Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spec = AppTheme.spec(context);
-    final bg = backgroundColor ?? spec.secondaryColor.withValues(alpha: 0.08);
-    final fg = foregroundColor ?? spec.secondaryColor;
+    final isGlass = spec.cardStyle == 'glass';
+    final bg =
+        backgroundColor ??
+        (isGlass
+            ? spec.panelColor.withValues(alpha: 0.92)
+            : spec.secondaryColor.withValues(alpha: 0.08));
+    final fg =
+        foregroundColor ??
+        (isGlass ? spec.inkColor.withValues(alpha: 0.9) : spec.secondaryColor);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: foregroundColor?.withValues(alpha: 0.08) ?? spec.lineColor,
+          color:
+              foregroundColor?.withValues(alpha: 0.08) ??
+              (isGlass
+                  ? spec.lineColor.withValues(alpha: 0.92)
+                  : spec.lineColor),
         ),
       ),
       child: Row(
@@ -193,11 +267,15 @@ class Pill extends StatelessWidget {
             Icon(icon, size: 14, color: fg),
             const SizedBox(width: 6),
           ],
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: fg),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -348,15 +426,143 @@ class AsyncButton extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2.2),
             )
           : Row(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (icon != null) ...[
                   Icon(icon, size: 18),
                   const SizedBox(width: 8),
                 ],
-                Text(label),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
+    );
+  }
+}
+
+int? _resolveSalonImageCacheExtent(
+  double extent, {
+  required double devicePixelRatio,
+  required double scale,
+  required int maxPixels,
+}) {
+  if (!extent.isFinite || extent <= 0) {
+    return null;
+  }
+
+  final scaledExtent = (extent * devicePixelRatio * scale).round();
+  return math.max(48, math.min(maxPixels, scaledExtent));
+}
+
+class SalonNetworkImage extends StatelessWidget {
+  const SalonNetworkImage({
+    super.key,
+    required this.imageUrl,
+    this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
+    this.backgroundColor,
+    this.placeholder,
+    this.error,
+    this.cacheScale = 1.12,
+    this.maxCacheWidth = 2048,
+    this.maxCacheHeight = 2048,
+    this.onError,
+  });
+
+  final String? imageUrl;
+  final BoxFit fit;
+  final Alignment alignment;
+  final Color? backgroundColor;
+  final Widget? placeholder;
+  final Widget? error;
+  final double cacheScale;
+  final int maxCacheWidth;
+  final int maxCacheHeight;
+  final VoidCallback? onError;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedImageUrl = imageUrl?.trim();
+    final fallback = error ?? placeholder ?? const _DefaultImageFallback();
+    final loading = placeholder ?? fallback;
+
+    Widget decorate(BoxConstraints constraints, Widget child) {
+      final hasFiniteWidth =
+          constraints.maxWidth.isFinite && constraints.maxWidth > 0;
+      final hasFiniteHeight =
+          constraints.maxHeight.isFinite && constraints.maxHeight > 0;
+      // Scroll/list layouts often leave one axis unconstrained.
+      final wrappedChild = hasFiniteWidth && hasFiniteHeight
+          ? SizedBox.expand(child: child)
+          : hasFiniteWidth || hasFiniteHeight
+          ? SizedBox(
+              width: hasFiniteWidth ? constraints.maxWidth : null,
+              height: hasFiniteHeight ? constraints.maxHeight : null,
+              child: child,
+            )
+          : child;
+
+      if (backgroundColor == null) {
+        return wrappedChild;
+      }
+      return ColoredBox(color: backgroundColor!, child: wrappedChild);
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (normalizedImageUrl == null || normalizedImageUrl.isEmpty) {
+          return decorate(constraints, fallback);
+        }
+
+        final devicePixelRatio =
+            MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
+        final cacheWidth = _resolveSalonImageCacheExtent(
+          constraints.maxWidth,
+          devicePixelRatio: devicePixelRatio,
+          scale: cacheScale,
+          maxPixels: maxCacheWidth,
+        );
+        final cacheHeight = _resolveSalonImageCacheExtent(
+          constraints.maxHeight,
+          devicePixelRatio: devicePixelRatio,
+          scale: cacheScale,
+          maxPixels: maxCacheHeight,
+        );
+
+        return decorate(
+          constraints,
+          Image.network(
+            normalizedImageUrl,
+            fit: fit,
+            alignment: alignment,
+            filterQuality: FilterQuality.high,
+            isAntiAlias: true,
+            gaplessPlayback: true,
+            cacheWidth: cacheWidth,
+            cacheHeight: cacheHeight,
+            errorBuilder: (context, errorObject, stackTrace) {
+              if (onError != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  onError?.call();
+                });
+              }
+              return fallback;
+            },
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) {
+                return child;
+              }
+              return loading;
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -368,12 +574,16 @@ class NetworkCardImage extends StatelessWidget {
     required this.height,
     this.borderRadius = 24,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
+    this.backgroundColor,
   });
 
   final String? imageUrl;
   final double height;
   final double borderRadius;
   final BoxFit fit;
+  final Alignment alignment;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -402,33 +612,40 @@ class NetworkCardImage extends StatelessWidget {
                   ),
                 ),
               )
-            : Image.network(
-                imageUrl!,
+            : SalonNetworkImage(
+                imageUrl: imageUrl!,
                 fit: fit,
-                errorBuilder: (context, error, stackTrace) {
-                  return DecoratedBox(
-                    decoration: BoxDecoration(color: spec.lineColor),
-                    child: Center(
-                      child: Text(
-                        'Imagem indisponível',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                  );
-                },
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) {
-                    return child;
-                  }
-
-                  return DecoratedBox(
-                    decoration: BoxDecoration(color: spec.lineColor),
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.4),
-                    ),
-                  );
-                },
+                alignment: alignment,
+                backgroundColor: backgroundColor ?? spec.lineColor,
+                error: Center(
+                  child: Text(
+                    'Imagem indisponível',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                placeholder: const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
               ),
+      ),
+    );
+  }
+}
+
+class _DefaultImageFallback extends StatelessWidget {
+  const _DefaultImageFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    final spec = AppTheme.spec(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(color: spec.lineColor),
+      child: Center(
+        child: Icon(
+          Icons.image_outlined,
+          size: 24,
+          color: spec.inkColor.withValues(alpha: 0.46),
+        ),
       ),
     );
   }

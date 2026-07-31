@@ -182,7 +182,7 @@ export function NotificationsList({
                       </strong>
                       <p>
                         {dispatchSnapshot?.error_detail ??
-                          "Nao houve nenhum alerta relevante no envio mais recente desse aviso."}
+                          "Não houve nenhum alerta relevante no envio mais recente desse aviso."}
                       </p>
                     </div>
                   </div>

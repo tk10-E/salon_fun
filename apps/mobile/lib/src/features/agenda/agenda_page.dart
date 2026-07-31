@@ -6,18 +6,76 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/salon_ui.dart';
 import '../notifications/customer_notifications_controller.dart';
+import '../profile/profile_repository.dart';
 import '../shared/app_models.dart';
 import 'booking_repository.dart';
+
+part 'agenda_page_flows.dart';
+part 'agenda_page_sections.dart';
+
+const List<String> _appointmentPaymentPreferenceValues = [
+  'pix',
+  'cash',
+  'debit_card',
+  'credit_card',
+  'to_be_defined',
+];
+
+bool _isFinalAppointmentStatusValue(String status) {
+  final normalized = status.trim().toLowerCase();
+  return normalized == 'cancelled' ||
+      normalized == 'completed' ||
+      normalized == 'no_show';
+}
+
+DateTime _appointmentCompletionUnlockAt(CustomerAppointment appointment) {
+  return appointment.date.add(const Duration(minutes: 3));
+}
+
+bool _canCustomerCompleteAppointment(
+  CustomerAppointment appointment,
+  DateTime now,
+) {
+  final status = appointment.status.trim().toLowerCase();
+  if (status != 'pending' && status != 'confirmed') {
+    return false;
+  }
+
+  return !now.isBefore(_appointmentCompletionUnlockAt(appointment));
+}
+
+String? _appointmentCompletionHint(
+  CustomerAppointment appointment,
+  DateTime now,
+) {
+  final status = appointment.status.trim().toLowerCase();
+  if (status != 'pending' && status != 'confirmed') {
+    return null;
+  }
+
+  final releaseAt = _appointmentCompletionUnlockAt(appointment);
+  if (!now.isBefore(releaseAt)) {
+    return null;
+  }
+
+  return 'A conclusao libera 3 minutos apos o horario marcado, a partir de ${formatTime(releaseAt)}.';
+}
 
 class AgendaPage extends StatefulWidget {
   const AgendaPage({
     super.key,
     required this.bookingRepository,
+    this.profileRepository,
+    this.focusedOffer,
+    this.focusedOfferRevision = 0,
     required this.notificationsController,
     required this.session,
   });
 
   final BookingRepository bookingRepository;
+  final ProfileRepository? profileRepository;
+  final SalonOfferHighlight? focusedOffer;
+  final int focusedOfferRevision;
   final CustomerNotificationsController notificationsController;
   final AppSession session;
 
@@ -27,12 +85,23 @@ class AgendaPage extends StatefulWidget {
 
 class _AgendaPageState extends State<AgendaPage> {
   bool _loading = true;
+  bool _servicesLoadFailed = false;
   List<ServiceOption> _services = const [];
   List<CustomerAppointment> _appointments = const [];
+  List<CustomerMembershipPlan> _membershipPlans = const [];
+  final Set<String> _locallyScheduledMembershipPlanIds = <String>{};
+  final Set<String> _locallyRequestedMembershipOfferIds = <String>{};
   ServiceOption? _selectedService;
+  String? _selectedStaffMemberId;
+  String? _reschedulingAppointmentId;
   DayAvailability? _availability;
+  final Map<String, DayAvailability?> _availabilityCache =
+      <String, DayAvailability?>{};
+  String? _loadErrorMessage;
   DateTime _selectedDay = DateUtils.dateOnly(DateTime.now());
   late int _lastAgendaRevision;
+  int _lastAppliedFocusedOfferRevision = 0;
+  int _loadRequestId = 0;
 
   @override
   void initState() {
@@ -49,6 +118,10 @@ class _AgendaPageState extends State<AgendaPage> {
       oldWidget.notificationsController.removeListener(_handleSyncChange);
       _lastAgendaRevision = widget.notificationsController.agendaRevision;
       widget.notificationsController.addListener(_handleSyncChange);
+    }
+
+    if (oldWidget.focusedOfferRevision != widget.focusedOfferRevision) {
+      _bootstrap();
     }
   }
 
@@ -69,51 +142,175 @@ class _AgendaPageState extends State<AgendaPage> {
   }
 
   Future<void> _bootstrap() async {
-    setState(() => _loading = true);
-    final services = await widget.bookingRepository.fetchServices();
-    final appointments = await widget.bookingRepository.fetchAppointments();
-    final selected = services.isEmpty
-        ? null
-        : (_selectedService ?? services.first);
-    final availability = selected == null
-        ? null
-        : await widget.bookingRepository.fetchDayAvailability(
-            serviceId: selected.id,
-            day: _selectedDay,
-          );
+    final loadRequestId = ++_loadRequestId;
+    setState(() {
+      _loading = true;
+      _servicesLoadFailed = false;
+      _loadErrorMessage = null;
+    });
+    _availabilityCache.clear();
 
-    if (!mounted) {
+    var services = _services;
+    var appointments = _appointments;
+    var membershipPlans = _membershipPlans;
+    DayAvailability? availability = _availability;
+    final loadErrors = <String>[];
+    var servicesLoadFailed = false;
+    final servicesFuture = widget.bookingRepository.fetchServices();
+    final appointmentsFuture = widget.bookingRepository.fetchAppointments();
+    final membershipPlansFuture = widget.bookingRepository.fetchMembershipPlans(
+      customerId: widget.session.customer.id,
+    );
+
+    try {
+      services = await servicesFuture;
+    } catch (error) {
+      servicesLoadFailed = true;
+      loadErrors.add(
+        _formatAgendaError(
+          error,
+          fallback: 'Nao foi possivel carregar os servicos da agenda.',
+        ),
+      );
+    }
+
+    try {
+      appointments = await appointmentsFuture;
+    } catch (error) {
+      loadErrors.add(
+        _formatAgendaError(
+          error,
+          fallback: 'Nao foi possivel carregar os seus agendamentos.',
+        ),
+      );
+    }
+
+    try {
+      membershipPlans = await membershipPlansFuture;
+    } catch (_) {
+      membershipPlans = const <CustomerMembershipPlan>[];
+    }
+
+    final shouldApplyFocusedOffer =
+        widget.focusedOfferRevision > 0 &&
+        widget.focusedOfferRevision != _lastAppliedFocusedOfferRevision;
+    final focusedServiceId = widget.focusedOffer?.bookingServiceId?.trim();
+    final selected = _resolveSelectedService(
+      services,
+      shouldApplyFocusedOffer: shouldApplyFocusedOffer,
+      focusedServiceId: focusedServiceId,
+    );
+
+    if (selected == null) {
+      availability = null;
+    } else {
+      try {
+        availability = await _getDayAvailability(
+          serviceId: selected.id,
+          day: _selectedDay,
+        );
+      } catch (error) {
+        availability = null;
+        loadErrors.add(
+          _formatAgendaError(
+            error,
+            fallback: 'Nao foi possivel carregar os horarios deste dia.',
+          ),
+        );
+      }
+    }
+
+    if (!mounted || loadRequestId != _loadRequestId) {
       return;
     }
 
+    final liveMembershipIds = membershipPlans
+        .map((membership) => membership.id.trim())
+        .where((membershipId) => membershipId.isNotEmpty)
+        .toSet();
+    final nextNow = DateTime.now();
+    final resolvedReschedulingAppointmentId =
+        _reschedulingAppointmentId != null &&
+            appointments.any(
+              (appointment) =>
+                  appointment.id == _reschedulingAppointmentId &&
+                  !_isHistoryAppointment(appointment, nextNow),
+            )
+        ? _reschedulingAppointmentId
+        : null;
+
     setState(() {
+      _locallyScheduledMembershipPlanIds.retainWhere(
+        (membershipId) => liveMembershipIds.contains(membershipId),
+      );
       _services = services;
       _appointments = appointments;
+      _membershipPlans = membershipPlans;
       _selectedService = selected;
       _availability = availability;
       _loading = false;
+      _servicesLoadFailed = servicesLoadFailed;
+      _loadErrorMessage = loadErrors.isEmpty ? null : loadErrors.first;
+      _reschedulingAppointmentId = resolvedReschedulingAppointmentId;
+      if (shouldApplyFocusedOffer) {
+        _lastAppliedFocusedOfferRevision = widget.focusedOfferRevision;
+      }
     });
   }
 
   Future<void> _changeService(ServiceOption service) async {
-    setState(() {
-      _selectedService = service;
-      _loading = true;
-    });
-
-    final availability = await widget.bookingRepository.fetchDayAvailability(
-      serviceId: service.id,
-      day: _selectedDay,
-    );
-
-    if (!mounted) {
+    final reschedulingAppointment = _reschedulingAppointment();
+    if (reschedulingAppointment != null &&
+        reschedulingAppointment.serviceId?.trim().isNotEmpty == true &&
+        reschedulingAppointment.serviceId != service.id) {
+      _showLoadError(
+        'A remarcacao precisa manter o mesmo servico. Troque apenas o dia ou horario.',
+      );
       return;
     }
 
+    if (_selectedService?.id == service.id && _availability != null) {
+      return;
+    }
+
+    final loadRequestId = ++_loadRequestId;
     setState(() {
-      _availability = availability;
-      _loading = false;
+      _selectedService = service;
+      _selectedStaffMemberId = null;
+      _loading = true;
+      _loadErrorMessage = null;
     });
+
+    try {
+      final availability = await _getDayAvailability(
+        serviceId: service.id,
+        day: _selectedDay,
+      );
+
+      if (!mounted || loadRequestId != _loadRequestId) {
+        return;
+      }
+
+      setState(() {
+        _availability = availability;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted || loadRequestId != _loadRequestId) {
+        return;
+      }
+
+      final message = _formatAgendaError(
+        error,
+        fallback: 'Nao foi possivel carregar os horarios deste servico.',
+      );
+      setState(() {
+        _availability = null;
+        _loading = false;
+        _loadErrorMessage = message;
+      });
+      _showLoadError(message);
+    }
   }
 
   Future<void> _changeDay(DateTime day) async {
@@ -121,707 +318,469 @@ class _AgendaPageState extends State<AgendaPage> {
       return;
     }
 
+    if (DateUtils.isSameDay(_selectedDay, day) && _availability != null) {
+      return;
+    }
+
+    final loadRequestId = ++_loadRequestId;
     setState(() {
       _selectedDay = day;
       _loading = true;
+      _loadErrorMessage = null;
     });
+
+    try {
+      final availability = await _getDayAvailability(
+        serviceId: _selectedService!.id,
+        day: day,
+      );
+
+      if (!mounted || loadRequestId != _loadRequestId) {
+        return;
+      }
+
+      setState(() {
+        _availability = availability;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted || loadRequestId != _loadRequestId) {
+        return;
+      }
+
+      final message = _formatAgendaError(
+        error,
+        fallback: 'Nao foi possivel carregar os horarios deste dia.',
+      );
+      setState(() {
+        _availability = null;
+        _loading = false;
+        _loadErrorMessage = message;
+      });
+      _showLoadError(message);
+    }
+  }
+
+  String _availabilityCacheKey({
+    required String serviceId,
+    required DateTime day,
+  }) {
+    final normalizedDay = DateUtils.dateOnly(day);
+    final month = normalizedDay.month.toString().padLeft(2, '0');
+    final dayOfMonth = normalizedDay.day.toString().padLeft(2, '0');
+    return '$serviceId|${normalizedDay.year}-$month-$dayOfMonth';
+  }
+
+  Future<DayAvailability?> _getDayAvailability({
+    required String serviceId,
+    required DateTime day,
+  }) async {
+    final cacheKey = _availabilityCacheKey(serviceId: serviceId, day: day);
+    if (_availabilityCache.containsKey(cacheKey)) {
+      return _availabilityCache[cacheKey];
+    }
 
     final availability = await widget.bookingRepository.fetchDayAvailability(
-      serviceId: _selectedService!.id,
+      serviceId: serviceId,
       day: day,
     );
+    _availabilityCache[cacheKey] = availability;
+    return availability;
+  }
 
-    if (!mounted) {
+  ServiceOption? _resolveSelectedService(
+    List<ServiceOption> services, {
+    required bool shouldApplyFocusedOffer,
+    required String? focusedServiceId,
+  }) {
+    if (services.isEmpty) {
+      return null;
+    }
+
+    if (shouldApplyFocusedOffer &&
+        focusedServiceId != null &&
+        focusedServiceId.isNotEmpty) {
+      for (final service in services) {
+        if (service.id == focusedServiceId) {
+          return service;
+        }
+      }
+    }
+
+    final selectedServiceId = _selectedService?.id;
+    if (selectedServiceId != null && selectedServiceId.isNotEmpty) {
+      for (final service in services) {
+        if (service.id == selectedServiceId) {
+          return service;
+        }
+      }
+    }
+
+    return services.first;
+  }
+
+  CustomerAppointment? _reschedulingAppointment() {
+    final appointmentId = _reschedulingAppointmentId?.trim();
+    if (appointmentId == null || appointmentId.isEmpty) {
+      return null;
+    }
+
+    for (final appointment in _appointments) {
+      if (appointment.id == appointmentId) {
+        return appointment;
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _startReschedulingAppointment(
+    CustomerAppointment appointment,
+  ) async {
+    final serviceId = appointment.serviceId?.trim();
+    if (serviceId == null || serviceId.isEmpty) {
+      _showLoadError(
+        'Esse horario ainda nao possui o servico operacional completo para remarcacao.',
+      );
       return;
     }
 
+    ServiceOption? matchedService;
+    for (final service in _services) {
+      if (service.id == serviceId) {
+        matchedService = service;
+        break;
+      }
+    }
+
+    if (matchedService == null) {
+      _showLoadError(
+        'Esse servico nao esta disponivel no app para remarcar agora.',
+      );
+      return;
+    }
+
+    final targetDay = DateUtils.dateOnly(appointment.date);
+    final loadRequestId = ++_loadRequestId;
     setState(() {
-      _availability = availability;
-      _loading = false;
+      _reschedulingAppointmentId = appointment.id;
+      _selectedService = matchedService;
+      _selectedStaffMemberId = appointment.staffMemberId;
+      _selectedDay = targetDay;
+      _loading = true;
+      _loadErrorMessage = null;
+    });
+
+    try {
+      final availability = await _getDayAvailability(
+        serviceId: matchedService.id,
+        day: targetDay,
+      );
+
+      if (!mounted || loadRequestId != _loadRequestId) {
+        return;
+      }
+
+      setState(() {
+        _availability = availability;
+        _loading = false;
+      });
+      _showLoadError(
+        appointment.isMembershipPlanAppointment
+            ? 'Remarcacao do plano pronta. Escolha outro horario com o mesmo profissional.'
+            : 'Remarcacao pronta. Escolha o novo horario na grade abaixo.',
+      );
+    } catch (error) {
+      if (!mounted || loadRequestId != _loadRequestId) {
+        return;
+      }
+
+      final message = _formatAgendaError(
+        error,
+        fallback: 'Nao foi possivel abrir a grade para remarcar agora.',
+      );
+      setState(() {
+        _availability = null;
+        _loading = false;
+        _loadErrorMessage = message;
+      });
+      _showLoadError(message);
+    }
+  }
+
+  void _cancelReschedulingMode() {
+    final reschedulingAppointment = _reschedulingAppointment();
+    _commitAgendaState(() {
+      _reschedulingAppointmentId = null;
+      if (reschedulingAppointment?.isMembershipPlanAppointment == true) {
+        _selectedStaffMemberId = null;
+      }
     });
   }
 
-  Future<void> _confirmBooking(AppointmentSlot slot) async {
-    final service = _selectedService;
-    if (service == null) {
-      return;
+  String _formatAgendaError(Object error, {required String fallback}) {
+    final message = '$error'.replaceFirst('Exception: ', '').trim();
+    if (message.isEmpty) {
+      return fallback;
     }
-
-    bool isSubmitting = false;
-    final created = await showModalBottomSheet<CustomerAppointment>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                8,
-                20,
-                20 + MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionTitle(
-                    title: 'Confirmar horário',
-                    subtitle: 'O app valida a disponibilidade em tempo real.',
-                  ),
-                  const SizedBox(height: 18),
-                  _AgendaInfoTile(
-                    label: 'Serviço',
-                    value: service.name,
-                    support:
-                        '${service.durationMinutes} min • ${formatCurrency(service.price)}',
-                  ),
-                  const SizedBox(height: 10),
-                  _AgendaInfoTile(
-                    label: 'Data',
-                    value: formatFullDate(slot.startAt),
-                    support:
-                        '${formatTime(slot.startAt)} até ${formatTime(slot.endsAt)}',
-                  ),
-                  const SizedBox(height: 10),
-                  _AgendaInfoTile(
-                    label: 'Profissional',
-                    value: slot.staffMemberName,
-                    support: 'Agenda encaixada no melhor slot livre.',
-                  ),
-                  const SizedBox(height: 18),
-                  AsyncButton(
-                    label: 'Fechar agendamento',
-                    isBusy: isSubmitting,
-                    icon: Icons.check_circle_rounded,
-                    onPressed: () async {
-                      setModalState(() => isSubmitting = true);
-                      try {
-                        final appointment = await widget.bookingRepository
-                            .createAppointment(service: service, slot: slot);
-                        if (!context.mounted) {
-                          return;
-                        }
-                        Navigator.of(context).pop(appointment);
-                      } catch (error) {
-                        if (!context.mounted) {
-                          return;
-                        }
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '$error'.replaceFirst('Exception: ', ''),
-                            ),
-                          ),
-                        );
-                        setModalState(() => isSubmitting = false);
-                      }
-                    },
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (created == null || !mounted) {
-      return;
+    if (_isAppointmentNotFoundError(error)) {
+      return 'Esse item antigo não existe mais no salão e foi removido do app.';
     }
-
-    await _bootstrap();
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          created.bookingPolicySnapshot?.isNotEmpty == true
-              ? 'Agendamento confirmado. Regras e sinal já foram aplicados.'
-              : 'Agendamento confirmado com sucesso.',
-        ),
-      ),
-    );
-
-    if (!mounted || created.bookingPolicySnapshot == null) {
-      return;
-    }
-
-    await _showDepositExperience(created);
+    return message;
   }
 
-  Future<void> _cancelAppointment(CustomerAppointment appointment) async {
-    final controller = TextEditingController();
-    bool submitting = false;
-
-    final didCancel = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                8,
-                20,
-                20 + MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionTitle(
-                    title: 'Cancelar horário',
-                    subtitle:
-                        'Explique em uma frase para liberar a agenda com clareza.',
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: controller,
-                    minLines: 3,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Motivo',
-                      hintText: 'Ex.: tive um imprevisto no trabalho',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  AsyncButton(
-                    label: 'Cancelar agendamento',
-                    isBusy: submitting,
-                    icon: Icons.event_busy_rounded,
-                    onPressed: () async {
-                      if (controller.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Informe um motivo para cancelar.'),
-                          ),
-                        );
-                        return;
-                      }
-
-                      setModalState(() => submitting = true);
-                      try {
-                        await widget.bookingRepository.cancelAppointment(
-                          appointmentId: appointment.id,
-                          reason: controller.text,
-                        );
-                        if (!context.mounted) {
-                          return;
-                        }
-                        Navigator.of(context).pop(true);
-                      } catch (error) {
-                        if (!context.mounted) {
-                          return;
-                        }
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '$error'.replaceFirst('Exception: ', ''),
-                            ),
-                          ),
-                        );
-                        setModalState(() => submitting = false);
-                      }
-                    },
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    controller.dispose();
-
-    if (didCancel != true || !mounted) {
-      return;
-    }
-
-    await _bootstrap();
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Agendamento cancelado.')));
+  bool _isAppointmentNotFoundError(Object error) {
+    return '$error'.toLowerCase().contains('appointment_not_found');
   }
 
-  Future<void> _showDepositExperience(CustomerAppointment appointment) async {
-    final preview = widget.session.landingData?.preview;
-    final paymentMode = preview?.bookingPaymentMode ?? 'manual';
-    final instructions = _buildDepositInstructions(preview, appointment);
-    final canPayNow =
-        appointment.depositAmount > 0 &&
-        paymentMode != 'manual' &&
-        paymentMode.trim().isNotEmpty;
-    final effectiveStatus = appointment.depositReportedPaidAt != null
-        ? 'reported_paid'
-        : appointment.depositStatus;
+  void _commitAgendaState(VoidCallback mutation) {
+    setState(mutation);
+  }
 
-    AppointmentDepositCharge? managedCharge;
-    bool loadingManagedCharge = false;
-    bool reportingPaid = false;
-    bool autoPreparedManagedCharge = false;
-    final referenceController = TextEditingController();
+  int _activeReservedCountForMembership(String membershipId) {
+    if (membershipId.trim().isEmpty) {
+      return 0;
+    }
 
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            Future<void> createManagedCharge({
-              bool forceRefresh = false,
-            }) async {
-              setModalState(() => loadingManagedCharge = true);
-              try {
-                final charge = await widget.bookingRepository
-                    .createManagedDepositCharge(
-                      appointmentId: appointment.id,
-                      forceRefresh: forceRefresh,
-                    );
-                if (!context.mounted) {
-                  return;
-                }
-                setModalState(() => managedCharge = charge);
-                await _bootstrap();
-              } catch (error) {
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$error'.replaceFirst('Exception: ', '')),
-                  ),
-                );
-              } finally {
-                if (context.mounted) {
-                  setModalState(() => loadingManagedCharge = false);
-                }
+    final now = DateTime.now();
+    final reservedCount = _appointments.where((appointment) {
+      return appointment.membershipPlanId == membershipId &&
+          appointment.membershipPlanReservationStatus == 'scheduled' &&
+          !_isHistoryAppointment(appointment, now);
+    }).length;
+    if (reservedCount > 0) {
+      return reservedCount;
+    }
+
+    return _locallyScheduledMembershipPlanIds.contains(membershipId) ? 1 : 0;
+  }
+
+  int _reservableSessionsRemaining(CustomerMembershipPlan membership) {
+    final remaining =
+        membership.sessionsRemaining -
+        _activeReservedCountForMembership(membership.id);
+    return remaining <= 0 ? 0 : remaining;
+  }
+
+  List<CustomerMembershipPlan> _pendingFirstSlotMembershipPlans() {
+    final now = DateTime.now();
+    final pending =
+        _membershipPlans
+            .where((membership) {
+              if (membership.status != 'active' ||
+                  !membership.isActiveOn(now)) {
+                return false;
               }
-            }
 
-            if (!autoPreparedManagedCharge &&
-                paymentMode == 'asaas_pix' &&
-                canPayNow &&
-                managedCharge == null &&
-                !loadingManagedCharge) {
-              autoPreparedManagedCharge = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!context.mounted) {
-                  return;
-                }
-                createManagedCharge();
-              });
-            }
-
-            Future<void> markManualPayment(String method) async {
-              setModalState(() => reportingPaid = true);
-              try {
-                await widget.bookingRepository.reportDepositPaid(
-                  appointmentId: appointment.id,
-                  paymentMethod: method,
-                  paymentReference: referenceController.text,
-                );
-                if (!context.mounted) {
-                  return;
-                }
-                await _bootstrap();
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Pagamento informado para o salão.'),
-                  ),
-                );
-                Navigator.of(context).pop();
-              } catch (error) {
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$error'.replaceFirst('Exception: ', '')),
-                  ),
-                );
-              } finally {
-                if (context.mounted) {
-                  setModalState(() => reportingPaid = false);
-                }
+              if (_activeReservedCountForMembership(membership.id) > 0) {
+                return false;
               }
+
+              return _reservableSessionsRemaining(membership) > 0;
+            })
+            .toList(growable: false)
+          ..sort((left, right) {
+            final expirationOrder = left.expiresAt.compareTo(right.expiresAt);
+            if (expirationOrder != 0) {
+              return expirationOrder;
             }
 
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                8,
-                20,
-                20 + MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SectionTitle(
-                      title: appointment.depositAmount > 0
-                          ? 'Pague o sinal agora'
-                          : 'Regras da reserva',
-                      subtitle: appointment.depositAmount > 0
-                          ? 'Seu horário já foi criado. Falta concluir o sinal para segurar a vaga.'
-                          : 'Tudo alinhado logo após a confirmação.',
-                    ),
-                    const SizedBox(height: 16),
-                    SalonPanel(
-                      child: Text(
-                        appointment.bookingPolicySnapshot ?? '',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    if (appointment.depositAmount > 0) ...[
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Pill(
-                            label:
-                                'Sinal ${formatCurrency(appointment.depositAmount)}',
-                            icon: Icons.payments_rounded,
-                            backgroundColor: AppTheme.accent.withValues(
-                              alpha: 0.18,
-                            ),
-                            foregroundColor: AppTheme.ink,
-                          ),
-                          Pill(
-                            label: _depositStatusLabel(
-                              managedCharge?.depositStatus ?? effectiveStatus,
-                            ),
-                            icon: Icons.verified_rounded,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (instructions != null)
-                        SalonPanel(
-                          accent: AppTheme.secondary.withValues(alpha: 0.12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Como pagar',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                instructions,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (paymentMode == 'pix' &&
-                          preview?.bookingPixKey?.trim().isNotEmpty ==
-                              true) ...[
-                        const SizedBox(height: 14),
-                        _AgendaInfoTile(
-                          label: 'Chave Pix',
-                          value: preview!.bookingPixKey!,
-                          support:
-                              '${preview.bookingPixRecipientName ?? 'Favorecido'} • ${preview.bookingPixRecipientCity ?? 'Cidade não informada'}',
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: referenceController,
-                          decoration: const InputDecoration(
-                            labelText: 'Comprovante ou observação',
-                            hintText: 'Ex.: nome da conta pagadora',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            AsyncButton(
-                              label: 'Copiar chave Pix',
-                              isBusy: false,
-                              icon: Icons.copy_rounded,
-                              onPressed: () async {
-                                await Clipboard.setData(
-                                  ClipboardData(text: preview.bookingPixKey!),
-                                );
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Chave Pix copiada.'),
-                                  ),
-                                );
-                              },
-                            ),
-                            AsyncButton(
-                              label: 'Já paguei',
-                              isBusy: reportingPaid,
-                              icon: Icons.check_circle_rounded,
-                              onPressed: () => markManualPayment('pix'),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (paymentMode == 'external_checkout' &&
-                          preview?.bookingExternalCheckoutUrl
-                                  ?.trim()
-                                  .isNotEmpty ==
-                              true) ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: referenceController,
-                          decoration: const InputDecoration(
-                            labelText: 'Referência do pagamento',
-                            hintText: 'Ex.: código do checkout',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            AsyncButton(
-                              label: 'Abrir checkout',
-                              isBusy: false,
-                              icon: Icons.open_in_new_rounded,
-                              onPressed: () async {
-                                final uri = Uri.tryParse(
-                                  preview!.bookingExternalCheckoutUrl!,
-                                );
-                                if (uri == null) {
-                                  return;
-                                }
-                                await launchUrl(
-                                  uri,
-                                  mode: LaunchMode.externalApplication,
-                                );
-                              },
-                            ),
-                            AsyncButton(
-                              label: 'Já concluí pagamento',
-                              isBusy: reportingPaid,
-                              icon: Icons.check_circle_rounded,
-                              onPressed: () =>
-                                  markManualPayment('external_checkout'),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (paymentMode == 'asaas_pix') ...[
-                        const SizedBox(height: 14),
-                        if (managedCharge?.providerPayload?.trim().isNotEmpty ==
-                            true)
-                          _AgendaInfoTile(
-                            label: 'Pix copia e cola',
-                            value: managedCharge!.providerPayload!,
-                            support: managedCharge?.providerStatus == null
-                                ? 'Cobrança gerada.'
-                                : 'Status atual: ${managedCharge?.providerStatus}',
-                          ),
-                        if (managedCharge?.providerError?.trim().isNotEmpty ==
-                            true) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            managedCharge!.providerError!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            AsyncButton(
-                              label: managedCharge == null
-                                  ? 'Gerar Pix agora'
-                                  : 'Atualizar Pix',
-                              isBusy: loadingManagedCharge,
-                              icon: Icons.qr_code_rounded,
-                              onPressed: () => createManagedCharge(
-                                forceRefresh: managedCharge != null,
-                              ),
-                            ),
-                            if (managedCharge?.providerPayload
-                                    ?.trim()
-                                    .isNotEmpty ==
-                                true)
-                              AsyncButton(
-                                label: 'Copiar código Pix',
-                                isBusy: false,
-                                icon: Icons.copy_rounded,
-                                onPressed: () async {
-                                  await Clipboard.setData(
-                                    ClipboardData(
-                                      text: managedCharge!.providerPayload!,
-                                    ),
-                                  );
-                                  if (!context.mounted) {
-                                    return;
-                                  }
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Código Pix copiado com sucesso.',
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            if (managedCharge?.providerInvoiceUrl
-                                    ?.trim()
-                                    .isNotEmpty ==
-                                true)
-                              AsyncButton(
-                                label: 'Abrir cobrança',
-                                isBusy: false,
-                                icon: Icons.open_in_new_rounded,
-                                onPressed: () async {
-                                  final uri = Uri.tryParse(
-                                    managedCharge!.providerInvoiceUrl!,
-                                  );
-                                  if (uri == null) {
-                                    return;
-                                  }
-                                  await launchUrl(
-                                    uri,
-                                    mode: LaunchMode.externalApplication,
-                                  );
-                                },
-                              ),
-                          ],
-                        ),
-                      ],
-                      if (!canPayNow && paymentMode == 'manual') ...[
-                        const SizedBox(height: 14),
-                        Text(
-                          'O salão vai orientar a confirmação manual desse sinal.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                      if (appointment.depositReportedPaidAt != null) ...[
-                        const SizedBox(height: 14),
-                        SalonPanel(
-                          accent: AppTheme.primary.withValues(alpha: 0.12),
-                          child: Text(
-                            appointment.depositReportedPaidVia
-                                        ?.trim()
-                                        .isNotEmpty ==
-                                    true
-                                ? 'Pagamento já informado via ${appointment.depositReportedPaidVia}. O salão vai validar e confirmar a reserva.'
-                                : 'Pagamento já informado ao salão. Falta apenas a validação final da reserva.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
+            return left.title.toLowerCase().compareTo(
+              right.title.toLowerCase(),
             );
-          },
-        );
-      },
-    );
+          });
 
-    referenceController.dispose();
+    return pending;
   }
 
-  Future<void> _openDepositPayment(CustomerAppointment appointment) async {
-    await _showDepositExperience(appointment);
-  }
-
-  String? _buildDepositInstructions(
-    SalonPreview? preview,
-    CustomerAppointment appointment,
-  ) {
-    final base = preview?.bookingPaymentInstructions?.trim();
-    if (base != null && base.isNotEmpty) {
-      return base;
-    }
-    if (appointment.depositAmount <= 0) {
+  String? _focusedMembershipPlanIdFromOffer() {
+    final offer = widget.focusedOffer;
+    if (offer == null || offer.kind != 'membership') {
       return null;
     }
-    return switch (preview?.bookingPaymentMode) {
-      'pix' =>
-        'Copie a chave Pix do salão, conclua o pagamento e marque como pago logo abaixo.',
-      'external_checkout' =>
-        'Abra o checkout do salão, conclua o pagamento e volte para finalizar a confirmação.',
-      'asaas_pix' =>
-        'Gere o Pix do sinal agora. Assim que o pagamento entrar, o status atualiza para o salão.',
-      _ => 'O salão vai orientar a melhor forma de confirmar seu sinal.',
-    };
+
+    const prefix = 'membership-plan:';
+    final rawId = offer.id.trim();
+    if (!rawId.startsWith(prefix)) {
+      return null;
+    }
+
+    final membershipId = rawId.substring(prefix.length).trim();
+    return membershipId.isEmpty ? null : membershipId;
   }
 
-  String _depositStatusLabel(String status) {
-    return switch (status) {
-      'received' => 'Sinal recebido',
-      'pending' => 'Sinal pendente',
-      'reported_paid' => 'Pagamento informado',
-      _ => 'Status do sinal',
-    };
+  SalonOfferHighlight? _focusedMembershipRequestOffer() {
+    final offer = widget.focusedOffer;
+    if (offer == null || offer.kind != 'membership') {
+      return null;
+    }
+
+    return offer.actionKind == membershipRequestSchedulingActionKind
+        ? offer
+        : null;
+  }
+
+  CustomerMembershipPlan? _focusedPendingMembershipForService(
+    ServiceOption service,
+    DateTime slotDay,
+  ) {
+    final focusedMembershipId = _focusedMembershipPlanIdFromOffer();
+    if (focusedMembershipId == null) {
+      return null;
+    }
+
+    for (final membership in _pendingFirstSlotMembershipPlans()) {
+      if (membership.id != focusedMembershipId) {
+        continue;
+      }
+
+      if (membership.serviceId != service.id) {
+        continue;
+      }
+
+      if (!membership.isActiveOn(slotDay)) {
+        continue;
+      }
+
+      if (_reservableSessionsRemaining(membership) <= 0) {
+        continue;
+      }
+
+      return membership;
+    }
+
+    return null;
+  }
+
+  Future<void> _focusMembershipPlan(CustomerMembershipPlan membership) async {
+    final serviceId = membership.serviceId?.trim();
+    if (serviceId == null || serviceId.isEmpty) {
+      return;
+    }
+
+    for (final service in _services) {
+      if (service.id == serviceId) {
+        await _changeService(service);
+        return;
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esse servico do plano ainda nao esta disponivel para reservar no app.',
+          ),
+        ),
+      );
+  }
+
+  CustomerMembershipPlan? _eligibleMembershipForService(
+    ServiceOption service,
+    DateTime slotDay,
+  ) {
+    final candidates =
+        _membershipPlans
+            .where(
+              (membership) =>
+                  membership.serviceId == service.id &&
+                  membership.isActiveOn(slotDay) &&
+                  _reservableSessionsRemaining(membership) > 0,
+            )
+            .toList(growable: false)
+          ..sort((left, right) => left.expiresAt.compareTo(right.expiresAt));
+
+    if (candidates.isEmpty) {
+      return null;
+    }
+
+    return candidates.first;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Keep the structured path active while the legacy inline layout is retired.
+    if (context.mounted) {
+      return _buildStructuredAgendaPage();
+    }
+
     final preview = widget.session.landingData?.preview;
     final accent = parseHexColor(
       preview?.brandColor,
       fallback: AppTheme.secondary,
     );
     final now = DateTime.now();
-    final upcoming =
+    final activeAppointments =
         _appointments
-            .where((item) => item.date.isAfter(now))
-            .where((item) => item.status != 'cancelled')
+            .where((item) => !_isHistoryAppointment(item, now))
             .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+    final historyAppointments =
+        _appointments.where((item) => _isHistoryAppointment(item, now)).toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+    final upcoming =
+        activeAppointments.where((item) => item.date.isAfter(now)).toList()
           ..sort((a, b) => a.date.compareTo(b.date));
     final nextAppointment = upcoming.isEmpty ? null : upcoming.first;
     final chipsDays = List<DateTime>.generate(
       10,
       (index) => DateUtils.dateOnly(now.add(Duration(days: index))),
     );
-    final availableSlots = List<AppointmentSlot>.from(
-      _availability?.availableSlots ?? const <AppointmentSlot>[],
-    )..sort((a, b) => a.startAt.compareTo(b.startAt));
     final staffMembers = List<StaffAvailability>.from(
       _availability?.staffMembers ?? const <StaffAvailability>[],
     );
+    final enabledStaffIds = staffMembers.map((staff) => staff.id).toSet();
+    final availableSlots =
+        List<AppointmentSlot>.from(
+              _availability?.availableSlots ?? const <AppointmentSlot>[],
+            )
+            .where((slot) => enabledStaffIds.contains(slot.staffMemberId))
+            .toList()
+          ..sort((a, b) => a.startAt.compareTo(b.startAt));
+    final focusedStaffMember = _resolveFocusedStaffMember(staffMembers);
+    final serviceScopedSlots = focusedStaffMember == null
+        ? availableSlots
+        : availableSlots
+              .where((slot) => slot.staffMemberId == focusedStaffMember.id)
+              .toList();
     final selectedDayAppointments =
-        _appointments
+        activeAppointments
             .where((item) => DateUtils.isSameDay(item.date, _selectedDay))
-            .where((item) => item.status != 'cancelled')
             .toList()
           ..sort((a, b) => a.date.compareTo(b.date));
+    final sameDayActiveAppointment = _activeAppointmentOnDay(
+      activeAppointments,
+      _selectedDay,
+      now,
+    );
+    final bookableSlots = sameDayActiveAppointment == null
+        ? serviceScopedSlots
+        : const <AppointmentSlot>[];
     final availableStaffCount = staffMembers
         .where((staff) => staff.status == 'available')
         .length;
-    final nextSlot = availableSlots.isEmpty ? null : availableSlots.first;
+    final nextSlot = bookableSlots.isEmpty ? null : bookableSlots.first;
     final selectedService = _selectedService;
+    final focusedOffer = widget.focusedOffer;
     final plannedRevenue = selectedDayAppointments.fold<double>(
       0,
-      (sum, appointment) => sum + (appointment.servicePrice ?? 0),
+      (sum, appointment) => appointment.isMembershipPlanAppointment
+          ? sum
+          : sum + (appointment.servicePrice ?? 0),
     );
-    final depositCount = _appointments
+    final depositCount = activeAppointments
         .where((appointment) => appointment.depositAmount > 0)
-        .where((appointment) => appointment.status != 'cancelled')
         .length;
+    final clearableHistoryAppointments = historyAppointments
+        .where(
+          (appointment) => _isFinalAppointmentStatusValue(appointment.status),
+        )
+        .toList(growable: false);
 
     return Scaffold(
       body: AppGradientBackground(
@@ -894,10 +853,14 @@ class _AgendaPageState extends State<AgendaPage> {
                           _AgendaMetricCard(
                             icon: Icons.bolt_rounded,
                             label: 'Encaixes do dia',
-                            value: '${availableSlots.length}',
-                            support: nextSlot == null
+                            value: '${bookableSlots.length}',
+                            support: sameDayActiveAppointment != null
+                                ? 'Bloqueado pela sua reserva de hoje'
+                                : nextSlot == null
                                 ? 'Sem vaga por enquanto'
-                                : 'Primeiro às ${formatTime(nextSlot.startAt)}',
+                                : focusedStaffMember == null
+                                ? 'Primeiro às ${formatTime(nextSlot.startAt)}'
+                                : '${focusedStaffMember.name} às ${formatTime(nextSlot.startAt)}',
                             tone: AppTheme.primary,
                           ),
                           _AgendaMetricCard(
@@ -915,7 +878,9 @@ class _AgendaPageState extends State<AgendaPage> {
                             value: '$availableStaffCount',
                             support: staffMembers.isEmpty
                                 ? 'Ainda sem escala'
-                                : '${staffMembers.length} profissionais avaliados',
+                                : focusedStaffMember == null
+                                ? '${staffMembers.length} profissionais habilitados para esse serviço'
+                                : 'Horários filtrados em ${focusedStaffMember.name}',
                             tone: AppTheme.secondary,
                           ),
                         ],
@@ -931,21 +896,28 @@ class _AgendaPageState extends State<AgendaPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                if (focusedOffer != null) ...[
+                  _AgendaOfferContextCard(
+                    offer: focusedOffer,
+                    selectedService: selectedService,
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 const SectionTitle(
                   title: 'Escolha o serviço',
                   subtitle: 'Tudo organizado para reservar sem atrito.',
                 ),
                 const SizedBox(height: 14),
-                if (_services.isEmpty && !_loading)
+                if (_services.isEmpty && !_loading && !_servicesLoadFailed)
                   const EmptyStateCard(
                     title: 'Sem serviços disponíveis',
                     message:
                         'Assim que o salão ativar a agenda, os serviços aparecem aqui.',
                     icon: Icons.spa_outlined,
                   )
-                else
+                else if (_services.isNotEmpty)
                   SizedBox(
-                    height: 176,
+                    height: 258,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _services.length,
@@ -966,11 +938,11 @@ class _AgendaPageState extends State<AgendaPage> {
                 const SectionTitle(
                   title: 'Escolha o dia',
                   subtitle:
-                      'Os melhores encaixes já aparecem no recorte selecionado.',
+                      'Os encaixes abaixo já respeitam o serviço escolhido.',
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
-                  height: 96,
+                  height: 136,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: chipsDays.length,
@@ -988,19 +960,47 @@ class _AgendaPageState extends State<AgendaPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                if (_loadErrorMessage != null) ...[
+                  SalonPanel(
+                    accent: AppTheme.accent,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SectionTitle(
+                          title: 'A agenda travou neste recorte',
+                          subtitle:
+                              'A tela continua aberta para voce tentar de novo sem perder o contexto.',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _loadErrorMessage!,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 14),
+                        OutlinedButton.icon(
+                          onPressed: _loading ? null : _bootstrap,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Tentar novamente'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 42),
                     child: Center(child: CircularProgressIndicator()),
                   )
-                else if (selectedService == null)
-                  const EmptyStateCard(
-                    title: 'Sem serviço selecionado',
-                    message:
-                        'Escolha um serviço para liberar a grade com equipe, horários e confirmação.',
-                    icon: Icons.calendar_view_day_rounded,
-                  )
-                else ...[
+                else if (selectedService == null) ...[
+                  if (_services.isNotEmpty && !_servicesLoadFailed)
+                    const EmptyStateCard(
+                      title: 'Sem serviço selecionado',
+                      message:
+                          'Escolha um serviço para liberar a grade com equipe e horários disponíveis na hora.',
+                      icon: Icons.calendar_view_day_rounded,
+                    ),
+                ] else ...[
                   SalonPanel(
                     accent: _availability?.isOpen == true
                         ? accent
@@ -1042,12 +1042,18 @@ class _AgendaPageState extends State<AgendaPage> {
                             _AgendaMetricCard(
                               icon: Icons.person_search_rounded,
                               label: 'Próximo encaixe',
-                              value: nextSlot == null
+                              value: sameDayActiveAppointment != null
+                                  ? 'Travado'
+                                  : nextSlot == null
                                   ? 'Sem horário'
                                   : formatTime(nextSlot.startAt),
-                              support: nextSlot == null
+                              support: sameDayActiveAppointment != null
+                                  ? 'Você já possui um horário ativo neste dia'
+                                  : nextSlot == null
                                   ? 'Nenhuma vaga neste recorte'
-                                  : 'Com ${nextSlot.staffMemberName}',
+                                  : focusedStaffMember == null
+                                  ? 'Com ${nextSlot.staffMemberName}'
+                                  : 'Somente ${focusedStaffMember.name}',
                               tone: AppTheme.secondary,
                             ),
                             _AgendaMetricCard(
@@ -1062,7 +1068,7 @@ class _AgendaPageState extends State<AgendaPage> {
                                           .isNotEmpty ==
                                       true
                                   ? selectedService.description!.trim()
-                                  : 'Fluxo real de reserva, confirmação e cancelamento.',
+                                  : 'Somente profissionais habilitados para este serviço aparecem aqui.',
                               tone: AppTheme.accent,
                             ),
                           ],
@@ -1072,11 +1078,11 @@ class _AgendaPageState extends State<AgendaPage> {
                           const SectionTitle(
                             title: 'Equipe em destaque',
                             subtitle:
-                                'Veja quem está livre, ocupado ou fora da escala.',
+                                'Toque em um profissional para ver só os horários dele dentro do serviço escolhido.',
                           ),
                           const SizedBox(height: 14),
                           SizedBox(
-                            height: 178,
+                            height: 256,
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
                               itemCount: staffMembers.length,
@@ -1086,6 +1092,11 @@ class _AgendaPageState extends State<AgendaPage> {
                                 return _StaffAvailabilityCard(
                                   staff: staffMembers[index],
                                   accent: accent,
+                                  selected:
+                                      focusedStaffMember?.id ==
+                                      staffMembers[index].id,
+                                  onTap: () =>
+                                      _selectStaffMember(staffMembers[index]),
                                 );
                               },
                             ),
@@ -1097,12 +1108,24 @@ class _AgendaPageState extends State<AgendaPage> {
                   const SizedBox(height: 20),
                   SectionTitle(
                     title: 'Melhores horários',
-                    subtitle: availableSlots.isEmpty
+                    subtitle: sameDayActiveAppointment != null
+                        ? 'Depois desse atendimento, a próxima reserva precisa ficar para outro dia.'
+                        : bookableSlots.isEmpty
                         ? 'Troque o serviço ou o dia para encontrar outro encaixe.'
-                        : 'Escolha um card e feche sua reserva com confirmação imediata.',
+                        : focusedStaffMember == null
+                        ? 'Esses horários já pertencem ao serviço escolhido e à equipe habilitada.'
+                        : 'A grade abaixo mostra somente os horários de ${focusedStaffMember.name} para ${selectedService.name.toLowerCase()}.',
                   ),
                   const SizedBox(height: 14),
-                  if (availableSlots.isEmpty)
+                  if (sameDayActiveAppointment != null)
+                    EmptyStateCard(
+                      title: 'Você já reservou este dia',
+                      message: _sameDayBookingBlockMessage(
+                        sameDayActiveAppointment,
+                      ),
+                      icon: Icons.lock_clock_rounded,
+                    )
+                  else if (bookableSlots.isEmpty)
                     const EmptyStateCard(
                       title: 'Sem encaixe livre agora',
                       message:
@@ -1114,7 +1137,7 @@ class _AgendaPageState extends State<AgendaPage> {
                       child: GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: availableSlots.length,
+                        itemCount: bookableSlots.length,
                         gridDelegate:
                             const SliverGridDelegateWithMaxCrossAxisExtent(
                               maxCrossAxisExtent: 240,
@@ -1123,10 +1146,11 @@ class _AgendaPageState extends State<AgendaPage> {
                               mainAxisExtent: 188,
                             ),
                         itemBuilder: (context, index) {
-                          final slot = availableSlots[index];
+                          final slot = bookableSlots[index];
                           return _AgendaSlotCard(
                             slot: slot,
                             accent: accent,
+                            ctaLabel: 'Reservar agora',
                             onTap: () => _confirmBooking(slot),
                           );
                         },
@@ -1136,20 +1160,20 @@ class _AgendaPageState extends State<AgendaPage> {
                 const SizedBox(height: 20),
                 SectionTitle(
                   title: 'Sua agenda no salão',
-                  subtitle: _appointments.isEmpty
+                  subtitle: activeAppointments.isEmpty
                       ? 'Reserve o primeiro horário e ele aparece aqui na hora.'
-                      : 'Próximos horários, histórico e sinais alinhados em uma única visão.',
+                      : 'Próximos horários e sinais ficam aqui, sem misturar com o histórico.',
                 ),
                 const SizedBox(height: 14),
-                if (_appointments.isEmpty)
+                if (activeAppointments.isEmpty)
                   const EmptyStateCard(
-                    title: 'Sua agenda ainda está vazia',
+                    title: 'Sem agendamento ativo',
                     message:
-                        'Reserve o primeiro horário e ele aparece aqui na hora.',
+                        'Os horários encerrados ou cancelados ficam no histórico abaixo.',
                     icon: Icons.calendar_today_rounded,
                   )
                 else
-                  ..._appointments.map(
+                  ...activeAppointments.map(
                     (appointment) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: _AppointmentHistoryCard(
@@ -1164,15 +1188,75 @@ class _AgendaPageState extends State<AgendaPage> {
                                 appointment.depositReportedPaidAt == null
                             ? () => _openDepositPayment(appointment)
                             : null,
+                        onReschedule:
+                            appointment.date.isAfter(now) &&
+                                !_isHistoryAppointment(appointment, now)
+                            ? () => _startReschedulingAppointment(appointment)
+                            : null,
                         onCancel:
                             appointment.date.isAfter(now) &&
-                                appointment.status != 'cancelled' &&
-                                appointment.status != 'completed'
+                                !_isHistoryAppointment(appointment, now)
                             ? () => _cancelAppointment(appointment)
+                            : null,
+                        onComplete:
+                            _canCustomerCompleteAppointment(appointment, now)
+                            ? () => _completeAppointment(appointment)
+                            : null,
+                        completionHint: _appointmentCompletionHint(
+                          appointment,
+                          now,
+                        ),
+                        onReview: null,
+                        onArchive: null,
+                      ),
+                    ),
+                  ),
+                if (historyAppointments.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  SectionTitle(
+                    title: 'Histórico',
+                    subtitle:
+                        'Atendimentos encerrados, cancelados e horários passados aguardando sua confirmação final ficam aqui.',
+                    trailing: clearableHistoryAppointments.isEmpty
+                        ? null
+                        : TextButton.icon(
+                            onPressed: () => _clearAppointmentHistory(
+                              clearableHistoryAppointments,
+                            ),
+                            icon: const Icon(Icons.delete_sweep_rounded),
+                            label: const Text('Limpar'),
+                          ),
+                  ),
+                  const SizedBox(height: 14),
+                  ...historyAppointments.map(
+                    (appointment) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _AppointmentHistoryCard(
+                        appointment: appointment,
+                        accent: accent,
+                        highlight: false,
+                        onPay: null,
+                        onReschedule: null,
+                        onCancel: null,
+                        onComplete:
+                            _canCustomerCompleteAppointment(appointment, now)
+                            ? () => _completeAppointment(appointment)
+                            : null,
+                        completionHint: _appointmentCompletionHint(
+                          appointment,
+                          now,
+                        ),
+                        onReview: appointment.status == 'completed'
+                            ? () => _reviewAppointment(appointment)
+                            : null,
+                        onArchive:
+                            _isFinalAppointmentStatusValue(appointment.status)
+                            ? () => _archiveAppointment(appointment)
                             : null,
                       ),
                     ),
                   ),
+                ],
               ],
             ),
           ),
@@ -1202,8 +1286,8 @@ class _ServicePickerCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(26),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 236,
-        padding: const EdgeInsets.all(16),
+        width: 264,
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: selected ? accent.withValues(alpha: 0.12) : Colors.white,
           borderRadius: BorderRadius.circular(26),
@@ -1222,15 +1306,14 @@ class _ServicePickerCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _ServicePreviewImage(
+              imageUrl: service.imageUrl,
+              accent: selected ? accent : AppTheme.primary,
+            ),
+            const SizedBox(height: 10),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _AgendaArtwork(
-                  imageUrl: service.imageUrl,
-                  size: 58,
-                  accent: selected ? accent : AppTheme.primary,
-                  icon: Icons.spa_rounded,
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1238,16 +1321,16 @@ class _ServicePickerCard extends StatelessWidget {
                       Text(
                         service.name,
                         style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         service.description?.trim().isNotEmpty == true
                             ? service.description!.trim()
-                            : 'Reserva com confirmação imediata.',
+                            : 'Entra direto na agenda ao escolher o horário.',
                         style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -1258,14 +1341,16 @@ class _ServicePickerCard extends StatelessWidget {
               ],
             ),
             const Spacer(),
-            Row(
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Pill(
                   label: '${service.durationMinutes} min',
                   icon: Icons.schedule_rounded,
                   backgroundColor: AppTheme.secondary.withValues(alpha: 0.08),
                 ),
-                const Spacer(),
                 Text(
                   formatCurrency(service.price),
                   style: Theme.of(context).textTheme.titleMedium,
@@ -1275,6 +1360,53 @@ class _ServicePickerCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ServicePreviewImage extends StatelessWidget {
+  const _ServicePreviewImage({required this.imageUrl, required this.accent});
+
+  final String? imageUrl;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: SizedBox(
+        width: double.infinity,
+        height: 112,
+        child: imageUrl?.trim().isNotEmpty == true
+            ? SalonNetworkImage(
+                imageUrl: imageUrl!,
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+                error: _ServicePreviewFallback(accent: accent),
+                placeholder: _ServicePreviewFallback(accent: accent),
+              )
+            : _ServicePreviewFallback(accent: accent),
+      ),
+    );
+  }
+}
+
+class _ServicePreviewFallback extends StatelessWidget {
+  const _ServicePreviewFallback({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [accent.withValues(alpha: 0.18), AppTheme.panel],
+        ),
+      ),
+      child: Center(child: Icon(Icons.spa_rounded, color: accent, size: 30)),
     );
   }
 }
@@ -1299,8 +1431,8 @@ class _DayPickerCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 92,
-        padding: const EdgeInsets.all(14),
+        width: 100,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(
           color: selected ? accent : Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -1318,19 +1450,23 @@ class _DayPickerCard extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               _relativeDayLabel(day),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: selected ? Colors.white : AppTheme.mutedInk,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const Spacer(),
             Text(
               formatShortDate(day),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: selected ? Colors.white : AppTheme.ink,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
             Text(
@@ -1340,9 +1476,70 @@ class _DayPickerCard extends StatelessWidget {
                     ? Colors.white.withValues(alpha: 0.84)
                     : AppTheme.mutedInk,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AgendaOfferContextCard extends StatelessWidget {
+  const _AgendaOfferContextCard({
+    required this.offer,
+    required this.selectedService,
+  });
+
+  final SalonOfferHighlight offer;
+  final ServiceOption? selectedService;
+
+  @override
+  Widget build(BuildContext context) {
+    final linkedServiceName =
+        offer.bookingServiceName?.trim().isNotEmpty == true
+        ? offer.bookingServiceName!.trim()
+        : selectedService?.name;
+    final isMembershipRequestSchedule =
+        offer.actionKind == membershipRequestSchedulingActionKind;
+    final subtitle = isMembershipRequestSchedule
+        ? linkedServiceName == null
+              ? 'Voce esta pedindo ${offer.title} com um horario preferido. Esse horario so vira serie fixa depois que o salao aprovar o plano e confirmar o pagamento no painel.'
+              : 'Voce esta pedindo ${offer.title} com $linkedServiceName ja focado. Escolha o dia e o horario preferidos para o sistema tentar ativar a serie automaticamente quando o salao aprovar e confirmar o pagamento.'
+        : linkedServiceName == null
+        ? 'Voce veio da oferta ${offer.title}. Escolha o servico e feche o horario enquanto essa campanha estiver no ar.'
+        : 'Voce veio da oferta ${offer.title}. A agenda ja puxou $linkedServiceName para transformar essa campanha em horario confirmado.';
+
+    return SalonPanel(
+      accent: AppTheme.primary.withValues(alpha: 0.12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Pill(
+                label: isMembershipRequestSchedule
+                    ? 'Pedido com horario'
+                    : 'Oferta aplicada',
+                icon: isMembershipRequestSchedule
+                    ? Icons.event_repeat_rounded
+                    : Icons.local_offer_rounded,
+                backgroundColor: AppTheme.primary.withValues(alpha: 0.14),
+                foregroundColor: AppTheme.primary,
+              ),
+              Pill(label: offer.kindLabel),
+              if (offer.priceLabel?.trim().isNotEmpty == true)
+                Pill(label: offer.priceLabel!),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(offer.title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+        ],
       ),
     );
   }
@@ -1403,86 +1600,114 @@ class _AgendaMetricCard extends StatelessWidget {
 }
 
 class _StaffAvailabilityCard extends StatelessWidget {
-  const _StaffAvailabilityCard({required this.staff, required this.accent});
+  const _StaffAvailabilityCard({
+    required this.staff,
+    required this.accent,
+    required this.selected,
+    required this.onTap,
+  });
 
   final StaffAvailability staff;
   final Color accent;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final tone = switch (staff.status) {
       'available' => accent,
+      'serving' => AppTheme.primary,
       'off' => AppTheme.mutedInk,
       _ => AppTheme.accent,
     };
 
     return SizedBox(
       width: 228,
-      child: SalonPanel(
-        padding: const EdgeInsets.all(16),
-        accent: tone,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.panelRadius),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.panelRadius),
+            border: Border.all(
+              color: selected ? tone : Colors.transparent,
+              width: selected ? 2 : 0,
+            ),
+          ),
+          child: SalonPanel(
+            padding: const EdgeInsets.all(16),
+            accent: selected ? tone : tone.withValues(alpha: 0.08),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _AgendaArtwork(
-                  size: 54,
-                  accent: tone,
-                  icon: Icons.person_rounded,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        staff.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    _AgendaArtwork(
+                      imageUrl: staff.imageUrl,
+                      size: 54,
+                      accent: tone,
+                      icon: Icons.person_rounded,
+                      imageAlignment: kSalonPortraitAvatarAlignment,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            staff.name,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (staff.role?.trim().isNotEmpty == true) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              staff.role!,
+                              style: Theme.of(context).textTheme.bodySmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
                       ),
-                      if (staff.role?.trim().isNotEmpty == true) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          staff.role!,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                    if (selected)
+                      Icon(Icons.check_circle_rounded, color: tone, size: 22),
+                  ],
                 ),
+                const SizedBox(height: 14),
+                Pill(
+                  label: _staffStatusLabel(staff.status),
+                  icon: _staffStatusIcon(staff.status),
+                  backgroundColor: tone.withValues(alpha: 0.14),
+                  foregroundColor: tone == AppTheme.accent
+                      ? AppTheme.ink
+                      : tone,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  staff.statusDetail,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '${staff.availableSlotsCount} encaixes livres',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (staff.nextAvailableAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Próximo às ${formatTime(staff.nextAvailableAt!)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 14),
-            Pill(
-              label: _staffStatusLabel(staff.status),
-              icon: _staffStatusIcon(staff.status),
-              backgroundColor: tone.withValues(alpha: 0.14),
-              foregroundColor: tone == AppTheme.accent ? AppTheme.ink : tone,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              staff.statusDetail,
-              style: Theme.of(context).textTheme.bodySmall,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const Spacer(),
-            Text(
-              '${staff.availableSlotsCount} encaixes livres',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            if (staff.nextAvailableAt != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Próximo às ${formatTime(staff.nextAvailableAt!)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -1493,11 +1718,13 @@ class _AgendaSlotCard extends StatelessWidget {
   const _AgendaSlotCard({
     required this.slot,
     required this.accent,
+    this.ctaLabel = 'Reservar agora',
     required this.onTap,
   });
 
   final AppointmentSlot slot;
   final Color accent;
+  final String ctaLabel;
   final VoidCallback onTap;
 
   @override
@@ -1526,15 +1753,12 @@ class _AgendaSlotCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.flash_on_rounded, color: accent, size: 21),
+                _AgendaArtwork(
+                  imageUrl: slot.staffMemberImageUrl,
+                  size: 42,
+                  accent: accent,
+                  icon: Icons.person_rounded,
+                  imageAlignment: kSalonPortraitAvatarAlignment,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1550,7 +1774,7 @@ class _AgendaSlotCard extends StatelessWidget {
             Text(
               slot.staffMemberName,
               style: theme.textTheme.titleMedium,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
@@ -1573,7 +1797,7 @@ class _AgendaSlotCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Reservar agora',
+                      ctaLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
@@ -1598,14 +1822,24 @@ class _AppointmentHistoryCard extends StatelessWidget {
     required this.accent,
     required this.highlight,
     required this.onPay,
+    required this.onReschedule,
     required this.onCancel,
+    required this.onComplete,
+    required this.completionHint,
+    required this.onReview,
+    required this.onArchive,
   });
 
   final CustomerAppointment appointment;
   final Color accent;
   final bool highlight;
   final VoidCallback? onPay;
+  final VoidCallback? onReschedule;
   final VoidCallback? onCancel;
+  final VoidCallback? onComplete;
+  final String? completionHint;
+  final VoidCallback? onReview;
+  final VoidCallback? onArchive;
 
   @override
   Widget build(BuildContext context) {
@@ -1638,10 +1872,12 @@ class _AppointmentHistoryCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     if (appointment.staffName?.trim().isNotEmpty == true) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Com ${appointment.staffName}',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      const SizedBox(height: 10),
+                      _AgendaProfessionalSignature(
+                        name: appointment.staffName!,
+                        role: appointment.staffRole,
+                        imageUrl: appointment.staffImageUrl,
+                        accent: accent,
                       ),
                     ],
                   ],
@@ -1682,6 +1918,34 @@ class _AppointmentHistoryCard extends StatelessWidget {
                   backgroundColor: AppTheme.primary.withValues(alpha: 0.12),
                   foregroundColor: AppTheme.primary,
                 ),
+              if (appointment.isMembershipPlanAppointment)
+                Pill(
+                  label:
+                      appointment.membershipPlanTitle?.trim().isNotEmpty == true
+                      ? 'Plano • ${appointment.membershipPlanTitle}'
+                      : 'Coberto pelo plano',
+                  icon: Icons.workspace_premium_rounded,
+                  backgroundColor: accent.withValues(alpha: 0.14),
+                  foregroundColor: accent,
+                ),
+              if (!appointment.isMembershipPlanAppointment &&
+                  appointment.paymentPreference?.trim().isNotEmpty == true)
+                Pill(
+                  label:
+                      'Forma prevista • ${appointmentPaymentPreferenceLabel(appointment.paymentPreference!)}',
+                  icon: Icons.wallet_rounded,
+                  backgroundColor: AppTheme.secondary.withValues(alpha: 0.12),
+                  foregroundColor: AppTheme.secondary,
+                ),
+              if (appointment.isMembershipPlanAppointment &&
+                  appointment.membershipSessionIndex != null &&
+                  appointment.membershipSessionsIncluded != null)
+                Pill(
+                  label:
+                      'Sessao ${appointment.membershipSessionIndex}/${appointment.membershipSessionsIncluded}',
+                  icon: Icons.repeat_rounded,
+                  backgroundColor: AppTheme.panel,
+                ),
               if (appointment.presenceConfirmedAt != null)
                 Pill(
                   label:
@@ -1689,6 +1953,13 @@ class _AppointmentHistoryCard extends StatelessWidget {
                   icon: Icons.verified_user_rounded,
                   backgroundColor: AppTheme.primary.withValues(alpha: 0.12),
                   foregroundColor: AppTheme.primary,
+                ),
+              if (appointment.reviewRating != null)
+                Pill(
+                  label: '${appointment.reviewRating}/5 no app',
+                  icon: Icons.star_rounded,
+                  backgroundColor: accent.withValues(alpha: 0.14),
+                  foregroundColor: accent,
                 ),
             ],
           ),
@@ -1710,6 +1981,41 @@ class _AppointmentHistoryCard extends StatelessWidget {
               ),
             ),
           ],
+          if (appointment.reviewComment?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: accent.withValues(alpha: 0.14)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Avaliação enviada no app',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    appointment.reviewComment!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (appointment.reviewCreatedAt != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Enviada em ${formatFullDate(appointment.reviewCreatedAt!)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           if (onPay != null) ...[
             const SizedBox(height: 14),
             AsyncButton(
@@ -1719,12 +2025,64 @@ class _AppointmentHistoryCard extends StatelessWidget {
               onPressed: onPay,
             ),
           ],
+          if (onReschedule != null) ...[
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: onReschedule,
+              icon: const Icon(Icons.update_rounded),
+              label: const Text('Remarcar horario'),
+            ),
+          ],
           if (onCancel != null) ...[
             const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: onCancel,
               icon: const Icon(Icons.event_busy_rounded),
               label: const Text('Cancelar horário'),
+            ),
+          ],
+          if (completionHint?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.panel,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.line),
+              ),
+              child: Text(
+                completionHint!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+          if (onComplete != null) ...[
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onComplete,
+              icon: const Icon(Icons.verified_rounded),
+              label: const Text('Concluir atendimento'),
+            ),
+          ],
+          if (onReview != null) ...[
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: onReview,
+              icon: const Icon(Icons.star_rate_rounded),
+              label: Text(
+                appointment.reviewRating == null
+                    ? 'Avaliar atendimento'
+                    : 'Editar avaliação',
+              ),
+            ),
+          ],
+          if (onArchive != null) ...[
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: onArchive,
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('Remover do app'),
             ),
           ],
         ],
@@ -1779,10 +2137,25 @@ class _HighlightedAgendaCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 if (appointment.staffName?.trim().isNotEmpty == true) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Com ${appointment.staffName}',
-                    style: Theme.of(context).textTheme.bodySmall,
+                  const SizedBox(height: 10),
+                  _AgendaProfessionalSignature(
+                    name: appointment.staffName!,
+                    role: appointment.staffRole,
+                    imageUrl: appointment.staffImageUrl,
+                    accent: accent,
+                  ),
+                ],
+                if (appointment.isMembershipPlanAppointment) ...[
+                  const SizedBox(height: 10),
+                  Pill(
+                    label:
+                        appointment.membershipPlanTitle?.trim().isNotEmpty ==
+                            true
+                        ? appointment.membershipPlanTitle!
+                        : 'Plano mensal do app',
+                    icon: Icons.workspace_premium_rounded,
+                    backgroundColor: accent.withValues(alpha: 0.14),
+                    foregroundColor: accent,
                   ),
                 ],
               ],
@@ -1799,12 +2172,14 @@ class _AgendaArtwork extends StatelessWidget {
     required this.size,
     required this.accent,
     required this.icon,
+    this.imageAlignment = Alignment.center,
     this.imageUrl,
   });
 
   final double size;
   final Color accent;
   final IconData icon;
+  final Alignment imageAlignment;
   final String? imageUrl;
 
   @override
@@ -1815,21 +2190,68 @@ class _AgendaArtwork extends StatelessWidget {
         width: size,
         height: size,
         child: imageUrl?.trim().isNotEmpty == true
-            ? Image.network(
-                imageUrl!,
+            ? SalonNetworkImage(
+                imageUrl: imageUrl!,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return _FallbackArtwork(accent: accent, icon: icon);
-                },
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) {
-                    return child;
-                  }
-                  return _FallbackArtwork(accent: accent, icon: icon);
-                },
+                alignment: imageAlignment,
+                error: _FallbackArtwork(accent: accent, icon: icon),
+                placeholder: _FallbackArtwork(accent: accent, icon: icon),
               )
             : _FallbackArtwork(accent: accent, icon: icon),
       ),
+    );
+  }
+}
+
+class _AgendaProfessionalSignature extends StatelessWidget {
+  const _AgendaProfessionalSignature({
+    required this.name,
+    required this.accent,
+    this.role,
+    this.imageUrl,
+  });
+
+  final String name;
+  final String? role;
+  final String? imageUrl;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        _AgendaArtwork(
+          imageUrl: imageUrl,
+          size: 34,
+          accent: accent,
+          icon: Icons.person_rounded,
+          imageAlignment: kSalonPortraitAvatarAlignment,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Com $name',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (role?.trim().isNotEmpty == true)
+                Text(
+                  role!,
+                  style: theme.textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1909,6 +2331,8 @@ String _staffStatusLabel(String status) {
   switch (status) {
     case 'available':
       return 'Livre agora';
+    case 'serving':
+      return 'Em atendimento';
     case 'off':
       return 'Fora da escala';
     default:
@@ -1920,6 +2344,8 @@ IconData _staffStatusIcon(String status) {
   switch (status) {
     case 'available':
       return Icons.check_circle_rounded;
+    case 'serving':
+      return Icons.content_cut_rounded;
     case 'off':
       return Icons.pause_circle_rounded;
     default:

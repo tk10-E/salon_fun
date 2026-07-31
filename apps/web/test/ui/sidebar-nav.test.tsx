@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 
-import type { ReactNode } from "react";
-import type { MouseEventHandler } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MouseEventHandler, ReactNode } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { usePathnameMock, useRouterMock, prefetchMock } = vi.hoisted(() => ({
   usePathnameMock: vi.fn(),
@@ -26,7 +25,10 @@ vi.mock("next/link", () => ({
     <a
       href={props.href}
       className={props.className}
-      onClick={props.onClick}
+      onClick={(event) => {
+        props.onClick?.(event);
+        event.preventDefault();
+      }}
       onMouseEnter={props.onMouseEnter}
       onTouchStart={props.onTouchStart}
       onFocus={props.onFocus}
@@ -55,55 +57,115 @@ describe("SidebarNav", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("prefetches only when the user signals navigation intent", () => {
     render(<SidebarNav />);
 
     expect(prefetchMock).not.toHaveBeenCalled();
 
-    const feedLink = screen.getByRole("link", { name: /feed/i });
+    const campaignsLink = screen.getByRole("link", { name: /campanhas/i });
 
-    fireEvent.mouseEnter(feedLink);
+    fireEvent.mouseEnter(campaignsLink);
     expect(prefetchMock).toHaveBeenCalledTimes(1);
-    expect(prefetchMock).toHaveBeenLastCalledWith("/dashboard/feed");
+    expect(prefetchMock).toHaveBeenLastCalledWith(
+      "/dashboard/benefits/promotions",
+    );
 
-    fireEvent.focus(feedLink);
-    fireEvent.touchStart(feedLink);
+    fireEvent.focus(campaignsLink);
+    fireEvent.touchStart(campaignsLink);
 
     expect(prefetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("marca o link clicado como pendente imediatamente", () => {
+  it("shows the main salon and client-app areas and marks clicks as pending", () => {
     render(<SidebarNav />);
 
     expect(
-      screen.getByText(/Acesso rápido ao que move atendimento, agenda e operação\./i),
+      screen.getByText(/o que move o salão e o app do cliente/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Dia a dia do salão/i)).toBeInTheDocument();
-    expect(screen.getAllByText("7").length).toBeGreaterThan(0);
+    expect(screen.getByText(/essencial/i)).toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: /feed/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^hoje/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^agenda/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^clientes/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /lembretes/i }),
+      screen.getByRole("link", { name: /^serviços/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^equipe/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^caixa/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^feed/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^loja/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /^campanhas/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /whatsapp/i }),
+      screen.getByRole("link", { name: /^app do cliente/i }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^ajustes/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /caixa/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /vitrine do app/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /estoque/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("link", { name: /central ia/i }),
+    ).not.toBeInTheDocument();
 
-    const servicesLink = screen.getByRole("link", { name: /serviços/i });
-    fireEvent.click(servicesLink);
+    const clientsLink = screen.getByRole("link", { name: /^clientes/i });
+    fireEvent.click(clientsLink);
 
-    expect(servicesLink).toHaveClass("nav-link--pending");
-    expect(servicesLink).toHaveAttribute("aria-busy", "true");
+    expect(clientsLink).toHaveClass("nav-link--pending");
+    expect(clientsLink).toHaveAttribute("aria-busy", "true");
     expect(prefetchMock).toHaveBeenCalledTimes(1);
+    expect(prefetchMock).toHaveBeenCalledWith(MANAGEMENT_ROUTES.clients);
+  });
+
+  it("notifies the shell when a valid navigation starts", () => {
+    const onNavigate = vi.fn();
+
+    render(<SidebarNav onNavigate={onNavigate} />);
+
+    fireEvent.click(screen.getByRole("link", { name: /clientes/i }));
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("warms up the most likely routes after the panel settles", () => {
+    vi.useFakeTimers();
+
+    render(<SidebarNav />);
+
+    expect(prefetchMock).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(2400);
+    });
+
+    expect(prefetchMock).toHaveBeenCalledWith(MANAGEMENT_ROUTES.appointments);
+    expect(prefetchMock).toHaveBeenCalledWith(MANAGEMENT_ROUTES.clients);
     expect(prefetchMock).toHaveBeenCalledWith(MANAGEMENT_ROUTES.services);
+    expect(prefetchMock).toHaveBeenCalledWith("/dashboard/finance");
+    expect(prefetchMock).toHaveBeenCalledWith(MANAGEMENT_ROUTES.professionals);
+    expect(prefetchMock).toHaveBeenCalledWith("/dashboard/feed");
+    expect(prefetchMock).toHaveBeenCalledWith("/dashboard/inventory");
+    expect(prefetchMock).toHaveBeenCalledWith("/dashboard/benefits/promotions");
+    expect(prefetchMock).toHaveBeenCalledWith("/dashboard/client-app");
+  });
+
+  it("shows only billing activation when the workspace is locked", () => {
+    render(
+      <SidebarNav
+        isWorkspaceLocked
+        allowedPathsWhenLocked={["/planos"]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /escolher plano/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /agenda/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /clientes/i }),
+    ).not.toBeInTheDocument();
   });
 });

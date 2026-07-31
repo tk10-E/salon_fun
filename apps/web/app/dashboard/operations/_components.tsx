@@ -2,669 +2,683 @@ import Image from "next/image";
 import Link from "next/link";
 
 import {
-  runSalonAutoPilotAction,
   saveSalonMonthlyTargetsAction,
   saveStaffCommissionSettingsAction,
   updateCustomerProductOrderStatusAction,
-  sendCustomerReactivationAction,
 } from "@/app/actions";
 import { OPERATIONS_PATH } from "@/app/_actions/shared";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 
 import type { OperationsPageData } from "./_lib";
+import styles from "./page.module.css";
 
 type OperationsPageContentProps = {
   data: OperationsPageData;
+  searchParams?: {
+    message?: string;
+    orderState?: string;
+    tone?: string;
+  };
 };
 
-export function OperationsPageContent({ data }: OperationsPageContentProps) {
-  return (
-    <>
-      <OperationsHeader header={data.header} />
-      <OperationsGoalsSection goals={data.goals} />
-      <OperationsInsightsSection insights={data.insights} />
-      <OperationsCustomersAttentionSection
-        customersAttention={data.customersAttention}
-      />
-      <OperationsTeamSection team={data.team} />
-      <OperationsStoreOrdersSection store={data.store} />
-      <OperationsLowStockSection inventory={data.inventory} />
-      <OperationsMovementsSection inventory={data.inventory} />
-    </>
-  );
+function normalizeValue(value?: string | null) {
+  return value?.trim() ?? "";
 }
 
-function OperationsHeader({
-  header,
-}: {
-  header: OperationsPageData["header"];
-}) {
-  return (
-    <header className="simple-header">
-      <div>
-        <p className="eyebrow">Operações</p>
-        <h1>Visão executiva das operações do salão</h1>
-        <p className="muted">
-          Metas do mês, equipe, clientes e loja em uma leitura rápida.
-        </p>
-        <div className="inline-actions" style={{ marginTop: 8, flexWrap: "wrap" }}>
-          <span className="badge badge--soft">{header.monthLabel}</span>
-          <span className="badge badge--confirmed">
-            Faturamento {header.currentMonthRevenueLabel}
-          </span>
-          <span className="badge badge--soft">Ticket médio {header.ticketLabel}</span>
-          <span className="badge badge--soft">
-            Clientes atendidos {header.currentMonthServedCustomersLabel}
-          </span>
-          <span className="badge badge--soft">
-            Comissões {header.estimatedCommissionsLabel}
-          </span>
-          <span className="badge badge--accent">{header.storeOrdersLabel}</span>
-          <span className="badge badge--pending">
-            {header.lowStockProductsLabel}
-          </span>
-          <span
-            className={
-              header.autoPilotEnabled
-                ? "badge badge--confirmed"
-                : "badge badge--soft"
-            }
-          >
-            {header.autoPilotEnabled
-              ? "Sugestões automáticas ativas"
-              : "Sugestões automáticas pausadas"}
-          </span>
-        </div>
-      </div>
+function buildOperationsHref(
+  current: OperationsPageContentProps["searchParams"],
+  overrides: Record<string, string | undefined>,
+) {
+  const params = new URLSearchParams();
 
-      <div className="simple-row__actions" style={{ flexWrap: "wrap", gap: 8 }}>
-        <form action={runSalonAutoPilotAction}>
-          <input type="hidden" name="returnPath" value={OPERATIONS_PATH} />
-          <button type="submit" className="primary-button">
-            Atualizar prioridades agora
-          </button>
-        </form>
-        <Link href="/dashboard/finance" className="secondary-button">
-          Caixa
-        </Link>
-        <Link href="/dashboard/inventory" className="secondary-button">
-          Estoque
-        </Link>
-      </div>
-    </header>
-  );
+  if (current) {
+    for (const [key, value] of Object.entries(current)) {
+      if (key === "message" || key === "tone") {
+        continue;
+      }
+
+      if (value) {
+        params.set(key, value);
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!value) {
+      params.delete(key);
+      continue;
+    }
+
+    params.set(key, value);
+  }
+
+  const query = params.toString();
+  return `${OPERATIONS_PATH}${query ? `?${query}` : ""}`;
 }
 
-function OperationsGoalsSection({
-  goals,
-}: {
-  goals: OperationsPageData["goals"];
-}) {
-  return (
-    <section className="card content-card form-panel">
-      <div className="section-heading">
-        <div>
-          <h2>Metas do mês</h2>
-          <p className="muted">
-            Trabalhe com objetivos reais e acompanhe o ritmo do salão sem
-            complicação.
-          </p>
-        </div>
-        <span
-          className={
-            goals.monthlyTargetSaved ? "badge badge--confirmed" : "badge badge--soft"
-          }
-        >
-          {goals.monthlyTargetSaved ? "Metas salvas" : "Sugestões prontas"}
-        </span>
-      </div>
+function buildMetricCards(data: OperationsPageData) {
+  return [
+    {
+      accent: "#5b4bce",
+      label: "Faturamento do mês",
+      meta: data.header.monthLabel,
+      value: data.header.currentMonthRevenueLabel,
+    },
+    {
+      accent: "#7b54f5",
+      label: "Ticket médio",
+      meta: "Leitura atual",
+      value: data.header.ticketLabel,
+    },
+    {
+      accent: "#ef7f1a",
+      label: "Clientes atendidos",
+      meta: "No mês corrente",
+      value: data.header.currentMonthServedCustomersLabel,
+    },
+    {
+      accent: "#f15b87",
+      label: "Comissões",
+      meta: "Estimativa em curso",
+      value: data.header.estimatedCommissionsLabel,
+    },
+    {
+      accent: "#5b4bce",
+      label: "Pedidos da loja",
+      meta: "Fila comercial",
+      value: data.header.storeOrdersLabel,
+    },
+    {
+      accent: "#ef7f1a",
+      label: "Estoque em alerta",
+      meta: "Itens abaixo do mínimo",
+      value: data.header.lowStockProductsLabel,
+    },
+  ];
+}
 
-      <div className="simple-list">
-        <div className="operations-target-grid">
-          {goals.cards.map((goal) => (
-            <article key={goal.id} className="operations-target-card">
-              <div className="operations-target-card__header">
-                <div>
-                  <p className="eyebrow">{goal.label}</p>
-                  <strong className="operations-target-card__value">
-                    {goal.currentLabel}
-                  </strong>
-                </div>
-                <span className="badge badge--soft">Meta {goal.targetLabel}</span>
+function statusFilterMatches(
+  statusFilter: string,
+  status: OperationsPageData["store"]["orders"][number]["status"],
+) {
+  return statusFilter === "all" || statusFilter === status;
+}
+
+export function OperationsPageContent({
+  data,
+  searchParams,
+}: OperationsPageContentProps) {
+  const metricCards = buildMetricCards(data);
+  const orderState = normalizeValue(searchParams?.orderState) || "all";
+  const currentOperationsHref = buildOperationsHref(searchParams, {});
+  const storeOrdersSectionHref = `${currentOperationsHref}#store-orders`;
+  const filteredOrders = data.store.orders.filter((order) =>
+    statusFilterMatches(orderState, order.status),
+  );
+  const orderCounts = {
+    all: data.store.orders.length,
+    cancelled: data.store.orders.filter((order) => order.status === "cancelled").length,
+    completed: data.store.orders.filter((order) => order.status === "completed").length,
+    confirmed: data.store.orders.filter((order) => order.status === "confirmed").length,
+    pending: data.store.orders.filter((order) => order.status === "pending").length,
+    ready: data.store.orders.filter((order) => order.status === "ready").length,
+  };
+  const statusOptions = [
+    { label: "Todos", value: "all" },
+    { label: "Novos", value: "pending" },
+    { label: "Separando", value: "confirmed" },
+    { label: "Prontos", value: "ready" },
+    { label: "Concluídos", value: "completed" },
+    { label: "Cancelados", value: "cancelled" },
+  ];
+
+  return (
+    <div className={styles.page}>
+      <section className={styles.hero}>
+        <div className={styles.headerRow}>
+          <div>
+            <p className={styles.eyebrow}>Operação integrada</p>
+            <h1>Pedidos, equipe e rotina do salão</h1>
+            <p className={styles.lead}>
+              Loja, metas, equipe e estoque em uma leitura única para agir rápido
+              com dados reais.
+            </p>
+          </div>
+
+          <div className={styles.headerActions}>
+            <Link href="/dashboard/inventory" className={styles.secondaryButton}>
+              Loja e estoque
+            </Link>
+            <Link href="/dashboard/finance" className={styles.primaryButton}>
+              Caixa
+            </Link>
+          </div>
+        </div>
+
+        <div className={styles.metricGrid}>
+          {metricCards.map((card) => (
+            <article key={card.label} className={styles.metricCard}>
+              <span className={styles.metricLabel}>{card.label}</span>
+              <strong className={styles.metricValue}>{card.value}</strong>
+              <small className={styles.metricMeta}>{card.meta}</small>
+              <div className={styles.metricSpark}>
+                <span style={{ background: card.accent }} />
               </div>
-              <div
-                className="operations-progress"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={goal.progress}
-                aria-label={`${goal.label} no mês`}
-              >
-                <div
-                  className="operations-progress__fill"
-                  style={{ width: `${goal.progress}%` }}
-                />
-              </div>
-              <p className="operations-target-card__note">{goal.note}</p>
             </article>
           ))}
         </div>
+      </section>
 
-        <form action={saveSalonMonthlyTargetsAction} className="simple-form">
-          <input type="hidden" name="returnPath" value={OPERATIONS_PATH} />
-          <input
-            type="hidden"
-            name="referenceMonth"
-            value={goals.currentMonthReference}
-          />
-          <div className="split-grid operations-target-form-grid">
-            <div className="field">
-              <label htmlFor="operations-revenue-goal">Meta de faturamento</label>
-              <input
-                id="operations-revenue-goal"
-                name="revenueGoal"
-                type="number"
-                min="0"
-                step="50"
-                defaultValue={goals.cards[0]?.targetValue ?? 0}
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="operations-completed-goal">
-                Meta de atendimentos
-              </label>
-              <input
-                id="operations-completed-goal"
-                name="completedAppointmentsGoal"
-                type="number"
-                min="0"
-                step="1"
-                defaultValue={goals.cards[1]?.targetValue ?? 0}
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="operations-served-customers-goal">
-                Meta de clientes atendidos
-              </label>
-              <input
-                id="operations-served-customers-goal"
-                name="servedCustomersGoal"
-                type="number"
-                min="0"
-                step="1"
-                defaultValue={goals.cards[2]?.targetValue ?? 0}
-                required
-              />
-            </div>
-          </div>
-          <div
-            className="simple-row__actions"
-            style={{ justifyContent: "space-between" }}
-          >
-            <small className="list-meta">{goals.helperText}</small>
-            <button type="submit" className="primary-button">
-              Salvar metas do mês
-            </button>
-          </div>
-        </form>
-      </div>
-    </section>
-  );
-}
-
-function OperationsInsightsSection({
-  insights,
-}: {
-  insights: OperationsPageData["insights"];
-}) {
-  return (
-    <section className="card content-card">
-      <div className="section-heading">
-        <div>
-          <h2>Leitura rápida do mês</h2>
-          <p className="muted">
-            Os sinais principais para decidir a próxima ação.
-          </p>
-        </div>
-      </div>
-
-      <div className="simple-list">
-        <article className="simple-row">
-          <h3>Receita e ticket</h3>
-          <p className="muted">{insights.revenueSummary}</p>
-          <small className="list-meta">{insights.ticketSummary}</small>
-        </article>
-
-        <article className="simple-row">
-          <h3>Serviço e cliente destaque</h3>
-          <p className="muted">{insights.serviceSummary}</p>
-          <small className="list-meta">{insights.topCustomerSummary}</small>
-        </article>
-
-        <article className="simple-row">
-          <h3>Horário e cancelamento</h3>
-          <p className="muted">{insights.bestHourSummary}</p>
-          <small className="list-meta">{insights.cancelRateSummary}</small>
-        </article>
-
-        {insights.highlights.length ? (
-          <article className="simple-row">
-            <h3>Resumo executivo</h3>
-            <ul className="muted operations-insights-list">
-              {insights.highlights.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </article>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function OperationsCustomersAttentionSection({
-  customersAttention,
-}: {
-  customersAttention: OperationsPageData["customersAttention"];
-}) {
-  return (
-    <section className="card content-card">
-      <div className="section-heading">
-        <div>
-          <h2>Clientes que pedem atenção</h2>
-          <p className="muted">Estágio da base e quem merece reativação agora.</p>
-        </div>
-      </div>
-
-      <div className="simple-list">
-        <article className="simple-row">
-          <h3>Base por estágio</h3>
-          <p className="muted">Um retrato rápido para orientar retenção e retorno.</p>
-          <div className="simple-row__grid">
-            <div className="stat-card">
-              <strong>{customersAttention.stageCounters.novo}</strong>
-              <small>Novos (≤30d)</small>
-            </div>
-            <div className="stat-card">
-              <strong>{customersAttention.stageCounters.retorno}</strong>
-              <small>Retorno (≤60d)</small>
-            </div>
-            <div className="stat-card">
-              <strong>{customersAttention.stageCounters.fidelizado}</strong>
-              <small>Fidelizados (3+ visitas)</small>
-            </div>
-            <div className="stat-card">
-              <strong>{customersAttention.stageCounters.perdido}</strong>
-              <small>Perdidos (&gt;60d)</small>
-            </div>
-          </div>
-          <p className="muted" style={{ marginTop: 6 }}>
-            Ação sugerida: acompanhar novos, recuperar perdidos e ativar retorno
-            dos clientes recentes.
-          </p>
-        </article>
-
-        <article className="simple-row">
-          <h3>Clientes para reativar agora</h3>
-          <p className="muted">Top clientes há mais de 60 dias sem voltar.</p>
-          {!customersAttention.lostCustomers.length ? (
-            <p className="muted">Nenhum cliente perdido no momento.</p>
-          ) : (
-            customersAttention.lostCustomers.map((customer) => (
-              <div
-                key={customer.id}
-                className="simple-row"
-                style={{ marginTop: 8, borderColor: "var(--dashboard-border)" }}
-              >
-                <div
-                  className="inline-actions"
-                  style={{ flexWrap: "wrap", marginBottom: 6 }}
-                >
-                  <span className="badge badge--pending">
-                    {customer.stageBadges[0]}
-                  </span>
-                  <span className="badge badge--soft">{customer.stageBadges[1]}</span>
-                  {customer.lastVisitLabel ? (
-                    <span className="badge badge--soft">
-                      {customer.lastVisitLabel}
-                    </span>
-                  ) : null}
-                </div>
-                <h3>{customer.name}</h3>
-                <p className="muted">{customer.contactSummary}</p>
-                {customer.hasContact ? (
-                  <div className="simple-row__actions" style={{ flexWrap: "wrap", gap: 8 }}>
-                    <form action={sendCustomerReactivationAction}>
-                      <input type="hidden" name="customerName" value={customer.name} />
-                      <input
-                        type="hidden"
-                        name="customerPhone"
-                        value={customer.phoneValue}
-                      />
-                      <input type="hidden" name="returnPath" value={OPERATIONS_PATH} />
-                      <button type="submit" className="primary-button">
-                        Enviar pelo painel
-                      </button>
-                    </form>
-                    <a
-                      href={customer.whatsappUrl ?? "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="secondary-button"
-                    >
-                      Abrir no WhatsApp
-                    </a>
-                  </div>
-                ) : null}
-              </div>
-            ))
-          )}
-        </article>
-      </div>
-    </section>
-  );
-}
-
-function OperationsTeamSection({
-  team,
-}: {
-  team: OperationsPageData["team"];
-}) {
-  return (
-    <section className="card content-card">
-      <div className="section-heading">
-        <div>
-          <h2>Equipe em foco</h2>
-          <p className="muted">Top profissionais e comissão rápida.</p>
-        </div>
-      </div>
-
-      {!team.members.length ? (
-        <EmptyStateCard
-          eyebrow="Sem ranking"
-          title="Nenhum profissional ranqueado ainda"
-          description="Assim que os atendimentos concluídos entrarem, o ranking aparece aqui."
-        />
-      ) : (
-        <div className="simple-list">
-          {team.members.map((staffMember) => (
-            <article key={staffMember.id} className="simple-row">
-              <div className="inline-actions" style={{ marginBottom: 6, flexWrap: "wrap" }}>
-                <span className={staffMember.statusBadgeClass}>
-                  {staffMember.statusLabel}
-                </span>
-                <span className="badge badge--soft">
-                  {staffMember.assignedServicesSummary}
-                </span>
-              </div>
-              <h3>{staffMember.name}</h3>
-              <p className="muted">{staffMember.roleSummary}</p>
-              <small className="list-meta">{staffMember.performanceSummary}</small>
-
-              <details className="accordion" style={{ marginTop: 8 }}>
-                <summary>
-                  <span>Comissão</span>
-                  <span className="accordion__cta">editar</span>
-                </summary>
-                <div className="simple-form" style={{ marginTop: 8 }}>
-                  <form action={saveStaffCommissionSettingsAction} className="simple-form">
-                    <input type="hidden" name="staffMemberId" value={staffMember.id} />
-                    <div className="split-grid">
-                      <div className="field">
-                        <label htmlFor={`commission-rate-${staffMember.id}`}>
-                          Comissão (%)
-                        </label>
-                        <input
-                          id={`commission-rate-${staffMember.id}`}
-                          name="commissionRatePercent"
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          defaultValue={staffMember.commissionRatePercent}
-                          required
-                        />
-                      </div>
-                      <div className="field">
-                        <label htmlFor={`commission-flat-${staffMember.id}`}>Fixo</label>
-                        <input
-                          id={`commission-flat-${staffMember.id}`}
-                          name="commissionFlatFee"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          defaultValue={staffMember.commissionFlatFee}
-                          required
-                        />
-                      </div>
-                    </div>
-                    <button type="submit" className="secondary-button">
-                      Salvar comissão
-                    </button>
-                  </form>
-                </div>
-              </details>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function OperationsStoreOrdersSection({
-  store,
-}: {
-  store: OperationsPageData["store"];
-}) {
-  return (
-    <section className="card content-card">
-      <div className="section-heading">
-        <div>
-          <h2>Pedidos da loja</h2>
-          <p className="muted">Fila curta com ações rápidas.</p>
-        </div>
-      </div>
-
-      <div className="simple-list">
-        {!store.orders.length ? (
-          <EmptyStateCard
-            eyebrow="Sem pedidos"
-            title="A fila aparece aqui"
-            description="Quando a cliente comprar pelo app, o pedido entra nesta lista."
-          />
-        ) : (
-          store.orders.map((order) => (
-            <article key={order.id} className="simple-row">
-              <div className="inline-actions" style={{ marginBottom: 6, flexWrap: "wrap" }}>
-                <span className={order.statusBadgeClass}>{order.statusLabel}</span>
-                <span className="badge badge--soft">{order.orderNumberLabel}</span>
-                <span className="badge badge--soft">{order.totalItemsLabel}</span>
-                <span className="badge badge--soft">{order.orderMomentLabel}</span>
-              </div>
-              <h3>{order.customerName}</h3>
-              <p className="muted">{order.itemsSummary}</p>
-              <small className="list-meta">
-                Total {order.totalLabel} • Contato: {order.contactLabel}
-              </small>
-              {order.notes ? (
-                <p className="muted" style={{ marginTop: 6 }}>
-                  Obs: {order.notes}
-                </p>
-              ) : null}
-
-              {order.status !== "completed" && order.status !== "cancelled" ? (
-                <div className="simple-row__actions" style={{ flexWrap: "wrap" }}>
-                  {order.canConfirm ? (
-                    <form action={updateCustomerProductOrderStatusAction}>
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <input type="hidden" name="status" value="confirmed" />
-                      <button type="submit" className="primary-button">
-                        Confirmar
-                      </button>
-                    </form>
-                  ) : null}
-                  {order.canReady ? (
-                    <form action={updateCustomerProductOrderStatusAction}>
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <input type="hidden" name="status" value="ready" />
-                      <button type="submit" className="secondary-button">
-                        Pronto
-                      </button>
-                    </form>
-                  ) : null}
-                  {order.canComplete ? (
-                    <form action={updateCustomerProductOrderStatusAction}>
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <input type="hidden" name="status" value="completed" />
-                      <button type="submit" className="primary-button">
-                        Concluir
-                      </button>
-                    </form>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {order.canCancel ? (
-                <form
-                  action={updateCustomerProductOrderStatusAction}
-                  className="simple-form"
-                  style={{ marginTop: 10 }}
-                >
-                  <input type="hidden" name="orderId" value={order.id} />
-                  <input type="hidden" name="status" value="cancelled" />
-                  <div className="split-grid">
-                    <div className="field">
-                      <label htmlFor={`cancel-store-order-${order.id}`}>
-                        Motivo do cancelamento
-                      </label>
-                      <input
-                        id={`cancel-store-order-${order.id}`}
-                        name="cancellationReason"
-                        placeholder="Ex.: cliente desistiu, item indisponível"
-                        required
-                      />
-                    </div>
-                    <div className="inline-actions" style={{ alignItems: "flex-end" }}>
-                      <button type="submit" className="secondary-button">
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              ) : null}
-            </article>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
-function OperationsLowStockSection({
-  inventory,
-}: {
-  inventory: OperationsPageData["inventory"];
-}) {
-  return (
-    <section className="card content-card">
-      <div className="section-heading">
-        <div>
-          <h2>Produtos em alerta</h2>
-          <p className="muted">Itens no mínimo.</p>
-        </div>
-      </div>
-
-      {inventory.lowStockProducts.length ? (
-        <div className="simple-list">
-          {inventory.lowStockProducts.map((product) => (
-            <article
-              key={product.id}
-              className="simple-row"
-              style={{ display: "flex", gap: 12 }}
-            >
-              <div
-                style={{
-                  width: 80,
-                  height: 60,
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  border: "1px solid var(--dashboard-border)",
-                  background: "#f8fafc",
-                  position: "relative",
-                }}
-              >
-                {product.imageUrl ? (
-                  <Image
-                    src={product.imageUrl}
-                    alt={product.name}
-                    fill
-                    sizes="80px"
-                    style={{ objectFit: "cover" }}
-                  />
-                ) : null}
-              </div>
+      <section className={styles.contentGrid}>
+        <div className={styles.mainColumn}>
+          <article id="store-orders" className={styles.panel}>
+            <div className={styles.panelHeader}>
               <div>
-                <h3>{product.name}</h3>
-                <p className="muted">
-                  {product.stockLabel} • mínimo {product.minimumStockLabel}
-                </p>
+                <p className={styles.sidebarEyebrow}>Pedidos da loja</p>
+                <h2>Fila comercial do app</h2>
               </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <EmptyStateCard
-          eyebrow="Estoque saudável"
-          title="Nenhum item abaixo do mínimo"
-          description="Quando faltar, aparece aqui."
-        />
-      )}
-    </section>
-  );
-}
-
-function OperationsMovementsSection({
-  inventory,
-}: {
-  inventory: OperationsPageData["inventory"];
-}) {
-  return (
-    <section className="card content-card">
-      <div className="section-heading">
-        <div>
-          <h2>Movimentos recentes</h2>
-          <p className="muted">Entradas, saídas e ajustes.</p>
-        </div>
-      </div>
-
-      {!inventory.movements.length ? (
-        <EmptyStateCard
-          eyebrow="Sem movimentos"
-          title="Nada registrado"
-          description="Entradas, saídas e ajustes aparecem aqui."
-        />
-      ) : (
-        <div className="simple-list">
-          {inventory.movements.map((movement) => (
-            <article key={movement.id} className="simple-row">
-              <div className="inline-actions" style={{ marginBottom: 6, flexWrap: "wrap" }}>
-                <span className="badge badge--soft">{movement.movementLabel}</span>
-                <span className="badge badge--soft">{movement.createdAtLabel}</span>
+              <div className={styles.badgeRow}>
+                <span className={styles.countPill}>
+                  Leitura: {statusOptions.find((item) => item.value === orderState)?.label}
+                </span>
+                <span className={styles.countPill}>{filteredOrders.length} pedido(s)</span>
               </div>
-              <h3>{movement.productName}</h3>
-              <p className="muted">
-                {movement.quantityLabel} • saldo {movement.resultingStockLabel}
+            </div>
+
+            <div className={styles.tabRow}>
+              {statusOptions.map((status) => (
+                <a
+                  key={status.value}
+                  href={`${buildOperationsHref(searchParams, {
+                    orderState: status.value === "all" ? undefined : status.value,
+                  })}#store-orders`}
+                  className={
+                    orderState === status.value
+                      ? styles.tabActive
+                      : styles.tabLink
+                  }
+                >
+                  {status.label}
+                  <span>{orderCounts[status.value as keyof typeof orderCounts]}</span>
+                </a>
+              ))}
+            </div>
+
+            {!filteredOrders.length ? (
+              <EmptyStateCard
+                eyebrow="Sem pedidos"
+                title="A fila da loja está vazia neste recorte"
+                description="Quando a cliente comprar pelo app, o pedido entra aqui para confirmar, separar e entregar."
+              />
+            ) : (
+              <div className={styles.orderGrid}>
+                {filteredOrders.map((order) => (
+                  <article key={order.id} className={styles.orderCard}>
+                    <div className={styles.orderHeader}>
+                      <div className={styles.badgeRow}>
+                        <span className={order.statusBadgeClass}>{order.statusLabel}</span>
+                        <span className={styles.orderChip}>{order.orderNumberLabel}</span>
+                        <span className={styles.orderChip}>{order.totalItemsLabel}</span>
+                      </div>
+                      <strong className={styles.orderValue}>{order.totalLabel}</strong>
+                    </div>
+
+                    <h3>{order.customerName}</h3>
+                    <p className={styles.orderCopy}>{order.itemsSummary}</p>
+
+                    <div className={styles.orderMetaGrid}>
+                      <div className={styles.metaTile}>
+                        <span>Contato</span>
+                        <strong>{order.contactLabel}</strong>
+                      </div>
+                      <div className={styles.metaTile}>
+                        <span>Momento</span>
+                        <strong>{order.orderMomentLabel}</strong>
+                      </div>
+                    </div>
+
+                    {order.notes ? (
+                      <p className={styles.orderNote}>Obs: {order.notes}</p>
+                    ) : null}
+
+                    {order.status !== "completed" && order.status !== "cancelled" ? (
+                      <div className={styles.actionRow}>
+                        {order.canConfirm ? (
+                          <form action={updateCustomerProductOrderStatusAction}>
+                            <input type="hidden" name="returnPath" value={storeOrdersSectionHref} />
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="status" value="confirmed" />
+                            <button type="submit" className={styles.primaryButton}>
+                              Confirmar
+                            </button>
+                          </form>
+                        ) : null}
+                        {order.canReady ? (
+                          <form action={updateCustomerProductOrderStatusAction}>
+                            <input type="hidden" name="returnPath" value={storeOrdersSectionHref} />
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="status" value="ready" />
+                            <button type="submit" className={styles.secondaryButton}>
+                              Pronto
+                            </button>
+                          </form>
+                        ) : null}
+                        {order.canComplete ? (
+                          <form action={updateCustomerProductOrderStatusAction}>
+                            <input type="hidden" name="returnPath" value={storeOrdersSectionHref} />
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="status" value="completed" />
+                            <button type="submit" className={styles.primaryButton}>
+                              Concluir
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {order.canCancel ? (
+                      <details className={styles.disclosure}>
+                        <summary>Cancelar pedido</summary>
+                        <form action={updateCustomerProductOrderStatusAction} className={styles.inlineForm}>
+                          <input type="hidden" name="returnPath" value={storeOrdersSectionHref} />
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="status" value="cancelled" />
+                          <div className="field">
+                            <label htmlFor={`cancel-store-order-${order.id}`}>
+                              Motivo do cancelamento
+                            </label>
+                            <input
+                              id={`cancel-store-order-${order.id}`}
+                              name="cancellationReason"
+                              placeholder="Ex.: item indisponivel"
+                              required
+                            />
+                          </div>
+                          <button type="submit" className={styles.dangerButton}>
+                            Confirmar cancelamento
+                          </button>
+                        </form>
+                      </details>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.sidebarEyebrow}>Equipe</p>
+                <h2>Profissionais em foco</h2>
+              </div>
+            </div>
+
+            {!data.team.members.length ? (
+              <EmptyStateCard
+                eyebrow="Sem ranking"
+                title="A equipe aparece aqui quando houver operação"
+                description="Assim que os atendimentos forem concluídos, a leitura de comissão e performance ganha corpo."
+              />
+            ) : (
+              <div className={styles.teamGrid}>
+                {data.team.members.map((staffMember) => (
+                  <article key={staffMember.id} className={styles.teamCard}>
+                    <div className={styles.teamHeader}>
+                      <div>
+                        <div className={styles.badgeRow}>
+                          <span className={staffMember.statusBadgeClass}>
+                            {staffMember.statusLabel}
+                          </span>
+                        </div>
+                        <h3>{staffMember.name}</h3>
+                        <p className={styles.teamMeta}>{staffMember.roleSummary}</p>
+                      </div>
+                      <div className={styles.teamCommission}>
+                        <span>Comissão</span>
+                        <strong>{staffMember.estimatedCommissionLabel}</strong>
+                      </div>
+                    </div>
+
+                    <p className={styles.teamSummary}>{staffMember.performanceSummary}</p>
+                    <div className={styles.progressCard}>
+                      <div className={styles.progressHeader}>
+                        <span>Serviços ligados</span>
+                        <strong>{staffMember.assignedServicesSummary}</strong>
+                      </div>
+                      <div className={styles.progressTrack}>
+                        <span style={{ width: `${Math.min(staffMember.commissionRatePercent, 100)}%` }} />
+                      </div>
+                      <small>{staffMember.commissionRatePercent}% de comissão variável</small>
+                    </div>
+
+                    <details className={styles.disclosure}>
+                      <summary>Editar comissão</summary>
+                      <form action={saveStaffCommissionSettingsAction} className={styles.inlineForm}>
+                        <input type="hidden" name="staffMemberId" value={staffMember.id} />
+                        <div className={styles.fieldGrid}>
+                          <div className="field">
+                            <label htmlFor={`commission-rate-${staffMember.id}`}>
+                              Comissão (%)
+                            </label>
+                            <input
+                              id={`commission-rate-${staffMember.id}`}
+                              name="commissionRatePercent"
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              defaultValue={staffMember.commissionRatePercent}
+                              required
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`commission-flat-${staffMember.id}`}>Fixo</label>
+                            <input
+                              id={`commission-flat-${staffMember.id}`}
+                              name="commissionFlatFee"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              defaultValue={staffMember.commissionFlatFee}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <button type="submit" className={styles.secondaryButton}>
+                          Salvar comissão
+                        </button>
+                      </form>
+                    </details>
+                  </article>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.sidebarEyebrow}>Metas do mês</p>
+                <h2>Ritmo operacional</h2>
+              </div>
+              <span className={styles.countPill}>{data.goals.monthLabel}</span>
+            </div>
+
+            <div className={styles.goalGrid}>
+              {data.goals.cards.map((goal) => (
+                <article key={goal.id} className={styles.goalCard}>
+                  <span>{goal.label}</span>
+                  <strong>{goal.currentLabel}</strong>
+                  <small>Meta {goal.targetLabel}</small>
+                  <div className={styles.progressTrack}>
+                    <span style={{ width: `${goal.progress}%` }} />
+                  </div>
+                  <p>{goal.note}</p>
+                </article>
+              ))}
+            </div>
+
+            <form action={saveSalonMonthlyTargetsAction} className={styles.inlineForm}>
+              <input type="hidden" name="returnPath" value={OPERATIONS_PATH} />
+              <input
+                type="hidden"
+                name="referenceMonth"
+                value={data.goals.currentMonthReference}
+              />
+              <div className={styles.fieldGrid}>
+                <div className="field">
+                  <label htmlFor="operations-revenue-goal">Meta de faturamento</label>
+                  <input
+                    id="operations-revenue-goal"
+                    name="revenueGoal"
+                    type="number"
+                    min="0"
+                    step="50"
+                    defaultValue={data.goals.cards[0]?.targetValue ?? 0}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="operations-completed-goal">Meta de atendimentos</label>
+                  <input
+                    id="operations-completed-goal"
+                    name="completedAppointmentsGoal"
+                    type="number"
+                    min="0"
+                    step="1"
+                    defaultValue={data.goals.cards[1]?.targetValue ?? 0}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="operations-served-customers-goal">
+                    Meta de clientes atendidos
+                  </label>
+                  <input
+                    id="operations-served-customers-goal"
+                    name="servedCustomersGoal"
+                    type="number"
+                    min="0"
+                    step="1"
+                    defaultValue={data.goals.cards[2]?.targetValue ?? 0}
+                    required
+                  />
+                </div>
+              </div>
+              <div className={styles.footerRow}>
+                <small>{data.goals.helperText}</small>
+                <button type="submit" className={styles.primaryButton}>
+                  Salvar metas do mês
+                </button>
+              </div>
+            </form>
+          </article>
+        </div>
+
+        <div className={styles.sidebarColumn}>
+          <article className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.sidebarEyebrow}>Piloto do salão</p>
+                <h3>Agenda automática</h3>
+              </div>
+              <div className={styles.badgeRow}>
+                <span
+                  className={
+                    data.autopilot.active
+                      ? "badge badge--confirmed"
+                      : "badge badge--pending"
+                  }
+                >
+                  {data.autopilot.active ? "Ligado" : "Desligado"}
+                </span>
+                <span
+                  className={
+                    data.autopilot.schedulerReady
+                      ? "badge badge--soft"
+                      : "badge badge--pending"
+                  }
+                >
+                  {data.autopilot.schedulerReady
+                    ? "Agendador pronto"
+                    : "Agendador pendente"}
+                </span>
+              </div>
+            </div>
+
+            <p className={styles.sidebarCopy}>{data.autopilot.statusNote}</p>
+
+            <div className={styles.counterGrid}>
+              {data.autopilot.cards.map((card) => (
+                <div key={card.id} className={styles.counterCard}>
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                  <small>{card.note}</small>
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.ruleList}>
+              {data.autopilot.rules.map((rule) => (
+                <p key={rule}>{rule}</p>
+              ))}
+            </div>
+
+            {!data.autopilot.queue.length ? (
+              <p className={styles.sidebarCopy}>
+                Nenhum horário sensível agora. O sistema segue a regra sozinho.
               </p>
-              {movement.reason ? (
-                <small className="list-meta">{movement.reason}</small>
-              ) : null}
-            </article>
-          ))}
+            ) : (
+              <div className={styles.alertList}>
+                {data.autopilot.queue.map((item) => (
+                  <div key={item.id} className={styles.alertRow}>
+                    <div className={styles.badgeRow}>
+                      <span className={item.badgeClassName}>{item.badgeLabel}</span>
+                      {item.signalBadges.map((signal) => (
+                        <span key={signal} className="badge badge--soft">
+                          {signal}
+                        </span>
+                      ))}
+                    </div>
+                    <strong>{item.title}</strong>
+                    <span>{item.meta}</span>
+                    <small>{item.note}</small>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.sidebarEyebrow}>Leitura do mês</p>
+                <h3>Sinais executivos</h3>
+              </div>
+            </div>
+            <div className={styles.insightStack}>
+              <div className={styles.insightRow}>
+                <strong>Receita e ticket</strong>
+                <span>{data.insights.revenueSummary}</span>
+                <small>{data.insights.ticketSummary}</small>
+              </div>
+              <div className={styles.insightRow}>
+                <strong>Serviço e cliente</strong>
+                <span>{data.insights.serviceSummary}</span>
+                <small>{data.insights.topCustomerSummary}</small>
+              </div>
+              <div className={styles.insightRow}>
+                <strong>Horário e cancelamento</strong>
+                <span>{data.insights.bestHourSummary}</span>
+                <small>{data.insights.cancelRateSummary}</small>
+              </div>
+            </div>
+          </article>
+
+          <article className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.sidebarEyebrow}>Clientes em atenção</p>
+                <h3>Base e reativação</h3>
+              </div>
+            </div>
+            <div className={styles.counterGrid}>
+              <div className={styles.counterCard}>
+                <span>Novos</span>
+                <strong>{data.customersAttention.stageCounters.novo}</strong>
+              </div>
+              <div className={styles.counterCard}>
+                <span>Retorno</span>
+                <strong>{data.customersAttention.stageCounters.retorno}</strong>
+              </div>
+              <div className={styles.counterCard}>
+                <span>Fidelizados</span>
+                <strong>{data.customersAttention.stageCounters.fidelizado}</strong>
+              </div>
+              <div className={styles.counterCard}>
+                <span>Perdidos</span>
+                <strong>{data.customersAttention.stageCounters.perdido}</strong>
+              </div>
+            </div>
+
+            {!data.customersAttention.lostCustomers.length ? (
+              <p className={styles.sidebarCopy}>Nenhum cliente perdido no momento.</p>
+            ) : (
+              <div className={styles.alertList}>
+                {data.customersAttention.lostCustomers.map((customer) => (
+                  <div key={customer.id} className={styles.alertRow}>
+                    <strong>{customer.name}</strong>
+                    <span>{customer.stageBadges.join(" • ")}</span>
+                    <small>{customer.contactSummary}</small>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.sidebarEyebrow}>Produtos em alerta</p>
+                <h3>Estoque sob vigia</h3>
+              </div>
+            </div>
+            {!data.inventory.lowStockProducts.length ? (
+              <p className={styles.sidebarCopy}>Nenhum item abaixo do minimo agora.</p>
+            ) : (
+              <div className={styles.stockList}>
+                {data.inventory.lowStockProducts.map((product) => (
+                  <div key={product.id} className={styles.stockRow}>
+                    <div className={styles.stockThumb}>
+                      {product.imageUrl ? (
+                        <Image
+                          src={product.imageUrl}
+                          alt={product.name}
+                          fill
+                          sizes="72px"
+                        />
+                      ) : null}
+                    </div>
+                    <div>
+                      <strong>{product.name}</strong>
+                      <span>{product.stockLabel}</span>
+                      <small>Minimo {product.minimumStockLabel}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.sidebarEyebrow}>Movimentos recentes</p>
+                <h3>Entrada, saida e ajuste</h3>
+              </div>
+            </div>
+            {!data.inventory.movements.length ? (
+              <p className={styles.sidebarCopy}>Nada registrado no momento.</p>
+            ) : (
+              <div className={styles.alertList}>
+                {data.inventory.movements.map((movement) => (
+                  <div key={movement.id} className={styles.alertRow}>
+                    <strong>{movement.productName}</strong>
+                    <span>
+                      {movement.movementLabel} • {movement.quantityLabel}
+                    </span>
+                    <small>
+                      Saldo {movement.resultingStockLabel}
+                      {movement.reason ? ` • ${movement.reason}` : ""}
+                    </small>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
         </div>
-      )}
-    </section>
+      </section>
+    </div>
   );
 }

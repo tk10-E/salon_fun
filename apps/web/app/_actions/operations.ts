@@ -11,10 +11,9 @@ import {
 } from "@/lib/mediaUploadPresets";
 import { createClient } from "@/lib/supabase/server";
 import { optimizeUploadedImage } from "@/lib/uploadedImageOptimization";
-import { dispatchPendingWhatsAppNotifications } from "@/lib/whatsappDispatch";
-import { sanitizePhone, sendSalonWhatsAppTextMessage } from "@/lib/whatsapp";
 
 import {
+  buildStoreOrderStatusNotification,
   buildStoreProductNotification,
   buildRedirectNotice,
   COMMERCIAL_AUTOMATIONS_PATH,
@@ -31,12 +30,18 @@ const INVENTORY_REDIRECT_PATHS = [
   "/dashboard",
 ] as const;
 const PRODUCT_IMAGE_PRESET = MEDIA_UPLOAD_PRESETS.product;
-const AUTO_PILOT_REDIRECT_PATHS = [
-  OPERATIONS_PATH,
-  COMMERCIAL_AUTOMATIONS_PATH,
-  "/dashboard",
-  "/dashboard/client-app",
-] as const;
+const VALID_PRODUCT_ORDER_STATUSES = new Set([
+  "pending",
+  "confirmed",
+  "ready",
+  "completed",
+  "cancelled",
+]);
+type CustomerFacingStoreOrderStatus =
+  | "confirmed"
+  | "ready"
+  | "completed"
+  | "cancelled";
 const MONTHLY_TARGETS_REDIRECT_PATHS = [OPERATIONS_PATH, "/dashboard"] as const;
 
 function readNonNegativeNumber(value: FormDataEntryValue | null, fallback = 0) {
@@ -79,6 +84,62 @@ function revalidateOperationsPages() {
   revalidatePath("/dashboard");
 }
 
+async function notifyCustomerAboutStoreOrderStatus(params: {
+  supabase: ReturnType<typeof createClient>;
+  salonId: string;
+  orderId: string;
+  status: CustomerFacingStoreOrderStatus;
+}) {
+  const { supabase, salonId, orderId, status } = params;
+  const { data: orderContext, error } = await supabase
+    .from("customer_product_orders")
+    .select(
+      "id, customer_id, order_number, total_items, cancellation_reason, customer_product_order_items(product_name_snapshot)",
+    )
+    .eq("salon_id", salonId)
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error || !orderContext?.customer_id) {
+    return;
+  }
+
+  const firstItem = Array.isArray(orderContext.customer_product_order_items)
+    ? orderContext.customer_product_order_items.find(
+        (item) =>
+          item &&
+          typeof item === "object" &&
+          typeof item.product_name_snapshot === "string" &&
+          item.product_name_snapshot.trim().length > 0,
+      )
+    : null;
+  const notification = buildStoreOrderStatusNotification({
+    status,
+    orderId,
+    orderNumber:
+      typeof orderContext.order_number === "number"
+        ? orderContext.order_number
+        : null,
+    firstItemName: firstItem?.product_name_snapshot ?? null,
+    totalItems:
+      typeof orderContext.total_items === "number"
+        ? orderContext.total_items
+        : null,
+    cancellationReason: orderContext.cancellation_reason ?? null,
+  });
+
+  await queueCustomerNotification({
+    supabase,
+    salonId,
+    customerId: orderContext.customer_id,
+    audience: "single_customer",
+    notificationType: notification.type,
+    title: notification.title,
+    body: notification.body,
+    payload: notification.payload,
+  });
+}
+
 export async function saveSalonMonthlyTargetsActionImpl(formData: FormData) {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
@@ -106,7 +167,7 @@ export async function saveSalonMonthlyTargetsActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         returnPath,
-        "Preencha metas validas para salvar o mes.",
+        "Preencha metas válidas para salvar o mês.",
         "error",
       ),
     );
@@ -126,7 +187,7 @@ export async function saveSalonMonthlyTargetsActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         returnPath,
-        "Defina pelo menos uma meta acima de zero para este mes.",
+        "Defina pelo menos uma meta acima de zero para este mês.",
         "error",
       ),
     );
@@ -149,7 +210,7 @@ export async function saveSalonMonthlyTargetsActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         returnPath,
-        "Nao foi possivel salvar as metas do mes agora.",
+        "Não foi possível salvar as metas do mês agora.",
         "error",
       ),
     );
@@ -159,147 +220,10 @@ export async function saveSalonMonthlyTargetsActionImpl(formData: FormData) {
   redirect(
     buildRedirectNotice(
       returnPath,
-      "Metas do mes salvas com sucesso.",
+      "Metas do mês salvas com sucesso.",
       "success",
     ),
   );
-}
-
-export async function runSalonAutoPilotActionImpl(formData: FormData) {
-  const { salon } = await requireOwnerSalon();
-  const supabase = createClient();
-  const returnPath = resolveDashboardReturnPath(
-    formData,
-    OPERATIONS_PATH,
-    AUTO_PILOT_REDIRECT_PATHS,
-  );
-  const runAt = new Date().toISOString();
-
-  const [
-    appointmentAutomationResult,
-    growthAutomationResult,
-    haircutRebookAutomationResult,
-  ] =
-    await Promise.all([
-      supabase.rpc("queue_due_appointment_customer_notifications", {
-        run_at: runAt,
-      }),
-      supabase.rpc("queue_due_customer_growth_notifications", {
-        run_at: runAt,
-      }),
-      supabase.rpc("queue_due_haircut_rebook_notifications", {
-        run_at: runAt,
-      }),
-    ]);
-
-  if (
-    appointmentAutomationResult.error ||
-    growthAutomationResult.error ||
-    haircutRebookAutomationResult.error
-  ) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "Nao foi possivel rodar o modo automatico agora.",
-        "error",
-      ),
-    );
-  }
-
-  const dispatchResult = await dispatchPendingWhatsAppNotifications({
-    limit: 25,
-    salonId: salon.id,
-  });
-
-  if (!dispatchResult.ok) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "As automacoes foram geradas, mas nao consegui processar os envios do WhatsApp.",
-        "error",
-      ),
-    );
-  }
-
-  revalidateOperationsPages();
-  revalidatePath(COMMERCIAL_AUTOMATIONS_PATH);
-  revalidatePath("/dashboard/client-app");
-
-  if (dispatchResult.missingConfigSalons.length > 0) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "As automacoes foram geradas, mas o canal tecnico do WhatsApp deste salao ainda nao esta configurado.",
-        "error",
-      ),
-    );
-  }
-
-  if (dispatchResult.processed === 0) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        "Modo automatico rodou agora e nao encontrou mensagens vencidas para disparar.",
-        "success",
-      ),
-    );
-  }
-
-  const summary = [
-    `${dispatchResult.sent} WhatsApp enviado${dispatchResult.sent === 1 ? "" : "s"}`,
-    dispatchResult.missingPhone > 0
-      ? `${dispatchResult.missingPhone} cliente${dispatchResult.missingPhone === 1 ? "" : "s"} sem telefone valido`
-      : null,
-    dispatchResult.failed > 0
-      ? `${dispatchResult.failed} envio${dispatchResult.failed === 1 ? "" : "s"} com falha`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" • ");
-
-  redirect(
-    buildRedirectNotice(
-      returnPath,
-      `Modo automatico executado. ${summary}.`,
-      "success",
-    ),
-  );
-}
-
-export async function sendCustomerReactivationActionImpl(formData: FormData) {
-  const { salon } = await requireOwnerSalon();
-  const customerName = String(formData.get("customerName") ?? "").trim();
-  const rawPhone = String(formData.get("customerPhone") ?? "").trim();
-  const returnPath = String(formData.get("returnPath") ?? OPERATIONS_PATH);
-
-  const sanitizedPhone = sanitizePhone(rawPhone);
-
-  if (!sanitizedPhone) {
-    redirect(buildRedirectNotice(returnPath, "Esse cliente não tem WhatsApp/telefone válido.", "error"));
-  }
-
-  const message = `Oi ${customerName || "cliente"}, aqui é do salão ${salon.name}. Faz um tempo que você não vem (temos horário livre esta semana). Quer agendar agora?`;
-
-  const result = await sendSalonWhatsAppTextMessage(
-    salon.id,
-    sanitizedPhone,
-    message,
-  );
-
-  if (!result.ok) {
-    redirect(
-      buildRedirectNotice(
-        returnPath,
-        result.reason === "missing_config"
-          ? "Configure o canal tecnico do WhatsApp para enviar mensagens automáticas."
-          : "Não foi possível enviar o WhatsApp agora.",
-        "error",
-      ),
-    );
-  }
-
-  revalidateOperationsPages();
-  redirect(buildRedirectNotice(returnPath, "Mensagem de reativação enviada no WhatsApp.", "success"));
 }
 
 export async function saveStaffCommissionSettingsActionImpl(formData: FormData) {
@@ -357,7 +281,7 @@ export async function saveInventoryProductActionImpl(formData: FormData) {
   const supabase = createClient();
   const redirectPath = resolveDashboardReturnPath(
     formData,
-    OPERATIONS_PATH,
+    INVENTORY_PATH,
     INVENTORY_REDIRECT_PATHS,
   );
 
@@ -413,7 +337,7 @@ export async function saveInventoryProductActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           redirectPath,
-          `Cada foto do produto deve ter no maximo ${formatPresetMegabytes(
+          `Cada foto do produto deve ter no máximo ${formatPresetMegabytes(
             PRODUCT_IMAGE_PRESET.maxInputBytes,
           )} MB.`,
           "error",
@@ -433,7 +357,7 @@ export async function saveInventoryProductActionImpl(formData: FormData) {
         redirect(
           buildRedirectNotice(
             redirectPath,
-            "Nao foi possivel processar uma das fotos do produto.",
+            "Não foi possível processar uma das fotos do produto.",
             "error",
           ),
         );
@@ -573,7 +497,7 @@ export async function saveInventoryProductActionImpl(formData: FormData) {
 }
 
 export async function updateCustomerProductOrderStatusActionImpl(formData: FormData) {
-  await requireOwnerSalon();
+  const { salon } = await requireOwnerSalon();
   const supabase = createClient();
   const redirectPath = resolveDashboardReturnPath(
     formData,
@@ -587,6 +511,10 @@ export async function updateCustomerProductOrderStatusActionImpl(formData: FormD
 
   if (!orderId || !status) {
     redirect(buildRedirectNotice(redirectPath, "Selecione um pedido válido para atualizar.", "error"));
+  }
+
+  if (!VALID_PRODUCT_ORDER_STATUSES.has(status)) {
+    redirect(buildRedirectNotice(redirectPath, "Escolha um status válido para o pedido da loja.", "error"));
   }
 
   if (status === "cancelled" && !cancellationReason) {
@@ -628,6 +556,20 @@ export async function updateCustomerProductOrderStatusActionImpl(formData: FormD
       ? `${orderLabel} cancelado e estoque recomposto.`
       : `${orderLabel} atualizado com sucesso.`;
 
+  if (
+    status === "confirmed" ||
+    status === "ready" ||
+    status === "completed" ||
+    status === "cancelled"
+  ) {
+    await notifyCustomerAboutStoreOrderStatus({
+      supabase,
+      salonId: salon.id,
+      orderId,
+      status,
+    });
+  }
+
   revalidateOperationsPages();
   redirect(buildRedirectNotice(redirectPath, successMessage, "success"));
 }
@@ -637,7 +579,7 @@ export async function registerInventoryMovementActionImpl(formData: FormData) {
   const supabase = createClient();
   const redirectPath = resolveDashboardReturnPath(
     formData,
-    OPERATIONS_PATH,
+    INVENTORY_PATH,
     INVENTORY_REDIRECT_PATHS,
   );
 

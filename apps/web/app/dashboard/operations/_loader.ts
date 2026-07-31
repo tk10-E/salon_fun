@@ -4,6 +4,16 @@ import {
   formatDate,
   formatDateTime,
 } from "@/lib/formatters";
+import {
+  AUTOPILOT_COMPLETION_GRACE_MINUTES,
+  AUTOPILOT_CONFIRMED_NO_SHOW_GRACE_MINUTES,
+  AUTOPILOT_PENDING_NO_SHOW_GRACE_MINUTES,
+  buildAppointmentAutopilotSignalBadges,
+  hasOperationsAutopilotSchedulerConfig,
+  inspectOperationsAutopilotAppointment,
+} from "@/lib/operationsAutopilot";
+import { getConfiguredAppOrigin } from "@/lib/requestOrigin";
+import { getCronSecret } from "@/lib/serverEnv";
 import { requireOwnerSalon } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -100,12 +110,41 @@ type AppointmentRow = {
     | null;
 };
 
+type OperationsAutopilotAppointmentRow = {
+  customer_confirmation_requested_at: string | null;
+  customer_presence_confirmed_at: string | null;
+  customers:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
+  date: string;
+  deposit_customer_reported_paid_at: string | null;
+  deposit_paid_at: string | null;
+  deposit_status: string | null;
+  ends_at: string;
+  id: string;
+  protection_confirmation_required: boolean | null;
+  services:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
+  staff_members:
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
+  status: "pending" | "confirmed";
+};
+
+type CompletedAppointmentVisitRow = {
+  customer_id?: string | null;
+  date: string;
+};
+
 type CustomerRow = {
   id: string;
   name: string;
   created_at: string;
   phone?: string | null;
-  whatsapp_phone?: string | null;
 };
 
 type MonthlyTargetRow = {
@@ -138,7 +177,7 @@ function formatMovementLabel(value: InventoryMovementRow["movement_type"]) {
     case "in":
       return "Entrada";
     case "out":
-      return "Saída";
+      return "Saida";
     default:
       return "Ajuste";
   }
@@ -151,7 +190,7 @@ function formatStoreOrderStatusLabel(value: StoreOrderRow["status"]) {
     case "ready":
       return "Pronto";
     case "completed":
-      return "Concluído";
+      return "Concluido";
     case "cancelled":
       return "Cancelado";
     default:
@@ -188,6 +227,13 @@ function formatMonthLabel(value: string | Date, timeZone: string) {
     month: "long",
     year: "numeric",
   }).format(value instanceof Date ? value : new Date(value));
+}
+
+function formatAutopilotHours(valueInMinutes: number) {
+  const hours = valueInMinutes / 60;
+  return Number.isInteger(hours)
+    ? `${hours}h`
+    : `${hours.toFixed(1).replace(".", ",")}h`;
 }
 
 function buildCurrencyGoalSuggestion(previousValue: number, currentValue: number) {
@@ -234,25 +280,6 @@ function formatProgressNote(
   return `Faltam ${formatter(target - current)} para fechar a meta.`;
 }
 
-function buildWhatsAppUrl(
-  customer: CustomerRow & {
-    daysSince: number;
-  },
-) {
-  const phoneRaw = customer.whatsapp_phone ?? customer.phone ?? "";
-  const digits = phoneRaw.replace(/\D+/g, "");
-
-  if (!digits) {
-    return null;
-  }
-
-  const message = encodeURIComponent(
-    `Oi ${customer.name.split(" ")[0]}, aqui é do salão. Você esteve com a gente há ${Math.round(customer.daysSince)} dias. Quer agendar seu próximo horário?`,
-  );
-
-  return `https://wa.me/${digits}?text=${message}`;
-}
-
 export async function loadOperationsPageData(): Promise<OperationsPageData> {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
@@ -262,16 +289,27 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
   const currentMonthStart = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 12),
   );
+  const previousMonthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 12),
+  );
+  const nextMonthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 12),
+  );
   const currentMonthReference = currentMonthStart.toISOString().slice(0, 10);
+  const autopilotWindowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const autopilotWindowEnd = new Date(now.getTime() + 36 * 60 * 60 * 1000);
 
   const [
     operationsResult,
     inventoryProductsResult,
     storeOrdersResult,
     inventoryMovementsResult,
-    appointmentsResult,
+    recentAppointmentsResult,
+    autopilotAppointmentsResult,
+    completedAppointmentsHistoryResult,
     customersResult,
     monthlyTargetResult,
+    autopilotSchedulerReady,
   ] = await Promise.all([
     supabase.rpc("get_owner_operations_dashboard", {
       days_input: 7,
@@ -302,6 +340,26 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
       .from("appointments")
       .select("id, date, status, customers(id,name), services(id,name,price)")
       .eq("salon_id", salon.id)
+      .gte("date", previousMonthStart.toISOString())
+      .lt("date", nextMonthStart.toISOString())
+      .order("date", { ascending: false })
+      .limit(1500),
+    supabase
+      .from("appointments")
+      .select(
+        "id, date, ends_at, status, customer_confirmation_requested_at, customer_presence_confirmed_at, deposit_paid_at, deposit_customer_reported_paid_at, deposit_status, protection_confirmation_required, customers(id,name), services(id,name), staff_members(id,name)",
+      )
+      .eq("salon_id", salon.id)
+      .in("status", ["pending", "confirmed"])
+      .gte("date", autopilotWindowStart.toISOString())
+      .lt("date", autopilotWindowEnd.toISOString())
+      .order("date", { ascending: true })
+      .limit(120),
+    supabase
+      .from("appointments")
+      .select("customer_id, date")
+      .eq("salon_id", salon.id)
+      .eq("status", "completed")
       .gte(
         "date",
         new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
@@ -310,7 +368,7 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
       .limit(1500),
     supabase
       .from("customers")
-      .select("id, name, created_at, phone, whatsapp_phone")
+      .select("id, name, created_at, phone")
       .eq("salon_id", salon.id)
       .order("created_at", { ascending: false })
       .limit(800),
@@ -322,6 +380,7 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
       .eq("salon_id", salon.id)
       .eq("reference_month", currentMonthReference)
       .maybeSingle(),
+    hasOperationsAutopilotSchedulerConfig(),
   ]);
 
   const operations = (operationsResult.data ??
@@ -342,30 +401,36 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
 
   const inventoryProducts = (inventoryProductsResult.data ??
     []) as InventoryProductRow[];
-  const inventoryProductImages = inventoryProducts.map((product) => ({
-    current_stock: product.current_stock,
-    id: product.id,
-    imageUrl:
-      (product.image_paths ?? [])
-        .filter((path) => path?.trim())
-        .map(
-          (path) =>
-            supabase.storage.from("inventory-products").getPublicUrl(path).data
-              .publicUrl,
-        )[0] ?? null,
-    minimum_stock: product.minimum_stock,
-    name: product.name,
-    unit: product.unit,
-  }));
-  const lowStockProducts = inventoryProductImages.filter(
-    (product) =>
-      Number(product.current_stock ?? 0) <= Number(product.minimum_stock ?? 0),
-  );
+  const lowStockProducts = inventoryProducts
+    .filter(
+      (product) =>
+        Number(product.current_stock ?? 0) <= Number(product.minimum_stock ?? 0),
+    )
+    .map((product) => ({
+      current_stock: product.current_stock,
+      id: product.id,
+      imageUrl:
+        (product.image_paths ?? [])
+          .filter((path) => path?.trim())
+          .map(
+            (path) =>
+              supabase.storage.from("inventory-products").getPublicUrl(path).data
+                .publicUrl,
+          )[0] ?? null,
+      minimum_stock: product.minimum_stock,
+      name: product.name,
+      unit: product.unit,
+    }));
 
   const storeOrders = (storeOrdersResult.data ?? []) as StoreOrderRow[];
   const inventoryMovements = (inventoryMovementsResult.data ??
     []) as InventoryMovementRow[];
-  const appointments = (appointmentsResult.data ?? []) as AppointmentRow[];
+  const recentAppointments = (recentAppointmentsResult.data ?? []) as
+    AppointmentRow[];
+  const autopilotAppointments = (autopilotAppointmentsResult.data ?? []) as
+    OperationsAutopilotAppointmentRow[];
+  const completedAppointmentsHistory =
+    (completedAppointmentsHistoryResult.data ?? []) as CompletedAppointmentVisitRow[];
   const customers = (customersResult.data ?? []) as CustomerRow[];
   const monthlyTarget = (monthlyTargetResult.data ?? null) as
     | MonthlyTargetRow
@@ -380,14 +445,11 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
       }, 0);
 
   const currentMonthKey = getMonthKey(currentMonthStart, timeZone);
-  const previousMonthStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1, 12),
-  );
   const previousMonthKey = getMonthKey(previousMonthStart, timeZone);
-  const currentMonthAppointments = appointments.filter(
+  const currentMonthAppointments = recentAppointments.filter(
     (appointment) => getMonthKey(appointment.date, timeZone) === currentMonthKey,
   );
-  const previousMonthAppointments = appointments.filter(
+  const previousMonthAppointments = recentAppointments.filter(
     (appointment) => getMonthKey(appointment.date, timeZone) === previousMonthKey,
   );
   const currentMonthCompletedAppointments = currentMonthAppointments.filter(
@@ -500,10 +562,10 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
       : "Primeiro mês com comparação disponível.",
     topService
       ? `${topService.name} lidera as vendas neste mês.`
-      : "Sem serviço destaque ainda.",
+      : "Sem serviço em destaque ainda.",
     topCustomer
       ? `${topCustomer.name} é o maior ticket acumulado do mês.`
-      : "Nenhum cliente destaque até agora.",
+      : "Nenhuma cliente em destaque até agora.",
     bestHour
       ? `${bestHour.hour} concentra o melhor ticket médio do período.`
       : "O melhor horário aparece com mais atendimentos concluídos.",
@@ -518,23 +580,21 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
 
   const lastVisitMap = new Map<string, { count: number; last: Date }>();
 
-  for (const appointment of appointments.filter((item) => item.status === "completed")) {
-    const customer = firstRelation(appointment.customers);
-
-    if (!customer) {
+  for (const appointment of completedAppointmentsHistory) {
+    if (!appointment.customer_id) {
       continue;
     }
 
-    const last = lastVisitMap.get(customer.id);
+    const last = lastVisitMap.get(appointment.customer_id);
     const dateObject = new Date(appointment.date);
 
     if (!last || dateObject > last.last) {
-      lastVisitMap.set(customer.id, {
+      lastVisitMap.set(appointment.customer_id, {
         count: (last?.count ?? 0) + 1,
         last: dateObject,
       });
     } else {
-      lastVisitMap.set(customer.id, {
+      lastVisitMap.set(appointment.customer_id, {
         count: last.count + 1,
         last: last.last,
       });
@@ -650,15 +710,155 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
     },
   ];
 
+  const autopilotQueue = autopilotAppointments
+    .map((appointment) => {
+      const inspection = inspectOperationsAutopilotAppointment(appointment, now);
+      const customerName =
+        firstRelation(appointment.customers)?.name ?? "Cliente";
+      const serviceName = firstRelation(appointment.services)?.name ?? "Serviço";
+      const staffName = firstRelation(appointment.staff_members)?.name ?? "Equipe";
+      const signalBadges =
+        inspection.signalBadges.length > 0
+          ? inspection.signalBadges
+          : buildAppointmentAutopilotSignalBadges(appointment);
+
+      return {
+        action: inspection.action,
+        badgeClassName:
+          inspection.action === "complete"
+            ? "badge badge--confirmed"
+            : inspection.action === "no_show"
+              ? "badge badge--cancelled"
+              : "badge badge--pending",
+        badgeLabel:
+          inspection.action === "complete"
+            ? "Concluir sozinho"
+            : inspection.action === "no_show"
+              ? "Virar falta"
+              : "Acompanhando",
+        date: appointment.date,
+        depositStatus: appointment.deposit_status,
+        hasProtection:
+          Boolean(appointment.customer_confirmation_requested_at) ||
+          appointment.protection_confirmation_required === true,
+        id: appointment.id,
+        meta: `${serviceName} • ${staffName} • ${formatDateTime(appointment.date)}`,
+        note: inspection.reason,
+        signalBadges,
+        title: customerName,
+      };
+    })
+    .filter((item) => {
+      if (item.action !== "watch") {
+        return true;
+      }
+
+      return item.hasProtection || item.depositStatus === "pending";
+    })
+    .sort((left, right) => {
+      const priority =
+        (left.action === "complete" ? 0 : left.action === "no_show" ? 1 : 2) -
+        (right.action === "complete" ? 0 : right.action === "no_show" ? 1 : 2);
+
+      if (priority !== 0) {
+        return priority;
+      }
+
+      return new Date(left.date).getTime() - new Date(right.date).getTime();
+    })
+    .slice(0, 6);
+
+  const autopilotReadyToCompleteCount = autopilotQueue.filter(
+    (item) => item.action === "complete",
+  ).length;
+  const autopilotReadyToNoShowCount = autopilotQueue.filter(
+    (item) => item.action === "no_show",
+  ).length;
+  const autopilotCustomerSignalsCount = autopilotAppointments.filter((item) =>
+    Boolean(item.customer_presence_confirmed_at),
+  ).length;
+  const autopilotDepositSignalsCount = autopilotAppointments.filter((item) =>
+    Boolean(item.deposit_paid_at || item.deposit_customer_reported_paid_at),
+  ).length;
+  const schedulerCanSelfConfigure = Boolean(
+    getConfiguredAppOrigin() && getCronSecret(),
+  );
+  const autopilotStatusNote = !clientAppConfig.autoPilotEnabled
+    ? "Sem esse modo, o salão ainda precisa fechar atendimento na mão."
+    : autopilotSchedulerReady
+      ? "O sistema acompanha agenda, confirmação e fechamento sem clique manual."
+      : schedulerCanSelfConfigure
+        ? "O agendador ainda não ficou pronto. Salve Ajustes uma vez para finalizar a ligação."
+        : "O agendador ainda não ficou pronto no servidor.";
+  const autopilotRules = [
+    "Horários do app entram aceitos automaticamente.",
+    salon.booking_policy_auto_confirm_new_appointments
+      ? "Horários lançados no painel entram aceitos sem clique."
+      : null,
+    salon.booking_policy_enabled &&
+    salon.booking_policy_confirmation_required &&
+    salon.booking_policy_auto_cancel_unconfirmed
+      ? `Sem confirmação da cliente, o sistema cancela ${salon.booking_policy_auto_cancel_lead_minutes} min antes.`
+      : null,
+    salon.booking_policy_enabled &&
+    salon.booking_policy_requires_deposit &&
+    salon.booking_policy_auto_cancel_pending_deposit
+      ? `Sem sinal, o sistema cancela ${salon.booking_policy_auto_cancel_lead_minutes} min antes.`
+      : null,
+    `Depois do horário, o sistema conclui em ${AUTOPILOT_COMPLETION_GRACE_MINUTES} min quando encontra sinal real da cliente ou do pagamento.`,
+    `Sem sinal suficiente, o sistema marca falta entre ${formatAutopilotHours(AUTOPILOT_PENDING_NO_SHOW_GRACE_MINUTES)} e ${formatAutopilotHours(AUTOPILOT_CONFIRMED_NO_SHOW_GRACE_MINUTES)} depois do fim.`,
+  ].filter((value): value is string => Boolean(value));
+
   return {
+    autopilot: {
+      active: clientAppConfig.autoPilotEnabled,
+      cards: [
+        {
+          id: "customer-signals",
+          label: "Cliente confirmou",
+          note: "Leitura do app e da presença",
+          value: `${autopilotCustomerSignalsCount}`,
+        },
+        {
+          id: "deposit-signals",
+          label: "Sinal pronto",
+          note: "Pago ou informado pela cliente",
+          value: `${autopilotDepositSignalsCount}`,
+        },
+        {
+          id: "ready-to-complete",
+          label: "Concluir sozinho",
+          note: "Horários já com prova suficiente",
+          value: `${autopilotReadyToCompleteCount}`,
+        },
+        {
+          id: "ready-to-no-show",
+          label: "Virar falta",
+          note: "Horários sem sinal forte",
+          value: `${autopilotReadyToNoShowCount}`,
+        },
+      ],
+      queue: autopilotQueue.map((item) => ({
+        badgeClassName: item.badgeClassName,
+        badgeLabel: item.badgeLabel,
+        id: item.id,
+        meta: item.meta,
+        note: item.note,
+        signalBadges: item.signalBadges,
+        title: item.title,
+      })),
+      rules: autopilotRules,
+      schedulerReady: autopilotSchedulerReady,
+      statusNote: autopilotStatusNote,
+    },
     customersAttention: {
       lostCustomers: lostCustomers.map((customer) => {
-        const phoneValue = customer.whatsapp_phone ?? customer.phone ?? "";
+        const phoneValue = customer.phone ?? "";
         const hasContact = Boolean(phoneValue);
 
         return {
           contactSummary: hasContact
-            ? "Enviar mensagem automática ou abrir no WhatsApp."
+          ? "Contato pronto para ação direta no cadastro."
             : "Sem telefone cadastrado.",
           hasContact,
           id: customer.id,
@@ -670,9 +870,7 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
           stageBadges: [
             `${Math.round(customer.daysSince)} dias sem voltar`,
             `${customer.visits} visitas`,
-          ],
-          whatsappUrl: buildWhatsAppUrl(customer),
-        };
+          ],        };
       }),
       stageCounters,
     },
@@ -714,11 +912,11 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
             : `Receita ${Math.round(revenueDelta)}% acima do mês anterior.`,
       serviceSummary: topService
         ? `${topService.name} lidera o mês com ${topService.count} vendas.`
-        : "Sem serviço destaque por enquanto.",
+        : "Sem serviço em destaque por enquanto.",
       ticketSummary: `Ticket médio atual: ${formatCurrency(avgTicket)}`,
       topCustomerSummary: topCustomer
-        ? `${topCustomer.name} soma ${formatCurrency(topCustomer.total)} no período.`
-        : "Nenhum cliente com destaque de faturamento até agora.",
+        ? `${topCustomer.name} soma ${formatCurrency(topCustomer.total)} no periodo.`
+        : "Nenhum cliente com destaque de faturamento ate agora.",
     },
     inventory: {
       lowStockProducts: lowStockProducts.map((product) => ({
@@ -760,8 +958,8 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
           customerName: customer?.name ?? "Cliente",
           id: order.id,
           itemsSummary: items.length
-            ? items.map((item) => item.product_name_snapshot).join(" • ")
-            : "Pedido sem itens visíveis.",
+            ? items.map((item) => item.product_name_snapshot).join(" - ")
+            : "Pedido sem itens visiveis.",
           notes: order.notes?.trim() ? order.notes : null,
           orderMomentLabel: formatDateTime(orderMoment),
           orderNumberLabel: `#${order.order_number}`,
@@ -778,7 +976,7 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
         const assignedServices = Number(staffMember.assigned_services ?? 0);
 
         return {
-          assignedServicesSummary: `${assignedServices} serviço${assignedServices === 1 ? "" : "s"} • ${staffMember.upcoming_appointments} futuros`,
+          assignedServicesSummary: `${assignedServices} serviço${assignedServices === 1 ? "" : "s"} - ${staffMember.upcoming_appointments} futuros`,
           commissionFlatFee: Number(staffMember.commission_flat_fee ?? 0),
           commissionRatePercent: Number(
             staffMember.commission_rate_percent ?? 0,
@@ -788,8 +986,8 @@ export async function loadOperationsPageData(): Promise<OperationsPageData> {
           ),
           id: staffMember.id,
           name: staffMember.name,
-          performanceSummary: `Receita ${formatCurrency(Number(staffMember.total_revenue ?? 0))} • Comissão estimada ${formatCurrency(Number(staffMember.estimated_commission ?? 0))}`,
-          roleSummary: `${staffMember.role?.trim() || "Profissional do salão"} •${staffMember.next_appointment_at ? ` próxima ${formatDateTime(staffMember.next_appointment_at)}` : " sem próxima reserva"}`,
+          performanceSummary: `Receita ${formatCurrency(Number(staffMember.total_revenue ?? 0))} - Comissão estimada ${formatCurrency(Number(staffMember.estimated_commission ?? 0))}`,
+          roleSummary: `${staffMember.role?.trim() || "Profissional do salão"} -${staffMember.next_appointment_at ? ` próxima ${formatDateTime(staffMember.next_appointment_at)}` : " sem próxima reserva"}`,
           statusBadgeClass: staffMember.is_active
             ? "badge badge--confirmed"
             : "badge badge--cancelled",

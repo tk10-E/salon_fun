@@ -1,7 +1,12 @@
-import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
+﻿import Image from "next/image";
+import Link from "next/link";
+
+import styles from "./page.module.css";
+import {
+  AsyncActionForm,
+  AsyncActionNoticeRegion,
+} from "@/components/AsyncActionForm";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
-import { FlashMessage } from "@/components/FlashMessage";
-import { WorkspaceSectionNav } from "@/components/WorkspaceSectionNav";
 import {
   createManagementClientAction,
   deleteManagementClientAction,
@@ -18,21 +23,158 @@ type ClientesPageProps = {
   searchParams?: Promise<{
     q?: string;
     clientId?: string;
+    composer?: string;
     message?: string;
     tone?: string;
   }>;
 };
 
+type ClientRecord = Awaited<ReturnType<typeof loadManagementClients>>[number];
+
+function customerInitials(value: string) {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) {
+    return "CL";
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? "C"}${parts[parts.length - 1][0] ?? "L"}`.toUpperCase();
+}
+
+function getClientStage(client: ClientRecord) {
+  if (client.upcomingCount > 0 && client.completedCount >= 4) {
+    return { label: "Cliente forte", tone: "violet" as const };
+  }
+
+  if (client.upcomingCount > 0) {
+    return { label: "Retorno ativo", tone: "accent" as const };
+  }
+
+  if (client.completedCount > 0) {
+    return { label: "Com histÃ³rico", tone: "success" as const };
+  }
+
+  return { label: "Novo cadastro", tone: "soft" as const };
+}
+
+function formatPrimaryContact(client: ClientRecord) {
+  return [client.phone, client.email].filter(Boolean).join(" â€¢ ") || "Sem contato principal informado";
+}
+
+function getStageClass(
+  tone: ReturnType<typeof getClientStage>["tone"],
+  stylesMap: Record<string, string>,
+) {
+  if (tone === "accent") {
+    return stylesMap.stageAccent;
+  }
+
+  if (tone === "violet") {
+    return stylesMap.stageViolet;
+  }
+
+  if (tone === "success") {
+    return stylesMap.stageSuccess;
+  }
+
+  return stylesMap.stageSoft;
+}
+
+function formatLifecycleCopy(client: ClientRecord) {
+  if (client.upcomingCount > 0) {
+    return `${client.upcomingCount} retorno${client.upcomingCount === 1 ? "" : "s"} em andamento`;
+  }
+
+  if (client.completedCount > 0) {
+    return `${client.completedCount} visita${client.completedCount === 1 ? "" : "s"} no histÃ³rico`;
+  }
+
+  return "Pronta para o primeiro atendimento";
+}
+
+function toVisualPercent(value: number, fallback = 14) {
+  if (value <= 0) {
+    return fallback;
+  }
+
+  return Math.min(100, Math.max(fallback, value));
+}
+
+function DashboardGlyph({
+  name,
+}: {
+  name: "arrow" | "plus" | "search" | "spark";
+}) {
+  switch (name) {
+    case "search":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M10.5 4.75a5.75 5.75 0 1 1 0 11.5a5.75 5.75 0 0 1 0-11.5Zm0 1.5a4.25 4.25 0 1 0 0 8.5a4.25 4.25 0 0 0 0-8.5Zm6.53 9.72a.75.75 0 0 1 1.06 0l2.16 2.16a.75.75 0 0 1-1.06 1.06l-2.16-2.16a.75.75 0 0 1 0-1.06Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 4.25a.75.75 0 0 1 .75.75v6.25H19a.75.75 0 0 1 0 1.5h-6.25V19a.75.75 0 0 1-1.5 0v-6.25H5a.75.75 0 0 1 0-1.5h6.25V5a.75.75 0 0 1 .75-.75Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "spark":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M11.23 4.54c.28-1.06 1.8-1.06 2.08 0l.46 1.74a1.5 1.5 0 0 0 1.06 1.06l1.74.46c1.06.28 1.06 1.8 0 2.08l-1.74.46a1.5 1.5 0 0 0-1.06 1.06l-.46 1.74c-.28 1.06-1.8 1.06-2.08 0l-.46-1.74a1.5 1.5 0 0 0-1.06-1.06l-1.74-.46c-1.06-.28-1.06-1.8 0-2.08l1.74-.46a1.5 1.5 0 0 0 1.06-1.06l.46-1.74Zm6.72 9.72c.18-.68 1.15-.68 1.33 0l.22.83c.12.43.45.76.88.88l.83.22c.68.18.68 1.15 0 1.33l-.83.22a1.25 1.25 0 0 0-.88.88l-.22.83c-.18.68-1.15.68-1.33 0l-.22-.83a1.25 1.25 0 0 0-.88-.88l-.83-.22c-.68-.18-.68-1.15 0-1.33l.83-.22c.43-.12.76-.45.88-.88l.22-.83Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "arrow":
+    default:
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M8.22 6.22a.75.75 0 0 1 1.06 0h6.5a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0V8.78l-7.5 7.5a.75.75 0 0 1-1.06-1.06l7.5-7.5H9.28a.75.75 0 0 1-1.06-1.5Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+  }
+}
+
 export default async function ClientesPage({
   searchParams: searchParamsPromise,
 }: ClientesPageProps) {
-  const searchParams = await searchParamsPromise;
-  const { salon } = await requireOwnerSalon();
+  const [searchParams, { salon }] = await Promise.all([
+    searchParamsPromise,
+    requireOwnerSalon(),
+  ]);
+
   const timeZone = salon.timezone ?? "America/Sao_Paulo";
   const query = searchParams?.q?.trim() ?? "";
   const selectedClientId = searchParams?.clientId?.trim() ?? "";
+  const isCreateComposerOpen = searchParams?.composer === "1";
   const currentPath = buildFilterHref("/dashboard/gestao/clientes", searchParams, {});
+  const clearFiltersHref = buildFilterHref("/dashboard/gestao/clientes", searchParams, {
+    q: undefined,
+    clientId: undefined,
+  });
+  const clearHighlightHref = buildFilterHref("/dashboard/gestao/clientes", searchParams, {
+    clientId: undefined,
+  });
   const clients = await loadManagementClients(salon.id, query);
+
   const orderedClients = selectedClientId
     ? [...clients].sort((left, right) => {
         if (left.id === selectedClientId) {
@@ -46,12 +188,18 @@ export default async function ClientesPage({
         return left.name.localeCompare(right.name, "pt-BR");
       })
     : clients;
-  const clientsWithWhatsapp = clients.filter((client) => Boolean(client.whatsapp_phone?.trim())).length;
+
   const clientsWithUpcoming = clients.filter((client) => client.upcomingCount > 0).length;
   const clientsWithHistory = clients.filter((client) => client.completedCount > 0).length;
   const clientsWithBirthDate = clients.filter((client) => Boolean(client.birth_date)).length;
   const totalUpcoming = clients.reduce((sum, client) => sum + client.upcomingCount, 0);
   const totalCompleted = clients.reduce((sum, client) => sum + client.completedCount, 0);
+  const dormantClients = clients.filter(
+    (client) => client.completedCount > 0 && client.upcomingCount === 0,
+  ).length;
+  const strongClients = clients.filter((client) => getClientStage(client).tone === "violet").length;
+  const newClients = clients.filter((client) => client.completedCount === 0).length;
+
   const spotlightClient =
     orderedClients.find((client) => client.id === selectedClientId) ??
     [...clients].sort((left, right) => {
@@ -75,407 +223,568 @@ export default async function ClientesPage({
       }
 
       return left.name.localeCompare(right.name, "pt-BR");
-    })[0] ??
-    null;
+    })[0] ?? null;
+
   const mostRecentClient =
     [...clients]
       .filter((client) => Boolean(client.lastVisitAt))
-      .sort((left, right) => (right.lastVisitAt ?? "").localeCompare(left.lastVisitAt ?? ""))[0] ?? null;
+      .sort((left, right) => (right.lastVisitAt ?? "").localeCompare(left.lastVisitAt ?? ""))[0] ??
+    null;
 
-  return (
-    <div className="page-grid workspace-page management-page management-page--clients">
-      {searchParams?.message ? (
-        <FlashMessage message={searchParams.message} tone={searchParams.tone} />
-      ) : null}
+  const upcomingCoverage = clients.length
+    ? Math.round((clientsWithUpcoming / clients.length) * 100)
+    : 0;
+  const historyCoverage = clients.length
+    ? Math.round((clientsWithHistory / clients.length) * 100)
+    : 0;
+  const birthdayCoverage = clients.length
+    ? Math.round((clientsWithBirthDate / clients.length) * 100)
+    : 0;
+  const dormantCoverage = clients.length
+    ? Math.round((dormantClients / clients.length) * 100)
+    : 0;
+  const newClientsCoverage = clients.length
+    ? Math.round((newClients / clients.length) * 100)
+    : 0;
 
-      <DashboardWorkspaceHero
-        id="clients-overview"
-        eyebrow="Carteira do salão"
-        title="Clientes em ordem para atender e reativar."
-        description="Cadastro rápido, busca limpa e histórico útil para recepção e relacionamento."
-        highlight={{
-          label: "Base de clientes",
-          value: `${clients.length} cliente${clients.length === 1 ? "" : "s"}`,
-          note: clients.length
-            ? `${clientsWithUpcoming} com retorno previsto e ${totalCompleted} atendimento${totalCompleted === 1 ? "" : "s"} concluído${totalCompleted === 1 ? "" : "s"} no histórico.`
-            : "Assim que a recepção começar a cadastrar clientes, a carteira aparece aqui.",
-        }}
-        signals={[
-          {
-            label: "Com WhatsApp",
-            value: clientsWithWhatsapp,
-            tone: clientsWithWhatsapp ? "success" : "soft",
-          },
-          {
-            label: "Com retorno",
-            value: clientsWithUpcoming,
-            tone: clientsWithUpcoming ? "accent" : "soft",
-          },
-          {
-            label: "Com histórico",
-            value: clientsWithHistory,
-            tone: clientsWithHistory ? "warm" : "soft",
-          },
-        ]}
-        stats={[
-          {
-            label: "Próximos agendamentos",
-            value: totalUpcoming,
-            note: "Clientes com hora marcada.",
-            tone: totalUpcoming ? "accent" : "soft",
-          },
-          {
-            label: "Atendimentos concluídos",
-            value: totalCompleted,
-            note: "Histórico já registrado.",
-            tone: totalCompleted ? "success" : "soft",
-          },
-          {
-            label: "Aniversários com data",
-            value: clientsWithBirthDate,
-            note: "Base pronta para campanhas.",
-            tone: clientsWithBirthDate ? "warm" : "soft",
-          },
-          {
-            label: "Cliente forte",
-            value: spotlightClient?.name ?? "Sem destaque",
-            note: spotlightClient
-              ? `${spotlightClient.upcomingCount} próximo(s) e ${spotlightClient.completedCount} concluído(s).`
-              : "Cadastre e atenda para formar histórico.",
-            tone: spotlightClient ? "soft" : "neutral",
-          },
-        ]}
-        actions={
-          <div className="row-actions">
-            <a href="#client-create" className="primary-button">
-              Novo cliente
-            </a>
-            <a href="#client-list" className="secondary-button">
-              Ver carteira
-            </a>
-          </div>
-        }
-        aside={
-          <>
-            <span className="workspace-panel__eyebrow">Cliente em foco</span>
-            <h3>{spotlightClient?.name ?? "Base pronta para crescer"}</h3>
-            <p>
-              {spotlightClient
-                ? `${spotlightClient.completedCount} atendimento${spotlightClient.completedCount === 1 ? "" : "s"} concluído${spotlightClient.completedCount === 1 ? "" : "s"} e ${spotlightClient.upcomingCount} próximo${spotlightClient.upcomingCount === 1 ? "" : "s"} horário${spotlightClient.upcomingCount === 1 ? "" : "s"} nesta carteira.`
-                : "Quando a base ganhar histórico, o cliente com maior movimento aparece aqui."}
-            </p>
-            <div className="management-hero-pill-grid">
-              <div className="workspace-signal-pill workspace-hero__stat--soft">
-                <span>Última visita</span>
-                <strong>
-                  {mostRecentClient?.lastVisitAt
-                    ? formatDateLabel(mostRecentClient.lastVisitAt, timeZone)
-                    : "Sem histórico"}
-                </strong>
-              </div>
-              <div className="workspace-signal-pill workspace-hero__stat--accent">
-                <span>Contato forte</span>
-                <strong>
-                  {spotlightClient?.whatsapp_phone ||
-                    spotlightClient?.phone ||
-                    spotlightClient?.email ||
-                    "Atualize contato"}
-                </strong>
-              </div>
-            </div>
-          </>
-        }
-      />
+  const focusStage = spotlightClient ? getClientStage(spotlightClient) : null;
+  const focusHref = spotlightClient
+    ? buildFilterHref("/dashboard/gestao/clientes", searchParams, {
+        clientId: spotlightClient.id,
+      })
+    : "#client-list";
+  const openCreateHref = `${buildFilterHref("/dashboard/gestao/clientes", searchParams, {
+    composer: "1",
+  })}#client-create`;
+  const closeCreateHref = buildFilterHref("/dashboard/gestao/clientes", searchParams, {
+    composer: undefined,
+  });
+  const isSparsePortfolio = orderedClients.length <= 4;
+  const clientGridClassName = `${styles.clientGrid} ${
+    isSparsePortfolio ? styles.clientGridBalanced : ""
+  }`;
+  const createCard = (
+    <article id="client-create" className={styles.createCard}>
+      <div className={styles.sideCardHead}>
+        <div>
+          <span className={styles.sectionEyebrow}>Novo cliente</span>
+          <h3>Cadastro rÃ¡pido para recepÃ§Ã£o</h3>
+        </div>
+        <span className={styles.cardMiniIcon}>
+          <DashboardGlyph name="plus" />
+        </span>
+      </div>
 
-      <WorkspaceSectionNav
-        label="Atalhos da carteira"
-        items={[
-          { href: "#client-create", label: "Novo cliente", meta: "Cadastro rápido" },
-          { href: "#client-search", label: "Buscar", meta: "Nome, telefone ou e-mail" },
-          { href: "#client-list", label: "Carteira", meta: "Histórico e edição" },
-        ]}
-      />
+      <AsyncActionForm
+        action={createManagementClientAction}
+        className={styles.formStack}
+        resetOnSuccess
+      >
+        <input type="hidden" name="returnPath" value={closeCreateHref} />
 
-      <section className="workspace-subgrid management-summary-grid" aria-label="Resumo da carteira">
-        <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Relacionamento</span>
-          <h3>{clientsWithWhatsapp} contato{clientsWithWhatsapp === 1 ? "" : "s"} com WhatsApp</h3>
-          <p>
-            {clientsWithWhatsapp
-              ? "A base já tem canal direto para lembrete, retorno e campanhas."
-              : "Preencha o WhatsApp dos clientes para abrir comunicação rápida com a carteira."}
-          </p>
-        </article>
+        <div className={styles.field}>
+          <label htmlFor="client-name">Nome</label>
+          <input id="client-name" name="name" placeholder="Nome completo" required />
+        </div>
 
-        <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Retorno em aberto</span>
-          <h3>{clientsWithUpcoming} cliente{clientsWithUpcoming === 1 ? "" : "s"} com visita marcada</h3>
-          <p>
-            {spotlightClient?.upcomingCount
-              ? `${spotlightClient.name} já aparece com ${spotlightClient.upcomingCount} próximo(s) horário(s).`
-              : "Assim que a agenda girar, os retornos aparecem aqui para leitura rápida."}
-          </p>
-        </article>
-
-        <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Histórico útil</span>
-          <h3>{clientsWithHistory} cliente{clientsWithHistory === 1 ? "" : "s"} com atendimentos concluídos</h3>
-          <p>
-            {mostRecentClient?.lastVisitAt
-              ? `A última visita registrada foi em ${formatDateLabel(mostRecentClient.lastVisitAt, timeZone)}.`
-              : "Sem histórico ainda. Os atendimentos concluídos alimentam esta leitura automaticamente."}
-          </p>
-        </article>
-      </section>
-
-      <section className="management-grid management-grid--two">
-        <article id="client-create" className="card content-card management-card">
-          <div className="section-heading">
-            <div>
-              <h2>Novo cliente</h2>
-              <p className="muted">Cadastro curto com dados úteis para recepção.</p>
-            </div>
+        <div className={styles.splitGrid}>
+          <div className={styles.field}>
+            <label htmlFor="client-phone">Telefone</label>
+            <input id="client-phone" name="phone" placeholder="(11) 99999-0000" />
           </div>
 
-          <form action={createManagementClientAction} className="simple-form">
-            <input type="hidden" name="returnPath" value={currentPath} />
-
-            <div className="field">
-              <label htmlFor="client-name">Nome</label>
-              <input id="client-name" name="name" placeholder="Nome completo" required />
-            </div>
-
-            <div className="split-grid">
-              <div className="field">
-                <label htmlFor="client-phone">Telefone</label>
-                <input id="client-phone" name="phone" placeholder="(11) 99999-0000" />
-              </div>
-              <div className="field">
-                <label htmlFor="client-whatsapp">WhatsApp</label>
-                <input
-                  id="client-whatsapp"
-                  name="whatsappPhone"
-                  placeholder="(11) 99999-0000"
-                />
-              </div>
-            </div>
-
-            <div className="split-grid">
-              <div className="field">
-                <label htmlFor="client-email">E-mail</label>
-                <input id="client-email" name="email" type="email" />
-              </div>
-              <div className="field">
-                <label htmlFor="client-birthdate">Nascimento</label>
-                <input id="client-birthdate" name="birthDate" type="date" />
-              </div>
-            </div>
-
-            <div className="field">
-              <label htmlFor="client-notes">Observações</label>
-              <textarea
-                id="client-notes"
-                name="notes"
-                rows={3}
-                placeholder="Preferências, lembretes ou detalhes de atendimento."
-              />
-            </div>
-
-            <button type="submit" className="primary-button">
-              Salvar cliente
-            </button>
-          </form>
-        </article>
-
-        <article id="client-search" className="card content-card management-card">
-          <div className="section-heading">
-            <div>
-              <h2>Busca rápida</h2>
-              <p className="muted">Localize por nome, telefone, WhatsApp ou e-mail.</p>
-            </div>
+          <div className={styles.field}>
+            <label htmlFor="client-email">E-mail</label>
+            <input id="client-email" name="email" type="email" />
           </div>
 
-          <form method="get" className="simple-form">
-            <div className="field">
-              <label htmlFor="clients-search">Buscar cliente</label>
-              <input
-                id="clients-search"
-                name="q"
-                defaultValue={query}
-                placeholder="Ex.: Ana ou 11999990000"
-              />
-            </div>
-
-            <div className="inline-actions">
-              <button type="submit" className="secondary-button">
-                Buscar
-              </button>
-              <a href="/dashboard/gestao/clientes" className="secondary-button">
-                Limpar
-              </a>
-            </div>
-          </form>
-        </article>
-      </section>
-
-      <section id="client-list" className="card content-card management-card">
-        <div className="section-heading">
-          <div>
-            <h2>Clientes cadastrados</h2>
-            <p className="muted">
-              {clients.length
-                ? `${clients.length} cliente(s) encontrados`
-                : "Nenhum cliente cadastrado ainda"}
-            </p>
+          <div className={styles.field}>
+            <label htmlFor="client-birthdate">Nascimento</label>
+            <input id="client-birthdate" name="birthDate" type="date" />
           </div>
         </div>
 
-        {!clients.length ? (
-          <EmptyStateCard
-            eyebrow="Base vazia"
-            title="Cadastre o primeiro cliente"
-            description="Assim fica mais fácil marcar horários e acompanhar o histórico."
+        <div className={styles.field}>
+          <label htmlFor="client-notes">ObservaÃ§Ãµes</label>
+          <textarea
+            id="client-notes"
+            name="notes"
+            rows={3}
+            placeholder="PreferÃªncias, lembretes ou detalhes de atendimento."
           />
-        ) : (
-          <div className="management-customer-list">
-              {orderedClients.map((client) => (
-              <article key={client.id} className="management-customer-card">
-                <div className="management-customer-card__header">
-                  <div>
-                    <strong>{client.name}</strong>
-                    <p className="muted">
-                      {[client.phone, client.whatsapp_phone, client.email]
-                        .filter(Boolean)
-                        .join(" • ") || "Sem contato principal informado"}
-                    </p>
-                  </div>
-                  <div className="management-customer-card__metrics">
-                    {client.id === selectedClientId ? <span>em destaque</span> : null}
-                    <span>{client.upcomingCount} próximo(s)</span>
-                    <span>{client.completedCount} concluído(s)</span>
-                  </div>
-                </div>
+        </div>
 
-                <div className="management-customer-card__meta">
-                  <span>
-                    Última visita:{" "}
-                    {client.lastVisitAt
-                      ? formatDateLabel(client.lastVisitAt, timeZone)
-                      : "sem histórico"}
-                  </span>
-                  <span>
-                    Nascimento:{" "}
-                    {client.birth_date
-                      ? formatDateLabel(client.birth_date, timeZone)
-                      : "não informado"}
-                  </span>
-                </div>
-
-                {client.notes ? (
-                  <p className="management-inline-note">{client.notes}</p>
-                ) : null}
-
-                <details
-                  className="management-details"
-                  open={client.id === selectedClientId}
-                >
-                  <summary>Editar cadastro e ver histórico</summary>
-
-                  <form action={updateManagementClientAction} className="simple-form">
-                    <input type="hidden" name="returnPath" value={currentPath} />
-                    <input type="hidden" name="clientId" value={client.id} />
-
-                    <div className="field">
-                      <label>Nome</label>
-                      <input name="name" defaultValue={client.name} required />
-                    </div>
-
-                    <div className="split-grid">
-                      <div className="field">
-                        <label>Telefone</label>
-                        <input name="phone" defaultValue={client.phone ?? ""} />
-                      </div>
-                      <div className="field">
-                        <label>WhatsApp</label>
-                        <input
-                          name="whatsappPhone"
-                          defaultValue={client.whatsapp_phone ?? ""}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="split-grid">
-                      <div className="field">
-                        <label>E-mail</label>
-                        <input
-                          name="email"
-                          type="email"
-                          defaultValue={client.email ?? ""}
-                        />
-                      </div>
-                      <div className="field">
-                        <label>Nascimento</label>
-                        <input
-                          name="birthDate"
-                          type="date"
-                          defaultValue={client.birth_date ?? ""}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="field">
-                      <label>Observações</label>
-                      <textarea
-                        name="notes"
-                        rows={3}
-                        defaultValue={client.notes ?? ""}
-                      />
-                    </div>
-
-                    <div className="inline-actions">
-                      <button type="submit" className="primary-button">
-                        Salvar alterações
-                      </button>
-                    </div>
-                  </form>
-
-                  <div className="management-history">
-                    <strong>Histórico recente</strong>
-                    {!client.history.length ? (
-                      <p className="muted">Nenhum atendimento concluído ainda.</p>
-                    ) : (
-                      <div className="management-list">
-                        {client.history.map((entry) => (
-                          <div key={entry.id} className="management-list-row">
-                            <div className="management-list-row__main">
-                              <strong>{entry.serviceName}</strong>
-                              <span>
-                                {entry.professionalName} •{" "}
-                                {formatDateLabel(entry.date, timeZone)}
-                              </span>
-                            </div>
-                            <span className="badge badge--soft">
-                              {entry.status === "completed" ? "Concluído" : entry.status}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <form action={deleteManagementClientAction}>
-                    <input type="hidden" name="returnPath" value={currentPath} />
-                    <input type="hidden" name="clientId" value={client.id} />
-                    <button type="submit" className="danger-button">
-                      Excluir cliente
-                    </button>
-                  </form>
-                </details>
-              </article>
-            ))}
+        <div className={styles.createCardFooter}>
+          <div className={styles.createHints}>
+            <span>WhatsApp</span>
+            <span>AniversÃ¡rio</span>
+            <span>ObservaÃ§Ãµes</span>
           </div>
-        )}
-      </section>
-    </div>
+
+          <button type="submit" className="primary-button">
+            Salvar cliente
+          </button>
+        </div>
+      </AsyncActionForm>
+    </article>
+  );
+  const renderSpotlightInsights = () => (
+    <>
+      <div className={styles.focusChart}>
+        <div className={styles.focusChartTrack}>
+          <span
+            className={styles.focusChartPrimary}
+            style={{ width: `${toVisualPercent(upcomingCoverage, 18)}%` }}
+          />
+        </div>
+        <div className={styles.focusChartFooter}>
+          <div>
+            <strong>{clientsWithUpcoming}</strong>
+            <span>Retorno ativo</span>
+          </div>
+          <div>
+            <strong>{dormantClients}</strong>
+            <span>Para reativar</span>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.focusStats}>
+        <div>
+          <span>PrÃ³ximos</span>
+          <strong>{spotlightClient?.upcomingCount ?? 0}</strong>
+        </div>
+        <div>
+          <span>ConcluÃ­dos</span>
+          <strong>{spotlightClient?.completedCount ?? 0}</strong>
+        </div>
+        <div>
+          <span>Ãšltima visita</span>
+          <strong>
+            {mostRecentClient?.lastVisitAt
+              ? formatDateLabel(mostRecentClient.lastVisitAt, timeZone)
+              : "Sem histÃ³rico"}
+          </strong>
+        </div>
+      </div>
+    </>
+  );
+  const renderPortfolioInsights = () => (
+    <>
+      <div className={styles.overviewChart}>
+        <div className={styles.overviewTrack}>
+          <span
+            className={styles.overviewBarPrimary}
+            style={{ width: `${toVisualPercent(historyCoverage, 16)}%` }}
+          />
+        </div>
+        <div className={styles.overviewTrack}>
+          <span
+            className={styles.overviewBarSecondary}
+            style={{ width: `${toVisualPercent(upcomingCoverage, 16)}%` }}
+          />
+        </div>
+      </div>
+
+      <div className={styles.sourceBars}>
+        <div className={styles.sourceBarBlock}>
+          <div
+            className={`${styles.sourceBar} ${styles.sourceBarPrimary}`}
+            style={{ width: `${toVisualPercent(historyCoverage, 18)}%` }}
+          />
+          <div className={styles.sourceMeta}>
+            <strong>{clientsWithHistory}</strong>
+            <span>Com histÃ³rico</span>
+          </div>
+        </div>
+
+        <div className={styles.sourceBarBlock}>
+          <div
+            className={`${styles.sourceBar} ${styles.sourceBarWarm}`}
+            style={{ width: `${toVisualPercent(dormantCoverage, 16)}%` }}
+          />
+          <div className={styles.sourceMeta}>
+            <strong>{dormantClients}</strong>
+            <span>ReativaÃ§Ã£o</span>
+          </div>
+        </div>
+
+        <div className={styles.sourceBarBlock}>
+          <div
+            className={`${styles.sourceBar} ${styles.sourceBarCool}`}
+            style={{ width: `${toVisualPercent(newClientsCoverage, 16)}%` }}
+          />
+          <div className={styles.sourceMeta}>
+            <strong>{newClients}</strong>
+            <span>Novos cadastros</span>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.coverageRow}>
+        <span>{historyCoverage}% com histÃ³rico</span>
+        <span>{upcomingCoverage}% com retorno</span>
+        <span>{birthdayCoverage}% prontos para campanha</span>
+      </div>
+
+      <div className={styles.radarStats}>
+        <div className={styles.radarRow}>
+          <span>Ãšltima visita registrada</span>
+          <strong>
+            {mostRecentClient?.lastVisitAt
+              ? formatDateLabel(mostRecentClient.lastVisitAt, timeZone)
+              : "Sem histÃ³rico"}
+          </strong>
+        </div>
+        <div className={styles.radarRow}>
+          <span>Clientes fortes</span>
+          <strong>{strongClients}</strong>
+        </div>
+        <div className={styles.radarRow}>
+          <span>Atendimentos concluÃ­dos</span>
+          <strong>{totalCompleted}</strong>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <AsyncActionNoticeRegion
+      initialMessage={searchParams?.message}
+      initialTone={searchParams?.tone}
+    >
+      <div className={styles.page}>
+        <section className={styles.board}>
+                    <section className={styles.hero}>
+            <div className={styles.heroHeader}>
+              <div className={styles.heroCopy}>
+                <span className={styles.kicker}>Clientes</span>
+                <h1>Clientes</h1>
+                <p>Busque, abra a ficha e atualize o cadastro em uma tela so.</p>
+              </div>
+
+              <div className={styles.heroActions}>
+                <Link
+                  href={isCreateComposerOpen ? closeCreateHref : openCreateHref}
+                  className={styles.heroPrimaryButton}
+                >
+                  <span className={styles.buttonIcon}>
+                    <DashboardGlyph name="plus" />
+                  </span>
+                  {isCreateComposerOpen ? "Fechar cadastro" : "Novo cliente"}
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          <div className={styles.workspace}>
+            <section className={styles.mainColumn}>
+              <div className={styles.sectionHead}>
+                <div>
+                  <span className={styles.sectionEyebrow}>Clientes</span>
+                  <h2>Lista de clientes</h2>
+                </div>
+
+                <div className={styles.sectionFilters}>
+                  <span className={styles.filterPill}>
+                    Busca: {query ? `"${query}"` : "toda a base"}
+                  </span>
+                  <span className={styles.filterPill}>Com historico: {clientsWithHistory}</span>
+                  <span className={styles.filterPill}>Com retorno: {clientsWithUpcoming}</span>
+                  {selectedClientId ? (
+                    <Link href={clearHighlightHref} className={styles.filterAction}>
+                      Limpar destaque
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+
+              {!clients.length ? (
+                <div className={styles.emptyStateWrap}>
+                  <EmptyStateCard
+                    eyebrow="Base vazia"
+                    title="Cadastre o primeiro cliente"
+                    description="Assim fica mais fÃ¡cil marcar horÃ¡rios, acompanhar histÃ³rico e organizar o relacionamento."
+                  />
+                </div>
+              ) : (
+                <div id="client-list" className={clientGridClassName}>
+                  {orderedClients.map((client) => {
+                    const stage = getClientStage(client);
+                    const isHighlighted = client.id === selectedClientId;
+                    const clientHref = buildFilterHref("/dashboard/gestao/clientes", searchParams, {
+                      clientId: client.id,
+                    });
+                    const renderSecondarySnapshot = () => (
+                      <>
+                        <div className={styles.clientMetrics}>
+                          <div>
+                            <span>PrÃ³ximos</span>
+                            <strong>{client.upcomingCount}</strong>
+                          </div>
+                          <div>
+                            <span>ConcluÃ­dos</span>
+                            <strong>{client.completedCount}</strong>
+                          </div>
+                          <div>
+                            <span>Ãšltima visita</span>
+                            <strong>
+                              {client.lastVisitAt
+                                ? formatDateLabel(client.lastVisitAt, timeZone)
+                                : "Sem histÃ³rico"}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className={styles.clientMeta}>
+                          <span>
+                            AniversÃ¡rio:{" "}
+                            {client.birth_date
+                              ? formatDateLabel(client.birth_date, timeZone)
+                              : "nÃ£o informado"}
+                          </span>
+                          {isHighlighted ? <span>cliente em destaque</span> : null}
+                        </div>
+
+                        {client.notes ? (
+                          <p className={styles.clientNote}>{client.notes}</p>
+                        ) : null}
+                      </>
+                    );
+
+                    return (
+                      <article
+                        key={client.id}
+                        id={`client-card-${client.id}`}
+                        className={`${styles.clientCard} ${
+                          isHighlighted ? styles.clientCardHighlighted : ""
+                        }`}
+                      >
+                        <div className={styles.clientCardBody}>
+                          <div className={styles.clientCardTop}>
+                            <div
+                              className={`${styles.clientAvatarShell} ${getStageClass(
+                                stage.tone,
+                                styles,
+                              )}`}
+                            >
+                              <div className={styles.avatarFrame}>
+                                {client.profileImageUrl ? (
+                                  <Image
+                                    src={client.profileImageUrl}
+                                    alt={`Foto de ${client.name}`}
+                                    width={92}
+                                    height={92}
+                                    unoptimized
+                                    className={styles.clientAvatar}
+                                  />
+                                ) : (
+                                  <div
+                                    className={`${styles.clientAvatar} ${styles.clientAvatarPlaceholder}`}
+                                  >
+                                    {customerInitials(client.name)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className={styles.clientCardActions}>
+                              <span
+                                className={`${styles.stageBadge} ${getStageClass(
+                                  stage.tone,
+                                  styles,
+                                )}`}
+                              >
+                                {stage.label}
+                              </span>
+                              <Link href={clientHref} className={styles.cardAction}>
+                                {isHighlighted ? "Em foco" : "Abrir ficha"}
+                              </Link>
+                            </div>
+                          </div>
+
+                          <div className={styles.clientIdentity}>
+                            <strong>{client.name}</strong>
+                            <p>{formatLifecycleCopy(client)}</p>
+                            <span className={styles.clientContact}>
+                              {formatPrimaryContact(client)}
+                            </span>
+                            <small>
+                              {client.profileImageUrl
+                                ? "Foto enviada pela cliente no app."
+                                : "Sem foto enviada pela cliente."}
+                            </small>
+                          </div>
+
+                          <div className={styles.clientCardSecondaryDesktop}>
+                            {renderSecondarySnapshot()}
+                          </div>
+
+                          <details className={styles.clientMobileDetails}>
+                            <summary className={styles.clientMobileSummary}>
+                              Ver resumo
+                            </summary>
+                            <div className={styles.clientMobileBody}>
+                              {renderSecondarySnapshot()}
+                            </div>
+                          </details>
+                        </div>
+
+                        <details
+                          className={styles.clientDetails}
+                          open={client.id === selectedClientId}
+                        >
+                          <summary>Editar cliente</summary>
+
+                          <div className={styles.detailsBody}>
+                            <AsyncActionForm
+                              action={updateManagementClientAction}
+                              className={styles.formStack}
+                            >
+                              <input type="hidden" name="returnPath" value={currentPath} />
+                              <input type="hidden" name="clientId" value={client.id} />
+
+                              <div className={styles.field}>
+                                <label htmlFor={`client-name-${client.id}`}>Nome</label>
+                                <input
+                                  id={`client-name-${client.id}`}
+                                  name="name"
+                                  defaultValue={client.name}
+                                  required
+                                />
+                              </div>
+
+                              <div className={styles.splitGrid}>
+                                <div className={styles.field}>
+                                  <label htmlFor={`client-phone-${client.id}`}>Telefone</label>
+                                  <input
+                                    id={`client-phone-${client.id}`}
+                                    name="phone"
+                                    defaultValue={client.phone ?? ""}
+                                  />
+                                </div>
+
+                                <div className={styles.field}>
+                                  <label htmlFor={`client-email-${client.id}`}>E-mail</label>
+                                  <input
+                                    id={`client-email-${client.id}`}
+                                    name="email"
+                                    type="email"
+                                    defaultValue={client.email ?? ""}
+                                  />
+                                </div>
+
+                                <div className={styles.field}>
+                                  <label htmlFor={`client-birth-${client.id}`}>Nascimento</label>
+                                  <input
+                                    id={`client-birth-${client.id}`}
+                                    name="birthDate"
+                                    type="date"
+                                    defaultValue={client.birth_date ?? ""}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className={styles.field}>
+                                <label htmlFor={`client-notes-${client.id}`}>ObservaÃ§Ãµes</label>
+                                <textarea
+                                  id={`client-notes-${client.id}`}
+                                  name="notes"
+                                  rows={3}
+                                  defaultValue={client.notes ?? ""}
+                                />
+                              </div>
+
+                              <div className={styles.inlineActions}>
+                                <button type="submit" className="primary-button">
+                                  Salvar alteraÃ§Ãµes
+                                </button>
+                              </div>
+                            </AsyncActionForm>
+
+                            <div className={styles.historyBlock}>
+                              <strong>HistÃ³rico recente</strong>
+                              {!client.history.length ? (
+                                <p>Nenhum atendimento concluÃ­do ainda.</p>
+                              ) : (
+                                <div className={styles.historyList}>
+                                  {client.history.map((entry) => (
+                                    <div key={entry.id} className={styles.historyRow}>
+                                      <div>
+                                        <strong>{entry.serviceName}</strong>
+                                        <span>
+                                          {entry.professionalName} â€¢{" "}
+                                          {formatDateLabel(entry.date, timeZone)}
+                                        </span>
+                                      </div>
+                                      <span className={styles.historyBadge}>
+                                        {entry.status === "completed" ? "ConcluÃ­do" : entry.status}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <AsyncActionForm action={deleteManagementClientAction}>
+                              <input type="hidden" name="returnPath" value={currentPath} />
+                              <input type="hidden" name="clientId" value={client.id} />
+                              <button type="submit" className="danger-button">
+                                Excluir cliente
+                              </button>
+                            </AsyncActionForm>
+                          </div>
+                        </details>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+                        <aside className={styles.sideColumn}>
+              <article
+                id="client-search"
+                className={`${styles.sideCard} ${styles.sideSearchCard}`}
+              >
+                  <div className={styles.sideCardHead}>
+                    <div>
+                      <span className={styles.sectionEyebrow}>Busca</span>
+                      <h3>Busca rapida</h3>
+                    </div>
+                  <span className={styles.cardMiniIcon}>
+                    <DashboardGlyph name="search" />
+                  </span>
+                </div>
+
+                <form method="get" className={styles.formStack}>
+                  <div className={styles.field}>
+                    <label htmlFor="clients-search">Nome, telefone ou e-mail</label>
+                    <input
+                      id="clients-search"
+                      name="q"
+                      defaultValue={query}
+                      placeholder="Ex.: Ana ou 11999990000"
+                    />
+                  </div>
+
+                  <div className={styles.inlineActions}>
+                    <button type="submit" className="secondary-button">
+                      Buscar
+                    </button>
+                    <Link href={clearFiltersHref} className="secondary-button">
+                      Limpar
+                    </Link>
+                  </div>
+                </form>
+              </article>
+
+              {isCreateComposerOpen ? createCard : null}
+            </aside>
+          </div>
+        </section>
+      </div>
+    </AsyncActionNoticeRegion>
   );
 }
+

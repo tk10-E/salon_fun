@@ -2,16 +2,27 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import {
+  queueMembershipFirstSlotNotification,
+  scheduleApprovedMembershipRequestSeriesByAdmin,
+} from "@/lib/appointmentPlanReservations";
+import {
+  LEGACY_MANAGEMENT_ROUTES,
+  MANAGEMENT_ROUTES,
+} from "@/lib/management-navigation";
+import { parseMembershipRequestPreferredScheduleNotes } from "@/lib/membershipRequestPreferredSchedule";
 import { createClient } from "@/lib/supabase/server";
 
 import {
   buildRedirectNotice,
+  prepareCustomerNotificationPayload,
   queueCustomerNotification,
   resolveDashboardReturnPath,
   SUBSCRIPTIONS_PATH,
 } from "./shared";
 
-const CUSTOMERS_PATH = "/dashboard/customers";
+const CUSTOMERS_PATH = MANAGEMENT_ROUTES.clients;
+const LEGACY_CUSTOMERS_PATH = LEGACY_MANAGEMENT_ROUTES.customers;
 const NOTIFICATIONS_PATH = "/dashboard/notifications";
 
 function normalizeText(value: FormDataEntryValue | null, maxLength: number) {
@@ -60,6 +71,24 @@ function normalizeDate(value: FormDataEntryValue | null) {
   return /^\d{4}-\d{2}-\d{2}$/.test(normalizedValue) ? normalizedValue : null;
 }
 
+function readDateInput(value: FormDataEntryValue | null) {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) {
+    return {
+      isBlank: true,
+      isValid: false,
+      value: null as string | null,
+    };
+  }
+
+  return {
+    isBlank: false,
+    isValid: /^\d{4}-\d{2}-\d{2}$/.test(raw),
+    value: normalizeDate(value),
+  };
+}
+
 function formatCustomerMembershipError(message: string) {
   if (message.includes("customer_not_found")) {
     return "Não foi possível localizar esse cliente para ativar o pacote.";
@@ -80,25 +109,43 @@ function formatCustomerMembershipError(message: string) {
   return `Não foi possível ativar o pacote agora. ${message}`;
 }
 
+function normalizeLegacyCustomersReturnPath(path: string) {
+  if (!path.startsWith(LEGACY_CUSTOMERS_PATH)) {
+    return path;
+  }
+
+  return `${CUSTOMERS_PATH}${path.slice(LEGACY_CUSTOMERS_PATH.length)}`;
+}
+
 function resolveCustomersReturnPath(value: FormDataEntryValue | null) {
   const path = String(value ?? "").trim();
 
-  if (!path.startsWith(CUSTOMERS_PATH)) {
-    return CUSTOMERS_PATH;
+  if (path.startsWith(CUSTOMERS_PATH)) {
+    return path;
   }
 
-  return path;
+  if (path.startsWith(LEGACY_CUSTOMERS_PATH)) {
+    return normalizeLegacyCustomersReturnPath(path);
+  }
+
+  return CUSTOMERS_PATH;
 }
 
 function resolveMembershipManagementReturnPath(formData: FormData) {
-  return resolveDashboardReturnPath(formData, SUBSCRIPTIONS_PATH, [
+  const returnPath = resolveDashboardReturnPath(formData, SUBSCRIPTIONS_PATH, [
     "/dashboard",
     CUSTOMERS_PATH,
+    LEGACY_CUSTOMERS_PATH,
     SUBSCRIPTIONS_PATH,
   ]);
+
+  return normalizeLegacyCustomersReturnPath(returnPath);
 }
 
-function normalizeOptionalNotes(value: FormDataEntryValue | null, maxLength = 1000) {
+function normalizeOptionalNotes(
+  value: FormDataEntryValue | null,
+  maxLength = 1000,
+) {
   return normalizeText(value, maxLength);
 }
 
@@ -109,6 +156,14 @@ function formatMembershipRequestError(message: string) {
 
   if (message.includes("membership_request_not_pending")) {
     return "Esse pedido já foi tratado pelo salão.";
+  }
+
+  if (message.includes("membership_request_not_approved")) {
+    return "Esse pedido ainda precisa ser aprovado antes de confirmar o pagamento.";
+  }
+
+  if (message.includes("membership_request_already_paid")) {
+    return "Esse plano já foi marcado como pago e ativado.";
   }
 
   if (message.includes("membership_offer_not_operational")) {
@@ -139,6 +194,113 @@ function formatNotificationDate(value: string | null | undefined) {
     year: "numeric",
     timeZone: "America/Sao_Paulo",
   }).format(parsed);
+}
+
+function isMissingMembershipRequestPreferredScheduleColumnsError(
+  error: unknown,
+) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code =
+    "code" in error && typeof error.code === "string" ? error.code : "";
+  const message =
+    "message" in error && typeof error.message === "string"
+      ? error.message.toLowerCase()
+      : "";
+
+  return (
+    code === "42703" &&
+    message.includes("customer_membership_requests") &&
+    (message.includes("preferred_start_at") ||
+      message.includes("preferred_staff_member_id") ||
+      message.includes("preferred_staff_member_name_snapshot") ||
+      message.includes("approved_starts_on"))
+  );
+}
+
+type MembershipRequestApprovalRecord = {
+  customer_id: string;
+  offer_id: string;
+  offer_title_snapshot: string;
+  approved_starts_on?: string | null;
+  membership_id?: string | null;
+  preferred_staff_member_id: string | null;
+  preferred_start_at: string | null;
+  salon_id: string;
+  status: string;
+};
+
+async function loadMembershipRequestApprovalRecord(args: {
+  requestId: string;
+  salonId: string;
+  supabase: ReturnType<typeof createClient>;
+}) {
+  try {
+    const { data, error } = await (args.supabase as any)
+      .from("customer_membership_requests")
+      .select(
+        "id, salon_id, customer_id, offer_id, offer_title_snapshot, status, notes, approved_starts_on, membership_id, preferred_start_at, preferred_staff_member_id",
+      )
+      .eq("id", args.requestId)
+      .eq("salon_id", args.salonId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    const parsedNotes = parseMembershipRequestPreferredScheduleNotes(
+      data.notes,
+    );
+
+    return {
+      ...data,
+      preferred_staff_member_id:
+        String(data.preferred_staff_member_id ?? "").trim() ||
+        parsedNotes.preferredStaffMemberId,
+      preferred_start_at:
+        String(data.preferred_start_at ?? "").trim() ||
+        parsedNotes.preferredStartAt,
+    } satisfies MembershipRequestApprovalRecord;
+  } catch (error) {
+    if (!isMissingMembershipRequestPreferredScheduleColumnsError(error)) {
+      throw error;
+    }
+
+    const { data, error: fallbackError } = await (args.supabase as any)
+      .from("customer_membership_requests")
+      .select(
+        "id, salon_id, customer_id, offer_id, offer_title_snapshot, status, notes, membership_id",
+      )
+      .eq("id", args.requestId)
+      .eq("salon_id", args.salonId)
+      .maybeSingle();
+
+    if (fallbackError) {
+      throw fallbackError;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    const parsedNotes = parseMembershipRequestPreferredScheduleNotes(
+      data.notes,
+    );
+
+    return {
+      ...data,
+      approved_starts_on: null,
+      preferred_staff_member_id: parsedNotes.preferredStaffMemberId,
+      preferred_start_at: parsedNotes.preferredStartAt,
+    } satisfies MembershipRequestApprovalRecord;
+  }
 }
 
 export async function saveOwnerCustomerProfileActionImpl(formData: FormData) {
@@ -269,12 +431,12 @@ export async function sendCustomerNudgeActionImpl(formData: FormData) {
     notification_type: notificationType,
     title,
     body,
-    payload: {
+    payload: prepareCustomerNotificationPayload(notificationType, {
       type: notificationType,
       serviceName,
       tierLabel,
       cashbackBalance: Number.isFinite(cashbackBalance) ? cashbackBalance : 0,
-    },
+    }),
   });
 
   if (error) {
@@ -303,7 +465,7 @@ export async function assignCustomerMembershipPackageActionImpl(
 ) {
   const customerId = String(formData.get("customerId") ?? "").trim();
   const offerId = String(formData.get("offerId") ?? "").trim();
-  const startsOn = normalizeDate(formData.get("startsOn"));
+  const startsOnInput = readDateInput(formData.get("startsOn"));
   const notes = normalizeText(formData.get("notes"), 1000);
   const returnPath = resolveCustomersReturnPath(formData.get("returnPath"));
 
@@ -320,10 +482,20 @@ export async function assignCustomerMembershipPackageActionImpl(
     );
   }
 
+  if (!startsOnInput.isBlank && !startsOnInput.isValid) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Informe uma data válida para ativar o plano.",
+        "error",
+      ),
+    );
+  }
+
   const { error } = await supabase.rpc("assign_customer_membership_package", {
     customer_uuid: customerId,
     offer_uuid: offerId,
-    starts_on_input: startsOn,
+    starts_on_input: startsOnInput.value,
     notes_input: notes,
   });
 
@@ -338,7 +510,7 @@ export async function assignCustomerMembershipPackageActionImpl(
   }
 
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/appointments");
+  revalidatePath(MANAGEMENT_ROUTES.appointments);
   revalidatePath(CUSTOMERS_PATH);
   redirect(
     buildRedirectNotice(
@@ -353,7 +525,7 @@ export async function approveCustomerMembershipRequestActionImpl(
   formData: FormData,
 ) {
   const requestId = String(formData.get("requestId") ?? "").trim();
-  const startsOn = normalizeDate(formData.get("startsOn"));
+  const startsOnInput = readDateInput(formData.get("startsOn"));
   const notes = normalizeOptionalNotes(formData.get("notes"));
   const returnPath = resolveMembershipManagementReturnPath(formData);
 
@@ -370,14 +542,21 @@ export async function approveCustomerMembershipRequestActionImpl(
     );
   }
 
-  const { data: requestRecord } = await (supabase as any)
-    .from("customer_membership_requests")
-    .select(
-      "id, salon_id, customer_id, offer_id, offer_title_snapshot, status",
-    )
-    .eq("id", requestId)
-    .eq("salon_id", salon.id)
-    .maybeSingle();
+  if (startsOnInput.isBlank || !startsOnInput.isValid || !startsOnInput.value) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Informe a data real de início para ativar o plano.",
+        "error",
+      ),
+    );
+  }
+
+  const requestRecord = await loadMembershipRequestApprovalRecord({
+    requestId,
+    salonId: salon.id,
+    supabase,
+  });
 
   if (!requestRecord || requestRecord.status !== "pending") {
     redirect(
@@ -389,12 +568,105 @@ export async function approveCustomerMembershipRequestActionImpl(
     );
   }
 
-  const { data: approvedMembership, error } = await (supabase as any).rpc(
+  const { error } = await (supabase as any).rpc(
     "approve_customer_membership_request",
     {
       request_uuid: requestId,
-      starts_on_input: startsOn,
+      starts_on_input: startsOnInput.value,
       notes_input: notes,
+    },
+  );
+
+  if (error) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        formatMembershipRequestError(error.message),
+        "error",
+      ),
+    );
+  }
+
+  await queueCustomerNotification({
+    supabase,
+    salonId: salon.id,
+    customerId: requestRecord.customer_id,
+    audience: "single_customer",
+    notificationType: "membership_request_approved",
+    title: "Seu pedido de plano foi aprovado",
+    body: `${requestRecord.offer_title_snapshot} foi aprovado pelo salão. Assim que o pagamento for confirmado, o plano fica ativo no app.`,
+    payload: {
+      type: "membership_request_approved",
+      ctaTarget: "profile",
+      offerId: requestRecord.offer_id,
+      membershipId: null,
+      expiresAt: null,
+    },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath(MANAGEMENT_ROUTES.appointments);
+  revalidatePath(CUSTOMERS_PATH);
+  revalidatePath(SUBSCRIPTIONS_PATH);
+  revalidatePath(NOTIFICATIONS_PATH);
+  redirect(
+    buildRedirectNotice(
+      returnPath,
+      "Pedido aprovado. Agora falta marcar o pagamento para ativar no app.",
+      "success",
+    ),
+  );
+}
+
+export async function markCustomerMembershipRequestPaidActionImpl(
+  formData: FormData,
+) {
+  const requestId = String(formData.get("requestId") ?? "").trim();
+  const returnPath = resolveMembershipManagementReturnPath(formData);
+
+  const { salon } = await requireOwnerSalon();
+  const supabase = createClient();
+
+  if (!requestId) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Selecione um pedido antes de confirmar o pagamento.",
+        "error",
+      ),
+    );
+  }
+
+  const requestRecord = await loadMembershipRequestApprovalRecord({
+    requestId,
+    salonId: salon.id,
+    supabase,
+  });
+
+  if (!requestRecord || requestRecord.status !== "approved") {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Esse pedido precisa estar aprovado antes de ativar o plano.",
+        "error",
+      ),
+    );
+  }
+
+  if (String(requestRecord.membership_id ?? "").trim()) {
+    redirect(
+      buildRedirectNotice(
+        returnPath,
+        "Esse plano já foi marcado como pago e ativado.",
+        "error",
+      ),
+    );
+  }
+
+  const { data: approvedMembership, error } = await (supabase as any).rpc(
+    "mark_customer_membership_request_paid",
+    {
+      request_uuid: requestId,
     },
   );
 
@@ -417,13 +689,13 @@ export async function approveCustomerMembershipRequestActionImpl(
     salonId: salon.id,
     customerId: requestRecord.customer_id,
     audience: "single_customer",
-    notificationType: "membership_request_approved",
-    title: "Seu plano foi ativado",
+    notificationType: "membership_request_paid",
+    title: "Seu plano já está ativo",
     body: expiresAtLabel
-      ? `${requestRecord.offer_title_snapshot} foi aceito pelo salão e está ativo até ${expiresAtLabel}.`
-      : `${requestRecord.offer_title_snapshot} foi aceito pelo salão e já está ativo no app.`,
+      ? `${requestRecord.offer_title_snapshot} foi confirmado pelo salão e está ativo até ${expiresAtLabel}.`
+      : `${requestRecord.offer_title_snapshot} foi confirmado pelo salão e já está ativo no app.`,
     payload: {
-      type: "membership_request_approved",
+      type: "membership_request_paid",
       ctaTarget: "profile",
       offerId: requestRecord.offer_id,
       membershipId: approvedMembership?.id ?? null,
@@ -431,15 +703,67 @@ export async function approveCustomerMembershipRequestActionImpl(
     },
   });
 
+  let autoScheduledSeries = false;
+  const preferredStartAt = String(
+    requestRecord.preferred_start_at ?? "",
+  ).trim();
+  const preferredStaffMemberId = String(
+    requestRecord.preferred_staff_member_id ?? "",
+  ).trim();
+  if (approvedMembership?.id && preferredStartAt && preferredStaffMemberId) {
+    try {
+      const autoScheduleResult =
+        await scheduleApprovedMembershipRequestSeriesByAdmin({
+          membershipId: approvedMembership.id,
+          ownerSupabase: supabase as any,
+          preferredStaffMemberId,
+          preferredStartAt,
+          salonId: salon.id,
+        });
+      autoScheduledSeries =
+        autoScheduleResult.status === "reprocessed" ||
+        autoScheduleResult.status === "already_fixed";
+    } catch (error) {
+      console.error("membership_request_auto_schedule_failed", {
+        error,
+        membershipId: approvedMembership?.id ?? null,
+        requestId,
+        salonId: salon.id,
+      });
+    }
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const approvedStartsOn = String(
+    requestRecord.approved_starts_on ?? "",
+  ).trim();
+  if (
+    approvedMembership?.id &&
+    approvedStartsOn &&
+    approvedStartsOn <= todayIso &&
+    !autoScheduledSeries
+  ) {
+    await queueMembershipFirstSlotNotification({
+      admin: supabase as any,
+      customerId: requestRecord.customer_id,
+      expiresAt: approvedMembership?.expires_at ?? null,
+      membershipId: approvedMembership.id,
+      membershipTitle: requestRecord.offer_title_snapshot,
+      salonId: salon.id,
+      serviceId: approvedMembership?.service_id ?? null,
+      serviceName: approvedMembership?.service_name_snapshot ?? null,
+    });
+  }
+
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/appointments");
+  revalidatePath(MANAGEMENT_ROUTES.appointments);
   revalidatePath(CUSTOMERS_PATH);
   revalidatePath(SUBSCRIPTIONS_PATH);
   revalidatePath(NOTIFICATIONS_PATH);
   redirect(
     buildRedirectNotice(
       returnPath,
-      "Assinatura aprovada e ativada para a cliente.",
+      "Pagamento confirmado e plano ativado para a cliente.",
       "success",
     ),
   );
@@ -467,9 +791,7 @@ export async function rejectCustomerMembershipRequestActionImpl(
 
   const { data: requestRecord } = await (supabase as any)
     .from("customer_membership_requests")
-    .select(
-      "id, salon_id, customer_id, offer_id, offer_title_snapshot, status",
-    )
+    .select("id, salon_id, customer_id, offer_id, offer_title_snapshot, status")
     .eq("id", requestId)
     .eq("salon_id", salon.id)
     .maybeSingle();
@@ -509,9 +831,10 @@ export async function rejectCustomerMembershipRequestActionImpl(
     audience: "single_customer",
     notificationType: "membership_request_rejected",
     title: "Seu pedido de plano foi respondido",
-    body: (notes?.trim().length ?? 0) > 0
-      ? `O salão respondeu o pedido de ${requestRecord.offer_title_snapshot}: ${notes!.trim()}`
-      : `O salão respondeu o pedido de ${requestRecord.offer_title_snapshot}. Se quiser, você pode pedir novamente mais tarde.`,
+    body:
+      (notes?.trim().length ?? 0) > 0
+        ? `O salão respondeu o pedido de ${requestRecord.offer_title_snapshot}: ${notes!.trim()}`
+        : `O salão respondeu o pedido de ${requestRecord.offer_title_snapshot}. Se quiser, você pode pedir novamente mais tarde.`,
     payload: {
       type: "membership_request_rejected",
       ctaTarget: "profile",

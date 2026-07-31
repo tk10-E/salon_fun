@@ -8,7 +8,7 @@ type FlashMessageProps = {
 const toneMap: Record<FlashTone, { label: string; symbol: string }> = {
   success: { label: "Sucesso", symbol: "OK" },
   error: { label: "Aviso", symbol: "!" },
-  info: { label: "Informacao", symbol: "i" },
+  info: { label: "Informação", symbol: "i" },
 };
 
 function normalizeTone(tone?: string): FlashTone {
@@ -35,4 +35,3 @@ export function FlashMessage({ message, tone }: FlashMessageProps) {
     </div>
   );
 }
-

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../bootstrap/app_bootstrap.dart';
 import '../../core/theme/app_theme.dart';
@@ -6,6 +7,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/salon_ui.dart';
 import '../shared/app_models.dart';
 import 'auth_mode_switch.dart';
+import 'social_auth_button.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key, required this.bootstrap});
@@ -97,6 +99,31 @@ class _SignupPageState extends State<SignupPage> {
     }
   }
 
+  Future<void> _submitGoogle() async {
+    FocusScope.of(context).unfocus();
+    final sessionController = widget.bootstrap.sessionController;
+
+    if (_joinCodeController.text.trim().isEmpty) {
+      _showSnackBar('Informe o código do salão antes de entrar com Google.');
+      return;
+    }
+
+    final success = await sessionController.signInWithGoogle(
+      joinCode: _joinCodeController.text,
+      customerName: _nameController.text,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (!success) {
+      _showSnackBar(
+        sessionController.message ?? 'Não foi possível entrar com Google.',
+      );
+    }
+  }
+
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -118,6 +145,9 @@ class _SignupPageState extends State<SignupPage> {
           child: AnimatedBuilder(
             animation: sessionController,
             builder: (context, _) {
+              final canUseGoogleSignIn =
+                  widget.bootstrap.authService.canUseGoogleSignIn;              final canUseSocialSignIn =
+                  canUseGoogleSignIn;
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                 children: [
@@ -161,7 +191,9 @@ class _SignupPageState extends State<SignupPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Aqui a cliente só cria o acesso. Depois ela volta para a tela de entrada, confirma o e-mail e entra no app com mais segurança.',
+                          canUseSocialSignIn
+                              ? 'Você pode criar o acesso com senha ou entrar direto com Google. O código do salão continua obrigatório para vincular o perfil certo.'
+                              : 'Aqui a cliente só cria o acesso. Depois ela volta para a tela de entrada, confirma o e-mail e entra no app com mais segurança.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 18),
@@ -178,6 +210,7 @@ class _SignupPageState extends State<SignupPage> {
                         TextField(
                           controller: _joinCodeController,
                           textCapitalization: TextCapitalization.characters,
+                          inputFormatters: const [JoinCodeInputFormatter()],
                           onChanged: sessionController.previewSalon,
                           decoration: const InputDecoration(
                             labelText: 'Código do salão',
@@ -253,6 +286,40 @@ class _SignupPageState extends State<SignupPage> {
                           isBusy: sessionController.isBusy,
                           onPressed: _submit,
                         ),
+                        if (canUseSocialSignIn) ...[
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Divider(
+                                  color: AppTheme.line,
+                                  endIndent: 12,
+                                ),
+                              ),
+                              Text(
+                                'Entrar agora',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              Expanded(
+                                child: Divider(
+                                  color: AppTheme.line,
+                                  indent: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          if (canUseGoogleSignIn)
+                            SocialAuthButton(
+                              label: 'Criar e entrar com Google',
+                              icon: FontAwesomeIcons.google,
+                              iconColor: const Color(0xFFDB4437),
+                              borderColor: const Color(0xFFE7DDD5),
+                              onPressed: sessionController.isBusy
+                                  ? null
+                                  : _submitGoogle,
+                            ),
+                        ],
                         const SizedBox(height: 10),
                         OutlinedButton.icon(
                           onPressed: () => Navigator.of(context).maybePop(),

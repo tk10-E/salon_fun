@@ -4,6 +4,20 @@ import { createClient } from "@/lib/supabase/server";
 
 export type NoticeTone = "success" | "error" | "info";
 type CustomerNotificationAudience = "salon_customers" | "single_customer";
+type CustomerNotificationPayload = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
+
+export type CustomerNotificationDeliveryChannel =
+  | "push_and_inbox"
+  | "inbox_only";
+export type CustomerNotificationPushPriority = "high" | "normal";
+type CustomerNotificationNavigationDefaults = {
+  ctaTarget?: string;
+  openInbox?: boolean;
+  targetTabIndex?: number;
+};
 
 export const COMMERCIAL_OVERVIEW_PATH = "/dashboard/benefits";
 export const COMMERCIAL_PROMOTIONS_PATH = "/dashboard/benefits/promotions";
@@ -16,13 +30,33 @@ export const SUBSCRIPTIONS_PATH = "/dashboard/subscriptions";
 export const FINANCE_PATH = "/dashboard/finance";
 
 export function buildRedirectNotice(path: string, message: string, tone: NoticeTone = "info") {
-  const [pathname, currentQuery = ""] = path.split("?", 2);
-  const params = new URLSearchParams(currentQuery);
+  const parsed = new URL(path, "https://dashboard.local");
+  const params = parsed.searchParams;
 
   params.set("message", message);
   params.set("tone", tone);
 
-  return `${pathname}?${params.toString()}`;
+  return `${parsed.pathname}?${params.toString()}${parsed.hash}`;
+}
+
+export function rethrowIfRedirectError(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "digest" in error &&
+    typeof error.digest === "string" &&
+    error.digest.startsWith("NEXT_REDIRECT")
+  ) {
+    throw error;
+  }
+
+  if (
+    error instanceof Error &&
+    (error.message.startsWith("NEXT_REDIRECT") ||
+      error.message.startsWith("TEST_REDIRECT:"))
+  ) {
+    throw error;
+  }
 }
 
 export function resolveDashboardReturnPath(
@@ -36,7 +70,23 @@ export function resolveDashboardReturnPath(
     return fallbackPath;
   }
 
-  return allowedPaths.includes(returnPath) ? returnPath : fallbackPath;
+  if (!returnPath.startsWith("/")) {
+    return fallbackPath;
+  }
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(returnPath, "https://dashboard.local");
+  } catch {
+    return fallbackPath;
+  }
+
+  if (!allowedPaths.includes(parsed.pathname)) {
+    return fallbackPath;
+  }
+
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
 export function revalidateCommercialPaths(...paths: string[]) {
@@ -69,6 +119,113 @@ export function truncateNotificationText(value: string, maxLength = 160) {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+export function resolveCustomerNotificationDeliveryPolicy(
+  _notificationType: string,
+) {
+  return {
+    deliveryChannel: "push_and_inbox" as CustomerNotificationDeliveryChannel,
+    pushPriority: "high" as CustomerNotificationPushPriority,
+  };
+}
+
+export function resolveCustomerNotificationNavigationDefaults(
+  notificationType: string,
+): CustomerNotificationNavigationDefaults {
+  const normalizedType = notificationType.trim().toLowerCase();
+
+  if (
+    normalizedType.includes("appointment") ||
+    normalizedType.includes("agenda") ||
+    normalizedType.includes("booking") ||
+    normalizedType.includes("rebook") ||
+    normalizedType.includes("reminder") ||
+    normalizedType.includes("vacancy")
+  ) {
+    return {
+      ctaTarget: "appointments",
+      targetTabIndex: 1,
+    };
+  }
+
+  if (
+    normalizedType.includes("service") ||
+    normalizedType.includes("staff") ||
+    normalizedType.includes("team")
+  ) {
+    return {
+      ctaTarget: "appointments",
+      targetTabIndex: 1,
+    };
+  }
+
+  if (
+    normalizedType.includes("store") ||
+    normalizedType.includes("product") ||
+    normalizedType.includes("vitrine")
+  ) {
+    return {
+      ctaTarget: "store",
+      targetTabIndex: 2,
+    };
+  }
+
+  if (
+    normalizedType.includes("feed") ||
+    normalizedType.includes("post")
+  ) {
+    return {
+      ctaTarget: "feed",
+      targetTabIndex: 3,
+    };
+  }
+
+  if (
+    normalizedType.includes("loyalty") ||
+    normalizedType.includes("referral") ||
+    normalizedType.includes("membership")
+  ) {
+    return {
+      ctaTarget: "profile",
+      targetTabIndex: 4,
+    };
+  }
+
+  if (normalizedType.includes("notification") || normalizedType.includes("inbox")) {
+    return {
+      ctaTarget: "notifications",
+      openInbox: true,
+      targetTabIndex: 0,
+    };
+  }
+
+  return {
+    ctaTarget: "home",
+    targetTabIndex: 0,
+  };
+}
+
+export function prepareCustomerNotificationPayload(
+  notificationType: string,
+  payload: CustomerNotificationPayload = {},
+) {
+  const policy = resolveCustomerNotificationDeliveryPolicy(notificationType);
+  const navigationDefaults =
+    resolveCustomerNotificationNavigationDefaults(notificationType);
+
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      deliveryChannel: policy.deliveryChannel,
+      pushPriority:
+        payload["pushPriority"] ?? policy.pushPriority,
+      ctaTarget: payload["ctaTarget"] ?? navigationDefaults.ctaTarget,
+      openInbox: payload["openInbox"] ?? navigationDefaults.openInbox,
+      targetTabIndex:
+        payload["targetTabIndex"] ?? navigationDefaults.targetTabIndex,
+    }).filter(([, value]) => value !== undefined),
+  ) as Record<string, string | number | boolean | null>;
+}
+
 export async function queueCustomerNotification(params: {
   supabase: ReturnType<typeof createClient>;
   salonId: string;
@@ -77,7 +234,7 @@ export async function queueCustomerNotification(params: {
   body: string;
   audience?: CustomerNotificationAudience;
   customerId?: string | null;
-  payload?: Record<string, string | number | boolean | null | undefined>;
+  payload?: CustomerNotificationPayload;
 }) {
   const {
     supabase,
@@ -90,8 +247,9 @@ export async function queueCustomerNotification(params: {
     payload = {},
   } = params;
 
-  const cleanPayload = Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => value !== undefined),
+  const cleanPayload = prepareCustomerNotificationPayload(
+    notificationType,
+    payload,
   );
 
   const { error } = await supabase.from("salon_customer_notifications").insert({
@@ -221,7 +379,7 @@ export function buildServiceCatalogNotification(args: {
     type,
     payload: {
       type,
-      ctaTarget: "explore",
+      ctaTarget: "appointments",
       serviceId: args.serviceId ?? null,
       serviceName: args.serviceName,
       category: categoryLabel,
@@ -256,9 +414,162 @@ export function buildStoreProductNotification(args: {
     type,
     payload: {
       type,
-      ctaTarget: "explore",
+      ctaTarget: "store",
       productName: args.productName,
       brand: brandLabel,
+    },
+  };
+}
+
+export function buildAppointmentRescheduledNotification(args: {
+  appointmentId: string;
+  nextServiceName: string;
+  nextStaffMemberName?: string | null;
+  nextStartsAt: string;
+  previousStartsAt: string;
+  previousStaffMemberName?: string | null;
+  previousServiceName?: string | null;
+}) {
+  const previousServiceName = args.previousServiceName?.trim() || args.nextServiceName;
+  const previousStaffMemberName = args.previousStaffMemberName?.trim() || null;
+  const nextStaffMemberName = args.nextStaffMemberName?.trim() || null;
+  const previousLabel = formatAppointmentDateTimeLabel(args.previousStartsAt);
+  const nextLabel = formatAppointmentDateTimeLabel(args.nextStartsAt);
+
+  const bodyParts = [
+    previousServiceName !== args.nextServiceName
+      ? `${previousServiceName} foi reajustado para ${args.nextServiceName}.`
+      : `${args.nextServiceName} foi remarcado pelo salão.`,
+    `Antes: ${previousLabel}${previousStaffMemberName ? ` com ${previousStaffMemberName}` : ""}.`,
+    `Agora: ${nextLabel}${nextStaffMemberName ? ` com ${nextStaffMemberName}` : ""}.`,
+    "Abra o app para revisar os detalhes.",
+  ];
+
+  return {
+    title: "Seu horário mudou no salão",
+    body: bodyParts.join(" "),
+    type: "appointment_rescheduled",
+    payload: {
+      type: "appointment_rescheduled",
+      appointmentId: args.appointmentId,
+      appointmentStartsAt: args.nextStartsAt,
+      previousAppointmentStartsAt: args.previousStartsAt,
+      ctaTarget: "appointments",
+      openInbox: true,
+      serviceName: args.nextServiceName,
+      previousServiceName,
+      staffMemberName: nextStaffMemberName,
+      previousStaffMemberName,
+      targetTabIndex: 1,
+    },
+  };
+}
+
+export function buildAppointmentNoShowNotification(args: {
+  appointmentId: string;
+  serviceName: string;
+  startsAt: string;
+  staffMemberName?: string | null;
+}) {
+  const staffLabel = args.staffMemberName?.trim() || null;
+  const appointmentLabel = formatAppointmentDateTimeLabel(args.startsAt);
+
+  return {
+    title: "Seu horário foi marcado como falta",
+    body: staffLabel
+      ? `${args.serviceName} em ${appointmentLabel} com ${staffLabel} foi marcado como falta pelo salão. Se algo estiver errado, fale com a equipe no app.`
+      : `${args.serviceName} em ${appointmentLabel} foi marcado como falta pelo salão. Se algo estiver errado, fale com a equipe no app.`,
+    type: "appointment_no_show",
+    payload: {
+      type: "appointment_no_show",
+      appointmentId: args.appointmentId,
+      appointmentStartsAt: args.startsAt,
+      ctaTarget: "appointments",
+      openInbox: true,
+      serviceName: args.serviceName,
+      staffMemberName: staffLabel,
+      targetTabIndex: 1,
+    },
+  };
+}
+
+function buildStoreOrderItemsLabel(args: {
+  firstItemName?: string | null;
+  totalItems?: number | null;
+}) {
+  const firstItemName = args.firstItemName?.trim() || null;
+  const totalItems = Number(args.totalItems ?? 0);
+
+  if (!firstItemName) {
+    return null;
+  }
+
+  if (totalItems > 1) {
+    return `${firstItemName} e mais ${totalItems - 1} item(ns)`;
+  }
+
+  return firstItemName;
+}
+
+export function buildStoreOrderStatusNotification(args: {
+  status: "confirmed" | "ready" | "completed" | "cancelled";
+  orderId: string;
+  orderNumber?: number | null;
+  firstItemName?: string | null;
+  totalItems?: number | null;
+  cancellationReason?: string | null;
+}) {
+  const type = `store_order_${args.status}`;
+  const orderLabel = args.orderNumber
+    ? `Pedido #${args.orderNumber}`
+    : "Seu pedido da loja";
+  const itemsLabel = buildStoreOrderItemsLabel({
+    firstItemName: args.firstItemName,
+    totalItems: args.totalItems,
+  });
+  const orderContext = itemsLabel
+    ? `${orderLabel} com ${itemsLabel}`
+    : orderLabel;
+  const cancellationReason = args.cancellationReason?.trim() || null;
+
+  const copyByStatus = {
+    confirmed: {
+      title: "Seu pedido da loja foi confirmado",
+      body: `${orderContext} foi confirmado pelo salão e já aparece atualizado no app.`,
+    },
+    ready: {
+      title: "Seu pedido da loja está pronto",
+      body: `${orderContext} foi separado e está pronto para a próxima etapa.`,
+    },
+    completed: {
+      title: "Pedido da loja concluído",
+      body: `${orderContext} foi marcado como concluído pelo salão.`,
+    },
+    cancelled: {
+      title: "Seu pedido da loja foi cancelado",
+      body: cancellationReason
+        ? `${orderContext} foi cancelado. Motivo: ${cancellationReason}.`
+        : `${orderContext} foi cancelado pelo salão.`,
+    },
+  } as const;
+
+  const copy = copyByStatus[args.status];
+
+  return {
+    title: copy.title,
+    body: copy.body,
+    type,
+    payload: {
+      type,
+      ctaTarget: "store",
+      orderId: args.orderId,
+      orderNumber: args.orderNumber ?? null,
+      orderStatus: args.status,
+      productName: args.firstItemName?.trim() || null,
+      totalItems: args.totalItems ?? null,
+      cancellationReason,
+      openInbox: true,
+      targetTabIndex: 2,
     },
   };
 }
@@ -280,6 +591,10 @@ export function buildClientAppRefreshNotification(args: {
     areaLabels.length <= 1
       ? `O salão atualizou ${areaLabels[0] ?? "o app"}. Confira as novidades no app.`
       : `O salão atualizou ${areaLabels.slice(0, -1).join(", ")} e ${areaLabels.at(-1)}. Confira as novidades no app.`;
+  const ctaTarget =
+    normalizedAreas.length == 1 && normalizedAreas[0] === "vitrine"
+      ? "store"
+      : "home";
 
   return {
     title: "Novidades no app do salão",
@@ -287,7 +602,7 @@ export function buildClientAppRefreshNotification(args: {
     type,
     payload: {
       type,
-      ctaTarget: "explore",
+      ctaTarget,
       changedAreas: normalizedAreas.join(","),
     },
   };

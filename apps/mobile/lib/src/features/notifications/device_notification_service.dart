@@ -10,12 +10,63 @@ import '../../core/config/app_environment.dart';
 import '../shared/app_models.dart';
 import 'notification_navigation.dart';
 
-class DeviceNotificationService {
+enum DeviceNotificationHealth {
+  idle,
+  ready,
+  permissionDenied,
+  waitingActivation,
+}
+
+class DeviceNotificationHealthState {
+  const DeviceNotificationHealthState({
+    required this.health,
+    this.systemStatus,
+  });
+
+  final DeviceNotificationHealth health;
+  final String? systemStatus;
+
+  bool get showsCustomerCard =>
+      health == DeviceNotificationHealth.permissionDenied ||
+      health == DeviceNotificationHealth.waitingActivation;
+
+  bool get canRetry => showsCustomerCard;
+
+  String get title {
+    switch (health) {
+      case DeviceNotificationHealth.permissionDenied:
+        return 'Ative os lembretes do aparelho';
+      case DeviceNotificationHealth.waitingActivation:
+        return 'Conectando este aparelho aos avisos';
+      case DeviceNotificationHealth.ready:
+        return 'Lembretes prontos';
+      case DeviceNotificationHealth.idle:
+        return 'Avisos do aparelho';
+    }
+  }
+
+  String get message {
+    switch (health) {
+      case DeviceNotificationHealth.permissionDenied:
+        return 'O sistema do aparelho ainda não liberou notificações. Sem isso, os lembretes de horário podem não tocar aqui.';
+      case DeviceNotificationHealth.waitingActivation:
+        return 'Os avisos já estão ativos no app, mas este aparelho ainda está terminando a conexão com o push. Você pode tentar atualizar agora.';
+      case DeviceNotificationHealth.ready:
+        return 'Este aparelho está pronto para receber lembretes do salão.';
+      case DeviceNotificationHealth.idle:
+        return 'Os avisos do salão aparecem aqui assim que o dispositivo estiver conectado.';
+    }
+  }
+}
+
+class DeviceNotificationService extends ChangeNotifier {
   DeviceNotificationService({
     required this.environment,
     required this.supabaseClient,
     this.disablePush = false,
-  });
+  }) : _healthState = const DeviceNotificationHealthState(
+         health: DeviceNotificationHealth.idle,
+       );
 
   final AppEnvironment environment;
   final SupabaseClient? supabaseClient;
@@ -37,12 +88,29 @@ class DeviceNotificationService {
   bool _initialized = false;
   bool _bindingInProgress = false;
   int _registrationRetryAttempt = 0;
+  DeviceNotificationHealthState _healthState;
 
   bool get isAvailable =>
       !disablePush && environment.hasFirebase && supabaseClient != null;
 
   Stream<NotificationNavigationIntent> get notificationOpenStream =>
       _notificationOpenController.stream;
+
+  DeviceNotificationHealthState get healthState => _healthState;
+
+  Future<void> retryActivation() async {
+    if (!isAvailable || _boundCustomerId == null) {
+      return;
+    }
+
+    _cancelRegistrationRetry(resetAttempts: true);
+    await _syncCurrentBinding();
+  }
+
+  @visibleForTesting
+  void overrideHealthState(DeviceNotificationHealthState value) {
+    _setHealthState(value);
+  }
 
   NotificationNavigationIntent? takePendingNotificationIntent() {
     final intent = _pendingNavigationIntent;
@@ -101,9 +169,12 @@ class DeviceNotificationService {
       });
 
       _initialized = true;
+      _setHealthState(
+        const DeviceNotificationHealthState(health: DeviceNotificationHealth.idle),
+      );
       await _captureLaunchNotificationIntents(messaging);
     } catch (error) {
-      debugPrint(
+      _debugLog(
         'DeviceNotificationService.initialize failed: '
         '${error.toString()}',
       );
@@ -123,6 +194,9 @@ class DeviceNotificationService {
         _cancelRegistrationRetry(resetAttempts: true);
         _boundCustomerId = null;
         await _deactivateCurrentToken();
+        _setHealthState(
+          const DeviceNotificationHealthState(health: DeviceNotificationHealth.idle),
+        );
         return;
       }
 
@@ -134,18 +208,20 @@ class DeviceNotificationService {
       }
       await _syncCurrentBinding();
     } catch (error) {
-      debugPrint(
+      _debugLog(
         'DeviceNotificationService.bindSession failed: ${error.toString()}',
       );
     }
   }
 
+  @override
   Future<void> dispose() async {
     _cancelRegistrationRetry();
     await _foregroundMessageSubscription?.cancel();
     await _messageOpenedAppSubscription?.cancel();
     await _tokenRefreshSubscription?.cancel();
     await _notificationOpenController.close();
+    super.dispose();
   }
 
   void _handleRemoteNotificationOpened(RemoteMessage message) {
@@ -201,7 +277,7 @@ class DeviceNotificationService {
         _handleRemoteNotificationOpened(initialMessage);
       }
     } catch (error) {
-      debugPrint(
+      _debugLog(
         'DeviceNotificationService.launchIntent failed: ${error.toString()}',
       );
     }
@@ -236,9 +312,11 @@ class DeviceNotificationService {
       );
 
       if (!_isNotificationPermissionGranted(permission)) {
-        debugPrint(
-          'DeviceNotificationService.bindSession skipped: notification '
-          'permission not granted (${permission.authorizationStatus.name}).',
+        _setHealthState(
+          DeviceNotificationHealthState(
+            health: DeviceNotificationHealth.permissionDenied,
+            systemStatus: permission.authorizationStatus.name,
+          ),
         );
         return;
       }
@@ -247,9 +325,10 @@ class DeviceNotificationService {
 
       final token = await _resolveMessagingToken();
       if (token == null) {
-        debugPrint(
-          'DeviceNotificationService.bindSession skipped: push token is not '
-          'available yet.',
+        _setHealthState(
+          const DeviceNotificationHealthState(
+            health: DeviceNotificationHealth.waitingActivation,
+          ),
         );
         _scheduleRegistrationRetry();
         return;
@@ -258,9 +337,17 @@ class DeviceNotificationService {
       final didRegister = await _registerPushToken(token);
       if (didRegister) {
         _cancelRegistrationRetry(resetAttempts: true);
+        _setHealthState(
+          const DeviceNotificationHealthState(health: DeviceNotificationHealth.ready),
+        );
         return;
       }
 
+      _setHealthState(
+        const DeviceNotificationHealthState(
+          health: DeviceNotificationHealth.waitingActivation,
+        ),
+      );
       _scheduleRegistrationRetry();
     } finally {
       _bindingInProgress = false;
@@ -298,7 +385,7 @@ class DeviceNotificationService {
       final normalizedToken = token?.trim() ?? '';
       return normalizedToken.isEmpty ? null : normalizedToken;
     } catch (error) {
-      debugPrint('DeviceNotificationService.token failed: ${error.toString()}');
+      _debugLog('DeviceNotificationService.token failed: ${error.toString()}');
       return null;
     }
   }
@@ -334,7 +421,7 @@ class DeviceNotificationService {
       _registeredToken = token;
       return true;
     } catch (error) {
-      debugPrint(
+      _debugLog(
         'DeviceNotificationService.register failed: ${error.toString()}',
       );
       return false;
@@ -353,7 +440,7 @@ class DeviceNotificationService {
       );
       _registeredToken = null;
     } catch (error) {
-      debugPrint(
+      _debugLog(
         'DeviceNotificationService.deactivate failed: ${error.toString()}',
       );
     }
@@ -397,14 +484,17 @@ class DeviceNotificationService {
             channelName,
             channelDescription: channelDescription,
             importance: Importance.max,
-            priority: Priority.high,
+            priority: Priority.max,
+            playSound: true,
+            enableVibration: true,
             icon: 'ic_stat_salon_fun',
+            styleInformation: BigTextStyleInformation(body),
           ),
         ),
         payload: encodeNotificationPayload(message.data),
       );
     } catch (error) {
-      debugPrint(
+      _debugLog(
         'DeviceNotificationService.showForeground failed: '
         '${error.toString()}',
       );
@@ -468,6 +558,22 @@ class DeviceNotificationService {
       return 'Salon Fun iPhone';
     }
     return 'Salon Fun Android';
+  }
+
+  void _setHealthState(DeviceNotificationHealthState nextState) {
+    if (_healthState.health == nextState.health &&
+        _healthState.systemStatus == nextState.systemStatus) {
+      return;
+    }
+
+    _healthState = nextState;
+    notifyListeners();
+  }
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
+    }
   }
 
   static const AndroidNotificationChannel _updatesChannel =

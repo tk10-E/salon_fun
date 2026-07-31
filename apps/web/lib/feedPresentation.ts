@@ -13,18 +13,12 @@ export function cleanFeedCaption(value: string | null | undefined) {
 }
 
 export function isInstagramFeedSource(sourceType: string | null | undefined) {
-  return typeof sourceType === "string" && sourceType.startsWith("instagram");
+  void sourceType;
+  return false;
 }
 
 export function getFeedSourceBadgeLabel(sourceType: string | null | undefined) {
-  if (sourceType === "instagram_owned_post") {
-    return "Instagram";
-  }
-
-  if (sourceType === "instagram_mention") {
-    return "Marcação";
-  }
-
+  void sourceType;
   return null;
 }
 
@@ -109,14 +103,7 @@ function includesAnyKeyword(searchText: string, keywords: string[]) {
 }
 
 function buildFeedSourceContext(sourceType: string | null | undefined) {
-  if (sourceType === "instagram_mention") {
-    return " Aproveita uma marcação do Instagram sem perder leitura de app próprio.";
-  }
-
-  if (sourceType === "instagram_owned_post") {
-    return " Também reforça o que já foi publicado no Instagram do salão.";
-  }
-
+  void sourceType;
   return "";
 }
 

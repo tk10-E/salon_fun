@@ -9,6 +9,10 @@ import {
   MEDIA_UPLOAD_PRESETS,
   formatPresetMegabytes,
 } from "@/lib/mediaUploadPresets";
+import {
+  resolveMembershipLifecycleCopy,
+  resolveMembershipOfferLabel,
+} from "@/lib/membershipOffers";
 import { createClient } from "@/lib/supabase/server";
 import { optimizeUploadedImage } from "@/lib/uploadedImageOptimization";
 
@@ -55,7 +59,7 @@ async function uploadOfferImage(args: {
     redirect(
       buildRedirectNotice(
         args.redirectPath,
-        "Envie uma imagem valida para a assinatura.",
+        "Envie uma imagem válida para a assinatura.",
         "error",
       ),
     );
@@ -65,7 +69,7 @@ async function uploadOfferImage(args: {
     redirect(
       buildRedirectNotice(
         args.redirectPath,
-        `A foto da assinatura deve ter no maximo ${formatPresetMegabytes(
+        `A foto da assinatura deve ter no máximo ${formatPresetMegabytes(
           OFFER_IMAGE_PRESET.maxInputBytes,
         )} MB.`,
         "error",
@@ -81,7 +85,7 @@ async function uploadOfferImage(args: {
     redirect(
       buildRedirectNotice(
         args.redirectPath,
-        "Nao foi possivel processar a foto da assinatura.",
+        "Não foi possível processar a foto da assinatura.",
         "error",
       ),
     );
@@ -104,7 +108,7 @@ async function uploadOfferImage(args: {
     redirect(
       buildRedirectNotice(
         args.redirectPath,
-        "Nao foi possivel enviar a foto da assinatura.",
+        "Não foi possível enviar a foto da assinatura.",
         "error",
       ),
     );
@@ -153,16 +157,21 @@ function buildOfferNotification(args: {
   kind: string;
   title: string;
   highlightText: string;
+  membershipValidityDays?: number | null;
   startsOn: string | null;
 }) {
   const typePrefix = args.kind === "membership" ? "membership" : "promotion";
+  const membershipLabel =
+    args.kind === "membership"
+      ? resolveMembershipLifecycleCopy(args.membershipValidityDays)
+      : null;
   const notificationTitle =
     args.action === "created"
       ? args.kind === "membership"
-        ? "Novo plano mensal no salão"
+        ? `Novo ${membershipLabel} no salão`
         : "Nova promoção no salão"
       : args.kind === "membership"
-        ? "Plano mensal atualizado"
+        ? `${resolveMembershipOfferLabel(args.membershipValidityDays)} atualizado`
         : "Promoção atualizada";
 
   const defaultBody =
@@ -280,7 +289,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         redirectPath,
-        "Preencha serviço, sessões e validade para publicar um clube ou pacote operacional.",
+        "Preencha serviço, sessões e validade para publicar um plano ou pacote operacional.",
         "error",
       ),
     );
@@ -336,6 +345,7 @@ export async function createSalonOfferActionImpl(formData: FormData) {
       kind,
       title,
       highlightText,
+      membershipValidityDays,
       startsOn: normalizedStartsOn,
     });
 
@@ -457,7 +467,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         redirectPath,
-        "Preencha serviço, sessões e validade para atualizar esse clube ou pacote.",
+        "Preencha serviço, sessões e validade para atualizar esse plano ou pacote.",
         "error",
       ),
     );
@@ -474,7 +484,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         redirectPath,
-        "Nao foi possivel localizar essa assinatura.",
+        "Não foi possível localizar esta assinatura.",
         "error",
       ),
     );
@@ -547,6 +557,7 @@ export async function updateSalonOfferActionImpl(formData: FormData) {
       kind,
       title,
       highlightText,
+      membershipValidityDays,
       startsOn: normalizedStartsOn,
     });
 
@@ -600,7 +611,7 @@ export async function deleteSalonOfferActionImpl(formData: FormData) {
     redirect(
       buildRedirectNotice(
         redirectPath,
-        "Nao foi possivel localizar essa oferta.",
+        "Não foi possível localizar esta oferta.",
         "error",
       ),
     );

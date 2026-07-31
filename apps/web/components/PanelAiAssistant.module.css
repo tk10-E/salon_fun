@@ -1,0 +1,584 @@
+.panel {
+  display: grid;
+  gap: 18px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(168, 86, 45, 0.16), rgba(46, 107, 75, 0.18));
+  color: #533321;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.heroCopy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.heroTopline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.heroTopline h2 {
+  margin: 0;
+}
+
+.statusRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.statusCard {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(168, 86, 45, 0.14);
+  background: rgba(255, 255, 255, 0.68);
+  min-width: 0;
+}
+
+.statusCard strong,
+.statusCard span,
+.scoreCard strong,
+.scoreCard span,
+.insightCard h4,
+.insightCard p,
+.responseCard h3,
+.responseCard p,
+.decisionCard p,
+.decisionLabel,
+.responseQuestion,
+.responseModel,
+.scoreLabel,
+.contextMeta span,
+.followUp,
+.historyEmpty p {
+  overflow-wrap: anywhere;
+}
+
+.statusCard strong {
+  color: #2f241c;
+  font-size: 0.98rem;
+}
+
+.statusCard span {
+  color: #6a5c50;
+  font-size: 0.9rem;
+}
+
+.scoreGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.scoreCard {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(168, 86, 45, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(250, 243, 237, 0.9));
+  min-width: 0;
+}
+
+.scoreCard strong {
+  color: #261a13;
+  font-size: 1.2rem;
+  line-height: 1.1;
+}
+
+.scoreLabel {
+  color: #7b6556;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.executiveSummary {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(50, 95, 155, 0.08);
+  color: #344a66;
+  font-weight: 600;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.sectionHeader h3 {
+  margin: 0 0 4px;
+}
+
+.insightsSection,
+.historySection {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.actionPresetSection,
+.quickPromptSection {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.actionPresetGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.actionPresetCard {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(168, 86, 45, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(249, 242, 236, 0.92));
+  min-width: 0;
+}
+
+.actionPresetCard h4 {
+  margin: 0;
+  color: #2d2119;
+}
+
+.actionPresetCard p {
+  margin: 0;
+  color: #5a4a3e;
+}
+
+.actionPresetEyebrow {
+  color: #7b6556;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.insightsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.insightCard {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(168, 86, 45, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+  min-width: 0;
+}
+
+.insightAlert {
+  box-shadow: inset 0 0 0 1px rgba(181, 98, 56, 0.18);
+}
+
+.insightDrop {
+  box-shadow: inset 0 0 0 1px rgba(195, 153, 64, 0.18);
+}
+
+.insightOpportunity {
+  box-shadow: inset 0 0 0 1px rgba(68, 128, 94, 0.18);
+}
+
+.insightHeader {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.insightCard h4,
+.responseCard h3 {
+  margin: 0;
+  color: #2d2119;
+}
+
+.insightCard p,
+.responseCard p,
+.decisionCard p,
+.historyEmpty p {
+  margin: 0;
+  color: #5a4a3e;
+}
+
+.quickPrompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.quickPrompts :global(.secondary-button) {
+  white-space: normal;
+  max-width: 100%;
+}
+
+.commandBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.responseCard {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(168, 86, 45, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(249, 242, 236, 0.92));
+  min-width: 0;
+}
+
+.responseHeader {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 0;
+}
+
+.responseHeaderMain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.responseModel {
+  color: #6f6154;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.responseQuestion {
+  color: #7d6657;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.responseSummary {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: #30231a;
+}
+
+.contextSummary {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(247, 241, 234, 0.84);
+  min-width: 0;
+}
+
+.contextMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.contextMeta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(105, 86, 71, 0.1);
+  color: #6a5b4f;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.missingDataBlock {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px dashed rgba(168, 86, 45, 0.28);
+  background: rgba(255, 248, 241, 0.92);
+}
+
+.missingDataLabel {
+  color: #7d5e45;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.missingDataList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.decisionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.decisionCard {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid transparent;
+  min-width: 0;
+}
+
+.decisionCardProblem {
+  background: rgba(173, 77, 62, 0.09);
+  border-color: rgba(173, 77, 62, 0.14);
+}
+
+.decisionCardImpact {
+  background: rgba(206, 160, 73, 0.11);
+  border-color: rgba(206, 160, 73, 0.16);
+}
+
+.decisionCardSuggestion {
+  background: rgba(61, 95, 155, 0.1);
+  border-color: rgba(61, 95, 155, 0.16);
+}
+
+.decisionCardAction {
+  background: rgba(58, 113, 83, 0.1);
+  border-color: rgba(58, 113, 83, 0.16);
+}
+
+.decisionLabel {
+  color: #4c3d31;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.responseBullets {
+  margin: 0;
+  padding-left: 18px;
+  color: #4f4338;
+}
+
+.responseBulletLead {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(168, 86, 45, 0.12);
+  color: #4f4338;
+  font-weight: 600;
+}
+
+.responseBullets li + li {
+  margin-top: 6px;
+}
+
+.followUp {
+  color: #6b5f53;
+  font-weight: 600;
+}
+
+.debugDetails {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px dashed rgba(61, 95, 155, 0.22);
+  background: rgba(246, 249, 255, 0.9);
+}
+
+.debugSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: #35507b;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.debugSummaryHint {
+  color: #6580a8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.debugGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.debugCard {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(61, 95, 155, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  min-width: 0;
+}
+
+.debugLabel {
+  color: #6a7f9f;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.debugValue {
+  color: #253754;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.responseActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.responseActions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.actionIcon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.actionIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.historyList {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.historyEmpty {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px dashed rgba(168, 86, 45, 0.18);
+  min-width: 0;
+}
+
+.feedbackCard {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(168, 86, 45, 0.16);
+}
+
+.feedbackCard p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.feedbackError {
+  background: rgba(177, 74, 65, 0.1);
+  color: #8f342f;
+}
+
+.feedbackSuccess {
+  background: rgba(58, 113, 83, 0.1);
+  color: #2b6f4a;
+}
+
+.feedbackLoading {
+  background: rgba(61, 95, 155, 0.1);
+  color: #36517f;
+}
+
+@media (max-width: 960px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .actionPresetGrid,
+  .statusRow,
+  .scoreGrid,
+  .insightsGrid,
+  .decisionGrid,
+  .debugGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .responseHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

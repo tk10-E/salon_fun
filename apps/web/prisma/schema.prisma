@@ -59,7 +59,6 @@ model Client {
   authUserId    String?       @unique @map("auth_user_id") @db.Uuid
   name          String        @db.Text
   phone         String?       @db.Text
-  whatsappPhone String?       @map("whatsapp_phone") @db.Text
   email         String?       @db.Text
   birthDate     DateTime?     @map("birth_date") @db.Date
   notes         String?       @db.Text

@@ -1,0 +1,3 @@
+Novo visual do feed com layout premium, stories e vitrine mais forte para o salao.
+Melhorias de estabilidade na home e na navegacao entre feed e agenda.
+Ajustes de experiencia para manter conteudo real e imagens do salao mais claros no app.

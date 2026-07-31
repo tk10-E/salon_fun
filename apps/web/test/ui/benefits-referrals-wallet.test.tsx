@@ -124,10 +124,10 @@ describe("benefits referrals wallet UI", () => {
     });
 
     const ui = await ReferralsPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         message: "Programa atualizado.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);

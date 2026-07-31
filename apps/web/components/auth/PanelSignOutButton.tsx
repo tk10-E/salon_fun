@@ -35,7 +35,7 @@ export function PanelSignOutButton() {
       ]);
     } finally {
       window.location.assign(
-        "/login?message=Voce+saiu+do+painel+com+seguranca.&tone=info",
+        "/login?message=Voc%C3%AA+saiu+do+painel+com+seguran%C3%A7a.&tone=info",
       );
     }
   }

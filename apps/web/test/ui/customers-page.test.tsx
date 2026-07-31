@@ -28,7 +28,7 @@ describe("customers page UI", () => {
     const location = await captureRedirect(
       Promise.resolve().then(() =>
         CustomersPage({
-          searchParams: {
+          searchParams: Promise.resolve({
             customer: "customer-1",
             message: "Cliente atualizado.",
             page: "2",
@@ -36,7 +36,7 @@ describe("customers page UI", () => {
             segment: "vip",
             sort: "spent",
             tone: "success",
-          },
+          }),
         }),
       ),
       redirectMock,

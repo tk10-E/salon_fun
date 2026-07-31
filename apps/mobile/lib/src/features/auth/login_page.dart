@@ -8,6 +8,7 @@ import '../../core/widgets/salon_brand_hero.dart';
 import '../../core/widgets/salon_ui.dart';
 import '../shared/app_models.dart';
 import 'auth_mode_switch.dart';
+import 'social_auth_button.dart';
 import 'signup_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -105,6 +106,7 @@ class _LoginPageState extends State<LoginPage> {
 
     final success = await sessionController.signInWithGoogle(
       joinCode: _joinCodeController.text,
+      customerName: '',
     );
 
     if (!mounted) {
@@ -129,10 +131,10 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    final joinCode = result['joinCode']?.trim();
+    final joinCode = normalizeJoinCode(result['joinCode'] ?? '');
     final email = result['email']?.trim();
 
-    if (joinCode != null && joinCode.isNotEmpty) {
+    if (joinCode.isNotEmpty) {
       _joinCodeController.text = joinCode;
       widget.bootstrap.sessionController.previewSalon(joinCode);
     }
@@ -145,10 +147,6 @@ class _LoginPageState extends State<LoginPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  void _showSocialComingSoon(String provider) {
-    _showSnackBar('Login com $provider entra na próxima etapa do app.');
   }
 
   @override
@@ -166,6 +164,9 @@ class _LoginPageState extends State<LoginPage> {
           child: AnimatedBuilder(
             animation: sessionController,
             builder: (context, _) {
+              final canUseGoogleSignIn =
+                  widget.bootstrap.authService.canUseGoogleSignIn;              final canUseSocialSignIn =
+                  canUseGoogleSignIn;
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                 children: [
@@ -196,33 +197,39 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             if (sessionController.canUseBiometricUnlock)
                               const Pill(
-                                label: 'Impressão digital ativa',
-                                icon: Icons.fingerprint_rounded,
+                                label: 'Proteção do aparelho ativa',
+                                icon: Icons.phonelink_lock_rounded,
                               ),
                           ],
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Entre com sua conta.',
+                          'Entre com sua conta ou com um acesso social.',
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'O cadastro agora fica em uma tela própria. Aqui a cliente só entra com o acesso que já criou.',
+                          canUseSocialSignIn
+                              ? 'Você pode entrar com e-mail e senha ou usar Google no primeiro acesso. O vínculo com o salão continua pelo código acima.'
+                              : 'O cadastro agora fica em uma tela própria. Aqui a cliente só entra com o acesso que já criou.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 18),
                         _AuthNoticeCard(
                           icon: Icons.lock_open_rounded,
-                          title: 'Entrada separada do cadastro',
-                          message:
-                              'O primeiro acesso é criado em outra tela. Aqui a cliente entra com e-mail, senha, Google ou impressão digital.',
+                          title: canUseSocialSignIn
+                              ? 'Primeiro acesso com Google ou senha'
+                              : 'Entrada separada do cadastro',
+                          message: canUseSocialSignIn
+                              ? 'Se a cliente preferir, Google já podem criar a entrada e conectar o perfil ao salão. E-mail e senha continuam funcionando do jeito atual.'
+                              : 'O primeiro acesso é criado em outra tela. Depois disso, a cliente volta com e-mail e senha.',
                           tone: AppTheme.primary,
                         ),
                         const SizedBox(height: 18),
                         TextField(
                           controller: _joinCodeController,
                           textCapitalization: TextCapitalization.characters,
+                          inputFormatters: const [JoinCodeInputFormatter()],
                           onChanged: sessionController.previewSalon,
                           decoration: const InputDecoration(
                             labelText: 'Código do salão',
@@ -267,7 +274,7 @@ class _LoginPageState extends State<LoginPage> {
                             child: EmptyStateCard(
                               title: 'Integração pronta para receber as chaves',
                               message:
-                                  'O layout já está pronto. Falta alinhar Firebase, Supabase e a bridge. No Android, o login também aceita o google-services.json nativo do Firebase.',
+                                  'E-mail e Google usam Firebase. Depois o app sincroniza a sessão no Supabase pela bridge.',
                               icon: Icons.key_rounded,
                             ),
                           ),
@@ -282,45 +289,40 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: _sendReset,
                           child: const Text('Recuperar senha'),
                         ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Divider(
-                                color: AppTheme.line,
-                                endIndent: 12,
+                        if (canUseSocialSignIn) ...[
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Divider(
+                                  color: AppTheme.line,
+                                  endIndent: 12,
+                                ),
                               ),
+                              Text(
+                                'Entradas sociais',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              Expanded(
+                                child: Divider(
+                                  color: AppTheme.line,
+                                  indent: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          if (canUseGoogleSignIn)
+                            SocialAuthButton(
+                              label: 'Continuar com Google',
+                              icon: FontAwesomeIcons.google,
+                              iconColor: const Color(0xFFDB4437),
+                              borderColor: const Color(0xFFE7DDD5),
+                              onPressed: sessionController.isBusy
+                                  ? null
+                                  : _submitGoogle,
                             ),
-                            Text(
-                              'Entradas sociais',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            Expanded(
-                              child: Divider(color: AppTheme.line, indent: 12),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        SocialAuthButton(
-                          label: 'Continuar com Google',
-                          icon: FontAwesomeIcons.google,
-                          iconColor: const Color(0xFFDB4437),
-                          borderColor: const Color(0xFFE7DDD5),
-                          onPressed: sessionController.isBusy
-                              ? null
-                              : _submitGoogle,
-                        ),
-                        const SizedBox(height: 10),
-                        SocialAuthButton(
-                          label: 'Continuar com Facebook',
-                          icon: FontAwesomeIcons.facebookF,
-                          iconColor: const Color(0xFF1877F2),
-                          borderColor: const Color(0xFFD7E4FF),
-                          onPressed: sessionController.isBusy
-                              ? null
-                              : () => _showSocialComingSoon('Facebook'),
-                          trailing: const SoonTag(),
-                        ),
+                        ],
                         if (sessionController.message != null) ...[
                           const SizedBox(height: 14),
                           Text(
@@ -429,60 +431,6 @@ class _AuthNoticeCard extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class SocialAuthButton extends StatelessWidget {
-  const SocialAuthButton({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.iconColor,
-    required this.borderColor,
-    required this.onPressed,
-    this.trailing,
-  });
-
-  final String label;
-  final IconData icon;
-  final Color iconColor;
-  final Color borderColor;
-  final VoidCallback? onPressed;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        backgroundColor: Colors.white,
-        side: BorderSide(color: borderColor),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(child: FaIcon(icon, size: 18, color: iconColor)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-          ),
-          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
         ],
       ),
     );

@@ -11,16 +11,19 @@ import {
   MEDIA_UPLOAD_PRESETS,
   formatPresetMegabytes,
 } from "@/lib/mediaUploadPresets";
+import {
+  cancelAppointmentPlanReservationByAdmin,
+  finalizeAppointmentPlanReservation,
+  neutralizeMembershipPlanAppointment,
+  reprocessMembershipPlanSeriesByAdmin,
+  resolveAppointmentPlanReservation,
+} from "@/lib/appointmentPlanReservations";
 import { resolveAuthoritativeAppointmentPayment } from "@/lib/paymentIntegrity";
 import {
   MANAGEMENT_BASE_PATH,
   MANAGEMENT_PATHS,
   combineDateAndTimeToUtc,
 } from "@/lib/management";
-import {
-  sanitizePhone,
-  sendSalonWhatsAppTextMessage,
-} from "@/lib/whatsapp";
 import { recordSecurityAuditEvent } from "@/lib/security";
 import {
   managementAppointmentSchema,
@@ -38,13 +41,23 @@ import {
   managementServiceUpdateSchema,
 } from "@/lib/management-schemas";
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildInlineActionState,
+  isInlineAction,
+  type InlineActionState,
+} from "@/lib/inline-action-state";
 import { optimizeUploadedImage } from "@/lib/uploadedImageOptimization";
 
 import {
+  buildAppointmentNoShowNotification,
+  buildAppointmentRescheduledNotification,
   buildRedirectNotice,
   buildServiceCatalogNotification,
   buildStaffAvailabilityNotification,
+  formatAppointmentDateTimeLabel,
+  prepareCustomerNotificationPayload,
   queueCustomerNotification,
+  rethrowIfRedirectError,
   resolveDashboardReturnPath,
 } from "./shared";
 
@@ -56,6 +69,7 @@ const SERVICES_PATH = `${MANAGEMENT_BASE_PATH}/servicos`;
 const PAYMENTS_PATH = `${MANAGEMENT_BASE_PATH}/pagamentos`;
 const COMMISSIONS_PATH = `${MANAGEMENT_BASE_PATH}/comissoes`;
 const SERVICE_IMAGE_PRESET = MEDIA_UPLOAD_PRESETS.service;
+const PROFESSIONAL_IMAGE_PRESET = MEDIA_UPLOAD_PRESETS.service;
 
 const REVALIDATE_PATHS = [
   MANAGEMENT_BASE_PATH,
@@ -122,9 +136,87 @@ type AppointmentTransferPlan = {
   serviceName: string;
 };
 
+class ManagementActionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ManagementActionError";
+  }
+}
+
+function throwManagementActionError(message: string): never {
+  throw new ManagementActionError(message);
+}
+
+function extractMembershipDayKey(
+  value: string | null | undefined,
+  timeZone: string,
+) {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  const directMatch = normalized.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const parsed = new Date(normalized);
+  if (!Number.isFinite(parsed.getTime())) {
+    return null;
+  }
+
+  return formatLocalDateKey(parsed, timeZone);
+}
+
+function isDateWithinMembershipPlanWindow(args: {
+  membershipExpiresAt?: string | null;
+  membershipStartedAt?: string | null;
+  scheduledAt: Date;
+  timeZone: string;
+}) {
+  const scheduledDayKey = formatLocalDateKey(args.scheduledAt, args.timeZone);
+  const startDayKey = extractMembershipDayKey(
+    args.membershipStartedAt,
+    args.timeZone,
+  );
+  const endDayKey = extractMembershipDayKey(
+    args.membershipExpiresAt,
+    args.timeZone,
+  );
+
+  if (startDayKey && scheduledDayKey < startDayKey) {
+    return false;
+  }
+
+  if (endDayKey && scheduledDayKey > endDayKey) {
+    return false;
+  }
+
+  return true;
+}
+
+type DatabaseActionError = {
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  message?: string | null;
+};
+
 function flag(formData: FormData, field: string) {
   const value = formData.get(field);
   return value === "on" || value === "true";
+}
+
+function readStringValues(formData: FormData, field: string) {
+  return Array.from(
+    new Set(
+      formData
+        .getAll(field)
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function readUploadedFile(formData: FormData, field: string) {
@@ -134,6 +226,10 @@ function readUploadedFile(formData: FormData, field: string) {
 
 function buildServiceImagePath(salonId: string, extension: string) {
   return `${salonId}/services/${randomUUID()}.${extension}`;
+}
+
+function buildProfessionalImagePath(salonId: string, extension: string) {
+  return `${salonId}/staff/${randomUUID()}.${extension}`;
 }
 
 async function uploadManagementServiceImage(args: {
@@ -149,24 +245,14 @@ async function uploadManagementServiceImage(args: {
   }
 
   if (!imageFile.type.startsWith("image/")) {
-    redirect(
-      buildRedirectNotice(
-        args.redirectPath,
-        "Envie uma imagem válida para o serviço.",
-        "error",
-      ),
-    );
+    throwManagementActionError("Envie uma imagem válida para o serviço.");
   }
 
   if (imageFile.size > SERVICE_IMAGE_PRESET.maxInputBytes) {
-    redirect(
-      buildRedirectNotice(
-        args.redirectPath,
-        `A foto do servico deve ter no maximo ${formatPresetMegabytes(
-          SERVICE_IMAGE_PRESET.maxInputBytes,
-        )} MB.`,
-        "error",
-      ),
+    throwManagementActionError(
+      `A foto do serviço deve ter no máximo ${formatPresetMegabytes(
+        SERVICE_IMAGE_PRESET.maxInputBytes,
+      )} MB.`,
     );
   }
 
@@ -175,13 +261,7 @@ async function uploadManagementServiceImage(args: {
   try {
     optimizedImage = await optimizeUploadedImage(imageFile, "service");
   } catch {
-    redirect(
-      buildRedirectNotice(
-        args.redirectPath,
-        "Nao foi possivel processar a foto do servico.",
-        "error",
-      ),
-    );
+    throwManagementActionError("Não foi possível processar a foto do serviço.");
   }
 
   const imagePath = buildServiceImagePath(
@@ -196,12 +276,60 @@ async function uploadManagementServiceImage(args: {
     });
 
   if (uploadError) {
-    redirect(
-      buildRedirectNotice(
-        args.redirectPath,
-        "Nao foi possivel enviar a foto do servico.",
-        "error",
-      ),
+    throwManagementActionError("Não foi possível enviar a foto do serviço.");
+  }
+
+  return imagePath;
+}
+
+async function uploadManagementProfessionalImage(args: {
+  formData: FormData;
+  field: string;
+  salonId: string;
+  supabase: ReturnType<typeof createClient>;
+  redirectPath: string;
+}) {
+  const imageFile = readUploadedFile(args.formData, args.field);
+  if (!imageFile) {
+    return null;
+  }
+
+  if (!imageFile.type.startsWith("image/")) {
+    throwManagementActionError("Envie uma imagem valida para o profissional.");
+  }
+
+  if (imageFile.size > PROFESSIONAL_IMAGE_PRESET.maxInputBytes) {
+    throwManagementActionError(
+      `A foto do profissional deve ter no máximo ${formatPresetMegabytes(
+        PROFESSIONAL_IMAGE_PRESET.maxInputBytes,
+      )} MB.`,
+    );
+  }
+
+  let optimizedImage;
+
+  try {
+    optimizedImage = await optimizeUploadedImage(imageFile, "service");
+  } catch {
+    throwManagementActionError(
+      "Não foi possível processar a foto do profissional.",
+    );
+  }
+
+  const imagePath = buildProfessionalImagePath(
+    args.salonId,
+    optimizedImage.extension,
+  );
+  const { error: uploadError } = await args.supabase.storage
+    .from("salon-assets")
+    .upload(imagePath, optimizedImage.buffer, {
+      contentType: optimizedImage.contentType,
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throwManagementActionError(
+      "Não foi possível enviar a foto do profissional.",
     );
   }
 
@@ -210,7 +338,16 @@ async function uploadManagementServiceImage(args: {
 
 function firstMessage(error: unknown, fallback: string) {
   if (error instanceof ZodError) {
-    return error.issues[0]?.message ?? fallback;
+    const message = error.issues[0]?.message?.trim();
+    if (
+      !message ||
+      message.startsWith("Invalid input") ||
+      message.includes("received null")
+    ) {
+      return fallback;
+    }
+
+    return message;
   }
 
   if (error instanceof Error && error.message.trim()) {
@@ -220,24 +357,39 @@ function firstMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function rethrowIfRedirectError(error: unknown) {
-  if (
-    error &&
-    typeof error === "object" &&
-    "digest" in error &&
-    typeof error.digest === "string" &&
-    error.digest.startsWith("NEXT_REDIRECT")
-  ) {
-    throw error;
-  }
+function normalizeDatabaseErrorText(
+  error: DatabaseActionError | null | undefined,
+) {
+  return [error?.message, error?.details, error?.hint]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .trim()
+    .toLowerCase();
+}
 
-  if (
-    error instanceof Error &&
-    (error.message.startsWith("NEXT_REDIRECT") ||
-      error.message.startsWith("TEST_REDIRECT:"))
-  ) {
-    throw error;
-  }
+function isMissingDatabaseColumnError(
+  error: DatabaseActionError | null | undefined,
+  columnName: string,
+) {
+  const normalizedText = normalizeDatabaseErrorText(error);
+  const normalizedColumnName = columnName.trim().toLowerCase();
+  const mentionsMissingColumn =
+    normalizedText.includes(normalizedColumnName) &&
+    (normalizedText.includes("column") ||
+      normalizedText.includes("schema cache") ||
+      normalizedText.includes("could not find")) &&
+    (normalizedText.includes("does not exist") ||
+      normalizedText.includes("missing") ||
+      normalizedText.includes("schema cache") ||
+      normalizedText.includes("could not find"));
+
+  return (
+    mentionsMissingColumn ||
+    ((error?.code === "42703" ||
+      error?.code === "PGRST204" ||
+      error?.code === "PGRST205") &&
+      normalizedText.includes(normalizedColumnName))
+  );
 }
 
 function getReturnPath(formData: FormData, fallbackPath: string) {
@@ -261,19 +413,115 @@ function firstRelation<T>(value: NotificationRelation<T>) {
   return value ?? null;
 }
 
+async function notifyCustomerAboutManagementAppointmentStatus(params: {
+  supabase: ReturnType<typeof createClient>;
+  salonId: string;
+  appointmentId: string;
+  status: "confirmed" | "completed" | "cancelled" | "no_show";
+  cancellationReason?: string | null;
+  appointmentContext: {
+    customer_id?: string | null;
+    date: string;
+    services?: NotificationRelation<{ name: string | null }>;
+    staff_members?: NotificationRelation<{ name: string | null }>;
+  };
+}) {
+  const {
+    supabase,
+    salonId,
+    appointmentId,
+    status,
+    cancellationReason,
+    appointmentContext,
+  } = params;
+
+  if (!appointmentContext.customer_id) {
+    return;
+  }
+
+  const appointmentLabel = formatAppointmentDateTimeLabel(
+    appointmentContext.date,
+  );
+  const serviceName =
+    firstRelation(appointmentContext.services)?.name?.trim() ||
+    "seu atendimento";
+  const staffName =
+    firstRelation(appointmentContext.staff_members)?.name?.trim() || null;
+  const trimmedReason = cancellationReason?.trim() || null;
+
+  const notificationByStatus = {
+    confirmed: {
+      notificationType: "appointment_confirmed",
+      title: "Seu horário foi confirmado",
+      body: staffName
+        ? `${serviceName} em ${appointmentLabel} com ${staffName} foi confirmado pelo salão.`
+        : `${serviceName} em ${appointmentLabel} foi confirmado pelo salão.`,
+    },
+    completed: {
+      notificationType: "appointment_completed",
+      title: "Atendimento concluído",
+      body: staffName
+        ? `${serviceName} com ${staffName} foi marcado como concluído pelo salão.`
+        : `${serviceName} foi marcado como concluído pelo salão.`,
+    },
+    cancelled: {
+      notificationType: "appointment_cancelled",
+      title: "Seu horário foi cancelado pelo salão",
+      body: trimmedReason
+        ? `${serviceName} em ${appointmentLabel} foi cancelado. Motivo: ${trimmedReason}.`
+        : `${serviceName} em ${appointmentLabel} foi cancelado pelo salão.`,
+    },
+    no_show: buildAppointmentNoShowNotification({
+      appointmentId,
+      serviceName,
+      startsAt: appointmentContext.date,
+      staffMemberName: staffName,
+    }),
+  } as const;
+
+  const notification = notificationByStatus[status];
+  const notificationType =
+    "notificationType" in notification
+      ? notification.notificationType
+      : notification.type;
+
+  await queueCustomerNotification({
+    supabase,
+    salonId,
+    customerId: appointmentContext.customer_id,
+    audience: "single_customer",
+    notificationType,
+    title: notification.title,
+    body: notification.body,
+    payload: {
+      type: notificationType,
+      appointmentId,
+      appointmentStartsAt: appointmentContext.date,
+      ctaTarget: "appointments",
+      openInbox: true,
+      serviceName,
+      staffMemberName: staffName,
+      targetTabIndex: 1,
+    },
+  });
+}
+
 function dayAtIso(daysOffset: number) {
   return new Date(Date.now() + daysOffset * 24 * 60 * 60 * 1000).toISOString();
 }
 
-function getLocalDatePart(date: Date, timeZone: string, part: "year" | "month" | "day") {
+function getLocalDatePart(
+  date: Date,
+  timeZone: string,
+  part: "year" | "month" | "day",
+) {
   return (
     new Intl.DateTimeFormat("en-US", {
       timeZone,
       [part]: "2-digit",
     } as Intl.DateTimeFormatOptions)
       .formatToParts(date)
-      .find((item) => item.type === part)
-      ?.value ?? ""
+      .find((item) => item.type === part)?.value ?? ""
   );
 }
 
@@ -283,8 +531,7 @@ function formatLocalDateKey(date: Date, timeZone: string) {
     year: "numeric",
   })
     .formatToParts(date)
-    .find((item) => item.type === "year")
-    ?.value;
+    .find((item) => item.type === "year")?.value;
   const month = getLocalDatePart(date, timeZone, "month");
   const day = getLocalDatePart(date, timeZone, "day");
 
@@ -339,11 +586,15 @@ async function loadReplacementCandidates(args: {
   ]);
 
   if (professionalsResult.error) {
-    throw new Error("Não foi possível carregar os profissionais ativos do salão.");
+    throw new Error(
+      "Não foi possível carregar os profissionais ativos do salão.",
+    );
   }
 
   if (appointmentsResult.error) {
-    throw new Error("Não foi possível medir a força da equipe para o remanejamento.");
+    throw new Error(
+      "Não foi possível medir a força da equipe para o remanejamento.",
+    );
   }
 
   const counters = new Map<
@@ -366,7 +617,8 @@ async function loadReplacementCandidates(args: {
     };
 
     if (
-      (appointment.status === "pending" || appointment.status === "confirmed") &&
+      (appointment.status === "pending" ||
+        appointment.status === "confirmed") &&
       appointment.date >= nowIso
     ) {
       current.upcomingCount += 1;
@@ -379,14 +631,17 @@ async function loadReplacementCandidates(args: {
     counters.set(appointment.staff_member_id, current);
   }
 
-  return ((professionalsResult.data ?? []) as Array<{
-    id: string;
-    is_active: boolean;
-    name: string;
-  }>)
+  return (
+    (professionalsResult.data ?? []) as Array<{
+      id: string;
+      is_active: boolean;
+      name: string;
+    }>
+  )
     .filter(
       (professional) =>
-        professional.is_active && professional.id !== args.excludedProfessionalId,
+        professional.is_active &&
+        professional.id !== args.excludedProfessionalId,
     )
     .map((professional) => {
       const summary = counters.get(professional.id);
@@ -456,13 +711,18 @@ async function getAvailableStaffSlots(args: {
     return cached;
   }
 
-  const result = await args.supabase.rpc("get_available_staff_slots_for_service", {
-    service_uuid: args.serviceId,
-    target_day: args.targetDay,
-  });
+  const result = await args.supabase.rpc(
+    "get_available_staff_slots_for_service",
+    {
+      service_uuid: args.serviceId,
+      target_day: args.targetDay,
+    },
+  );
 
   if (result.error) {
-    throw new Error("Não foi possível calcular os encaixes da agenda para o remanejamento.");
+    throw new Error(
+      "Não foi possível calcular os encaixes da agenda para o remanejamento.",
+    );
   }
 
   const slots = (result.data ?? []) as AvailableStaffSlot[];
@@ -473,18 +733,26 @@ async function getAvailableStaffSlots(args: {
 async function findBestTransferSlot(args: {
   appointment: FutureProfessionalAppointment;
   candidate: ReplacementCandidate;
-  plannedBusyByProfessional: Map<string, Array<{ endsAt: string; startsAt: string }>>;
+  plannedBusyByProfessional: Map<
+    string,
+    Array<{ endsAt: string; startsAt: string }>
+  >;
   slotCache: Map<string, AvailableStaffSlot[]>;
   supabase: any;
   timeZone: string;
 }) {
   const originalStartAt = args.appointment.date;
-  const originalDay = formatLocalDateKey(new Date(originalStartAt), args.timeZone);
+  const originalDay = formatLocalDateKey(
+    new Date(originalStartAt),
+    args.timeZone,
+  );
   const dayAnchor = new Date(originalStartAt);
   dayAnchor.setUTCHours(12, 0, 0, 0);
 
   for (let offset = 0; offset <= 30; offset += 1) {
-    const probeDay = new Date(dayAnchor.getTime() + offset * 24 * 60 * 60 * 1000);
+    const probeDay = new Date(
+      dayAnchor.getTime() + offset * 24 * 60 * 60 * 1000,
+    );
     const targetDay = formatLocalDateKey(probeDay, args.timeZone);
     const slots = await getAvailableStaffSlots({
       cache: args.slotCache,
@@ -493,7 +761,8 @@ async function findBestTransferSlot(args: {
       targetDay,
     });
 
-    const plannedBusy = args.plannedBusyByProfessional.get(args.candidate.id) ?? [];
+    const plannedBusy =
+      args.plannedBusyByProfessional.get(args.candidate.id) ?? [];
     const filtered = slots
       .filter((slot) => slot.staff_member_id === args.candidate.id)
       .filter((slot) => {
@@ -510,15 +779,19 @@ async function findBestTransferSlot(args: {
           }),
         );
       })
-      .sort((left, right) =>
-        new Date(left.start_at).getTime() - new Date(right.start_at).getTime(),
+      .sort(
+        (left, right) =>
+          new Date(left.start_at).getTime() -
+          new Date(right.start_at).getTime(),
       );
 
     if (!filtered.length) {
       continue;
     }
 
-    const exactSlot = filtered.find((slot) => slot.start_at === originalStartAt);
+    const exactSlot = filtered.find(
+      (slot) => slot.start_at === originalStartAt,
+    );
     if (exactSlot) {
       return {
         keepsSameTime: true,
@@ -585,11 +858,9 @@ function buildAppointmentReassignmentNote(args: {
   return `${baseNotes}\n\n${summary}`;
 }
 
-function mapDatabaseError(
-  error: { code?: string | null; message?: string | null } | null | undefined,
-) {
+function mapDatabaseError(error: DatabaseActionError | null | undefined) {
   const message = error?.message?.trim() ?? "";
-  const normalized = message.toLowerCase();
+  const normalized = normalizeDatabaseErrorText(error);
 
   if (error?.code === "23505") {
     return "Já existe um registro com esses dados.";
@@ -631,6 +902,10 @@ function mapDatabaseError(
     normalized.includes("appointment_already_completed")
   ) {
     return "Somente atendimentos concluídos podem receber pagamento.";
+  }
+
+  if (normalized.includes("invalid_payment_preference")) {
+    return "Selecione uma forma preferida de pagamento válida.";
   }
 
   if (normalized.includes("payment_amount_must_match_service_price")) {
@@ -688,15 +963,64 @@ function mapDatabaseError(
     return "Ainda existem agendamentos futuros com esse profissional. Recalcule o remanejamento antes de remover.";
   }
 
+  if (normalized.includes("staff_members_phone_length_check")) {
+    return "Telefone precisa ter entre 8 e 30 caracteres.";
+  }
+
+  if (normalized.includes("staff_members_commission_rate_percent_check")) {
+    return "A comissão precisa ficar entre 0% e 100%.";
+  }
+
+  if (
+    error?.code === "42501" ||
+    normalized.includes("permission denied") ||
+    normalized.includes("row-level security")
+  ) {
+    return "Sua sessão não tem permissão para concluir essa alteração. Entre novamente e tente de novo.";
+  }
+
   return null;
 }
 
-function fail(returnPath: string, message: string) {
-  redirect(buildRedirectNotice(returnPath, message, "error"));
+function respond(
+  formData: FormData,
+  returnPath: string,
+  message: string,
+  tone: "success" | "error" | "info",
+): InlineActionState | never {
+  if (isInlineAction(formData)) {
+    return buildInlineActionState(message, tone);
+  }
+
+  redirect(buildRedirectNotice(returnPath, message, tone));
 }
 
-function succeed(returnPath: string, message: string) {
-  redirect(buildRedirectNotice(returnPath, message, "success"));
+function fail(_returnPath: string, message: string): never {
+  throwManagementActionError(message);
+}
+
+function succeed(
+  formData: FormData,
+  returnPath: string,
+  message: string,
+): InlineActionState | never {
+  return respond(formData, returnPath, message, "success");
+}
+
+function handleActionFailure(
+  formData: FormData,
+  returnPath: string,
+  error: unknown,
+  fallback: string,
+): InlineActionState | never {
+  rethrowIfRedirectError(error);
+
+  const message =
+    error instanceof ManagementActionError
+      ? error.message
+      : firstMessage(error, fallback);
+
+  return respond(formData, returnPath, message, "error");
 }
 
 async function ensureActiveServiceAssignments(args: {
@@ -727,6 +1051,112 @@ async function ensureActiveServiceAssignments(args: {
       onConflict: "staff_member_id,service_id",
     },
   );
+}
+
+async function loadSalonServiceAssignments(args: {
+  salonId: string;
+  supabase: any;
+}) {
+  const servicesResult = await args.supabase
+    .from("services")
+    .select("id, name")
+    .eq("salon_id", args.salonId);
+
+  if (servicesResult.error) {
+    throwManagementActionError(
+      "Não foi possível carregar os serviços do salão.",
+    );
+  }
+
+  return (servicesResult.data ?? []) as Array<{ id: string; name: string }>;
+}
+
+async function assertProfessionalServiceSelectionIsSafe(args: {
+  professionalId: string;
+  requestedServiceIds: string[];
+  salonId: string;
+  supabase: any;
+}) {
+  const openAppointmentsResult = await args.supabase
+    .from("appointments")
+    .select("id, service_id, services(name)")
+    .eq("salon_id", args.salonId)
+    .eq("staff_member_id", args.professionalId)
+    .in("status", ["pending", "confirmed"])
+    .gte("date", new Date().toISOString());
+
+  if (openAppointmentsResult.error) {
+    throwManagementActionError(
+      "Não foi possível validar a agenda futura desse profissional.",
+    );
+  }
+
+  const retainedServiceIds = new Set(args.requestedServiceIds);
+  const blockedAppointments = (
+    (openAppointmentsResult.data ?? []) as Array<{
+      id: string;
+      service_id: string;
+      services: NotificationRelation<{ name: string | null }>;
+    }>
+  ).filter((appointment) => !retainedServiceIds.has(appointment.service_id));
+
+  if (!blockedAppointments.length) {
+    return;
+  }
+
+  const affectedServices = Array.from(
+    new Set(
+      blockedAppointments
+        .map((appointment) => firstRelation(appointment.services)?.name?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const affectedLabel = affectedServices.length
+    ? affectedServices.slice(0, 3).join(", ")
+    : "esses serviços";
+
+  throwManagementActionError(
+    `Remaneje ou conclua os próximos horários de ${affectedLabel} antes de tirar esses serviços da agenda desse profissional.`,
+  );
+}
+
+async function replaceProfessionalServiceAssignments(args: {
+  clearExisting?: boolean;
+  professionalId: string;
+  requestedServiceIds: string[];
+  supabase: any;
+}) {
+  if (args.clearExisting ?? true) {
+    const deleteResult = await args.supabase
+      .from("staff_service_assignments")
+      .delete()
+      .eq("staff_member_id", args.professionalId);
+
+    if (deleteResult.error) {
+      throwManagementActionError(
+        "Não foi possível atualizar os serviços habilitados desse profissional.",
+      );
+    }
+  }
+
+  if (!args.requestedServiceIds.length) {
+    return;
+  }
+
+  const insertResult = await args.supabase
+    .from("staff_service_assignments")
+    .insert(
+      args.requestedServiceIds.map((serviceId) => ({
+        staff_member_id: args.professionalId,
+        service_id: serviceId,
+      })),
+    );
+
+  if (insertResult.error) {
+    throwManagementActionError(
+      "Não foi possível salvar os serviços habilitados desse profissional.",
+    );
+  }
 }
 
 async function getAppointmentPaymentCount(
@@ -767,12 +1197,13 @@ export async function createManagementCategoryAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Categoria cadastrada com sucesso.");
+    return succeed(formData, returnPath, "Categoria cadastrada com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível criar a categoria."),
+      error,
+      "Não foi possível criar a categoria.",
     );
   }
 }
@@ -807,12 +1238,13 @@ export async function updateManagementCategoryAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Categoria atualizada com sucesso.");
+    return succeed(formData, returnPath, "Categoria atualizada com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível atualizar a categoria."),
+      error,
+      "Não foi possível atualizar a categoria.",
     );
   }
 }
@@ -853,12 +1285,13 @@ export async function deleteManagementCategoryAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Categoria removida com sucesso.");
+    return succeed(formData, returnPath, "Categoria removida com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível excluir a categoria."),
+      error,
+      "Não foi possível excluir a categoria.",
     );
   }
 }
@@ -927,10 +1360,14 @@ export async function createManagementServiceAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Serviço cadastrado com sucesso.");
+    return succeed(formData, returnPath, "Serviço cadastrado com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(returnPath, firstMessage(error, "Não foi possível criar o serviço."));
+    return handleActionFailure(
+      formData,
+      returnPath,
+      error,
+      "Não foi possível criar o serviço.",
+    );
   }
 }
 
@@ -1019,12 +1456,13 @@ export async function updateManagementServiceAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Serviço atualizado com sucesso.");
+    return succeed(formData, returnPath, "Serviço atualizado com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível atualizar o serviço."),
+      error,
+      "Não foi possível atualizar o serviço.",
     );
   }
 }
@@ -1065,11 +1503,13 @@ export async function deleteManagementServiceAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Serviço removido com sucesso.");
+    return succeed(formData, returnPath, "Serviço removido com sucesso.");
   } catch (error) {
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível excluir o serviço."),
+      error,
+      "Não foi possível excluir o serviço.",
     );
   }
 }
@@ -1081,7 +1521,6 @@ export async function createManagementClientAction(formData: FormData) {
     const parsed = managementClientSchema.parse({
       name: formData.get("name"),
       phone: formData.get("phone"),
-      whatsappPhone: formData.get("whatsappPhone"),
       email: formData.get("email"),
       birthDate: formData.get("birthDate"),
       notes: formData.get("notes"),
@@ -1092,7 +1531,6 @@ export async function createManagementClientAction(formData: FormData) {
       salon_id: salon.id,
       name: parsed.name,
       phone: parsed.phone ?? null,
-      whatsapp_phone: parsed.whatsappPhone ?? null,
       email: parsed.email ?? null,
       birth_date: parsed.birthDate ?? null,
       notes: parsed.notes ?? null,
@@ -1106,12 +1544,13 @@ export async function createManagementClientAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Cliente cadastrado com sucesso.");
+    return succeed(formData, returnPath, "Cliente cadastrado com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível cadastrar o cliente."),
+      error,
+      "Não foi possível cadastrar o cliente.",
     );
   }
 }
@@ -1124,7 +1563,6 @@ export async function updateManagementClientAction(formData: FormData) {
       clientId: formData.get("clientId"),
       name: formData.get("name"),
       phone: formData.get("phone"),
-      whatsappPhone: formData.get("whatsappPhone"),
       email: formData.get("email"),
       birthDate: formData.get("birthDate"),
       notes: formData.get("notes"),
@@ -1136,7 +1574,6 @@ export async function updateManagementClientAction(formData: FormData) {
       .update({
         name: parsed.name,
         phone: parsed.phone ?? null,
-        whatsapp_phone: parsed.whatsappPhone ?? null,
         email: parsed.email ?? null,
         birth_date: parsed.birthDate ?? null,
         notes: parsed.notes ?? null,
@@ -1152,12 +1589,13 @@ export async function updateManagementClientAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Cliente atualizado com sucesso.");
+    return succeed(formData, returnPath, "Cliente atualizado com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível atualizar o cliente."),
+      error,
+      "Não foi possível atualizar o cliente.",
     );
   }
 }
@@ -1198,12 +1636,13 @@ export async function deleteManagementClientAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Cliente removido com sucesso.");
+    return succeed(formData, returnPath, "Cliente removido com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível excluir o cliente."),
+      error,
+      "Não foi possível excluir o cliente.",
     );
   }
 }
@@ -1212,29 +1651,69 @@ export async function createManagementProfessionalAction(formData: FormData) {
   const returnPath = getReturnPath(formData, PROFESSIONALS_PATH);
 
   try {
+    const shouldSyncServiceAssignments =
+      String(formData.get("serviceSelectionReady") ?? "") === "1";
+    const requestedServiceIds = readStringValues(formData, "serviceIds");
     const parsed = managementProfessionalSchema.parse({
       name: formData.get("name"),
       specialty: formData.get("specialty"),
       phone: formData.get("phone"),
       commissionRatePercent: formData.get("commissionRatePercent"),
       isActive: flag(formData, "isActive"),
+      serviceIds: requestedServiceIds,
     });
     const { salon } = await requireOwnerSalon();
     const supabase = createClient() as any;
+    if (shouldSyncServiceAssignments) {
+      const salonServices = await loadSalonServiceAssignments({
+        supabase,
+        salonId: salon.id,
+      });
+      const validServiceIds = new Set(
+        salonServices.map((service) => service.id),
+      );
+
+      if (
+        parsed.serviceIds.some((serviceId) => !validServiceIds.has(serviceId))
+      ) {
+        fail(returnPath, "Selecione apenas serviços do seu salão.");
+      }
+    }
+    const uploadedImagePath = await uploadManagementProfessionalImage({
+      formData,
+      field: "image",
+      salonId: salon.id,
+      supabase,
+      redirectPath: returnPath,
+    });
+    const insertPayload: Record<string, unknown> = {
+      salon_id: salon.id,
+      name: parsed.name,
+      role: parsed.specialty ?? null,
+      phone: parsed.phone ?? null,
+      commission_rate_percent: parsed.commissionRatePercent,
+      is_active: parsed.isActive,
+    };
+
+    if (uploadedImagePath) {
+      insertPayload.image_path = uploadedImagePath;
+    }
     const insertResult = await supabase
       .from("staff_members")
-      .insert({
-        salon_id: salon.id,
-        name: parsed.name,
-        role: parsed.specialty ?? null,
-        phone: parsed.phone ?? null,
-        commission_rate_percent: parsed.commissionRatePercent,
-        is_active: parsed.isActive,
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
 
     if (insertResult.error || !insertResult.data?.id) {
+      if (uploadedImagePath) {
+        await supabase.storage.from("salon-assets").remove([uploadedImagePath]);
+      }
+      if (isMissingDatabaseColumnError(insertResult.error, "image_path")) {
+        fail(
+          returnPath,
+          "Atualize o banco com a migration da foto dos profissionais antes de enviar esse arquivo.",
+        );
+      }
       fail(
         returnPath,
         mapDatabaseError(insertResult.error) ??
@@ -1242,11 +1721,20 @@ export async function createManagementProfessionalAction(formData: FormData) {
       );
     }
 
-    await ensureActiveServiceAssignments({
-      supabase,
-      salonId: salon.id,
-      professionalId: insertResult.data.id,
-    });
+    if (shouldSyncServiceAssignments) {
+      await replaceProfessionalServiceAssignments({
+        clearExisting: false,
+        supabase,
+        professionalId: insertResult.data.id,
+        requestedServiceIds: parsed.serviceIds,
+      });
+    } else {
+      await ensureActiveServiceAssignments({
+        supabase,
+        salonId: salon.id,
+        professionalId: insertResult.data.id,
+      });
+    }
 
     if (parsed.isActive) {
       const notification = buildStaffAvailabilityNotification({
@@ -1265,12 +1753,17 @@ export async function createManagementProfessionalAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Profissional cadastrado com sucesso.");
-  } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return succeed(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível cadastrar o profissional."),
+      "Profissional cadastrado com sucesso.",
+    );
+  } catch (error) {
+    return handleActionFailure(
+      formData,
+      returnPath,
+      error,
+      "Não foi possível cadastrar o profissional.",
     );
   }
 }
@@ -1279,6 +1772,9 @@ export async function updateManagementProfessionalAction(formData: FormData) {
   const returnPath = getReturnPath(formData, PROFESSIONALS_PATH);
 
   try {
+    const shouldSyncServiceAssignments =
+      String(formData.get("serviceSelectionReady") ?? "") === "1";
+    const requestedServiceIds = readStringValues(formData, "serviceIds");
     const parsed = managementProfessionalUpdateSchema.parse({
       professionalId: formData.get("professionalId"),
       name: formData.get("name"),
@@ -1286,15 +1782,26 @@ export async function updateManagementProfessionalAction(formData: FormData) {
       phone: formData.get("phone"),
       commissionRatePercent: formData.get("commissionRatePercent"),
       isActive: flag(formData, "isActive"),
+      serviceIds: requestedServiceIds,
     });
     const { salon } = await requireOwnerSalon();
     const supabase = createClient() as any;
-    const currentProfessional = await supabase
+    const removeImage = flag(formData, "removeImage");
+    let currentProfessional = await supabase
       .from("staff_members")
-      .select("id, is_active")
+      .select("id, is_active, image_path")
       .eq("id", parsed.professionalId)
       .eq("salon_id", salon.id)
       .maybeSingle();
+
+    if (isMissingDatabaseColumnError(currentProfessional.error, "image_path")) {
+      currentProfessional = await supabase
+        .from("staff_members")
+        .select("id, is_active")
+        .eq("id", parsed.professionalId)
+        .eq("salon_id", salon.id)
+        .maybeSingle();
+    }
 
     if (currentProfessional.error || !currentProfessional.data?.id) {
       fail(returnPath, "Não foi possível localizar esse profissional.");
@@ -1317,26 +1824,95 @@ export async function updateManagementProfessionalAction(formData: FormData) {
       }
     }
 
+    if (shouldSyncServiceAssignments) {
+      const salonServices = await loadSalonServiceAssignments({
+        supabase,
+        salonId: salon.id,
+      });
+      const validServiceIds = new Set(
+        salonServices.map((service) => service.id),
+      );
+
+      if (
+        parsed.serviceIds.some((serviceId) => !validServiceIds.has(serviceId))
+      ) {
+        fail(returnPath, "Selecione apenas serviços do seu salão.");
+      }
+
+      await assertProfessionalServiceSelectionIsSafe({
+        supabase,
+        professionalId: parsed.professionalId,
+        requestedServiceIds: parsed.serviceIds,
+        salonId: salon.id,
+      });
+    }
+
+    const previousImagePath = currentProfessional.data.image_path ?? null;
+    const uploadedImagePath = await uploadManagementProfessionalImage({
+      formData,
+      field: "image",
+      salonId: salon.id,
+      supabase,
+      redirectPath: returnPath,
+    });
+    const nextImagePath = uploadedImagePath
+      ? uploadedImagePath
+      : removeImage
+        ? null
+        : previousImagePath;
+    const updatePayload: Record<string, unknown> = {
+      name: parsed.name,
+      role: parsed.specialty ?? null,
+      phone: parsed.phone ?? null,
+      commission_rate_percent: parsed.commissionRatePercent,
+      is_active: parsed.isActive,
+    };
+
+    if (uploadedImagePath || removeImage || previousImagePath) {
+      updatePayload.image_path = nextImagePath;
+    }
     const { error } = await supabase
       .from("staff_members")
-      .update({
-        name: parsed.name,
-        role: parsed.specialty ?? null,
-        phone: parsed.phone ?? null,
-        commission_rate_percent: parsed.commissionRatePercent,
-        is_active: parsed.isActive,
-      })
+      .update(updatePayload)
       .eq("id", parsed.professionalId)
       .eq("salon_id", salon.id);
 
     if (error) {
+      console.error(
+        "updateManagementProfessionalAction: failed to update professional",
+        {
+          salonId: salon.id,
+          professionalId: parsed.professionalId,
+          code: error.code ?? null,
+          message: error.message ?? null,
+        },
+      );
+      if (uploadedImagePath) {
+        await supabase.storage.from("salon-assets").remove([uploadedImagePath]);
+      }
+      if (isMissingDatabaseColumnError(error, "image_path")) {
+        fail(
+          returnPath,
+          "Atualize o banco com a migration da foto dos profissionais antes de salvar essa imagem.",
+        );
+      }
       fail(
         returnPath,
         mapDatabaseError(error) ?? "Não foi possível atualizar o profissional.",
       );
     }
 
-    if (parsed.isActive) {
+    if (previousImagePath && previousImagePath !== nextImagePath) {
+      await supabase.storage.from("salon-assets").remove([previousImagePath]);
+    }
+
+    if (shouldSyncServiceAssignments) {
+      await replaceProfessionalServiceAssignments({
+        supabase,
+        professionalId: parsed.professionalId,
+        requestedServiceIds: parsed.serviceIds,
+      });
+    } else if (parsed.isActive) {
       await ensureActiveServiceAssignments({
         supabase,
         salonId: salon.id,
@@ -1361,12 +1937,17 @@ export async function updateManagementProfessionalAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Profissional atualizado com sucesso.");
-  } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return succeed(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível atualizar o profissional."),
+      "Profissional atualizado com sucesso.",
+    );
+  } catch (error) {
+    return handleActionFailure(
+      formData,
+      returnPath,
+      error,
+      "Não foi possível atualizar o profissional.",
     );
   }
 }
@@ -1386,12 +1967,21 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
       typeof salon.name === "string" && salon.name.trim().length
         ? salon.name.trim()
         : "salão";
-    const professionalResult = await supabase
+    let professionalResult = await supabase
       .from("staff_members")
-      .select("id, name, is_default")
+      .select("id, name, is_default, image_path")
       .eq("id", parsed.id)
       .eq("salon_id", salon.id)
       .maybeSingle();
+
+    if (isMissingDatabaseColumnError(professionalResult.error, "image_path")) {
+      professionalResult = await supabase
+        .from("staff_members")
+        .select("id, name, is_default")
+        .eq("id", parsed.id)
+        .eq("salon_id", salon.id)
+        .maybeSingle();
+    }
 
     if (professionalResult.error || !professionalResult.data?.id) {
       fail(returnPath, "Não foi possível localizar esse profissional.");
@@ -1424,8 +2014,18 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
         );
       }
 
+      if (professionalResult.data.image_path) {
+        await supabase.storage
+          .from("salon-assets")
+          .remove([professionalResult.data.image_path]);
+      }
+
       invalidateManagementPages();
-      succeed(returnPath, "Profissional removido com sucesso.");
+      return succeed(
+        formData,
+        returnPath,
+        "Profissional removido com sucesso.",
+      );
     }
 
     const futureAppointmentsResult = await supabase
@@ -1446,8 +2046,8 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
       );
     }
 
-    const futureAppointments =
-      (futureAppointmentsResult.data ?? []) as FutureProfessionalAppointment[];
+    const futureAppointments = (futureAppointmentsResult.data ??
+      []) as FutureProfessionalAppointment[];
 
     if (!futureAppointments.length) {
       const [pauseResult, blocksResult] = await Promise.all([
@@ -1472,7 +2072,8 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
       }
 
       invalidateManagementPages();
-      succeed(
+      return succeed(
+        formData,
         returnPath,
         blocksResult.error
           ? `${professionalResult.data.name} saiu da equipe ativa e foi movido para o histórico. Alguns bloqueios futuros ainda precisam de revisão manual.`
@@ -1536,7 +2137,11 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
             typeof customer?.name === "string" && customer.name.trim().length
               ? customer.name.trim()
               : "Cliente",
-          customerPhone: sanitizePhone(customer?.phone ?? null),
+          customerPhone:
+            typeof customer?.phone === "string" &&
+            customer.phone.trim().length > 0
+              ? customer.phone.trim()
+              : null,
           keepsSameTime: slot.keepsSameTime,
           nextEndsAt: slot.nextEndsAt,
           nextStartAt: slot.nextStartAt,
@@ -1576,7 +2181,8 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
 
       const resolvedPlan = selectedPlan as AppointmentTransferPlan;
       const nextBusyWindow =
-        plannedBusyByProfessional.get(resolvedPlan.replacementStaffMemberId) ?? [];
+        plannedBusyByProfessional.get(resolvedPlan.replacementStaffMemberId) ??
+        [];
       nextBusyWindow.push({
         endsAt: resolvedPlan.nextEndsAt,
         startsAt: resolvedPlan.nextStartAt,
@@ -1644,19 +2250,24 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
           customer_id: plan.customerId,
           notification_type: "appointment_staff_reassigned",
           payload: {
-            appointmentId: plan.appointmentId,
-            keepSameTime: plan.keepsSameTime,
-            nextEndsAt: plan.nextEndsAt,
-            nextStartAt: plan.nextStartAt,
-            previousEndsAt: plan.previousEndsAt,
-            previousStartAt: plan.previousStartAt,
-            previousStatus: plan.previousStatus,
-            previousStaffMemberName: plan.previousStaffMemberName,
-            replacementStaffMemberId: plan.replacementStaffMemberId,
-            replacementStaffMemberName: plan.replacementStaffMemberName,
-            requiresCustomerConfirmation: true,
-            serviceName: plan.serviceName,
-            type: "appointment_staff_reassigned",
+            ...prepareCustomerNotificationPayload(
+              "appointment_staff_reassigned",
+              {
+                appointmentId: plan.appointmentId,
+                keepSameTime: plan.keepsSameTime,
+                nextEndsAt: plan.nextEndsAt,
+                nextStartAt: plan.nextStartAt,
+                previousEndsAt: plan.previousEndsAt,
+                previousStartAt: plan.previousStartAt,
+                previousStatus: plan.previousStatus,
+                previousStaffMemberName: plan.previousStaffMemberName,
+                replacementStaffMemberId: plan.replacementStaffMemberId,
+                replacementStaffMemberName: plan.replacementStaffMemberName,
+                requiresCustomerConfirmation: true,
+                serviceName: plan.serviceName,
+                type: "appointment_staff_reassigned",
+              },
+            ),
           },
           salon_id: salon.id,
           title: copy.title,
@@ -1675,54 +2286,20 @@ export async function deleteManagementProfessionalAction(formData: FormData) {
       }
     }
 
-    let whatsappFailures = 0;
-
-    for (const plan of transferPlans) {
-      if (!plan.customerPhone) {
-        continue;
-      }
-
-      const copy = buildCustomerReassignmentCopy({
-        nextStartAt: plan.nextStartAt,
-        previousStaffMemberName: plan.previousStaffMemberName,
-        replacementStaffMemberName: plan.replacementStaffMemberName,
-        salonName,
-        sameTime: plan.keepsSameTime,
-        serviceName: plan.serviceName,
-        timeZone,
-      });
-      const message = `Oi, ${plan.customerName}. ${copy.body}`;
-      const sendResult = await sendSalonWhatsAppTextMessage(
-        salon.id,
-        plan.customerPhone,
-        message,
-      );
-
-      if (!sendResult.ok) {
-        whatsappFailures += 1;
-      }
-    }
-
-    if (whatsappFailures > 0) {
-      warnings.push(
-        whatsappFailures === 1
-          ? "1 cliente não recebeu WhatsApp automático"
-          : `${whatsappFailures} clientes não receberam WhatsApp automático`,
-      );
-    }
-
     invalidateManagementPages();
-    succeed(
+    return succeed(
+      formData,
       returnPath,
       warnings.length
         ? `${professionalResult.data.name} saiu da equipe ativa e foi movido para o histórico. ${transferPlans.length} cliente(s) foram remanejados e precisam confirmar a troca. Atenção: ${warnings.join(" e ")}.`
         : `${professionalResult.data.name} saiu da equipe ativa e foi movido para o histórico. ${transferPlans.length} cliente(s) foram remanejados para os profissionais mais fortes disponíveis e receberam pedido de confirmação.`,
     );
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível excluir o profissional."),
+      error,
+      "Não foi possível excluir o profissional.",
     );
   }
 }
@@ -1737,6 +2314,7 @@ export async function createManagementAppointmentAction(formData: FormData) {
       serviceId: formData.get("serviceId"),
       date: formData.get("date"),
       time: formData.get("time"),
+      paymentPreference: formData.get("paymentPreference"),
       notes: formData.get("notes"),
     });
     const { salon } = await requireOwnerSalon();
@@ -1761,6 +2339,7 @@ export async function createManagementAppointmentAction(formData: FormData) {
       requested_date: scheduledAt.toISOString(),
       staff_member_uuid: parsed.professionalId,
       notes_input: parsed.notes ?? null,
+      payment_preference_input: parsed.paymentPreference ?? null,
     });
 
     if (createResult.error) {
@@ -1772,12 +2351,13 @@ export async function createManagementAppointmentAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Agendamento criado com sucesso.");
+    return succeed(formData, returnPath, "Agendamento criado com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível criar o agendamento."),
+      error,
+      "Não foi possível criar o agendamento.",
     );
   }
 }
@@ -1793,15 +2373,81 @@ export async function updateManagementAppointmentAction(formData: FormData) {
       serviceId: formData.get("serviceId"),
       date: formData.get("date"),
       time: formData.get("time"),
+      paymentPreference: formData.get("paymentPreference"),
       notes: formData.get("notes"),
     });
     const { salon } = await requireOwnerSalon();
     const supabase = createClient() as any;
+    const currentAppointmentResult = await supabase
+      .from("appointments")
+      .select(
+        "id, customer_id, service_id, staff_member_id, date, services(name), staff_members(name)",
+      )
+      .eq("id", parsed.appointmentId)
+      .eq("salon_id", salon.id)
+      .maybeSingle();
+
+    if (currentAppointmentResult.error || !currentAppointmentResult.data?.id) {
+      fail(returnPath, "Não foi possível localizar esse agendamento.");
+    }
+
     const scheduledAt = combineDateAndTimeToUtc(
       parsed.date,
       parsed.time,
       salon.timezone ?? "America/Sao_Paulo",
     );
+    const planReservation = await resolveAppointmentPlanReservation({
+      appointmentId: parsed.appointmentId,
+      salonId: salon.id,
+    });
+
+    if (
+      planReservation &&
+      currentAppointmentResult.data.customer_id &&
+      parsed.clientId !== currentAppointmentResult.data.customer_id
+    ) {
+      fail(
+        returnPath,
+        "Atendimentos cobertos por plano precisam manter a mesma cliente do app.",
+      );
+    }
+
+    if (
+      planReservation &&
+      parsed.professionalId !== currentAppointmentResult.data.staff_member_id
+    ) {
+      fail(
+        returnPath,
+        "Atendimentos cobertos por plano precisam manter o profissional reservado para o plano.",
+      );
+    }
+
+    if (
+      planReservation &&
+      currentAppointmentResult.data.service_id &&
+      parsed.serviceId !== currentAppointmentResult.data.service_id
+    ) {
+      fail(
+        returnPath,
+        "Atendimentos cobertos por plano precisam manter o serviço do plano.",
+      );
+    }
+
+    if (
+      planReservation &&
+      !isDateWithinMembershipPlanWindow({
+        membershipExpiresAt: planReservation.membershipExpiresAt,
+        membershipStartedAt: planReservation.membershipStartedAt,
+        scheduledAt,
+        timeZone: salon.timezone ?? "America/Sao_Paulo",
+      })
+    ) {
+      fail(
+        returnPath,
+        "Esse horário precisa continuar dentro da vigência do plano mensal.",
+      );
+    }
+
     const updateResult = await supabase.rpc("update_management_appointment", {
       appointment_uuid: parsed.appointmentId,
       customer_uuid: parsed.clientId,
@@ -1809,6 +2455,9 @@ export async function updateManagementAppointmentAction(formData: FormData) {
       requested_date: scheduledAt.toISOString(),
       staff_member_uuid: parsed.professionalId,
       notes_input: parsed.notes ?? null,
+      payment_preference_input: planReservation
+        ? null
+        : (parsed.paymentPreference ?? null),
     });
 
     if (updateResult.error) {
@@ -1819,13 +2468,136 @@ export async function updateManagementAppointmentAction(formData: FormData) {
       );
     }
 
+    if (planReservation) {
+      await neutralizeMembershipPlanAppointment({
+        appointmentId: parsed.appointmentId,
+      });
+    }
+
+    const updatedAppointmentResult = await supabase
+      .from("appointments")
+      .select(
+        "id, customer_id, service_id, staff_member_id, date, services(name), staff_members(name)",
+      )
+      .eq("id", parsed.appointmentId)
+      .eq("salon_id", salon.id)
+      .maybeSingle();
+
+    if (
+      !updatedAppointmentResult.error &&
+      updatedAppointmentResult.data?.customer_id
+    ) {
+      const previousAppointment = currentAppointmentResult.data;
+      const nextAppointment = updatedAppointmentResult.data;
+      const previousServiceName =
+        firstRelation(previousAppointment.services)?.name?.trim() ||
+        "seu atendimento";
+      const nextServiceName =
+        firstRelation(nextAppointment.services)?.name?.trim() ||
+        previousServiceName;
+      const previousStaffMemberName =
+        firstRelation(previousAppointment.staff_members)?.name?.trim() || null;
+      const nextStaffMemberName =
+        firstRelation(nextAppointment.staff_members)?.name?.trim() ||
+        previousStaffMemberName;
+      const appointmentChanged =
+        previousAppointment.date !== nextAppointment.date ||
+        previousServiceName !== nextServiceName ||
+        previousStaffMemberName !== nextStaffMemberName;
+
+      if (appointmentChanged) {
+        const notification = buildAppointmentRescheduledNotification({
+          appointmentId: parsed.appointmentId,
+          nextServiceName,
+          nextStaffMemberName,
+          nextStartsAt: nextAppointment.date,
+          previousStartsAt: previousAppointment.date,
+          previousStaffMemberName,
+          previousServiceName,
+        });
+
+        await queueCustomerNotification({
+          supabase,
+          salonId: salon.id,
+          customerId: nextAppointment.customer_id,
+          audience: "single_customer",
+          notificationType: notification.type,
+          title: notification.title,
+          body: notification.body,
+          payload: notification.payload,
+        });
+      }
+    }
+
     invalidateManagementPages();
-    succeed(returnPath, "Agendamento atualizado com sucesso.");
+    return succeed(formData, returnPath, "Agendamento atualizado com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível atualizar o agendamento."),
+      error,
+      "Não foi possível atualizar o agendamento.",
+    );
+  }
+}
+
+export async function reprocessManagementMembershipPlanAction(
+  formData: FormData,
+) {
+  const returnPath = getReturnPath(formData, APPOINTMENTS_PATH);
+
+  try {
+    const appointmentId = String(formData.get("appointmentId") ?? "").trim();
+    if (!appointmentId) {
+      fail(returnPath, "Não foi possível localizar o horário-base do plano.");
+    }
+
+    const { salon, user } = await requireOwnerSalon();
+    const supabase = createClient() as any;
+    const result = await reprocessMembershipPlanSeriesByAdmin({
+      actorUserId: user?.id ?? null,
+      appointmentId,
+      ownerSupabase: supabase,
+      requestPath: returnPath,
+      salonId: salon.id,
+    });
+
+    invalidateManagementPages();
+
+    if (result.status === "reprocessed") {
+      const skippedLabel =
+        result.skippedCount > 0
+          ? ` ${result.skippedCount} sessao(oes) ainda ficaram sem encaixe automatico.`
+          : "";
+      return respond(
+        formData,
+        returnPath,
+        `Série do plano reprocessada. ${result.scheduledCount} novo(s) horário(s) foram encaixados automaticamente.${skippedLabel}`,
+        "success",
+      );
+    }
+
+    if (result.status === "needs_manual_review") {
+      return respond(
+        formData,
+        returnPath,
+        `Nenhum novo horário entrou automaticamente. ${result.skippedCount} sessão(ões) ainda exigem ajuste manual no mesmo dia ou horário.`,
+        "info",
+      );
+    }
+
+    return respond(
+      formData,
+      returnPath,
+      "Nenhum ajuste era necessário. Essa série do plano já estava fixa ou sem novas sessões abertas.",
+      "info",
+    );
+  } catch (error) {
+    return handleActionFailure(
+      formData,
+      returnPath,
+      error,
+      "Não foi possível reprocessar a série do plano.",
     );
   }
 }
@@ -1841,11 +2613,13 @@ export async function updateManagementAppointmentStatusAction(
       status: formData.get("status"),
       cancellationReason: formData.get("cancellationReason"),
     });
-    const { salon } = await requireOwnerSalon();
+    const { salon, user } = await requireOwnerSalon();
     const supabase = createClient() as any;
     const appointmentResult = await supabase
       .from("appointments")
-      .select("id, date, ends_at, status")
+      .select(
+        "id, date, ends_at, status, customer_id, services(name), staff_members(name)",
+      )
       .eq("id", parsed.appointmentId)
       .eq("salon_id", salon.id)
       .maybeSingle();
@@ -1877,21 +2651,88 @@ export async function updateManagementAppointmentStatusAction(
       );
     }
 
-    if (parsed.status === "completed") {
-      const result = await supabase.rpc("mark_appointment_completed", {
-        appointment_uuid: parsed.appointmentId,
-      });
+    const planReservation = await resolveAppointmentPlanReservation({
+      appointmentId: parsed.appointmentId,
+      salonId: salon.id,
+    });
 
-      if (result.error) {
+    if (parsed.status === "completed") {
+      if (new Date(appointmentResult.data.ends_at) > new Date()) {
         fail(
           returnPath,
-          mapDatabaseError(result.error) ??
-            "Não foi possível concluir o atendimento.",
+          "Conclua o atendimento apenas depois do horário final.",
         );
       }
 
+      const completeResult = await supabase.rpc("mark_appointment_completed", {
+        appointment_uuid: parsed.appointmentId,
+      });
+
+      if (completeResult.error) {
+        const completeErrorMessage = completeResult.error.message ?? "";
+        const canFallbackComplete =
+          appointmentResult.data.status !== "cancelled" &&
+          appointmentResult.data.status !== "completed" &&
+          new Date(appointmentResult.data.ends_at) <= new Date() &&
+          !completeErrorMessage.includes("appointment_not_finished") &&
+          !completeErrorMessage.includes("appointment_already_completed") &&
+          !completeErrorMessage.includes(
+            "cancelled_appointment_cannot_be_completed",
+          ) &&
+          !completeErrorMessage.includes("appointment_not_found") &&
+          !completeErrorMessage.includes("unauthorized");
+
+        if (canFallbackComplete) {
+          const fallbackUpdate = await supabase
+            .from("appointments")
+            .update({
+              status: "completed",
+              completed_at: new Date().toISOString(),
+              cancelled_at: null,
+              cancelled_by: null,
+              cancellation_reason: null,
+            })
+            .eq("id", parsed.appointmentId)
+            .eq("salon_id", salon.id);
+
+          if (fallbackUpdate.error) {
+            fail(
+              returnPath,
+              mapDatabaseError(fallbackUpdate.error) ??
+                "Não foi possível concluir o atendimento.",
+            );
+          }
+        } else {
+          fail(
+            returnPath,
+            mapDatabaseError(completeResult.error) ??
+              "Não foi possível concluir o atendimento.",
+          );
+        }
+      }
+
+      if (planReservation) {
+        await finalizeAppointmentPlanReservation({
+          appointmentId: parsed.appointmentId,
+          ownerSupabase: supabase,
+          salonId: salon.id,
+        });
+      }
+
+      await notifyCustomerAboutManagementAppointmentStatus({
+        supabase,
+        salonId: salon.id,
+        appointmentId: parsed.appointmentId,
+        status: "completed",
+        appointmentContext: appointmentResult.data,
+      });
+
       invalidateManagementPages();
-      succeed(returnPath, "Atendimento concluído com sucesso.");
+      return succeed(
+        formData,
+        returnPath,
+        "Atendimento concluído com sucesso.",
+      );
     }
 
     if (parsed.status === "cancelled") {
@@ -1909,15 +2750,41 @@ export async function updateManagementAppointmentStatusAction(
         );
       }
 
+      if (planReservation) {
+        await cancelAppointmentPlanReservationByAdmin({
+          actorUserId: user?.id ?? null,
+          appointmentId: parsed.appointmentId,
+          requestPath: returnPath,
+          salonId: salon.id,
+        });
+      }
+
+      await notifyCustomerAboutManagementAppointmentStatus({
+        supabase,
+        salonId: salon.id,
+        appointmentId: parsed.appointmentId,
+        status: "cancelled",
+        cancellationReason:
+          parsed.cancellationReason ?? "Cancelado pelo salão.",
+        appointmentContext: appointmentResult.data,
+      });
+
       invalidateManagementPages();
-      succeed(returnPath, "Agendamento cancelado com sucesso.");
+      return succeed(
+        formData,
+        returnPath,
+        "Agendamento cancelado com sucesso.",
+      );
     }
 
     if (
       parsed.status === "no_show" &&
       new Date(appointmentResult.data.ends_at) > new Date()
     ) {
-      fail(returnPath, "Registre falta apenas depois do horário final do atendimento.");
+      fail(
+        returnPath,
+        "Registre falta apenas depois do horário final do atendimento.",
+      );
     }
 
     if (
@@ -1949,13 +2816,46 @@ export async function updateManagementAppointmentStatusAction(
       );
     }
 
+    if (parsed.status === "no_show" && planReservation) {
+      await finalizeAppointmentPlanReservation({
+        appointmentId: parsed.appointmentId,
+        ownerSupabase: supabase,
+        salonId: salon.id,
+      });
+    }
+
+    if (parsed.status === "confirmed") {
+      await notifyCustomerAboutManagementAppointmentStatus({
+        supabase,
+        salonId: salon.id,
+        appointmentId: parsed.appointmentId,
+        status: "confirmed",
+        appointmentContext: appointmentResult.data,
+      });
+    }
+
+    if (parsed.status === "no_show") {
+      await notifyCustomerAboutManagementAppointmentStatus({
+        supabase,
+        salonId: salon.id,
+        appointmentId: parsed.appointmentId,
+        status: "no_show",
+        appointmentContext: appointmentResult.data,
+      });
+    }
+
     invalidateManagementPages();
-    succeed(returnPath, "Status do agendamento atualizado com sucesso.");
-  } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return succeed(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível atualizar o status."),
+      "Status do agendamento atualizado com sucesso.",
+    );
+  } catch (error) {
+    return handleActionFailure(
+      formData,
+      returnPath,
+      error,
+      "Não foi possível atualizar o status.",
     );
   }
 }
@@ -1985,6 +2885,18 @@ export async function upsertManagementPaymentAction(formData: FormData) {
       fail(returnPath, "Selecione um atendimento válido.");
     }
 
+    const planReservation = await resolveAppointmentPlanReservation({
+      appointmentId: parsed.appointmentId,
+      salonId: salon.id,
+    });
+
+    if (planReservation) {
+      fail(
+        returnPath,
+        "Atendimentos cobertos por plano não recebem pagamento avulso.",
+      );
+    }
+
     if (appointmentResult.data.status !== "completed") {
       fail(
         returnPath,
@@ -1994,8 +2906,16 @@ export async function upsertManagementPaymentAction(formData: FormData) {
 
     const relatedService = firstRelation(
       appointmentResult.data.services as
-        | { id?: string | null; name?: string | null; price?: number | string | null }
-        | Array<{ id?: string | null; name?: string | null; price?: number | string | null }>
+        | {
+            id?: string | null;
+            name?: string | null;
+            price?: number | string | null;
+          }
+        | Array<{
+            id?: string | null;
+            name?: string | null;
+            price?: number | string | null;
+          }>
         | null,
     );
     const submittedAmount = Number(parsed.amount);
@@ -2057,17 +2977,19 @@ export async function upsertManagementPaymentAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(
+    return succeed(
+      formData,
       returnPath,
       paymentIntegrity.hasMismatch
         ? "Pagamento salvo com o valor oficial do atendimento."
         : "Pagamento salvo com sucesso.",
     );
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível registrar o pagamento."),
+      error,
+      "Não foi possível registrar o pagamento.",
     );
   }
 }
@@ -2095,12 +3017,13 @@ export async function deleteManagementPaymentAction(formData: FormData) {
     }
 
     invalidateManagementPages();
-    succeed(returnPath, "Pagamento removido com sucesso.");
+    return succeed(formData, returnPath, "Pagamento removido com sucesso.");
   } catch (error) {
-    rethrowIfRedirectError(error);
-    fail(
+    return handleActionFailure(
+      formData,
       returnPath,
-      firstMessage(error, "Não foi possível remover o pagamento."),
+      error,
+      "Não foi possível remover o pagamento.",
     );
   }
 }

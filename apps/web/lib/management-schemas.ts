@@ -1,6 +1,12 @@
 import { z } from "zod";
 
+import { APPOINTMENT_PAYMENT_PREFERENCE_OPTIONS } from "@/lib/appointmentPaymentPreference";
+
 function emptyToUndefined(value: unknown) {
+  if (value == null) {
+    return undefined;
+  }
+
   if (typeof value !== "string") {
     return value;
   }
@@ -25,6 +31,19 @@ function optionalStringField(max: number, label: string) {
     z
       .string()
       .max(max, `${label} pode ter no máximo ${max} caracteres.`)
+      .optional(),
+  );
+}
+
+function optionalStringFieldRange(min: number, max: number, label: string) {
+  return z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .refine(
+        (value) => value.length >= min && value.length <= max,
+        `${label} precisa ter entre ${min} e ${max} caracteres.`,
+      )
       .optional(),
   );
 }
@@ -56,6 +75,9 @@ const uuidField = (label: string) =>
     z.string().uuid(`${label} inválido.`),
   );
 
+const uuidArrayField = (label: string) =>
+  z.array(z.string().uuid(`${label} inválido.`)).default([]);
+
 const optionalEmailField = z.preprocess(
   emptyToUndefined,
   z
@@ -70,6 +92,21 @@ const optionalDateField = z.preprocess(
   z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida.")
+    .optional(),
+);
+
+const optionalAppointmentPaymentPreferenceField = z.preprocess(
+  emptyToUndefined,
+  z
+    .enum(
+      APPOINTMENT_PAYMENT_PREFERENCE_OPTIONS.map((item) => item.value) as [
+        (typeof APPOINTMENT_PAYMENT_PREFERENCE_OPTIONS)[number]["value"],
+        ...(typeof APPOINTMENT_PAYMENT_PREFERENCE_OPTIONS)[number]["value"][],
+      ],
+      {
+        message: "Selecione uma forma preferida de pagamento válida.",
+      },
+    )
     .optional(),
 );
 
@@ -106,7 +143,6 @@ export const managementServiceUpdateSchema = managementServiceSchema.extend({
 export const managementClientSchema = z.object({
   name: stringField(2, 120, "Nome do cliente"),
   phone: optionalStringField(30, "Telefone"),
-  whatsappPhone: optionalStringField(30, "WhatsApp"),
   email: optionalEmailField,
   birthDate: optionalDateField,
   notes: optionalStringField(2000, "Observações"),
@@ -119,31 +155,31 @@ export const managementClientUpdateSchema = managementClientSchema.extend({
 export const managementProfessionalSchema = z.object({
   name: stringField(2, 120, "Nome do profissional"),
   specialty: optionalStringField(120, "Especialidade"),
-  phone: optionalStringField(30, "Telefone"),
+  phone: optionalStringFieldRange(8, 30, "Telefone"),
   commissionRatePercent: percentageField("Comissão"),
   isActive: z.boolean().default(true),
+  serviceIds: uuidArrayField("Serviço"),
 });
 
-export const managementProfessionalUpdateSchema = managementProfessionalSchema.extend({
-  professionalId: uuidField("Profissional"),
-});
+export const managementProfessionalUpdateSchema =
+  managementProfessionalSchema.extend({
+    professionalId: uuidField("Profissional"),
+  });
 
 export const managementAppointmentSchema = z.object({
   clientId: uuidField("Cliente"),
   professionalId: uuidField("Profissional"),
   serviceId: uuidField("Serviço"),
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida."),
-  time: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/, "Informe um horário válido."),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida."),
+  time: z.string().regex(/^\d{2}:\d{2}$/, "Informe um horário válido."),
+  paymentPreference: optionalAppointmentPaymentPreferenceField,
   notes: optionalStringField(1000, "Observações"),
 });
 
-export const managementAppointmentUpdateSchema = managementAppointmentSchema.extend({
-  appointmentId: uuidField("Agendamento"),
-});
+export const managementAppointmentUpdateSchema =
+  managementAppointmentSchema.extend({
+    appointmentId: uuidField("Agendamento"),
+  });
 
 export const managementAppointmentStatusSchema = z.object({
   appointmentId: uuidField("Agendamento"),
@@ -158,9 +194,7 @@ export const managementPaymentSchema = z.object({
   paidAtDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida."),
-  paidAtTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/, "Informe um horário válido."),
+  paidAtTime: z.string().regex(/^\d{2}:\d{2}$/, "Informe um horário válido."),
   notes: optionalStringField(500, "Observação"),
 });
 

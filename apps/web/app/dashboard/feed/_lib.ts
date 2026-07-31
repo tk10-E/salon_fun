@@ -4,6 +4,7 @@ export type FeedPageData = {
     postsCount: number;
     promotionsCount: number;
     reelsCount: number;
+    storiesCount: number;
     transformationsCount: number;
   };
   posts: Array<{
@@ -28,6 +29,17 @@ export type FeedPageData = {
     title: string;
     visualCategory: "portfolio" | "transformation" | "promotion";
     visualCategoryLabel: string;
+  }>;
+  stories: Array<{
+    caption: string | null;
+    createdAt: string;
+    expiresAt: string;
+    id: string;
+    imageUrl: string;
+    serviceName: string | null;
+    staffMemberName: string | null;
+    staffMemberRole: string | null;
+    title: string;
   }>;
   services: Array<{
     id: string;

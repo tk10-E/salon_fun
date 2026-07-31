@@ -242,10 +242,12 @@ export async function generateClientAppImageVariants(params: {
             fit: "cover",
             position: "centre",
           })
+          .sharpen()
           .jpeg({
             quality: 86,
             mozjpeg: true,
             progressive: true,
+            chromaSubsampling: "4:4:4",
           })
           .toBuffer();
 

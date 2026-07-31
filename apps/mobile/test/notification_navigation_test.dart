@@ -74,6 +74,67 @@ void main() {
     );
   });
 
+  test('uses payload context when explore is too generic', () {
+    expect(
+      resolveNotificationTargetTab(
+        notificationType: 'service_published',
+        payload: const <String, dynamic>{
+          'ctaTarget': 'explore',
+          'serviceId': 'service-1',
+        },
+      ),
+      1,
+    );
+    expect(
+      resolveNotificationTargetTab(
+        notificationType: 'client_app_updated',
+        payload: const <String, dynamic>{
+          'ctaTarget': 'explore',
+          'changedAreas': 'vitrine',
+        },
+      ),
+      2,
+    );
+    expect(
+      resolveNotificationTargetTab(
+        notificationType: 'membership_request_approved',
+        payload: const <String, dynamic>{
+          'offerId': 'offer-1',
+          'offerKind': 'membership',
+        },
+      ),
+      4,
+    );
+    expect(
+      resolveNotificationTargetTab(
+        notificationType: 'membership_request_paid',
+        payload: const <String, dynamic>{
+          'membershipId': 'membership-1',
+          'ctaTarget': 'profile',
+        },
+      ),
+      4,
+    );
+  });
+
+  test('accepts explicit inbox flags and localized targets', () {
+    final agendaIntent = resolveNotificationNavigationIntent(
+      notificationType: 'panel_update',
+      payload: const <String, dynamic>{'ctaTarget': 'agenda'},
+    );
+    final inboxIntent = resolveNotificationNavigationIntent(
+      notificationType: 'panel_update',
+      payload: const <String, dynamic>{
+        'targetTabIndex': '0',
+        'openInbox': 'true',
+      },
+    );
+
+    expect(agendaIntent.targetTabIndex, 1);
+    expect(inboxIntent.targetTabIndex, 0);
+    expect(inboxIntent.openInbox, isTrue);
+  });
+
   test('roundtrips foreground notification payloads', () {
     final encoded = encodeNotificationPayload(const <String, dynamic>{
       'type': 'appointment_confirmed',

@@ -62,11 +62,11 @@ export async function GET(
       featuredServices: landingData.featuredServices,
       activeOffers: landingData.activeOffers,
       recentPosts: landingData.recentPosts,
+      recentReviews: landingData.recentReviews,
       centralCampaigns: landingData.centralCampaigns,
       stats: landingData.stats,
       links: {
         whatsappUrl: buildWhatsAppUrl(landingData.preview.whatsappPhone),
-        instagramUrl: landingData.preview.instagramUrl,
         mapUrl: landingData.preview.mapUrl,
         supportUrl: landingData.preview.supportUrl,
         supportEmail: landingData.preview.supportEmail,
@@ -87,11 +87,7 @@ export async function GET(
   );
 }
 
-function buildWhatsAppUrl(phone: string | null) {
-  if (!phone) {
-    return null;
-  }
-
-  const digits = phone.replace(/\D/g, "");
+function buildWhatsAppUrl(phone: string | null | undefined) {
+  const digits = String(phone ?? "").replace(/\D+/g, "");
   return digits ? `https://wa.me/${digits}` : null;
 }

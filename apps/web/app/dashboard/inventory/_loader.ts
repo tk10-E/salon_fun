@@ -1,4 +1,5 @@
 import { requireOwnerSalon } from "@/lib/auth";
+import { getLocalDateKey, getUtcRangeForLocalMonth } from "@/lib/management";
 import { createClient } from "@/lib/supabase/server";
 
 import type { InventoryPageData } from "./_lib";
@@ -34,7 +35,14 @@ type InventoryMovementRow = {
 
 type StoreOrderItemRow = {
   id: string;
+  line_total_amount: number | string;
+  product_brand_snapshot: string | null;
+  product_id: string | null;
+  product_image_path: string | null;
   product_name_snapshot: string;
+  quantity: number;
+  unit_price_snapshot: number | string;
+  unit_snapshot: string;
 };
 
 type StoreOrderRow = {
@@ -102,12 +110,65 @@ function isVisibleInStorefront(product: {
   );
 }
 
+function mapStoreOrders(rows: StoreOrderRow[]) {
+  return rows.map((order) => {
+    const customer = firstRelation(order.customers);
+
+    return {
+      id: order.id,
+      orderNumber: order.order_number,
+      status: order.status,
+      totalItems: order.total_items,
+      subtotalAmount: order.subtotal_amount,
+      notes: order.notes,
+      cancellationReason: order.cancellation_reason,
+      createdAt: order.created_at,
+      confirmedAt: order.confirmed_at,
+      readyAt: order.ready_at,
+      completedAt: order.completed_at,
+      cancelledAt: order.cancelled_at,
+      orderMoment:
+        order.cancelled_at ??
+        order.completed_at ??
+        order.ready_at ??
+        order.confirmed_at ??
+        order.created_at,
+      customerName: customer?.name ?? "Cliente",
+      customerPhone: customer?.phone?.trim() || null,
+      items: (order.customer_product_order_items ?? []).map((item) => ({
+        id: item.id,
+        lineTotalAmount: item.line_total_amount,
+        productBrandSnapshot: item.product_brand_snapshot,
+        productId: item.product_id,
+        productImagePath: item.product_image_path,
+        productNameSnapshot: item.product_name_snapshot,
+        quantity: item.quantity,
+        unitPriceSnapshot: item.unit_price_snapshot,
+        unitSnapshot: item.unit_snapshot,
+      })),
+    };
+  });
+}
+
 export async function loadInventoryPageData(): Promise<InventoryPageData> {
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
+  const timeZone = salon.timezone ?? "America/Sao_Paulo";
+  const currentMonthKey = getLocalDateKey(new Date(), timeZone).slice(0, 7);
+  const currentMonthRange = getUtcRangeForLocalMonth(currentMonthKey, timeZone);
+  const currentMonthLabel = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    timeZone,
+    year: "numeric",
+  }).format(new Date(currentMonthRange.start));
 
-  const [inventoryProductsResult, storeOrdersResult, inventoryMovementsResult, staffOptionsResult] =
-    await Promise.all([
+  const [
+    inventoryProductsResult,
+    storeOrdersResult,
+    analyticsStoreOrdersResult,
+    inventoryMovementsResult,
+    staffOptionsResult,
+  ] = await Promise.all([
       supabase
         .from("inventory_products")
         .select(
@@ -119,11 +180,22 @@ export async function loadInventoryPageData(): Promise<InventoryPageData> {
       supabase
         .from("customer_product_orders")
         .select(
-          "id, order_number, status, total_items, subtotal_amount, notes, cancellation_reason, created_at, confirmed_at, ready_at, completed_at, cancelled_at, customers(name, phone), customer_product_order_items(id, product_name_snapshot)",
+          "id, order_number, status, total_items, subtotal_amount, notes, cancellation_reason, created_at, confirmed_at, ready_at, completed_at, cancelled_at, customers(name, phone), customer_product_order_items(id, product_name_snapshot, product_brand_snapshot, product_image_path, product_id, quantity, unit_price_snapshot, line_total_amount, unit_snapshot)",
         )
         .eq("salon_id", salon.id)
         .order("created_at", { ascending: false })
         .limit(12),
+      supabase
+        .from("customer_product_orders")
+        .select(
+          "id, order_number, status, total_items, subtotal_amount, notes, cancellation_reason, created_at, confirmed_at, ready_at, completed_at, cancelled_at, customers(name, phone), customer_product_order_items(id, product_name_snapshot, product_brand_snapshot, product_image_path, product_id, quantity, unit_price_snapshot, line_total_amount, unit_snapshot)",
+        )
+        .eq("salon_id", salon.id)
+        .eq("status", "completed")
+        .gte("completed_at", currentMonthRange.start.toISOString())
+        .lt("completed_at", currentMonthRange.end.toISOString())
+        .order("completed_at", { ascending: false })
+        .limit(500),
       supabase
         .from("inventory_movements")
         .select(
@@ -170,37 +242,9 @@ export async function loadInventoryPageData(): Promise<InventoryPageData> {
       return left.name.localeCompare(right.name);
     });
 
-  const storeOrders = ((storeOrdersResult.data ?? []) as StoreOrderRow[]).map(
-    (order) => {
-      const customer = firstRelation(order.customers);
-
-      return {
-        id: order.id,
-        orderNumber: order.order_number,
-        status: order.status,
-        totalItems: order.total_items,
-        subtotalAmount: order.subtotal_amount,
-        notes: order.notes,
-        cancellationReason: order.cancellation_reason,
-        createdAt: order.created_at,
-        confirmedAt: order.confirmed_at,
-        readyAt: order.ready_at,
-        completedAt: order.completed_at,
-        cancelledAt: order.cancelled_at,
-        orderMoment:
-          order.cancelled_at ??
-          order.completed_at ??
-          order.ready_at ??
-          order.confirmed_at ??
-          order.created_at,
-        customerName: customer?.name ?? "Cliente",
-        customerPhone: customer?.phone?.trim() || null,
-        items: (order.customer_product_order_items ?? []).map((item) => ({
-          id: item.id,
-          productNameSnapshot: item.product_name_snapshot,
-        })),
-      };
-    },
+  const storeOrders = mapStoreOrders((storeOrdersResult.data ?? []) as StoreOrderRow[]);
+  const completedStoreOrders = mapStoreOrders(
+    (analyticsStoreOrdersResult.data ?? []) as StoreOrderRow[],
   );
 
   const inventoryMovements = ((inventoryMovementsResult.data ?? []) as InventoryMovementRow[]).map(
@@ -234,11 +278,14 @@ export async function loadInventoryPageData(): Promise<InventoryPageData> {
   const hiddenStoreProductsCount = inventoryProducts.filter(
     (product) => product.isActive && !isVisibleInStorefront(product),
   ).length;
-  const storeRevenue = storeOrders
-    .filter((order) => order.status === "completed")
+  const storeRevenue = completedStoreOrders
     .reduce((sum, order) => sum + Number(order.subtotalAmount ?? 0), 0);
 
   return {
+    analytics: {
+      completedStoreOrders,
+      periodLabel: currentMonthLabel,
+    },
     header: {
       hiddenStoreProductsCount,
       openStoreOrders,

@@ -24,22 +24,32 @@ class CustomerNotificationsController extends ChangeNotifier {
   List<AppNotificationItem> _remoteNotifications = const [];
 
   RealtimeChannel? _appointmentsChannel;
+  RealtimeChannel? _customerProfileChannel;
+  RealtimeChannel? _salonProfileChannel;
   RealtimeChannel? _postsChannel;
-  RealtimeChannel? _servicesChannel;
+  RealtimeChannel? _birthdayCampaignChannel;  RealtimeChannel? _servicesChannel;
+  RealtimeChannel? _staffMembersChannel;
+  RealtimeChannel? _staffBlocksChannel;
   RealtimeChannel? _offersChannel;
   RealtimeChannel? _referralsChannel;
+  RealtimeChannel? _referralEventsChannel;
+  RealtimeChannel? _referralRewardUnlocksChannel;
   RealtimeChannel? _loyaltyProgramsChannel;
   RealtimeChannel? _loyaltyTransactionsChannel;
   RealtimeChannel? _membershipsChannel;
+  RealtimeChannel? _membershipRequestsChannel;
+  RealtimeChannel? _membershipRedemptionsChannel;
   RealtimeChannel? _notificationsChannel;
   RealtimeChannel? _inventoryChannel;
   RealtimeChannel? _ordersChannel;
   RealtimeChannel? _orderItemsChannel;
 
   Timer? _landingRefreshDebounce;
+  Timer? _sessionRefreshDebounce;
   bool _refreshingNotifications = false;
   bool _loadingInbox = false;
   bool _isDisposed = false;
+  Future<void>? _rebindInFlight;
   int _homeRevision = 0;
   int _agendaRevision = 0;
   int _feedRevision = 0;
@@ -52,6 +62,11 @@ class CustomerNotificationsController extends ChangeNotifier {
   int get storeRevision => _storeRevision;
   int get benefitsRevision => _benefitsRevision;
   bool get isLoadingInbox => _loadingInbox;
+
+  void touchHomeRevision() {
+    _homeRevision += 1;
+    _safeNotify();
+  }
 
   List<AppNotificationItem> get notifications {
     final merged = <AppNotificationItem>[
@@ -70,13 +85,30 @@ class CustomerNotificationsController extends ChangeNotifier {
     _session = session;
 
     if (hasSameSession) {
-      await refreshNotifications();
+      await refreshSyncBindings(reloadInbox: true);
       return;
     }
 
     await _unsubscribeAll();
     await refreshNotifications();
     _subscribeRealtime();
+  }
+
+  Future<void> refreshSyncBindings({bool reloadInbox = true}) async {
+    final inFlight = _rebindInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _refreshSyncBindingsNow(reloadInbox: reloadInbox);
+    _rebindInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_rebindInFlight, future)) {
+        _rebindInFlight = null;
+      }
+    }
   }
 
   Future<void> refreshNotifications() async {
@@ -93,6 +125,10 @@ class CustomerNotificationsController extends ChangeNotifier {
         customerId: session.customer.id,
         salonId: session.customer.salonId,
       );
+    } catch (error) {
+      _debugLog(
+        'CustomerNotificationsController.refresh failed: ${error.toString()}',
+      );
     } finally {
       _refreshingNotifications = false;
       _loadingInbox = false;
@@ -101,23 +137,29 @@ class CustomerNotificationsController extends ChangeNotifier {
   }
 
   Future<void> markAllRead() async {
-    final unreadRemoteIds = _remoteNotifications
-        .where((item) => !item.isRead)
-        .map((item) => item.id)
-        .toList();
+    try {
+      final unreadRemoteIds = _remoteNotifications
+          .where((item) => !item.isRead)
+          .map((item) => item.id)
+          .toList();
 
-    if (unreadRemoteIds.isNotEmpty) {
-      await notificationRepository.markAsRead(unreadRemoteIds);
-    }
+      if (unreadRemoteIds.isNotEmpty) {
+        await notificationRepository.markAsRead(unreadRemoteIds);
+      }
 
-    for (var index = 0; index < _localNotifications.length; index += 1) {
-      _localNotifications[index] = _localNotifications[index].copyWith(
-        isRead: true,
+      for (var index = 0; index < _localNotifications.length; index += 1) {
+        _localNotifications[index] = _localNotifications[index].copyWith(
+          isRead: true,
+        );
+      }
+
+      await refreshNotifications();
+      _safeNotify();
+    } catch (error) {
+      _debugLog(
+        'CustomerNotificationsController.markAllRead failed: ${error.toString()}',
       );
     }
-
-    await refreshNotifications();
-    _safeNotify();
   }
 
   Future<void> markNotificationRead(AppNotificationItem item) async {
@@ -135,7 +177,31 @@ class CustomerNotificationsController extends ChangeNotifier {
     }
 
     if (!item.isRead) {
-      await notificationRepository.markAsRead([item.id]);
+      try {
+        await notificationRepository.markAsRead([item.id]);
+        await refreshNotifications();
+      } catch (error) {
+        _debugLog(
+          'CustomerNotificationsController.markNotificationRead failed: ${error.toString()}',
+        );
+      }
+    }
+  }
+
+  Future<void> _refreshSyncBindingsNow({required bool reloadInbox}) async {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+
+    if (client != null) {
+      await _unsubscribeAll();
+      if (_session == session) {
+        _subscribeRealtime();
+      }
+    }
+
+    if (reloadInbox) {
       await refreshNotifications();
     }
   }
@@ -169,21 +235,73 @@ class CustomerNotificationsController extends ChangeNotifier {
         )
         .subscribe();
 
+    _customerProfileChannel = safeClient
+        .channel('customer-profile-$customerId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'customers',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: customerId,
+          ),
+          callback: (_) {
+            _benefitsRevision += 1;
+            _homeRevision += 1;
+            _queueSessionRefresh();
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _salonProfileChannel = safeClient
+        .channel('customer-salon-profile-$salonId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'salons',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: salonId,
+          ),
+          callback: (_) {
+            _homeRevision += 1;
+            _queueLandingRefresh();
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
     _postsChannel = safeClient
         .channel('customer-posts-$salonId')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'salon_posts',
+          callback: (_) {
+            _feedRevision += 1;
+            _homeRevision += 1;
+            _queueLandingRefresh();
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _birthdayCampaignChannel = safeClient
+        .channel('customer-birthday-campaign-$salonId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'salon_birthday_campaigns',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'salon_id',
             value: salonId,
           ),
           callback: (_) {
-            _feedRevision += 1;
             _homeRevision += 1;
-            _queueLandingRefresh();
             _safeNotify();
           },
         )
@@ -204,6 +322,44 @@ class CustomerNotificationsController extends ChangeNotifier {
             _agendaRevision += 1;
             _homeRevision += 1;
             _queueLandingRefresh();
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _staffMembersChannel = safeClient
+        .channel('customer-staff-members-$salonId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'staff_members',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'salon_id',
+            value: salonId,
+          ),
+          callback: (_) {
+            _agendaRevision += 1;
+            _homeRevision += 1;
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _staffBlocksChannel = safeClient
+        .channel('customer-staff-blocks-$salonId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'staff_blocks',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'salon_id',
+            value: salonId,
+          ),
+          callback: (_) {
+            _agendaRevision += 1;
+            _homeRevision += 1;
             _safeNotify();
           },
         )
@@ -243,6 +399,44 @@ class CustomerNotificationsController extends ChangeNotifier {
             _benefitsRevision += 1;
             _homeRevision += 1;
             _queueLandingRefresh();
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _referralEventsChannel = safeClient
+        .channel('customer-referral-events-$customerId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'salon_referral_events',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'referrer_customer_id',
+            value: customerId,
+          ),
+          callback: (_) {
+            _benefitsRevision += 1;
+            _homeRevision += 1;
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _referralRewardUnlocksChannel = safeClient
+        .channel('customer-referral-rewards-$customerId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'salon_referral_reward_unlocks',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'referrer_customer_id',
+            value: customerId,
+          ),
+          callback: (_) {
+            _benefitsRevision += 1;
+            _homeRevision += 1;
             _safeNotify();
           },
         )
@@ -293,6 +487,44 @@ class CustomerNotificationsController extends ChangeNotifier {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'customer_memberships',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'customer_id',
+            value: customerId,
+          ),
+          callback: (_) {
+            _benefitsRevision += 1;
+            _homeRevision += 1;
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _membershipRequestsChannel = safeClient
+        .channel('customer-membership-requests-$customerId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'customer_membership_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'customer_id',
+            value: customerId,
+          ),
+          callback: (_) {
+            _benefitsRevision += 1;
+            _homeRevision += 1;
+            _safeNotify();
+          },
+        )
+        .subscribe();
+
+    _membershipRedemptionsChannel = safeClient
+        .channel('customer-membership-redemptions-$customerId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'customer_membership_redemptions',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'customer_id',
@@ -401,6 +633,13 @@ class CustomerNotificationsController extends ChangeNotifier {
     });
   }
 
+  void _queueSessionRefresh() {
+    _sessionRefreshDebounce?.cancel();
+    _sessionRefreshDebounce = Timer(const Duration(milliseconds: 420), () {
+      unawaited(sessionController.refreshAuthenticatedSession());
+    });
+  }
+
   String _buildOrderStatusMessage(dynamic rawStatus) {
     final status = (rawStatus?.toString() ?? '').trim().toLowerCase();
     switch (status) {
@@ -423,6 +662,34 @@ class CustomerNotificationsController extends ChangeNotifier {
         type.contains('benefit') ||
         type.contains('membership')) {
       _benefitsRevision += 1;
+      _homeRevision += 1;
+      _queueLandingRefresh();
+      _safeNotify();
+      return;
+    }
+
+    if (type.contains('service') ||
+        type.contains('offer') ||
+        type.contains('promotion') ||
+        type.contains('campaign') ||
+        type.contains('client_app') ||
+        type.contains('branding') ||        type.contains('feed') ||
+        type.contains('post') ||
+        type.contains('store') ||
+        type.contains('product') ||
+        type.contains('vitrine')) {
+      if (type.contains('service')) {
+        _agendaRevision += 1;
+      }
+      if (type.contains('feed') ||
+          type.contains('post')) {
+        _feedRevision += 1;
+      }
+      if (type.contains('store') ||
+          type.contains('product') ||
+          type.contains('vitrine')) {
+        _storeRevision += 1;
+      }
       _homeRevision += 1;
       _queueLandingRefresh();
       _safeNotify();
@@ -486,6 +753,7 @@ class CustomerNotificationsController extends ChangeNotifier {
 
   Future<void> _unsubscribeAll() async {
     _landingRefreshDebounce?.cancel();
+    _sessionRefreshDebounce?.cancel();
     final safeClient = client;
     if (safeClient == null) {
       return;
@@ -493,13 +761,21 @@ class CustomerNotificationsController extends ChangeNotifier {
 
     final channels = <RealtimeChannel?>[
       _appointmentsChannel,
+      _customerProfileChannel,
+      _salonProfileChannel,
       _postsChannel,
-      _servicesChannel,
+      _birthdayCampaignChannel,      _servicesChannel,
+      _staffMembersChannel,
+      _staffBlocksChannel,
       _offersChannel,
       _referralsChannel,
+      _referralEventsChannel,
+      _referralRewardUnlocksChannel,
       _loyaltyProgramsChannel,
       _loyaltyTransactionsChannel,
       _membershipsChannel,
+      _membershipRequestsChannel,
+      _membershipRedemptionsChannel,
       _notificationsChannel,
       _inventoryChannel,
       _ordersChannel,
@@ -513,13 +789,21 @@ class CustomerNotificationsController extends ChangeNotifier {
     }
 
     _appointmentsChannel = null;
+    _customerProfileChannel = null;
+    _salonProfileChannel = null;
     _postsChannel = null;
-    _servicesChannel = null;
+    _birthdayCampaignChannel = null;    _servicesChannel = null;
+    _staffMembersChannel = null;
+    _staffBlocksChannel = null;
     _offersChannel = null;
     _referralsChannel = null;
+    _referralEventsChannel = null;
+    _referralRewardUnlocksChannel = null;
     _loyaltyProgramsChannel = null;
     _loyaltyTransactionsChannel = null;
     _membershipsChannel = null;
+    _membershipRequestsChannel = null;
+    _membershipRedemptionsChannel = null;
     _notificationsChannel = null;
     _inventoryChannel = null;
     _ordersChannel = null;
@@ -530,6 +814,7 @@ class CustomerNotificationsController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _landingRefreshDebounce?.cancel();
+    _sessionRefreshDebounce?.cancel();
     unawaited(_unsubscribeAll());
     super.dispose();
   }
@@ -539,5 +824,11 @@ class CustomerNotificationsController extends ChangeNotifier {
       return;
     }
     notifyListeners();
+  }
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
+    }
   }
 }

@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 
+import { type BillingStatus } from "@/lib/billing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   mapStripeSubscriptionStatus,
@@ -20,34 +21,107 @@ function addGracePeriodIso(days = 3) {
 async function findExistingSubscription(args: {
   providerSubscriptionId?: string | null;
   providerCustomerId?: string | null;
-}): Promise<{ salon_id: string; plan_id: string; activated_at: string | null } | null> {
+}): Promise<{
+  salon_id: string;
+  plan_id: string;
+  activated_at: string | null;
+  status: BillingStatus;
+  grace_ends_at: string | null;
+  provider_customer_id: string | null;
+  provider_subscription_id: string | null;
+} | null> {
   const admin = createAdminClient() as any;
 
   if (args.providerSubscriptionId) {
     const { data } = await admin
       .from("salon_subscriptions")
-      .select("salon_id, plan_id, activated_at")
+      .select("salon_id, plan_id, activated_at, status, grace_ends_at, provider_customer_id, provider_subscription_id")
       .eq("provider_subscription_id", args.providerSubscriptionId)
       .maybeSingle();
 
     if (data) {
-      return data as { salon_id: string; plan_id: string; activated_at: string | null };
+      return data as {
+        salon_id: string;
+        plan_id: string;
+        activated_at: string | null;
+        status: BillingStatus;
+        grace_ends_at: string | null;
+        provider_customer_id: string | null;
+        provider_subscription_id: string | null;
+      };
     }
   }
 
   if (args.providerCustomerId) {
     const { data } = await admin
       .from("salon_subscriptions")
-      .select("salon_id, plan_id, activated_at")
+      .select("salon_id, plan_id, activated_at, status, grace_ends_at, provider_customer_id, provider_subscription_id")
       .eq("provider_customer_id", args.providerCustomerId)
       .maybeSingle();
 
     if (data) {
-      return data as { salon_id: string; plan_id: string; activated_at: string | null };
+      return data as {
+        salon_id: string;
+        plan_id: string;
+        activated_at: string | null;
+        status: BillingStatus;
+        grace_ends_at: string | null;
+        provider_customer_id: string | null;
+        provider_subscription_id: string | null;
+      };
     }
   }
 
   return null;
+}
+
+async function findSalonSubscription(salonId: string): Promise<{
+  salon_id: string;
+  plan_id: string;
+  activated_at: string | null;
+  status: BillingStatus;
+  grace_ends_at: string | null;
+  provider_customer_id: string | null;
+  provider_subscription_id: string | null;
+} | null> {
+  const admin = createAdminClient() as any;
+  const { data } = await admin
+    .from("salon_subscriptions")
+    .select("salon_id, plan_id, activated_at, status, grace_ends_at, provider_customer_id, provider_subscription_id")
+    .eq("salon_id", salonId)
+    .maybeSingle();
+
+  if (!data) {
+    return null;
+  }
+
+  return data as {
+    salon_id: string;
+    plan_id: string;
+    activated_at: string | null;
+    status: BillingStatus;
+    grace_ends_at: string | null;
+    provider_customer_id: string | null;
+    provider_subscription_id: string | null;
+  };
+}
+
+function resolveGraceEndsAt(args: {
+  existingSubscription: Awaited<ReturnType<typeof findExistingSubscription>>;
+  mappedStatus: BillingStatus;
+}) {
+  if (args.mappedStatus !== "past_due") {
+    return null;
+  }
+
+  if (
+    args.existingSubscription?.status === "past_due" &&
+    args.existingSubscription.grace_ends_at
+  ) {
+    return args.existingSubscription.grace_ends_at;
+  }
+
+  return addGracePeriodIso();
 }
 
 export async function syncStripeSubscriptionRecord(
@@ -63,6 +137,9 @@ export async function syncStripeSubscriptionRecord(
     typeof subscription.customer === "string"
       ? subscription.customer
       : subscription.customer?.id ?? context?.providerCustomerId ?? null;
+  if (!providerCustomerId) {
+    throw new Error(`A assinatura Stripe ${subscription.id} não trouxe customer válido.`);
+  }
   const firstItem = subscription.items.data[0];
   const priceId = firstItem?.price?.id ?? null;
   const resolvedPricePlan = priceId ? resolvePlanIdFromStripePriceId(priceId) : null;
@@ -80,10 +157,27 @@ export async function syncStripeSubscriptionRecord(
     throw new Error(`Não foi possível resolver o salão da assinatura Stripe ${subscription.id}.`);
   }
 
+  if (existingSubscription && existingSubscription.salon_id !== salonId) {
+    throw new Error(
+      `A assinatura Stripe ${subscription.id} já está vinculada a outro salão.`,
+    );
+  }
+
+  const salonScopedSubscription = await findSalonSubscription(salonId);
+
+  if (
+    salonScopedSubscription?.provider_customer_id &&
+    salonScopedSubscription.provider_customer_id !== providerCustomerId
+  ) {
+    throw new Error(
+      `O salão ${salonId} já possui outro customer Stripe vinculado.`,
+    );
+  }
+
   const planId =
+    resolvedPricePlan?.planId ??
     context?.planId ??
     nonEmptyString(subscription.metadata?.planId) ??
-    resolvedPricePlan?.planId ??
     existingSubscription?.plan_id ??
     "starter";
   const billingInterval =
@@ -110,7 +204,7 @@ export async function syncStripeSubscriptionRecord(
       trial_ends_at: trialEnd,
       current_period_started_at: currentPeriodStart,
       current_period_ends_at: currentPeriodEnd,
-      grace_ends_at: mappedStatus === "past_due" ? addGracePeriodIso() : null,
+      grace_ends_at: resolveGraceEndsAt({ existingSubscription, mappedStatus }),
       activated_at: activatedAt,
       canceled_at: mappedStatus === "canceled" ? canceledAt ?? new Date().toISOString() : null,
       payment_provider: "stripe",

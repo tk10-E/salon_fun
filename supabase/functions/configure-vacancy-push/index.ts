@@ -483,8 +483,9 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "missing_db_url" }, 500);
   }
 
-  const functionUrl = new URL("/functions/v1/send-vacancy-push", request.url)
-    .toString();
+  const functionUrl = new URL("/functions/v1/send-vacancy-push", request.url);
+  functionUrl.protocol = "https:";
+  const pushFunctionUrl = functionUrl.toString();
 
   const sql = postgres(dbUrl, {
     prepare: false,
@@ -496,7 +497,7 @@ Deno.serve(async (request: Request) => {
     await sql`
       insert into private.runtime_config (key, value)
       values
-        ('vacancy_push_function_url', ${functionUrl}),
+        ('vacancy_push_function_url', ${pushFunctionUrl}),
         ('vacancy_push_webhook_secret', ${expectedSecret})
       on conflict (key)
       do update set

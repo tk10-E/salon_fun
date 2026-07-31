@@ -143,9 +143,15 @@ describe("service actions", () => {
       }),
     );
     expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
-      expect.arrayContaining(["/dashboard", "/dashboard/services", "/dashboard/team"]),
+      expect.arrayContaining([
+        "/dashboard",
+        "/dashboard/gestao/servicos",
+        "/dashboard/gestao/profissionais",
+      ]),
     );
-    expect(location).toBe("/dashboard/services?message=Servi%C3%A7o+adicionado+com+sucesso.&tone=success");
+    expect(location).toBe(
+      "/dashboard/gestao/servicos?message=Servi%C3%A7o+adicionado+com+sucesso.&tone=success",
+    );
   });
 
   it("blocks service deletion when linked appointments or posts exist", async () => {
@@ -214,7 +220,7 @@ describe("service actions", () => {
     );
 
     expect(deleteService).not.toHaveBeenCalled();
-    expect(location).toContain("/dashboard/services?");
+    expect(location).toContain("/dashboard/gestao/servicos?");
     expect(location).toContain("N%C3%A3o+foi+poss%C3%ADvel+excluir+Corte+premium");
   });
 });

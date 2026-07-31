@@ -7,7 +7,7 @@ class AppEnvironment {
     required this.supabaseUrl,
     required this.supabaseAnonKey,
     required this.authBridgeUrl,
-    required this.defaultJoinCode,
+    required this.googleServerClientId,    required this.defaultJoinCode,
     required this.firebaseApiKey,
     required this.firebaseProjectId,
     required this.firebaseMessagingSenderId,
@@ -18,6 +18,8 @@ class AppEnvironment {
     required this.firebaseAuthDomain,
     required this.firebaseStorageBucket,
     required this.firebaseIosBundleId,
+    required this.enableAdMobAds,
+    required this.adMobBannerAdUnitId,
   });
 
   factory AppEnvironment.fromEnvironment() {
@@ -35,6 +37,10 @@ class AppEnvironment {
       authBridgeUrl: _normalizeUrl(
         const String.fromEnvironment('AUTH_BRIDGE_URL', defaultValue: ''),
       ),
+      googleServerClientId: const String.fromEnvironment(
+        'GOOGLE_SERVER_CLIENT_ID',
+        defaultValue: '',
+      ).trim(),
       defaultJoinCode: const String.fromEnvironment(
         'DEFAULT_SALON_JOIN_CODE',
         defaultValue: '',
@@ -79,6 +85,13 @@ class AppEnvironment {
         'FIREBASE_IOS_BUNDLE_ID',
         defaultValue: '',
       ).trim(),
+      enableAdMobAds: _parseBoolEnvironment(
+        const String.fromEnvironment('ENABLE_ADMOB_ADS', defaultValue: 'false'),
+      ),
+      adMobBannerAdUnitId: const String.fromEnvironment(
+        'ADMOB_BANNER_AD_UNIT_ID',
+        defaultValue: '',
+      ).trim(),
     );
   }
 
@@ -88,7 +101,7 @@ class AppEnvironment {
       supabaseUrl: '',
       supabaseAnonKey: '',
       authBridgeUrl: '',
-      defaultJoinCode: '',
+      googleServerClientId: '',      defaultJoinCode: '',
       firebaseApiKey: '',
       firebaseProjectId: '',
       firebaseMessagingSenderId: '',
@@ -99,6 +112,8 @@ class AppEnvironment {
       firebaseAuthDomain: '',
       firebaseStorageBucket: '',
       firebaseIosBundleId: '',
+      enableAdMobAds: false,
+      adMobBannerAdUnitId: '',
     );
   }
 
@@ -106,7 +121,7 @@ class AppEnvironment {
   final String supabaseUrl;
   final String supabaseAnonKey;
   final String authBridgeUrl;
-  final String defaultJoinCode;
+  final String googleServerClientId;  final String defaultJoinCode;
   final String firebaseApiKey;
   final String firebaseProjectId;
   final String firebaseMessagingSenderId;
@@ -117,13 +132,33 @@ class AppEnvironment {
   final String firebaseAuthDomain;
   final String firebaseStorageBucket;
   final String firebaseIosBundleId;
+  final bool enableAdMobAds;
+  final String adMobBannerAdUnitId;
 
   bool get hasPublicApi => apiBaseUrl.isNotEmpty;
+
+  String? get defaultPrivacyPolicyUrl =>
+      publicApiUri('/privacidade')?.toString();
+
+  String? get defaultTermsOfUseUrl => publicApiUri('/termos')?.toString();
+
+  String? get defaultSupportUrl => publicApiUri('/suporte')?.toString();
+
+  String? get defaultAccountDeletionUrl =>
+      publicApiUri('/excluir-conta')?.toString();
 
   bool get hasSupabase => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   bool get hasFirebase =>
       firebaseOptions != null || canBootstrapFirebaseNatively;
+
+  bool get canShowAdMobBanner {
+    if (kIsWeb || !enableAdMobAds || adMobBannerAdUnitId.isEmpty) {
+      return false;
+    }
+
+    return defaultTargetPlatform == TargetPlatform.android;
+  }
 
   bool get hasFirebaseBaseConfig =>
       firebaseApiKey.isNotEmpty &&
@@ -131,7 +166,7 @@ class AppEnvironment {
       firebaseMessagingSenderId.isNotEmpty;
 
   bool get canBootstrapFirebaseNatively {
-    if (!hasFirebaseBaseConfig || kIsWeb) {
+    if (kIsWeb || _hasExplicitFirebaseRuntimeConfig) {
       return false;
     }
 
@@ -192,21 +227,70 @@ class AppEnvironment {
 
   String _resolveFirebaseAppId() {
     if (kIsWeb) {
-      return firebaseWebAppId.isNotEmpty ? firebaseWebAppId : firebaseAppId;
+      return _selectCompatibleFirebaseAppId(
+        primary: firebaseWebAppId,
+        fallback: firebaseAppId,
+        platformMarker: 'web',
+      );
     }
 
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return firebaseAndroidAppId.isNotEmpty
-            ? firebaseAndroidAppId
-            : firebaseAppId;
+        return _selectCompatibleFirebaseAppId(
+          primary: firebaseAndroidAppId,
+          fallback: firebaseAppId,
+          platformMarker: 'android',
+        );
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
-        return firebaseIosAppId.isNotEmpty ? firebaseIosAppId : firebaseAppId;
+        return _selectCompatibleFirebaseAppId(
+          primary: firebaseIosAppId,
+          fallback: firebaseAppId,
+          platformMarker: 'ios',
+        );
       default:
         return firebaseAppId;
     }
   }
+
+  bool get _hasExplicitFirebaseRuntimeConfig =>
+      firebaseApiKey.isNotEmpty ||
+      firebaseProjectId.isNotEmpty ||
+      firebaseMessagingSenderId.isNotEmpty ||
+      firebaseAppId.isNotEmpty ||
+      firebaseAndroidAppId.isNotEmpty ||
+      firebaseIosAppId.isNotEmpty ||
+      firebaseWebAppId.isNotEmpty ||
+      firebaseAuthDomain.isNotEmpty ||
+      firebaseStorageBucket.isNotEmpty ||
+      firebaseIosBundleId.isNotEmpty;
+
+  String _selectCompatibleFirebaseAppId({
+    required String primary,
+    required String fallback,
+    required String platformMarker,
+  }) {
+    final primaryValue = primary.trim();
+    if (_matchesFirebasePlatformAppId(primaryValue, platformMarker)) {
+      return primaryValue;
+    }
+
+    final fallbackValue = fallback.trim();
+    if (_matchesFirebasePlatformAppId(fallbackValue, platformMarker)) {
+      return fallbackValue;
+    }
+
+    return '';
+  }
+}
+
+bool _matchesFirebasePlatformAppId(String value, String platformMarker) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) {
+    return false;
+  }
+
+  return normalized.contains(':$platformMarker:');
 }
 
 String _normalizeUrl(String value) {
@@ -218,4 +302,16 @@ String _normalizeUrl(String value) {
   return normalized.endsWith('/')
       ? normalized.substring(0, normalized.length - 1)
       : normalized;
+}
+
+bool _parseBoolEnvironment(String value) {
+  switch (value.trim().toLowerCase()) {
+    case '1':
+    case 'true':
+    case 'yes':
+    case 'on':
+      return true;
+    default:
+      return false;
+  }
 }

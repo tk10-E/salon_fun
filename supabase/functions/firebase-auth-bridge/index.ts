@@ -29,9 +29,7 @@ const EXPECTED_FIREBASE_API_KEYS = expectedFirebaseApiKeysRaw
       .map((value) => value.trim())
       .filter(Boolean)
   : [];
-const TRUSTED_FEDERATED_PROVIDERS = new Set([
-  "facebook.com",
-  "google.com",
+const TRUSTED_FEDERATED_PROVIDERS = new Set([  "google.com",
   "apple.com",
 ]);
 

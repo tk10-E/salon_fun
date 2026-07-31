@@ -60,9 +60,7 @@ export type ClientAppHubData = {
   activeMembershipsCount: number;
   recentNotificationsCount: number;
   activePushTokensCount: number;
-  recentPushTokensCount: number;
-  instagramConnectionCount: number;
-  commercialDataHealth: BenefitsOverviewDiagnostics;
+  recentPushTokensCount: number;  commercialDataHealth: BenefitsOverviewDiagnostics;
   growthAutomationSettings: BenefitsOverviewData["growthAutomationSettings"];
   growthAutomationOverview: BenefitsOverviewData["growthAutomationOverview"];
   loyaltyOverview: BenefitsOverviewData["loyaltyOverview"];

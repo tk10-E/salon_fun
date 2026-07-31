@@ -72,38 +72,39 @@ export async function optimizeUploadedImage(
     .sharpen();
 
   if (context === "product" && hasAlpha) {
-    const buffer = await resizedImage
+    const { data, info } = await resizedImage
       .png({
         compressionLevel: 9,
         progressive: true,
         palette: true,
       })
-      .toBuffer();
+      .toBuffer({ resolveWithObject: true });
 
     return {
-      buffer,
+      buffer: data,
       contentType: "image/png",
       extension: "png",
-      width,
-      height,
+      width: info.width,
+      height: info.height,
     };
   }
 
-  const buffer = await resizedImage
+  const { data, info } = await resizedImage
     .flatten({ background: "#ffffff" })
     .jpeg({
       quality: preset.serverQuality,
       mozjpeg: true,
       progressive: true,
+      chromaSubsampling: "4:4:4",
     })
-    .toBuffer();
+    .toBuffer({ resolveWithObject: true });
 
   return {
-    buffer,
+    buffer: data,
     contentType: "image/jpeg",
     extension: "jpg",
-    width,
-    height,
+    width: info.width,
+    height: info.height,
   };
 }
 

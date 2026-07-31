@@ -1,0 +1,1569 @@
+.page {
+  display: grid;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(288px, 320px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.shellMonthFocus {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shellMonthFocus .sidebar {
+  display: none;
+}
+
+.shellMonthFocus .mainStage {
+  gap: 24px;
+}
+
+.shellMonthFocus .monthCard {
+  padding: 24px 24px 28px;
+  border-radius: 28px;
+}
+
+.shellMonthFocus .monthHeaderCopy h2 {
+  font-size: clamp(2rem, 3.3vw, 2.72rem);
+  line-height: 0.98;
+}
+
+.shellMonthFocus .weekdayRow span {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 0.86rem;
+}
+
+.shellMonthFocus .monthGrid {
+  grid-auto-rows: minmax(164px, 1fr);
+}
+
+.shellMonthFocus .dayCell {
+  min-height: 164px;
+  padding: 10px 12px 12px;
+}
+
+.shellMonthFocus .calendarChip,
+.shellMonthFocus .calendarOverflow {
+  min-height: 46px;
+  max-width: calc(100% - 2px);
+  padding: 0 12px;
+}
+
+.shellMonthFocus .calendarChip::after {
+  left: 54%;
+  width: 170px;
+}
+
+.shellMonthFocus .calendarChipPrimary {
+  max-width: 228px;
+  font-size: 0.76rem;
+}
+
+.shellMonthFocus .calendarChipMeta {
+  max-width: 176px;
+  font-size: 0.62rem;
+}
+
+.shellMonthFocus .calendarChipAvatar,
+.shellMonthFocus .calendarChipAvatarMuted,
+.shellMonthFocus .calendarChipAvatarImage {
+  width: 30px;
+  height: 30px;
+}
+
+.shellMonthFocus .calendarChipAvatar,
+.shellMonthFocus .calendarChipAvatarMuted {
+  font-size: 0.62rem;
+}
+
+.shellMonthFocus .calendarChipAvatarMuted {
+  margin-left: -12px;
+}
+
+.sidebar {
+  position: sticky;
+  top: 28px;
+  display: grid;
+  gap: 18px;
+}
+
+.brandCard,
+.sidebarPanel,
+.monthCard,
+.statCard,
+.weekBoard,
+.dayBoard,
+.dayCard {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+  box-shadow: 0 20px 52px rgba(15, 23, 42, 0.08);
+}
+
+.brandCard,
+.sidebarPanel,
+.monthCard,
+.weekBoard,
+.dayBoard,
+.dayCard {
+  padding: 22px;
+}
+
+.monthCard,
+.statsGrid,
+.weekBoard,
+.dayBoard {
+  scroll-margin-top: 112px;
+}
+
+.brandCard {
+  display: grid;
+  gap: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #fff8f3 100%);
+  color: #141923;
+}
+
+.brandHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logoMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #18213b 0%, #101729 100%);
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.brandTitleGroup {
+  display: grid;
+  gap: 2px;
+}
+
+.brandFoot {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #111827;
+  color: #fff;
+}
+
+.brandFoot span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.brandEyebrow,
+.panelEyebrow,
+.stageEyebrow,
+.detailEyebrow {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brandEyebrow {
+  color: #f25f16;
+}
+
+.brandTitleGroup strong,
+.brandFoot strong {
+  font-size: 1.32rem;
+  line-height: 1.05;
+}
+
+.brandTitleGroup p,
+.brandFoot p,
+.brandCard p {
+  margin: 0;
+  color: #5f687b;
+}
+
+.sidebarPrimaryLink {
+  min-height: 54px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #18213b 0%, #101729 100%);
+  color: #fff;
+  box-shadow: 0 18px 34px rgba(16, 23, 41, 0.22);
+  text-decoration: none;
+}
+
+.sidebarPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panelHeaderAction {
+  flex-shrink: 0;
+}
+
+.panelHeader h2,
+.monthHeaderCopy h2,
+.dayBoardHeader h2 {
+  margin: 0;
+  color: #141923;
+}
+
+.panelHeader p,
+.mainHeader p,
+.monthHeaderCopy p,
+.dayBoardHeader p,
+.sidebarPanel p,
+.statCard p,
+.dayIdentityCopy p,
+.dayInfoPanel p,
+.inlineNote {
+  margin: 0;
+  color: #586175;
+  line-height: 1.55;
+}
+
+.panelEyebrow,
+.stageEyebrow,
+.detailEyebrow {
+  color: #f25f16;
+}
+
+.miniMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dayFocusPreview {
+  display: grid;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+.dayFocusPreviewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dayFocusPreviewHeader strong {
+  color: #141923;
+  font-size: 0.92rem;
+}
+
+.dayFocusPreviewList {
+  display: grid;
+  gap: 8px;
+}
+
+.staleQueue {
+  display: grid;
+  gap: 10px;
+}
+
+.staleMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.staleMetric {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef3f9 100%);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.staleMetric span {
+  color: #71798a;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.staleMetric strong {
+  color: #10131a;
+  font-size: 1.02rem;
+}
+
+.staleCard {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #f5f7fb;
+}
+
+.staleCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.staleCardHeader strong {
+  color: #141923;
+  font-size: 0.92rem;
+}
+
+.staleCardHeader span {
+  color: #7c4a28;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.staleCard p {
+  margin: 0;
+  color: #586175;
+}
+
+.staleSignalRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.staleSignal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(16, 23, 41, 0.06);
+  color: #243044;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.staleActions {
+  flex-wrap: wrap;
+}
+
+.dayFocusPreviewItem {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f7f9fc 0%, #f3f6fb 100%);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+  text-decoration: none;
+}
+
+.dayFocusPreviewItem strong {
+  color: #141923;
+  font-size: 0.92rem;
+}
+
+.dayFocusPreviewItem p {
+  margin: 0;
+  color: #586175;
+}
+
+.dayFocusPreviewTime {
+  color: #7c4a28;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.miniMetrics article,
+.statCard,
+.dayInfoPanel {
+  display: grid;
+  gap: 8px;
+}
+
+.miniMetrics article,
+.dayInfoPanel {
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f2f5fa 100%);
+}
+
+.miniMetrics span,
+.statCard span,
+.dayInfoPanel span,
+.dayCellTop small {
+  color: #71798a;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.miniMetrics strong,
+.statCard strong {
+  color: #10131a;
+  font-size: 1.05rem;
+}
+
+.mainStage {
+  display: grid;
+  gap: 18px;
+}
+
+.mainHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.mainHeaderCopy {
+  display: grid;
+  gap: 8px;
+  max-width: 34rem;
+}
+
+.mainHeaderTools {
+  display: grid;
+  justify-items: end;
+  gap: 14px;
+}
+
+.mainActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.mainPrimaryLink {
+  min-height: 48px;
+  padding-inline: 20px;
+  border-radius: 18px;
+  text-decoration: none;
+}
+
+.mainSecondaryLink {
+  min-height: 48px;
+  padding-inline: 18px;
+}
+
+.alertButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  color: #141923;
+  font-weight: 700;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.mainHeader h1 {
+  margin: 4px 0 6px;
+  color: #10131a;
+  font-size: clamp(2rem, 3.2vw, 2.85rem);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+}
+
+.viewSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f5f7fb 0%, #edf1f6 100%);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.viewSwitchLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  color: #5f687b;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.viewSwitchActive {
+  background: #141923;
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(20, 25, 35, 0.16);
+}
+
+.calendarModeTabs {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 48px;
+  padding: 0 6px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.calendarModeTab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #617088;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.calendarModeTabActive {
+  color: #12223f;
+  font-weight: 700;
+}
+
+.calendarModeTabActive::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(90deg, #2f6bff 0%, #4f86ff 100%);
+}
+
+.filterBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.56fr) minmax(300px, 0.88fr);
+  grid-template-areas:
+    "month summary"
+    "form summary";
+  gap: 16px;
+  align-items: start;
+}
+
+.filterBarCalendarFocus {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "month"
+    "form";
+}
+
+.filterForm,
+.filterSummary,
+.supportGrid > article {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+  box-shadow: 0 20px 52px rgba(15, 23, 42, 0.08);
+}
+
+.filterForm {
+  grid-area: form;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 20px 22px;
+  align-items: start;
+  align-content: start;
+}
+
+.filterField {
+  display: grid;
+  gap: 8px;
+}
+
+.filterField input,
+.filterField select {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: #141923;
+  font: inherit;
+}
+
+.filterField input:focus,
+.filterField select:focus {
+  outline: none;
+  border-color: rgba(242, 95, 22, 0.32);
+  box-shadow:
+    0 0 0 4px rgba(242, 95, 22, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.filterField label {
+  color: #71798a;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.filterActions {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  justify-content: start;
+  align-content: start;
+  gap: 10px;
+}
+
+.filterSummary {
+  grid-area: summary;
+  display: grid;
+  gap: 12px;
+  padding: 20px 22px;
+  align-content: start;
+  background:
+    radial-gradient(circle at top right, rgba(242, 95, 22, 0.08), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+}
+
+.filterSummaryInline {
+  grid-column: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.filterSummary strong {
+  color: #10131a;
+  font-size: 1.14rem;
+  line-height: 1.25;
+}
+
+.filterSummary p {
+  margin: 0;
+  color: #586175;
+  line-height: 1.55;
+}
+
+.filterSignals {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.monthCard {
+  grid-area: month;
+  display: grid;
+  gap: 14px;
+  padding: 20px 20px 22px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+}
+
+.monthControlRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.monthRangeControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  color: #4f5b70;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.monthControlNav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: #2a3448;
+  text-decoration: none;
+}
+
+.monthTodayLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  color: #2a3448;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.monthHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.monthHeaderCopy {
+  text-align: left;
+}
+
+.monthKicker {
+  display: inline-flex;
+  margin-top: 2px;
+  color: #7b8598;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.monthNav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  color: #141923;
+  font-size: 1.35rem;
+  text-decoration: none;
+}
+
+.monthSignals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.signalPill {
+  display: grid;
+  gap: 4px;
+  min-height: 78px;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f5f7fb 0%, #eef2f7 100%);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.signalPill strong {
+  color: #141923;
+  font-size: 0.82rem;
+}
+
+.signalPill span {
+  color: #5a6170;
+  font-size: 0.92rem;
+}
+
+.weekdayRow {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  overflow: hidden;
+}
+
+.weekdayRow span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 36px;
+  padding: 0 12px;
+  background: #fff;
+  color: #6b7383;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.weekdayRow span:last-child {
+  border-right: 0;
+}
+
+.monthGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  overflow: hidden;
+}
+
+.dayCell {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 132px;
+  padding: 8px 10px 10px;
+  background: #fff;
+  color: inherit;
+  text-decoration: none;
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
+  overflow: visible;
+}
+
+.dayCell:hover {
+  transform: none;
+  background: #fbfdff;
+}
+
+.dayCell:nth-child(7n) {
+  border-right: 0;
+}
+
+.dayCellMuted {
+  background: #fafbfc;
+  opacity: 0.82;
+}
+
+.dayCellSelected {
+  background:
+    linear-gradient(180deg, rgba(242, 95, 22, 0.08) 0, rgba(242, 95, 22, 0.08) 4px, #fff 4px, #fff 100%);
+}
+
+.dayCellTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dayCellTop span {
+  color: #141923;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.dayCellBody {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.calendarChip,
+.calendarOverflow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 6px);
+  min-height: 40px;
+  padding: 0 11px;
+  border-radius: 999px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+}
+
+.calendarChip::after {
+  content: "";
+  position: absolute;
+  left: 65%;
+  top: 0;
+  width: 130px;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--chip-trail, rgba(99, 102, 241, 0.2));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.calendarChipPrimary,
+.calendarChipMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.calendarChipPrimary {
+  max-width: 184px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.calendarChipMeta {
+  max-width: 138px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+}
+
+.calendarChipAvatars {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.calendarChipAvatar,
+.calendarChipAvatarMuted {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+}
+
+.calendarChipAvatarImage {
+  width: 26px;
+  height: 26px;
+  display: block;
+  border-radius: 999px;
+  object-fit: cover;
+  object-position: center 20%;
+  image-orientation: from-image;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+}
+
+.calendarChipAvatarImageSecondary {
+  margin-left: -11px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.calendarChipAvatar {
+  background: rgba(255, 255, 255, 0.95);
+  color: #172033;
+}
+
+.calendarChipAvatarMuted {
+  margin-left: -11px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #2c3c59;
+}
+
+.calendarChipConfirmed {
+  background: var(--chip-bg, linear-gradient(135deg, #2f6bff 0%, #4f86ff 100%));
+  color: #fff;
+}
+
+.calendarChipPending {
+  background: var(--chip-bg, linear-gradient(135deg, #f8d067 0%, #f4c233 100%));
+  color: #fff;
+}
+
+.calendarChipCompleted {
+  background: var(--chip-bg, linear-gradient(135deg, #1ea95b 0%, #2dbd6e 100%));
+  color: #fff;
+}
+
+.calendarChipCancelled {
+  background: var(--chip-bg, linear-gradient(135deg, #ff5b54 0%, #ff7c77 100%));
+  color: #fff;
+}
+
+.calendarChipSoft {
+  background: var(--chip-bg, linear-gradient(135deg, #7b869a 0%, #98a2b3 100%));
+  color: #fff;
+}
+
+.calendarToneBlue {
+  --chip-bg: linear-gradient(135deg, #2d7eff 0%, #3f94ff 100%);
+  --chip-trail: rgba(90, 157, 255, 0.25);
+}
+
+.calendarToneGold {
+  --chip-bg: linear-gradient(135deg, #f1b84b 0%, #f0c66c 100%);
+  --chip-trail: rgba(240, 198, 108, 0.28);
+}
+
+.calendarToneViolet {
+  --chip-bg: linear-gradient(135deg, #7a5dff 0%, #8f6dff 100%);
+  --chip-trail: rgba(155, 124, 255, 0.24);
+}
+
+.calendarToneCoral {
+  --chip-bg: linear-gradient(135deg, #f45f7d 0%, #f7748e 100%);
+  --chip-trail: rgba(247, 116, 142, 0.24);
+}
+
+.calendarToneCyan {
+  --chip-bg: linear-gradient(135deg, #21b7d2 0%, #34c8df 100%);
+  --chip-trail: rgba(70, 206, 224, 0.22);
+}
+
+.calendarOverflow {
+  background: #eef2f7;
+  color: #5d6577;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.supportGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statCard {
+  min-height: 118px;
+  padding: 18px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at bottom right, rgba(242, 95, 22, 0.05), transparent 32%),
+    linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+}
+
+.dayBoard {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 28px;
+}
+
+.weekBoard {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.weekList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.weekDayCard {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #f8fafc;
+}
+
+.weekDayCardSelected {
+  background:
+    linear-gradient(180deg, rgba(242, 95, 22, 0.1) 0, rgba(242, 95, 22, 0.1) 4px, #fff 4px, #fff 100%);
+  border-color: rgba(242, 95, 22, 0.18);
+}
+
+.weekDayHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.weekDayHeader strong {
+  color: #10131a;
+  font-size: 0.96rem;
+}
+
+.weekDayBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #5d6577;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.weekAppointmentList {
+  display: grid;
+  gap: 8px;
+}
+
+.weekAppointmentItem {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #fff;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.weekAppointmentItem strong {
+  color: #10131a;
+  font-size: 0.88rem;
+}
+
+.weekAppointmentItem span {
+  color: #5d6577;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.weekAppointmentItem small,
+.weekEmpty {
+  color: #71798a;
+  font-size: 0.78rem;
+}
+
+.dayBoardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dayBoardBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: #fff1e8;
+  color: #d35718;
+  font-weight: 800;
+}
+
+.dayList {
+  display: grid;
+  gap: 16px;
+}
+
+.dayCard {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, rgba(242, 95, 22, 0.05), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+}
+
+.dayCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.dayIdentity {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.dayAvatar {
+  width: 88px;
+  height: 88px;
+  display: block;
+  border-radius: 22px;
+  object-fit: cover;
+  object-position: center 20%;
+  image-orientation: from-image;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+  flex-shrink: 0;
+}
+
+.dayAvatarFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #1d2436 0%, #2a3247 100%);
+  color: #fff;
+  font-weight: 800;
+}
+
+.dayIdentityCopy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dayIdentityEyebrow {
+  color: #7c4a28;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dayIdentityCopy strong {
+  color: #10131a;
+  font-size: 1.06rem;
+}
+
+.dayIdentityHighlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.dayIdentityHighlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #fff5ef;
+  color: #7c4a28;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.dayIdentityAvatar {
+  width: 24px;
+  height: 24px;
+  display: block;
+  border-radius: 999px;
+  object-fit: cover;
+  object-position: center 18%;
+  image-orientation: from-image;
+  border: 1px solid rgba(124, 74, 40, 0.22);
+}
+
+.dayIdentityAvatarFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(124, 74, 40, 0.15);
+  color: #7c4a28;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.dayStatusStack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.dayMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dayMeta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f7f8fb;
+  color: #5d6577;
+  font-size: 0.82rem;
+}
+
+.dayInfoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dayInfoPanel strong {
+  color: #111827;
+  font-size: 1rem;
+}
+
+.inlineNote {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fff5ef;
+  color: #6f4422;
+}
+
+.actionRow {
+  align-items: center;
+}
+
+.inlineDetails {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  padding-top: 14px;
+}
+
+.inlineDetails summary {
+  cursor: pointer;
+  color: #141923;
+  font-weight: 700;
+}
+
+.inlineDetails[open] {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 1280px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filterBar {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "month"
+      "form"
+      "summary";
+  }
+
+  .filterBarCalendarFocus {
+    grid-template-areas:
+      "month"
+      "form";
+  }
+}
+
+@media (max-width: 960px) {
+  .monthGrid,
+  .dayInfoGrid,
+  .statsGrid,
+  .supportGrid,
+  .filterForm,
+  .filterSignals,
+  .filterSummaryInline {
+    grid-template-columns: 1fr;
+  }
+
+  .weekList {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    order: 2;
+    position: static;
+    top: auto;
+  }
+
+  .mainStage {
+    order: 1;
+  }
+
+  .dayCell {
+    min-height: auto;
+  }
+
+  .mainHeaderTools {
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .mainActionRow {
+    justify-content: stretch;
+  }
+
+  .mainPrimaryLink,
+  .mainSecondaryLink {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .alertButton {
+    width: 100%;
+  }
+
+  .viewSwitch,
+  .mainHeaderTools,
+  .mainActionRow,
+  .mainHeader,
+  .weekDayHeader,
+  .dayCardTop,
+  .dayBoardHeader {
+    display: grid;
+  }
+
+  .viewSwitch {
+    width: 100%;
+  }
+
+  .viewSwitchLink {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .calendarModeTabs {
+    gap: 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .calendarModeTabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .calendarModeTab {
+    white-space: nowrap;
+  }
+
+  .monthControlRow {
+    flex-wrap: wrap;
+  }
+
+  .weekdayRow {
+    display: none;
+  }
+
+  .monthGrid {
+    gap: 12px;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .dayCell {
+    padding: 14px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 18px;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+  }
+
+  .monthSignals {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .monthSignals::-webkit-scrollbar {
+    display: none;
+  }
+
+  .signalPill {
+    min-width: 0;
+    flex: 0 0 min(68vw, 220px);
+    scroll-snap-align: start;
+  }
+
+  .dayStatusStack {
+    justify-content: flex-start;
+  }
+
+  .filterActions {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 720px) {
+  .miniMetrics {
+    grid-template-columns: 1fr;
+  }
+
+  .monthHeader {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+
+  .monthNav {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.page,
+.shell,
+.sidebar,
+.mainStage,
+.filterBar,
+.filterForm,
+.filterSummary,
+.statsGrid,
+.supportGrid,
+.monthGrid,
+.miniMetrics,
+.dayIdentityHighlights {
+  min-width: 0;
+}
+
+.brandCard,
+.sidebarPanel,
+.monthCard,
+.statCard,
+.weekBoard,
+.dayBoard,
+.dayCard,
+.filterForm,
+.filterSummary,
+.supportGrid > article,
+.miniMetrics article,
+.dayInfoPanel {
+  min-width: 0;
+}
+
+.statsGrid,
+.supportGrid,
+.miniMetrics,
+.dayIdentityHighlights {
+  align-items: stretch;
+}
+
+.statCard,
+.dayCard,
+.supportGrid > article,
+.miniMetrics article,
+.dayInfoPanel {
+  height: 100%;
+  align-content: start;
+}
+
+.mainActionRow,
+.panelHeader,
+.dayFocusPreviewHeader,
+.filterActions {
+  align-items: center;
+}

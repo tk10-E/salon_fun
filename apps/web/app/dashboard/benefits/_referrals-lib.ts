@@ -76,11 +76,11 @@ export async function loadReferralsPageData(
       .limit(12),
     supabase
       .from("salon_referral_reward_unlocks")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id),
     supabase
       .from("salon_referral_reward_unlocks")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("status", "available"),
     supabase

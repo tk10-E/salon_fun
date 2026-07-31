@@ -21,7 +21,35 @@ vi.mock("@/app/_actions/management", () => ({
 }));
 
 vi.mock("@/lib/management", () => ({
-  buildFilterHref: vi.fn(() => "/dashboard/gestao/categorias"),
+  buildFilterHref: vi.fn(
+    (
+      pathname: string,
+      current: Record<string, string | string[] | undefined> | undefined,
+      overrides: Record<string, string | undefined>,
+    ) => {
+      const params = new URLSearchParams();
+
+      if (current) {
+        for (const [key, rawValue] of Object.entries(current)) {
+          const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+          if (value) {
+            params.set(key, value);
+          }
+        }
+      }
+
+      for (const [key, value] of Object.entries(overrides)) {
+        if (!value) {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      }
+
+      const query = params.toString();
+      return `${pathname}${query ? `?${query}` : ""}`;
+    },
+  ),
   loadManagementCategories: loadManagementCategoriesMock,
 }));
 
@@ -41,7 +69,7 @@ describe("management categories page", () => {
       {
         id: "category-1",
         name: "Cabelo",
-        description: "Cortes, escovas e finalizações.",
+        description: "Cortes, escovas e finalizacoes.",
         is_active: true,
         created_at: "2026-01-01T10:00:00.000Z",
         updated_at: "2026-04-08T10:00:00.000Z",
@@ -61,12 +89,12 @@ describe("management categories page", () => {
     ]);
   });
 
-  it("renders a stronger categories overview without changing the catalog workflow", async () => {
+  it("renders the redesigned categories workspace with hidden compose by default", async () => {
     const ui = await CategoriasPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         message: "Categoria atualizada.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);
@@ -74,18 +102,48 @@ describe("management categories page", () => {
     expect(screen.getByText("Categoria atualizada.")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Categorias organizadas para vender melhor.",
+        name: "Categorias do catálogo",
+        level: 1,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Cobertura do catálogo")).toBeInTheDocument();
-    expect(screen.getByText("Categoria em foco")).toBeInTheDocument();
-    expect(screen.getByText("Catálogo vivo")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Nova categoria" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Resumo do catálogo" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Categorias cadastradas" })).toBeInTheDocument();
+    expect(screen.getByText("Categorias ativas")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Categorias cadastradas" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Prioridades do catálogo" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Cabelo").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Cortes, escovas e finalizações.").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Cortes, escovas e finalizacoes.").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("link", { name: "Nova categoria" }).getAttribute("href"),
+    ).toContain("compose=1");
+    expect(
+      screen.queryByRole("button", { name: "Salvar categoria" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Salvar alterações" }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("opens the category compose panel when compose=1", async () => {
+    const ui = await CategoriasPage({
+      searchParams: Promise.resolve({
+        compose: "1",
+      }),
+    });
+
+    render(ui);
+
+    expect(
+      screen.getByRole("heading", { name: "Criar categoria" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Salvar categoria" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Salvar alterações" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Fechar" })).toHaveAttribute(
+      "href",
+      "/dashboard/gestao/categorias",
+    );
   });
 });

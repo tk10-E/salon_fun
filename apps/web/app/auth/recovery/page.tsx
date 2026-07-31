@@ -223,7 +223,7 @@ export default function PasswordRecoveryPage() {
               Redefina sua senha e volte ao painel com segurança
             </p>
             <h1>
-              Seu acesso do salão volta a ficar pronto em poucos instantes.
+              Seu acesso ao salão fica pronto em poucos instantes.
             </h1>
             <p className="auth-hero-summary">
               Escolha uma nova senha para continuar acompanhando agenda, equipe,
@@ -237,7 +237,7 @@ export default function PasswordRecoveryPage() {
             <span className="eyebrow">Nova senha</span>
             <h2>Recuperar conta</h2>
             <p className="muted">
-              Defina uma nova senha e siga direto para o dashboard do seu salão.
+              Defina uma nova senha e siga direto para o painel do seu salão.
             </p>
           </div>
 

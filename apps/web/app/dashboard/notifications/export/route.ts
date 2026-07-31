@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
     );
 
     if (error) {
-      return NextResponse.json({ error: "Nao foi possivel exportar os avisos." }, { status: 500 });
+      return NextResponse.json({ error: "Não foi possível exportar os avisos." }, { status: 500 });
     }
 
     const rows = (data ?? []) as NotificationRow[];
@@ -212,13 +212,13 @@ export async function GET(request: NextRequest) {
     "Data",
     "Categoria",
     "Tipo",
-    "Publico",
+    "Público",
     "Cliente",
     "Status push",
     "Resposta push",
     "Enviados",
     "Falhas",
-    "Titulo",
+    "Título",
     "Mensagem",
   ]);
 

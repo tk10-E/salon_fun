@@ -3,19 +3,21 @@ import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { getSalonBillingEntitlements } from "@/lib/billing";
+import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 import { WEEKDAY_OPTIONS } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/server";
 
 import {
   buildRedirectNotice,
   buildStaffAvailabilityNotification,
+  prepareCustomerNotificationPayload,
   queueCustomerNotification,
 } from "./shared";
 
-const TEAM_PATH = "/dashboard/team";
-const APPOINTMENTS_PATH = "/dashboard/appointments";
+const TEAM_PATH = MANAGEMENT_ROUTES.professionals;
+const APPOINTMENTS_PATH = MANAGEMENT_ROUTES.appointments;
 const DASHBOARD_PATH = "/dashboard";
-const SERVICES_PATH = "/dashboard/services";
+const SERVICES_PATH = MANAGEMENT_ROUTES.services;
 
 function readStringValues(formData: FormData, field: string) {
   return formData
@@ -57,6 +59,20 @@ function isStaffOpeningAlignedToSalonGrid(args: {
   return (staffOpenMinutes - salonOpenMinutes) % args.slotStepMinutes === 0;
 }
 
+async function touchStaffMemberSyncStamp(args: {
+  supabase: any;
+  salonId: string;
+  staffMemberId: string;
+}) {
+  // Touch the salon-scoped staff row so realtime listeners refresh even when
+  // the change happened in child tables such as hours or assignments.
+  await args.supabase
+    .from("staff_members")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", args.staffMemberId)
+    .eq("salon_id", args.salonId);
+}
+
 export async function createStaffMemberActionImpl(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const role = String(formData.get("role") ?? "").trim();
@@ -66,7 +82,13 @@ export async function createStaffMemberActionImpl(formData: FormData) {
   const billing = await getSalonBillingEntitlements(salon.id);
 
   if (!name) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Informe o nome do profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Informe o nome do profissional.",
+        "error",
+      ),
+    );
   }
 
   if (billing.maxStaffMembers !== null) {
@@ -93,14 +115,30 @@ export async function createStaffMemberActionImpl(formData: FormData) {
     .eq("salon_id", salon.id);
 
   if (servicesError) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível carregar os serviços para a equipe.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível carregar os serviços para a equipe.",
+        "error",
+      ),
+    );
   }
 
-  const salonServiceIds = new Set((services ?? []).map((service) => service.id));
-  const selectedServiceIds = requestedServiceIds.length ? requestedServiceIds : [...salonServiceIds];
+  const salonServiceIds = new Set(
+    (services ?? []).map((service) => service.id),
+  );
+  const selectedServiceIds = requestedServiceIds.length
+    ? requestedServiceIds
+    : [...salonServiceIds];
 
   if (selectedServiceIds.some((serviceId) => !salonServiceIds.has(serviceId))) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Selecione apenas serviços do seu salão.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Selecione apenas serviços do seu salão.",
+        "error",
+      ),
+    );
   }
 
   const { data: staffMember, error: staffError } = await supabase
@@ -115,19 +153,33 @@ export async function createStaffMemberActionImpl(formData: FormData) {
     .single();
 
   if (staffError || !staffMember) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível cadastrar o profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível cadastrar o profissional.",
+        "error",
+      ),
+    );
   }
 
   if (selectedServiceIds.length) {
-    const { error: assignmentsError } = await supabase.from("staff_service_assignments").insert(
-      selectedServiceIds.map((serviceId) => ({
-        staff_member_id: staffMember.id,
-        service_id: serviceId,
-      })),
-    );
+    const { error: assignmentsError } = await supabase
+      .from("staff_service_assignments")
+      .insert(
+        selectedServiceIds.map((serviceId) => ({
+          staff_member_id: staffMember.id,
+          service_id: serviceId,
+        })),
+      );
 
     if (assignmentsError) {
-      redirect(buildRedirectNotice(TEAM_PATH, "O profissional foi criado, mas não foi possível vincular os serviços.", "error"));
+      redirect(
+        buildRedirectNotice(
+          TEAM_PATH,
+          "O profissional foi criado, mas não foi possível vincular os serviços.",
+          "error",
+        ),
+      );
     }
   }
 
@@ -147,10 +199,18 @@ export async function createStaffMemberActionImpl(formData: FormData) {
 
   revalidatePath(TEAM_PATH);
   revalidatePath(SERVICES_PATH);
-  redirect(buildRedirectNotice(TEAM_PATH, "Profissional adicionado com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      TEAM_PATH,
+      "Profissional adicionado com sucesso.",
+      "success",
+    ),
+  );
 }
 
-export async function updateStaffMemberAssignmentsActionImpl(formData: FormData) {
+export async function updateStaffMemberAssignmentsActionImpl(
+  formData: FormData,
+) {
   const staffMemberId = String(formData.get("staffMemberId") ?? "").trim();
   const requestedServiceIds = readStringValues(formData, "serviceIds");
   const { salon } = await requireOwnerSalon();
@@ -175,7 +235,13 @@ export async function updateStaffMemberAssignmentsActionImpl(formData: FormData)
   const staffError = staffLookupResult.error;
 
   if (staffError || !staffMember) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível localizar esse profissional.",
+        "error",
+      ),
+    );
   }
 
   const { data: services, error: servicesError } = await supabase
@@ -184,13 +250,29 @@ export async function updateStaffMemberAssignmentsActionImpl(formData: FormData)
     .eq("salon_id", salon.id);
 
   if (servicesError) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível carregar os serviços do salão.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível carregar os serviços do salão.",
+        "error",
+      ),
+    );
   }
 
-  const validServiceIds = new Set((services ?? []).map((service) => service.id));
+  const validServiceIds = new Set(
+    (services ?? []).map((service) => service.id),
+  );
 
-  if (requestedServiceIds.some((serviceId) => !validServiceIds.has(serviceId))) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Selecione apenas serviços válidos para esse profissional.", "error"));
+  if (
+    requestedServiceIds.some((serviceId) => !validServiceIds.has(serviceId))
+  ) {
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Selecione apenas serviços válidos para esse profissional.",
+        "error",
+      ),
+    );
   }
 
   const { error: deleteError } = await supabase
@@ -199,24 +281,50 @@ export async function updateStaffMemberAssignmentsActionImpl(formData: FormData)
     .eq("staff_member_id", staffMemberId);
 
   if (deleteError) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível atualizar os serviços do profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível atualizar os serviços do profissional.",
+        "error",
+      ),
+    );
   }
 
   if (requestedServiceIds.length) {
-    const { error: insertError } = await supabase.from("staff_service_assignments").insert(
-      requestedServiceIds.map((serviceId) => ({
-        staff_member_id: staffMemberId,
-        service_id: serviceId,
-      })),
-    );
+    const { error: insertError } = await supabase
+      .from("staff_service_assignments")
+      .insert(
+        requestedServiceIds.map((serviceId) => ({
+          staff_member_id: staffMemberId,
+          service_id: serviceId,
+        })),
+      );
 
     if (insertError) {
-      redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível salvar os serviços desse profissional.", "error"));
+      redirect(
+        buildRedirectNotice(
+          TEAM_PATH,
+          "Não foi possível salvar os serviços desse profissional.",
+          "error",
+        ),
+      );
     }
   }
 
+  await touchStaffMemberSyncStamp({
+    supabase,
+    salonId: salon.id,
+    staffMemberId,
+  });
+
   revalidatePath(TEAM_PATH);
-  redirect(buildRedirectNotice(TEAM_PATH, "Serviços do profissional atualizados com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      TEAM_PATH,
+      "Serviços do profissional atualizados com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function updateStaffBusinessHoursActionImpl(formData: FormData) {
@@ -236,31 +344,50 @@ export async function updateStaffBusinessHoursActionImpl(formData: FormData) {
     .maybeSingle();
 
   if (staffError || !staffMember) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível localizar esse profissional.",
+        "error",
+      ),
+    );
   }
 
-  const { data: salonBusinessHours, error: salonBusinessHoursError } = await supabase
-    .from("salon_business_hours")
-    .select("weekday, is_open, opens_at")
-    .eq("salon_id", salon.id);
+  const { data: salonBusinessHours, error: salonBusinessHoursError } =
+    await supabase
+      .from("salon_business_hours")
+      .select("weekday, is_open, opens_at")
+      .eq("salon_id", salon.id);
 
   if (salonBusinessHoursError) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível carregar a grade oficial do salão.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível carregar a grade oficial do salão.",
+        "error",
+      ),
+    );
   }
 
   const salonBusinessHoursByWeekday = new Map(
-    ((salonBusinessHours ?? []) as Array<{
-      is_open: boolean;
-      opens_at: string | null;
-      weekday: number;
-    }>).map((entry) => [entry.weekday, entry]),
+    (
+      (salonBusinessHours ?? []) as Array<{
+        is_open: boolean;
+        opens_at: string | null;
+        weekday: number;
+      }>
+    ).map((entry) => [entry.weekday, entry]),
   );
   const slotStepMinutes = salon.slot_step_minutes ?? 30;
 
   const businessHours = WEEKDAY_OPTIONS.map((weekday) => {
     const isOpen = formData.get(`staffIsOpen_${weekday.value}`) === "on";
-    const opensAt = String(formData.get(`staffOpensAt_${weekday.value}`) ?? "").trim();
-    const closesAt = String(formData.get(`staffClosesAt_${weekday.value}`) ?? "").trim();
+    const opensAt = String(
+      formData.get(`staffOpensAt_${weekday.value}`) ?? "",
+    ).trim();
+    const closesAt = String(
+      formData.get(`staffClosesAt_${weekday.value}`) ?? "",
+    ).trim();
 
     if (!isOpen) {
       return {
@@ -324,16 +451,36 @@ export async function updateStaffBusinessHoursActionImpl(formData: FormData) {
     };
   });
 
-  const { error } = await supabase.from("staff_business_hours").upsert(businessHours, {
-    onConflict: "staff_member_id,weekday",
-  });
+  const { error } = await supabase
+    .from("staff_business_hours")
+    .upsert(businessHours, {
+      onConflict: "staff_member_id,weekday",
+    });
 
   if (error) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível salvar a agenda desse profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível salvar a agenda desse profissional.",
+        "error",
+      ),
+    );
   }
 
+  await touchStaffMemberSyncStamp({
+    supabase,
+    salonId: salon.id,
+    staffMemberId,
+  });
+
   revalidatePath(TEAM_PATH);
-  redirect(buildRedirectNotice(TEAM_PATH, "Agenda do profissional atualizada com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      TEAM_PATH,
+      "Agenda do profissional atualizada com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function toggleStaffMemberStatusActionImpl(formData: FormData) {
@@ -361,7 +508,13 @@ export async function toggleStaffMemberStatusActionImpl(formData: FormData) {
   const staffError = staffLookupResult.error;
 
   if (staffError || !staffMember) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível localizar esse profissional.",
+        "error",
+      ),
+    );
   }
 
   const { error: updateError } = await supabase
@@ -371,7 +524,13 @@ export async function toggleStaffMemberStatusActionImpl(formData: FormData) {
     .eq("salon_id", salon.id);
 
   if (updateError) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível atualizar o status do profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível atualizar o status do profissional.",
+        "error",
+      ),
+    );
   }
 
   if (nextStatus) {
@@ -381,7 +540,10 @@ export async function toggleStaffMemberStatusActionImpl(formData: FormData) {
       .eq("staff_member_id", staffMemberId);
 
     if (!countError && (count ?? 0) === 0) {
-      const { data: services } = await supabase.from("services").select("id").eq("salon_id", salon.id);
+      const { data: services } = await supabase
+        .from("services")
+        .select("id")
+        .eq("salon_id", salon.id);
       if (services?.length) {
         await supabase.from("staff_service_assignments").insert(
           services.map((service) => ({
@@ -413,7 +575,9 @@ export async function toggleStaffMemberStatusActionImpl(formData: FormData) {
   redirect(
     buildRedirectNotice(
       TEAM_PATH,
-      nextStatus ? "Profissional reativado com sucesso." : "Profissional pausado com sucesso.",
+      nextStatus
+        ? "Profissional reativado com sucesso."
+        : "Profissional pausado com sucesso.",
       "success",
     ),
   );
@@ -436,7 +600,13 @@ export async function deleteStaffMemberActionImpl(formData: FormData) {
     .maybeSingle();
 
   if (staffError || !staffMember) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível localizar esse profissional.",
+        "error",
+      ),
+    );
   }
 
   if (staffMember.is_default) {
@@ -482,17 +652,31 @@ export async function deleteStaffMemberActionImpl(formData: FormData) {
     .eq("salon_id", salon.id);
 
   if (deleteError) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível remover esse profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível remover esse profissional.",
+        "error",
+      ),
+    );
   }
 
   revalidatePath(TEAM_PATH);
   revalidatePath(APPOINTMENTS_PATH);
-  redirect(buildRedirectNotice(TEAM_PATH, `${staffMember.name} foi removido da equipe.`, "success"));
+  redirect(
+    buildRedirectNotice(
+      TEAM_PATH,
+      `${staffMember.name} foi removido da equipe.`,
+      "success",
+    ),
+  );
 }
 
 export async function offboardStaffMemberActionImpl(formData: FormData) {
   const staffMemberId = String(formData.get("staffMemberId") ?? "").trim();
-  const replacementStaffMemberId = String(formData.get("replacementStaffMemberId") ?? "").trim();
+  const replacementStaffMemberId = String(
+    formData.get("replacementStaffMemberId") ?? "",
+  ).trim();
   const { salon } = await requireOwnerSalon();
   const supabase = createClient();
   const now = new Date().toISOString();
@@ -509,7 +693,13 @@ export async function offboardStaffMemberActionImpl(formData: FormData) {
     .maybeSingle();
 
   if (staffError || !staffMember) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível localizar esse profissional.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível localizar esse profissional.",
+        "error",
+      ),
+    );
   }
 
   if (staffMember.is_default) {
@@ -522,13 +712,14 @@ export async function offboardStaffMemberActionImpl(formData: FormData) {
     );
   }
 
-  const { data: futureAppointments, error: futureAppointmentsError } = await supabase
-    .from("appointments")
-    .select("id, service_id, customer_id, date, services(name)")
-    .eq("salon_id", salon.id)
-    .eq("staff_member_id", staffMemberId)
-    .gt("date", now)
-    .in("status", ["pending", "confirmed"]);
+  const { data: futureAppointments, error: futureAppointmentsError } =
+    await supabase
+      .from("appointments")
+      .select("id, service_id, customer_id, date, services(name)")
+      .eq("salon_id", salon.id)
+      .eq("staff_member_id", staffMemberId)
+      .gt("date", now)
+      .in("status", ["pending", "confirmed"]);
 
   if (futureAppointmentsError) {
     redirect(
@@ -565,14 +756,19 @@ export async function offboardStaffMemberActionImpl(formData: FormData) {
       );
     }
 
-    const { data: replacementStaffMember, error: replacementError } = await supabase
-      .from("staff_members")
-      .select("id, name, is_active")
-      .eq("id", replacementStaffMemberId)
-      .eq("salon_id", salon.id)
-      .maybeSingle();
+    const { data: replacementStaffMember, error: replacementError } =
+      await supabase
+        .from("staff_members")
+        .select("id, name, is_active")
+        .eq("id", replacementStaffMemberId)
+        .eq("salon_id", salon.id)
+        .maybeSingle();
 
-    if (replacementError || !replacementStaffMember || !replacementStaffMember.is_active) {
+    if (
+      replacementError ||
+      !replacementStaffMember ||
+      !replacementStaffMember.is_active
+    ) {
       redirect(
         buildRedirectNotice(
           TEAM_PATH,
@@ -584,11 +780,14 @@ export async function offboardStaffMemberActionImpl(formData: FormData) {
 
     replacementName = replacementStaffMember.name;
 
-    const appointmentServiceIds = Array.from(new Set(futureItems.map((item) => item.service_id)));
-    const { data: replacementAssignments, error: replacementAssignmentsError } = await supabase
-      .from("staff_service_assignments")
-      .select("service_id")
-      .eq("staff_member_id", replacementStaffMemberId);
+    const appointmentServiceIds = Array.from(
+      new Set(futureItems.map((item) => item.service_id)),
+    );
+    const { data: replacementAssignments, error: replacementAssignmentsError } =
+      await supabase
+        .from("staff_service_assignments")
+        .select("service_id")
+        .eq("staff_member_id", replacementStaffMemberId);
 
     if (replacementAssignmentsError) {
       redirect(
@@ -600,9 +799,15 @@ export async function offboardStaffMemberActionImpl(formData: FormData) {
       );
     }
 
-    const replacementServiceIds = new Set((replacementAssignments ?? []).map((assignment) => assignment.service_id));
+    const replacementServiceIds = new Set(
+      (replacementAssignments ?? []).map((assignment) => assignment.service_id),
+    );
 
-    if (appointmentServiceIds.some((serviceId) => !replacementServiceIds.has(serviceId))) {
+    if (
+      appointmentServiceIds.some(
+        (serviceId) => !replacementServiceIds.has(serviceId),
+      )
+    ) {
       redirect(
         buildRedirectNotice(
           TEAM_PATH,
@@ -634,9 +839,12 @@ export async function offboardStaffMemberActionImpl(formData: FormData) {
 
     const notifications = futureItems.map((item) => {
       const serviceRelation =
-        item.services && Array.isArray(item.services) ? item.services[0] : item.services;
+        item.services && Array.isArray(item.services)
+          ? item.services[0]
+          : item.services;
       const serviceName =
-        typeof serviceRelation?.name === "string" && serviceRelation.name.trim().length
+        typeof serviceRelation?.name === "string" &&
+        serviceRelation.name.trim().length
           ? serviceRelation.name.trim()
           : "atendimento";
 
@@ -648,13 +856,18 @@ export async function offboardStaffMemberActionImpl(formData: FormData) {
         title: "Seu horário teve troca de profissional",
         body: `${staffMember.name} não atende mais no salão. Seu ${serviceName} continua no mesmo horário e agora será com ${replacementStaffMember.name}.`,
         payload: {
-          type: "appointment_staff_reassigned",
-          appointmentId: item.id,
-          appointmentAt: item.date,
-          serviceName,
-          staffMemberName: replacementStaffMember.name,
-          previousStaffMemberName: staffMember.name,
-          replacementStaffMemberName: replacementStaffMember.name,
+          ...prepareCustomerNotificationPayload(
+            "appointment_staff_reassigned",
+            {
+              type: "appointment_staff_reassigned",
+              appointmentId: item.id,
+              appointmentAt: item.date,
+              serviceName,
+              staffMemberName: replacementStaffMember.name,
+              previousStaffMemberName: staffMember.name,
+              replacementStaffMemberName: replacementStaffMember.name,
+            },
+          ),
         },
       };
     });
@@ -730,7 +943,13 @@ export async function createStaffBlockActionImpl(formData: FormData) {
   const supabase = createClient();
 
   if (!staffMemberId || !startsAt || !endsAt) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Preencha profissional, início e fim do bloqueio.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Preencha profissional, início e fim do bloqueio.",
+        "error",
+      ),
+    );
   }
 
   const { error } = await supabase.rpc("create_staff_block", {
@@ -753,7 +972,13 @@ export async function createStaffBlockActionImpl(formData: FormData) {
   revalidatePath(TEAM_PATH);
   revalidatePath(DASHBOARD_PATH);
   revalidatePath(APPOINTMENTS_PATH);
-  redirect(buildRedirectNotice(TEAM_PATH, "Bloqueio manual criado com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(
+      TEAM_PATH,
+      "Bloqueio manual criado com sucesso.",
+      "success",
+    ),
+  );
 }
 
 export async function deleteStaffBlockActionImpl(formData: FormData) {
@@ -772,10 +997,18 @@ export async function deleteStaffBlockActionImpl(formData: FormData) {
     .eq("salon_id", salon.id);
 
   if (error) {
-    redirect(buildRedirectNotice(TEAM_PATH, "Não foi possível remover o bloqueio.", "error"));
+    redirect(
+      buildRedirectNotice(
+        TEAM_PATH,
+        "Não foi possível remover o bloqueio.",
+        "error",
+      ),
+    );
   }
 
   revalidatePath(TEAM_PATH);
   revalidatePath(APPOINTMENTS_PATH);
-  redirect(buildRedirectNotice(TEAM_PATH, "Bloqueio removido com sucesso.", "success"));
+  redirect(
+    buildRedirectNotice(TEAM_PATH, "Bloqueio removido com sucesso.", "success"),
+  );
 }

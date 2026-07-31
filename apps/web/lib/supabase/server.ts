@@ -4,7 +4,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/env";
 
 type SupabaseCookieStore = {
-  get(name: string): { value: string } | undefined;
+  getAll(): Array<{ name: string; value: string }>;
   set(options: { name: string; value: string } & CookieOptions): void;
 };
 
@@ -13,19 +13,16 @@ export function createClient() {
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
+      setAll(
+        cookiesToSet: Array<{ name: string; value: string } & CookieOptions>,
+      ) {
         try {
-          cookieStore.set({ name, value, ...options });
-        } catch {
-          // Cookie writes are ignored when called from Server Components.
-        }
-      },
-      remove(name: string, options: CookieOptions) {
-        try {
-          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+          for (const cookie of cookiesToSet) {
+            cookieStore.set(cookie);
+          }
         } catch {
           // Cookie writes are ignored when called from Server Components.
         }

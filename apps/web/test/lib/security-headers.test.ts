@@ -34,4 +34,20 @@ describe("security headers", () => {
       "connect-src 'self' https://test.supabase.co wss://test.supabase.co https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com https://www.googleapis.com https://apis.google.com https://accounts.google.com https://salon-fun-73373.firebaseapp.com",
     );
   });
+
+  it("marks the public activation route as non-cacheable", () => {
+    const request = new NextRequest("https://painel.jc7desenvovimento.online/comecar");
+    const response = applySecurityHeaders(
+      NextResponse.next({
+        request,
+      }),
+      request,
+    );
+
+    expect(response.headers.get("Cache-Control")).toBe(
+      "no-store, no-cache, max-age=0, must-revalidate",
+    );
+    expect(response.headers.get("Pragma")).toBe("no-cache");
+    expect(response.headers.get("Expires")).toBe("0");
+  });
 });

@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -29,6 +29,10 @@ vi.mock("@/lib/management", () => ({
   loadManagementServices: loadManagementServicesMock,
 }));
 
+vi.mock("@/lib/formatters", () => ({
+  formatCurrency: vi.fn((value: number) => `R$ ${value.toFixed(2)}`),
+}));
+
 import ServicosPage from "@/app/dashboard/gestao/servicos/page";
 
 describe("management services page", () => {
@@ -48,12 +52,12 @@ describe("management services page", () => {
       ],
       serviceFormCategories: [
         {
-          id: "category-quick-1",
+          id: "category-1",
           label: "Principal",
           secondary: "Carro-chefe do salão.",
         },
         {
-          id: "category-quick-2",
+          id: "category-2",
           label: "Complementar",
           secondary: "Extras e adicionais.",
         },
@@ -77,6 +81,7 @@ describe("management services page", () => {
         created_at: "2026-01-01T10:00:00.000Z",
         updated_at: "2026-04-08T10:00:00.000Z",
         appointmentsCount: 8,
+        imageUrl: "https://example.com/corte.png",
       },
       {
         id: "service-2",
@@ -91,38 +96,63 @@ describe("management services page", () => {
         created_at: "2026-01-02T10:00:00.000Z",
         updated_at: "2026-04-08T10:00:00.000Z",
         appointmentsCount: 3,
+        imageUrl: null,
       },
     ]);
   });
 
-  it("renders a stronger services overview without changing catalog actions", async () => {
+  it("renders the premium light catalog while preserving real management actions", async () => {
     const ui = await ServicosPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         message: "Serviço salvo com sucesso.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);
 
     expect(screen.getByText("Serviço salvo com sucesso.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Serviços" })).toBeInTheDocument();
+    expect(screen.getByText("Catalogo")).toBeInTheDocument();
+    expect(screen.getByText("Servicos ativos")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cabelo" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tratamento" })).toBeInTheDocument();
+    expect(screen.getAllByText("Corte feminino").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Hidratação premium").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Finalização e escova leve.").length).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", {
-        name: "Serviços prontos para vender com clareza.",
+      screen.getAllByText("Tratamento profundo com máscara nutritiva.").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ativo").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Inativo").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Novo serviço" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Novo serviço",
       }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Catálogo ativo")).toBeInTheDocument();
-    expect(screen.getByText("Leitura do catálogo")).toBeInTheDocument();
-    expect(screen.getAllByText("Categoria forte").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Novo serviço" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Filtros do catálogo" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Serviços cadastrados" })).toBeInTheDocument();
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Salvar serviço" })).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Salvar alterações" }).length,
+    ).toBeGreaterThan(0);
+
+    cleanup();
+
+    const uiWithComposer = await ServicosPage({
+      searchParams: Promise.resolve({
+        composer: "1",
+        draftCategoryId: "category-1",
+      }),
+    });
+
+    render(uiWithComposer);
+
+    expect(screen.getAllByRole("heading", { name: "Novo serviço" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Salvar serviço" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Fechar cadastro" })).toBeInTheDocument();
     expect(screen.getAllByText("Principal").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Complementar").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Corte feminino").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Finalização e escova leve.").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Hidratação premium").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Salvar serviço" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Salvar alterações" }).length).toBeGreaterThan(0);
   });
 });
+
+
