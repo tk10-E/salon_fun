@@ -29,12 +29,14 @@ type PanelAccessPolicyEvaluation = {
 const DEFAULT_EVALUATION: SessionSecurityEvaluation = {
   action: "allow",
   allowed: true,
-  idleTimeoutSeconds: 3600,
+  idleTimeoutSeconds: 28800,
   riskLevel: "low",
   sessionId: null,
   suspiciousEvents: 0,
   suspiciousReason: null,
 };
+
+const DEFAULT_LOW_RISK_IDLE_TIMEOUT_SECONDS = 28800;
 
 const DEVICE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 const DEVICE_COOKIE_NAME = "sf_device_id";
@@ -251,7 +253,10 @@ function mapEvaluationRow(
         ? rawAction
         : "allow",
     allowed: row.allowed === true,
-    idleTimeoutSeconds: Math.max(300, Number(row.idle_timeout_seconds ?? 3600)),
+    idleTimeoutSeconds: Math.max(
+      300,
+      Number(row.idle_timeout_seconds ?? DEFAULT_LOW_RISK_IDLE_TIMEOUT_SECONDS),
+    ),
     riskLevel:
       rawRiskLevel === "high" || rawRiskLevel === "medium"
         ? rawRiskLevel

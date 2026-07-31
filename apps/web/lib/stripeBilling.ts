@@ -1,6 +1,12 @@
+import { unstable_cache } from "next/cache";
 import Stripe from "stripe";
 
-import { type BillingInterval, type BillingStatus } from "@/lib/billing";
+import {
+  SINGLE_BILLING_INTERVALS,
+  SINGLE_BILLING_PLAN_ID,
+  type BillingInterval,
+  type BillingStatus,
+} from "@/lib/billing";
 import { getConfiguredAppOrigin } from "@/lib/requestOrigin";
 import {
   getStripePriceEnvName,
@@ -9,6 +15,12 @@ import {
   getStripeWebhookSecret,
 } from "@/lib/serverEnv";
 
+const REQUIRED_STRIPE_PRICES = SINGLE_BILLING_INTERVALS.map(
+  (billingInterval) => ({
+    planId: SINGLE_BILLING_PLAN_ID,
+    billingInterval,
+  }),
+);
 const PLAN_IDS = ["starter", "growth", "premium"] as const;
 const BILLING_INTERVALS = ["monthly", "yearly"] as const;
 const STRIPE_BILLING_RETURN_PATH = "/dashboard/billing";
@@ -66,11 +78,9 @@ export function getStripeBillingReadiness(): StripeBillingReadiness {
     missing.push("STRIPE_WEBHOOK_SECRET");
   }
 
-  for (const planId of PLAN_IDS) {
-    for (const billingInterval of BILLING_INTERVALS) {
-      if (!getStripePriceId(planId, billingInterval)) {
-        missing.push(getStripePriceEnvName(planId, billingInterval));
-      }
+  for (const { planId, billingInterval } of REQUIRED_STRIPE_PRICES) {
+    if (!getStripePriceId(planId, billingInterval)) {
+      missing.push(getStripePriceEnvName(planId, billingInterval));
     }
   }
 
@@ -80,7 +90,7 @@ export function getStripeBillingReadiness(): StripeBillingReadiness {
   };
 }
 
-export async function getStripeOperationalStatus(): Promise<StripeOperationalStatus> {
+async function loadStripeOperationalStatus(): Promise<StripeOperationalStatus> {
   const readiness = getStripeBillingReadiness();
   const configuredOrigin = getConfiguredAppOrigin();
   const billingPortalReturnUrl = configuredOrigin ? `${configuredOrigin}${STRIPE_BILLING_RETURN_PATH}` : null;
@@ -104,9 +114,8 @@ export async function getStripeOperationalStatus(): Promise<StripeOperationalSta
   const issues: string[] = [];
 
   const priceResults = await Promise.all(
-    PLAN_IDS.flatMap((planId) =>
-      BILLING_INTERVALS.map(async (billingInterval) => {
-        const priceId = resolveStripePriceId(planId, billingInterval);
+    REQUIRED_STRIPE_PRICES.map(async ({ planId, billingInterval }) => {
+      const priceId = resolveStripePriceId(planId, billingInterval);
 
         try {
           const price = await stripe.prices.retrieve(priceId);
@@ -124,7 +133,6 @@ export async function getStripeOperationalStatus(): Promise<StripeOperationalSta
           return null;
         }
       }),
-    ),
   );
 
   const priceModes = new Set(priceResults.flatMap((item) => (item ? [item.livemode] : [])));
@@ -145,72 +153,107 @@ export async function getStripeOperationalStatus(): Promise<StripeOperationalSta
     issues.push("Os price IDs misturam itens de teste e produção.");
   }
 
-  let activePortalConfigCount = 0;
-  let portalConfigured = false;
+  const [portalStatus, webhookStatus] = await Promise.all([
+    (async () => {
+      try {
+        const portalConfigs = await stripe.billingPortal.configurations.list({ limit: 20 });
+        const activeConfigs = portalConfigs.data.filter((config) => config.active);
+        const portalConfigured = Boolean(
+          billingPortalReturnUrl &&
+            activeConfigs.some((config) => config.default_return_url === billingPortalReturnUrl),
+        );
 
-  try {
-    const portalConfigs = await stripe.billingPortal.configurations.list({ limit: 20 });
-    const activeConfigs = portalConfigs.data.filter((config) => config.active);
-    activePortalConfigCount = activeConfigs.length;
-    portalConfigured = Boolean(
-      billingPortalReturnUrl &&
-        activeConfigs.some((config) => config.default_return_url === billingPortalReturnUrl),
-    );
+        return {
+          activePortalConfigCount: activeConfigs.length,
+          issue: portalConfigured
+            ? null
+            : "Customer Portal do Stripe ainda não está configurado para o billing do painel.",
+          portalConfigured,
+        };
+      } catch (error) {
+        return {
+          activePortalConfigCount: 0,
+          issue:
+            error instanceof Error
+              ? `Não foi possível validar o Customer Portal do Stripe: ${error.message}`
+              : "Não foi possível validar o Customer Portal do Stripe.",
+          portalConfigured: false,
+        };
+      }
+    })(),
+    (async () => {
+      try {
+        const webhookEndpoints = await stripe.webhookEndpoints.list({ limit: 20 });
+        const matchedEndpoint = webhookEndpoints.data.find((endpoint) =>
+          endpoint.url === webhookUrl &&
+          endpoint.status === "enabled" &&
+          webhookEndpointHandlesRequiredBillingEvents(endpoint)
+        );
+        const webhookConfigured = Boolean(webhookUrl && matchedEndpoint);
 
-    if (!portalConfigured) {
-      issues.push("Customer Portal do Stripe ainda não está configurado para o billing do painel.");
-    }
-  } catch (error) {
-    issues.push(
-      error instanceof Error
-        ? `Não foi possível validar o Customer Portal do Stripe: ${error.message}`
-        : "Não foi possível validar o Customer Portal do Stripe.",
-    );
+        if (webhookConfigured) {
+          return {
+            issue: null,
+            webhookConfigured,
+          };
+        }
+
+        const enabledEndpointWithMissingEvents = webhookEndpoints.data.find((endpoint) =>
+          endpoint.url === webhookUrl && endpoint.status === "enabled"
+        );
+
+        return {
+          issue:
+            webhookUrl && enabledEndpointWithMissingEvents
+              ? "Webhook do Stripe ainda não está ouvindo todos os eventos de cobrança necessários."
+              : "Webhook do Stripe ainda não aponta para /api/stripe/webhook no domínio ativo.",
+          webhookConfigured,
+        };
+      } catch (error) {
+        return {
+          issue:
+            error instanceof Error
+              ? `Não foi possível validar o webhook do Stripe: ${error.message}`
+              : "Não foi possível validar o webhook do Stripe.",
+          webhookConfigured: false,
+        };
+      }
+    })(),
+  ]);
+
+  if (portalStatus.issue) {
+    issues.push(portalStatus.issue);
   }
 
-  let webhookConfigured = false;
-
-  try {
-    const webhookEndpoints = await stripe.webhookEndpoints.list({ limit: 20 });
-    const matchedEndpoint = webhookEndpoints.data.find((endpoint) =>
-      endpoint.url === webhookUrl &&
-      endpoint.status === "enabled" &&
-      webhookEndpointHandlesRequiredBillingEvents(endpoint)
-    );
-    webhookConfigured = Boolean(webhookUrl && matchedEndpoint);
-
-    if (!webhookConfigured && webhookUrl) {
-      const enabledEndpointWithMissingEvents = webhookEndpoints.data.find((endpoint) =>
-        endpoint.url === webhookUrl && endpoint.status === "enabled"
-      );
-
-      if (enabledEndpointWithMissingEvents) {
-        issues.push("Webhook do Stripe ainda não está ouvindo todos os eventos de cobrança necessários.");
-      } else {
-        issues.push("Webhook do Stripe ainda não aponta para /api/stripe/webhook no domínio ativo.");
-      }
-    } else if (!webhookConfigured) {
-      issues.push("Webhook do Stripe ainda não aponta para /api/stripe/webhook no domínio ativo.");
-    }
-  } catch (error) {
-    issues.push(
-      error instanceof Error
-        ? `Não foi possível validar o webhook do Stripe: ${error.message}`
-        : "Não foi possível validar o webhook do Stripe.",
-    );
+  if (webhookStatus.issue) {
+    issues.push(webhookStatus.issue);
   }
 
   return {
     configured: true,
     mode,
-    liveReady: issues.length === 0 && mode === "live" && portalConfigured && webhookConfigured,
+    liveReady:
+      issues.length === 0 &&
+      mode === "live" &&
+      portalStatus.portalConfigured &&
+      webhookStatus.webhookConfigured,
     issues,
-    activePortalConfigCount,
-    portalConfigured,
+    activePortalConfigCount: portalStatus.activePortalConfigCount,
+    portalConfigured: portalStatus.portalConfigured,
     billingPortalReturnUrl,
-    webhookConfigured,
+    webhookConfigured: webhookStatus.webhookConfigured,
     webhookUrl,
   };
+}
+
+const getStripeOperationalStatusCached = unstable_cache(
+  async () => loadStripeOperationalStatus(),
+  ["stripe-operational-status"],
+  { revalidate: 300 },
+);
+
+export async function getStripeOperationalStatus(): Promise<StripeOperationalStatus> {
+  return getStripeOperationalStatusCached();
 }
 
 export function resolveStripePriceId(planId: string, billingInterval: BillingInterval) {

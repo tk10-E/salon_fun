@@ -28,11 +28,11 @@ describe("services page UI", () => {
     const location = await captureRedirect(
       Promise.resolve().then(() =>
         ServicesPage({
-          searchParams: {
+          searchParams: Promise.resolve({
             category: "Cabelo",
             message: "Servico salvo com sucesso.",
             tone: "success",
-          },
+          }),
         }),
       ),
       redirectMock,

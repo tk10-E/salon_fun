@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import { PUBLIC_BILLING_PATH } from "@/lib/billing";
+import { resolveOnboardingReturnPath } from "@/lib/onboardingActivation";
 import { getSalonSegmentPreset, normalizeSalonBusinessSegment } from "@/lib/salonSegments";
 
 import { buildRedirectNotice } from "./shared";
@@ -10,6 +11,11 @@ import { buildRedirectNotice } from "./shared";
 export async function createSalonActionImpl(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const businessSegment = normalizeSalonBusinessSegment(String(formData.get("businessSegment") ?? ""));
+  const returnPath = resolveOnboardingReturnPath(
+    typeof formData.get("returnPath") === "string"
+      ? String(formData.get("returnPath"))
+      : null,
+  );
   const preset = getSalonSegmentPreset(businessSegment);
   const { supabase, user } = await requireUser();
 
@@ -41,9 +47,12 @@ export async function createSalonActionImpl(formData: FormData) {
 
   revalidatePath("/dashboard");
   revalidatePath(PUBLIC_BILLING_PATH);
+  if (returnPath !== PUBLIC_BILLING_PATH) {
+    revalidatePath(returnPath);
+  }
   redirect(
     buildRedirectNotice(
-      PUBLIC_BILLING_PATH,
+      returnPath,
       "Salão criado com sucesso. Agora escolha o plano para liberar o painel.",
       "success",
     ),

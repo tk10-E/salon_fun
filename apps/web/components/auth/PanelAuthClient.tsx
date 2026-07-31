@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 import { FlashMessage } from "@/components/FlashMessage";
@@ -19,9 +20,12 @@ import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/brow
 import type { FirebaseWebConfig } from "@/lib/firebase/config";
 
 type PanelAuthClientProps = {
+  emailConfirmationPath?: string;
   initialMessage?: string;
   initialTone?: string;
   firebaseConfig: FirebaseWebConfig | null;
+  mode?: "sign-in" | "sign-up";
+  onboardingPath?: string;
 };
 
 type Notice = {
@@ -38,7 +42,7 @@ type PendingEnrollment = {
   qrCode: string;
   secret: string;
 };
-type SocialProvider = "facebook" | "google";
+type SocialProvider = "google";
 
 const emptyFormState = {
   signInEmail: "",
@@ -48,6 +52,7 @@ const emptyFormState = {
   signUpPassword: "",
   signUpPasswordConfirmation: "",
 };
+const PANEL_SESSION_READY_ENDPOINT = "/api/internal/session/ping";
 const SESSION_SYNC_TIMEOUT_MS = 6000;
 const SESSION_VISIBILITY_POLL_INTERVAL_MS = 250;
 
@@ -116,6 +121,33 @@ function waitForDelay(delayMs: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, delayMs);
   });
+}
+
+async function waitForPanelServerSession(timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const response = await fetch(PANEL_SESSION_READY_ENDPOINT, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "x-panel-session-ready": "1",
+      },
+    }).catch(() => null);
+
+    if (response?.status === 204) {
+      return true;
+    }
+
+    await waitForDelay(
+      Math.min(
+        SESSION_VISIBILITY_POLL_INTERVAL_MS,
+        Math.max(1, deadline - Date.now()),
+      ),
+    );
+  }
+
+  return false;
 }
 
 const supabaseEmailFlowFallbackMessages = new Set([
@@ -209,7 +241,7 @@ async function getOwnerMfaRequirement(userId: string) {
   const supabase = createSupabaseBrowserClient() as any;
   const salonResult = await supabase
     .from("salons")
-    .select("id")
+    .select("id, salon_security_settings(mfa_totp_enabled)")
     .eq("owner_user_id", userId)
     .maybeSingle();
 
@@ -220,15 +252,17 @@ async function getOwnerMfaRequirement(userId: string) {
     };
   }
 
-  const policyResult = await supabase
-    .from("salon_security_settings")
-    .select("mfa_totp_enabled")
-    .eq("salon_id", salonResult.data.id)
-    .maybeSingle();
+  const rawPolicy = Array.isArray(salonResult.data.salon_security_settings)
+    ? salonResult.data.salon_security_settings[0]
+    : salonResult.data.salon_security_settings;
 
   return {
     hasSalon: true,
-    mfaTotpEnabled: policyResult.data?.mfa_totp_enabled === true,
+    mfaTotpEnabled:
+      rawPolicy != null &&
+      typeof rawPolicy === "object" &&
+      "mfa_totp_enabled" in rawPolicy &&
+      rawPolicy.mfa_totp_enabled === true,
   };
 }
 
@@ -250,7 +284,7 @@ function formatSupabaseAuthError(error: unknown, fallbackMessage: string) {
       return "Confirme o e-mail antes de entrar no painel.";
     case "email_exists":
     case "user_already_exists":
-      return "Não foi possível criar a conta agora.";
+      return "Este e-mail já está cadastrado. Entre no painel ou use Recuperar senha.";
     case "over_email_send_rate_limit":
       return "Muitos pedidos foram feitos em sequência. Aguarde alguns minutos e tente de novo.";
     default:
@@ -291,6 +325,7 @@ async function signInWithSupabasePassword(input: {
 
 async function signUpWithSupabasePassword(input: {
   email: string;
+  emailRedirectPath?: string;
   password: string;
   passwordConfirmation: string;
 }) {
@@ -305,7 +340,7 @@ async function signUpWithSupabasePassword(input: {
 
   const supabase = createSupabaseBrowserClient();
   const email = normalizeEmailAddress(input.email);
-  const emailRedirectTo = buildBrowserUrl("/login");
+  const emailRedirectTo = buildBrowserUrl(input.emailRedirectPath ?? "/login");
   const { data, error } = await supabase.auth.signUp({
     email,
     password: input.password,
@@ -351,7 +386,7 @@ async function sendSupabasePasswordResetEmail(email: string) {
 }
 
 function getSocialProviderLabel(provider: SocialProvider) {
-  return provider === "facebook" ? "Facebook" : "Google";
+  return "Google";
 }
 
 async function signInWithSupabaseSocialProvider(provider: SocialProvider) {
@@ -378,15 +413,15 @@ async function signInWithSupabaseSocialProvider(provider: SocialProvider) {
   window.location.assign(data.url);
 }
 
-function openPanelWorkspace(pathname = "/dashboard") {
-  window.location.assign(pathname);
-}
-
 export function PanelAuthClient({
+  emailConfirmationPath = "/login",
   initialMessage,
   initialTone,
   firebaseConfig,
+  mode = "sign-in",
+  onboardingPath = "/onboarding",
 }: PanelAuthClientProps) {
+  const router = useRouter();
   const [notice, setNotice] = useState<Notice | null>(() =>
     normalizeNotice(initialMessage, initialTone),
   );
@@ -398,10 +433,42 @@ export function PanelAuthClient({
   const [mfaPendingEnrollment, setMfaPendingEnrollment] =
     useState<PendingEnrollment | null>(null);
   const [mfaSessionEmail, setMfaSessionEmail] = useState<string | null>(null);
+  const sessionSyncPromiseRef = useRef<{
+    hasSession: boolean;
+    promise: Promise<boolean>;
+  } | null>(null);
+  const isSignUpMode = mode === "sign-up";
   const firebaseEnabled = firebaseConfig != null;
   const verifiedMfaFactors = mfaFactors.filter(
     (factor) => factor.status === "verified",
   );
+  const socialButtonMetaLabel =
+    loadingIntent === "google"
+      ? "Abrindo..."
+      : isSignUpMode
+        ? "Criar conta ou continuar"
+        : "Entrar ou criar";
+  const primaryCardEyebrow = isSignUpMode ? "Ativação" : "Acesso";
+  const primaryCardTitle = isSignUpMode
+    ? "Criar conta do salão"
+    : "Entrar no painel";
+  const primaryCardDescription = isSignUpMode
+    ? "Use Google ou o e-mail principal para começar a ativação."
+    : "Use Google ou o e-mail principal do salão.";
+  const inlineSecurityNote = isSignUpMode
+    ? "Depois do cadastro, a confirmação extra aparece só se o salão exigir autenticador."
+    : "Se esta conta usar autenticador, o código aparece só no próximo passo.";
+  const signUpHint = isSignUpMode
+    ? "Depois de confirmar o e-mail, você volta para concluir a ativação do salão."
+    : "Depois de confirmar o e-mail, você segue para o onboarding do salão.";
+  const utilityCardTitle = isSignUpMode ? "Já tem conta ou perdeu a senha?" : "Outras opções";
+  const utilityCardDescription = isSignUpMode
+    ? "Abra só se precisar entrar com uma conta existente ou recuperar o acesso."
+    : "Abra só se precisar recuperar a senha ou criar o primeiro acesso.";
+
+  function openPanelWorkspace(pathname = "/dashboard") {
+    router.replace(pathname);
+  }
 
   async function resolveSessionSnapshot(args?: {
     session?: SessionSnapshot | null;
@@ -445,12 +512,14 @@ export function PanelAuthClient({
     return null;
   }
 
-  async function syncAuthenticatedSession(args?: {
+  async function performSessionSync(args?: {
     session?: SessionSnapshot | null;
     waitForSessionMs?: number;
   }) {
     const supabase = createSupabaseBrowserClient();
     const session = await resolveSessionSnapshot(args);
+    const serverSessionTimeoutMs =
+      args?.waitForSessionMs ?? SESSION_SYNC_TIMEOUT_MS;
 
     if (!session?.user) {
       setAuthStage("forms");
@@ -461,8 +530,11 @@ export function PanelAuthClient({
     }
 
     setMfaSessionEmail(session.user.email ?? null);
+    const serverSessionReadyPromise =
+      waitForPanelServerSession(serverSessionTimeoutMs);
 
     try {
+      let nextWorkspacePath = "/dashboard";
       const [{ data: aalData }, { data: factorData }, mfaRequirement] =
         await withTimeout(
           Promise.all([
@@ -489,14 +561,49 @@ export function PanelAuthClient({
         return true;
       }
 
+      nextWorkspacePath = mfaRequirement.hasSalon
+        ? "/dashboard"
+        : onboardingPath;
       setAuthStage("forms");
-      openPanelWorkspace(mfaRequirement.hasSalon ? "/dashboard" : "/onboarding");
+      if (!(await serverSessionReadyPromise)) {
+        return false;
+      }
+
+      openPanelWorkspace(nextWorkspacePath);
       return true;
     } catch {
       setAuthStage("forms");
+      if (!(await serverSessionReadyPromise)) {
+        return false;
+      }
+
       openPanelWorkspace("/dashboard");
       return true;
     }
+  }
+
+  async function syncAuthenticatedSession(args?: {
+    session?: SessionSnapshot | null;
+    waitForSessionMs?: number;
+  }) {
+    const hasSession = Boolean(args?.session?.user);
+    const currentSync = sessionSyncPromiseRef.current;
+
+    if (currentSync && (currentSync.hasSession || !hasSession)) {
+      return await currentSync.promise;
+    }
+
+    const syncPromise = performSessionSync(args).finally(() => {
+      if (sessionSyncPromiseRef.current?.promise === syncPromise) {
+        sessionSyncPromiseRef.current = null;
+      }
+    });
+
+    sessionSyncPromiseRef.current = {
+      hasSession,
+      promise: syncPromise,
+    };
+    return await syncPromise;
   }
 
   useEffect(() => {
@@ -557,7 +664,7 @@ export function PanelAuthClient({
       } catch (error) {
         const message = getErrorMessage(
           error,
-          "Nao foi possivel concluir o login com Google agora.",
+          "Não foi possível concluir o login com Google agora.",
         );
 
         if (shouldFallbackToSupabaseGoogleSignIn(message)) {
@@ -670,8 +777,8 @@ export function PanelAuthClient({
         message:
           errorMessage === "E-mail ou senha inválidos."
             ? firebaseEnabled
-              ? `${errorMessage} Se esta conta já existia no painel, tente a recuperação do mesmo e-mail para alinhar o acesso.`
-              : `${errorMessage} Se esta conta é antiga, use a recuperação para definir uma nova senha do painel.`
+              ? `${errorMessage} Se essa conta já existia no painel, tente a recuperação do mesmo e-mail para alinhar o acesso.`
+              : `${errorMessage} Se essa conta é antiga, use a recuperação para definir uma nova senha do painel.`
             : errorMessage,
         tone: "error",
       });
@@ -687,7 +794,17 @@ export function PanelAuthClient({
     try {
       if (provider === "google" && firebaseEnabled) {
         try {
-          await signInWithFirebaseGoogle();
+          const sessionSnapshot = await signInWithFirebaseGoogle();
+          if (sessionSnapshot?.user) {
+            const synced = await syncAuthenticatedSession({
+              session: sessionSnapshot,
+              waitForSessionMs: SESSION_SYNC_TIMEOUT_MS,
+            });
+            if (!synced) {
+              setNotice(buildSessionSyncErrorNotice());
+              setLoadingIntent(null);
+            }
+          }
         } catch (firebaseError) {
           const message = getErrorMessage(
             firebaseError,
@@ -795,6 +912,7 @@ export function PanelAuthClient({
 
           outcome = await signUpWithSupabasePassword({
             email: formState.signUpEmail,
+            emailRedirectPath: emailConfirmationPath,
             password: formState.signUpPassword,
             passwordConfirmation: formState.signUpPasswordConfirmation,
           });
@@ -802,19 +920,22 @@ export function PanelAuthClient({
       } else {
         outcome = await signUpWithSupabasePassword({
           email: formState.signUpEmail,
+          emailRedirectPath: emailConfirmationPath,
           password: formState.signUpPassword,
           passwordConfirmation: formState.signUpPasswordConfirmation,
         });
       }
 
       if (!outcome.requiresEmailConfirmation) {
-        window.location.assign("/onboarding");
+        openPanelWorkspace(onboardingPath);
         return;
       }
 
       setNotice({
         message: outcome.requiresEmailConfirmation
-          ? `Conta criada. Confirme o e-mail ${outcome.email} antes de entrar no painel.`
+          ? isSignUpMode
+            ? `Conta criada. Confirme o e-mail ${outcome.email} e volte para concluir a ativação do salão.`
+            : `Conta criada. Confirme o e-mail ${outcome.email} antes de entrar no painel.`
           : "Conta criada com sucesso. Você já pode entrar no painel.",
         tone: "success",
       });
@@ -956,10 +1077,154 @@ export function PanelAuthClient({
     }
   }
 
+  function renderEmailSignInForm(buttonClassName: string, className?: string) {
+    return (
+      <form
+        className={className ? `form-grid ${className}` : "form-grid"}
+        onSubmit={handleEmailSignIn}
+      >
+        <div className="field">
+          <label htmlFor="signin-email">E-mail</label>
+          <input
+            id="signin-email"
+            name="email"
+            type="email"
+            placeholder="contato@seusalao.com.br"
+            required
+            value={formState.signInEmail}
+            onChange={(event) => updateField("signInEmail", event.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="signin-password">Senha</label>
+          <input
+            id="signin-password"
+            name="password"
+            type="password"
+            placeholder="Sua senha"
+            required
+            value={formState.signInPassword}
+            onChange={(event) => updateField("signInPassword", event.target.value)}
+          />
+        </div>
+
+        <button
+          type="submit"
+          className={buttonClassName}
+          disabled={loadingIntent !== null}
+        >
+          {loadingIntent === "sign-in" ? "Entrando..." : "Entrar"}
+        </button>
+      </form>
+    );
+  }
+
+  function renderPasswordResetForm() {
+    return (
+      <form
+        className="form-grid auth-disclosure__content"
+        onSubmit={handlePasswordReset}
+      >
+        <div className="field">
+          <label htmlFor="recovery-email">E-mail da conta</label>
+          <input
+            id="recovery-email"
+            name="email"
+            type="email"
+            placeholder="contato@seusalao.com.br"
+            required
+            value={formState.resetEmail}
+            onChange={(event) => updateField("resetEmail", event.target.value)}
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="secondary-button"
+          disabled={loadingIntent !== null}
+        >
+          {loadingIntent === "reset" ? "Enviando..." : "Enviar link"}
+        </button>
+      </form>
+    );
+  }
+
+  function renderEmailSignUpForm(buttonClassName: string, className?: string) {
+    return (
+      <form
+        className={className ? `form-grid ${className}` : "form-grid"}
+        onSubmit={handleSignUp}
+      >
+        <div className="field">
+          <label htmlFor="signup-email">E-mail</label>
+          <input
+            id="signup-email"
+            name="email"
+            type="email"
+            placeholder="novo@email.com"
+            required
+            value={formState.signUpEmail}
+            onChange={(event) => updateField("signUpEmail", event.target.value)}
+          />
+        </div>
+
+        <div className="auth-signup-password-grid">
+          <div className="field">
+            <label htmlFor="signup-password">Senha</label>
+            <input
+              id="signup-password"
+              name="password"
+              type="password"
+              minLength={6}
+              placeholder="Mínimo 6 caracteres"
+              required
+              value={formState.signUpPassword}
+              onChange={(event) => updateField("signUpPassword", event.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="signup-password-confirmation">
+              Confirmar senha
+            </label>
+            <input
+              id="signup-password-confirmation"
+              name="passwordConfirmation"
+              type="password"
+              minLength={6}
+              placeholder="Repita a senha"
+              required
+              value={formState.signUpPasswordConfirmation}
+              onChange={(event) =>
+                updateField("signUpPasswordConfirmation", event.target.value)
+              }
+            />
+          </div>
+        </div>
+        <span className="field-hint auth-signup-hint">{signUpHint}</span>
+
+        <button
+          type="submit"
+          className={buttonClassName}
+          disabled={loadingIntent !== null}
+        >
+          {loadingIntent === "sign-up"
+            ? "Criando conta..."
+            : "Criar conta com e-mail"}
+        </button>
+      </form>
+    );
+  }
+
   if (authStage === "mfa") {
     return (
       <>
         <div className="auth-form-stack">
+          {notice ? (
+            <FlashMessage message={notice.message} tone={notice.tone} />
+          ) : null}
+
           <div className="panel-card panel-card--accent auth-form-card">
             <div className="panel-card__header">
               <span className="eyebrow">Verificação</span>
@@ -1074,10 +1339,6 @@ export function PanelAuthClient({
             </button>
           </div>
         </div>
-
-        {notice ? (
-          <FlashMessage message={notice.message} tone={notice.tone} />
-        ) : null}
       </>
     );
   }
@@ -1085,15 +1346,17 @@ export function PanelAuthClient({
   return (
     <>
       <div className="auth-form-stack">
+        {notice ? (
+          <FlashMessage message={notice.message} tone={notice.tone} />
+        ) : null}
+
         <div className="panel-card panel-card--accent auth-form-card auth-primary-auth-card">
           <div className="panel-card__header">
-            <span className="eyebrow">Acesso</span>
+            <span className="eyebrow">{primaryCardEyebrow}</span>
           </div>
           <div className="auth-form-card__meta auth-form-card__meta--compact">
-            <h3>Entrar no painel</h3>
-            <p className="muted">
-              Use Google, Facebook ou o e-mail principal do salão.
-            </p>
+            <h3>{primaryCardTitle}</h3>
+            <p className="muted">{primaryCardDescription}</p>
           </div>
           <div className="auth-social-grid">
             <button
@@ -1126,36 +1389,7 @@ export function PanelAuthClient({
               </span>
               <span className="auth-social-button__meta">
                 <strong>Continuar com Google</strong>
-                <span>
-                  {loadingIntent === "google"
-                    ? "Abrindo..."
-                    : "Entrar ou criar"}
-                </span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className="secondary-button auth-social-button auth-social-button--facebook"
-              onClick={() => {
-                void handleSocialSignIn("facebook");
-              }}
-              disabled={loadingIntent !== null}
-            >
-              <span className="auth-social-button__mark" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                  <path
-                    fill="currentColor"
-                    d="M13.47 21.5v-8.2h2.76l.41-3.2h-3.17V8.06c0-.92.26-1.55 1.58-1.55h1.69V3.65c-.29-.04-1.28-.12-2.43-.12-2.4 0-4.05 1.47-4.05 4.17v2.4H7.53v3.2h2.73v8.2h3.21Z"
-                  />
-                </svg>
-              </span>
-              <span className="auth-social-button__meta">
-                <strong>Continuar com Facebook</strong>
-                <span>
-                  {loadingIntent === "facebook"
-                    ? "Abrindo..."
-                    : "Entrar ou criar"}
-                </span>
+                <span>{socialButtonMetaLabel}</span>
               </span>
             </button>
           </div>
@@ -1164,171 +1398,85 @@ export function PanelAuthClient({
             <span />
           </div>
 
-          <div className="auth-compact-copy auth-login-copy">
-            <strong>Entrar com e-mail</strong>
-            <p className="muted">Se preferir, use o e-mail cadastrado.</p>
-          </div>
-          <form className="form-grid" onSubmit={handleEmailSignIn}>
-            <div className="field">
-              <label htmlFor="signin-email">E-mail</label>
-              <input
-                id="signin-email"
-                name="email"
-                type="email"
-                placeholder="salao@email.com"
-                required
-                value={formState.signInEmail}
-                onChange={(event) =>
-                  updateField("signInEmail", event.target.value)
-                }
-              />
-            </div>
-
-            <div className="field">
-              <label htmlFor="signin-password">Senha</label>
-              <input
-                id="signin-password"
-                name="password"
-                type="password"
-                placeholder="Sua senha"
-                required
-                value={formState.signInPassword}
-                onChange={(event) =>
-                  updateField("signInPassword", event.target.value)
-                }
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={loadingIntent !== null}
-            >
-              {loadingIntent === "sign-in"
-                ? "Entrando..."
-                : "Entrar"}
-            </button>
-          </form>
+          {isSignUpMode ? (
+            <>
+              <div className="auth-compact-copy auth-login-copy">
+                <strong>Criar conta com e-mail</strong>
+                <p className="muted">
+                  Abra a conta principal que vai ativar o salão.
+                </p>
+              </div>
+              {renderEmailSignUpForm("primary-button")}
+            </>
+          ) : (
+            <>
+              <div className="auth-compact-copy auth-login-copy">
+                <strong>Entrar com e-mail</strong>
+                <p className="muted">Se preferir, use o e-mail cadastrado.</p>
+              </div>
+              {renderEmailSignInForm("primary-button")}
+              <p className="auth-inline-note">{inlineSecurityNote}</p>
+            </>
+          )}
         </div>
 
-        <div className="auth-utility-sections">
-          <details className="auth-disclosure">
-            <summary className="auth-disclosure__summary">
-              <span>Recuperar senha</span>
-              <span className="auth-disclosure__meta">Enviar link</span>
-            </summary>
+        <div className="panel-card auth-form-card auth-utility-card">
+          <div className="auth-utility-intro">
+            <strong>{utilityCardTitle}</strong>
+            <p className="muted">{utilityCardDescription}</p>
+          </div>
 
-            <form
-              className="form-grid auth-disclosure__content"
-              onSubmit={handlePasswordReset}
-            >
-              <div className="field">
-                <label htmlFor="recovery-email">E-mail da conta</label>
-                <input
-                  id="recovery-email"
-                  name="email"
-                  type="email"
-                  placeholder="salao@email.com"
-                  required
-                  value={formState.resetEmail}
-                  onChange={(event) =>
-                    updateField("resetEmail", event.target.value)
-                  }
-                />
-              </div>
+          <div className="auth-utility-sections">
+            {isSignUpMode ? (
+              <>
+                <details className="auth-disclosure">
+                  <summary className="auth-disclosure__summary">
+                    <span>Já tenho conta</span>
+                    <span className="auth-disclosure__meta">Entrar</span>
+                  </summary>
 
-              <button
-                type="submit"
-                className="secondary-button"
-                disabled={loadingIntent !== null}
-              >
-                {loadingIntent === "reset" ? "Enviando..." : "Enviar link"}
-              </button>
-            </form>
-          </details>
+                  {renderEmailSignInForm(
+                    "secondary-button",
+                    "auth-disclosure__content",
+                  )}
+                </details>
 
-          <details className="auth-disclosure">
-            <summary className="auth-disclosure__summary">
-              <span>Cadastrar com e-mail</span>
-              <span className="auth-disclosure__meta">Primeiro acesso</span>
-            </summary>
+                <details className="auth-disclosure">
+                  <summary className="auth-disclosure__summary">
+                    <span>Recuperar senha</span>
+                    <span className="auth-disclosure__meta">Enviar link</span>
+                  </summary>
 
-            <form
-              className="form-grid auth-disclosure__content"
-              onSubmit={handleSignUp}
-            >
-              <div className="field">
-                <label htmlFor="signup-email">E-mail</label>
-                <input
-                  id="signup-email"
-                  name="email"
-                  type="email"
-                  placeholder="novo@email.com"
-                  required
-                  value={formState.signUpEmail}
-                  onChange={(event) =>
-                    updateField("signUpEmail", event.target.value)
-                  }
-                />
-              </div>
+                  {renderPasswordResetForm()}
+                </details>
+              </>
+            ) : (
+              <>
+                <details className="auth-disclosure">
+                  <summary className="auth-disclosure__summary">
+                    <span>Recuperar senha</span>
+                    <span className="auth-disclosure__meta">Enviar link</span>
+                  </summary>
 
-              <div className="auth-signup-password-grid">
-                <div className="field">
-                  <label htmlFor="signup-password">Senha</label>
-                  <input
-                    id="signup-password"
-                    name="password"
-                    type="password"
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
-                    required
-                    value={formState.signUpPassword}
-                    onChange={(event) =>
-                      updateField("signUpPassword", event.target.value)
-                    }
-                  />
-                </div>
+                  {renderPasswordResetForm()}
+                </details>
 
-                <div className="field">
-                  <label htmlFor="signup-password-confirmation">
-                    Confirmar senha
-                  </label>
-                  <input
-                    id="signup-password-confirmation"
-                    name="passwordConfirmation"
-                    type="password"
-                    minLength={6}
-                    placeholder="Repita a senha"
-                    required
-                    value={formState.signUpPasswordConfirmation}
-                    onChange={(event) =>
-                      updateField("signUpPasswordConfirmation", event.target.value)
-                    }
-                  />
-                </div>
-              </div>
-              <span className="field-hint auth-signup-hint">
-                Depois de confirmar o e-mail, você segue para o onboarding do
-                salão.
-              </span>
+                <details className="auth-disclosure">
+                  <summary className="auth-disclosure__summary">
+                    <span>Cadastrar com e-mail</span>
+                    <span className="auth-disclosure__meta">Primeiro acesso</span>
+                  </summary>
 
-              <button
-                type="submit"
-                className="secondary-button"
-                disabled={loadingIntent !== null}
-              >
-                {loadingIntent === "sign-up"
-                  ? "Criando conta..."
-                  : "Criar conta com e-mail"}
-              </button>
-            </form>
-          </details>
+                  {renderEmailSignUpForm(
+                    "secondary-button",
+                    "auth-disclosure__content",
+                  )}
+                </details>
+              </>
+            )}
+          </div>
         </div>
       </div>
-
-      {notice ? (
-        <FlashMessage message={notice.message} tone={notice.tone} />
-      ) : null}
     </>
   );
 }

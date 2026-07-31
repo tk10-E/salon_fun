@@ -2,6 +2,7 @@ import {
   approveCustomerMembershipRequestAction,
   createSalonOfferAction,
   deleteSalonOfferAction,
+  markCustomerMembershipRequestPaidAction,
   rejectCustomerMembershipRequestAction,
   updateSalonOfferAction,
 } from "@/app/actions";
@@ -11,6 +12,11 @@ import { FlashMessage } from "@/components/FlashMessage";
 import { WorkspaceSectionNav } from "@/components/WorkspaceSectionNav";
 import { requireOwnerSalon } from "@/lib/auth";
 import { formatCurrency, formatDate } from "@/lib/formatters";
+import {
+  resolveMembershipLifecycleCopy,
+  resolveMembershipOfferLabel,
+} from "@/lib/membershipOffers";
+import { parseMembershipRequestPreferredScheduleNotes } from "@/lib/membershipRequestPreferredSchedule";
 import { createClient } from "@/lib/supabase/server";
 
 type SubscriptionsPageProps = {
@@ -57,11 +63,14 @@ type ServiceOption = {
   category: string | null;
 };
 
-type PendingMembershipRequest = {
+type MembershipRequestRecord = {
   id: string;
   customer_id: string;
   offer_id: string;
   offer_title_snapshot: string;
+  approved_starts_on: string | null;
+  decided_at: string | null;
+  membership_id: string | null;
   price_snapshot: number | string | null;
   notes: string | null;
   status: string;
@@ -136,25 +145,32 @@ function formatOperationalSummary(
     offer.membership_validity_days === 1
       ? "1 dia"
       : `${offer.membership_validity_days} dias`;
+  const membershipLabel = resolveMembershipLifecycleCopy(
+    offer.membership_validity_days,
+  );
 
-  return `${sessionsLabel} de ${serviceLabel} com validade de ${validityLabel}.`;
+  return `${sessionsLabel} de ${serviceLabel} com validade real de ${validityLabel} para este ${membershipLabel}.`;
 }
 
 function formatMembershipActivationGuidance(validityDays: number | null) {
+  const membershipLabel = resolveMembershipLifecycleCopy(validityDays);
+
   if (validityDays == null || validityDays <= 0) {
-    return "A validade real começa na data de ativação escolhida pelo salão.";
+    return `A validade real deste ${membershipLabel} começa na data de ativação escolhida pelo salão.`;
   }
 
   return validityDays === 1
-    ? "A validade real deste pacote é de 1 dia a partir da data de ativação."
-    : `A validade real deste pacote é de ${validityDays} dias a partir da data de ativação.`;
+    ? `A validade real deste ${membershipLabel} é de 1 dia a partir da data de ativação.`
+    : `A validade real deste ${membershipLabel} é de ${validityDays} dias a partir da data de ativação.`;
 }
 
 export default async function SubscriptionsPage({
   searchParams: searchParamsPromise,
 }: SubscriptionsPageProps) {
-  const searchParams = await searchParamsPromise;
-  const { salon } = await requireOwnerSalon();
+  const [searchParams, { salon }] = await Promise.all([
+    searchParamsPromise,
+    requireOwnerSalon(),
+  ]);
   const supabase = createClient();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -189,18 +205,26 @@ export default async function SubscriptionsPage({
     (supabase as any)
       .from("customer_membership_requests")
       .select(
-        "id, customer_id, offer_id, offer_title_snapshot, price_snapshot, notes, status, requested_at, customers(name)",
+        "id, customer_id, offer_id, offer_title_snapshot, approved_starts_on, decided_at, membership_id, price_snapshot, notes, status, requested_at, customers(name)",
       )
       .eq("salon_id", salon.id)
-      .eq("status", "pending")
+      .or("status.eq.pending,and(status.eq.approved,membership_id.is.null)")
       .order("requested_at", { ascending: false }),
   ]);
 
   const offers = (offersResult.data ?? []) as MembershipOfferRow[];
   const memberships = (membershipsResult.data ?? []) as MembershipRecord[];
   const serviceOptions = (servicesResult.data ?? []) as ServiceOption[];
-  const pendingMembershipRequests = (membershipRequestsResult.data ?? []) as
-    PendingMembershipRequest[];
+  const membershipRequests = (membershipRequestsResult.data ??
+    []) as MembershipRequestRecord[];
+  const pendingMembershipRequests = membershipRequests.filter(
+    (request) => request.status === "pending",
+  );
+  const awaitingPaymentRequests = membershipRequests.filter(
+    (request) =>
+      request.status === "approved" &&
+      !String(request.membership_id ?? "").trim(),
+  );
   const serviceNameById = new Map(
     serviceOptions.map((service) => [
       service.id,
@@ -396,7 +420,12 @@ export default async function SubscriptionsPage({
           {
             href: "#subscription-requests",
             label: "Pedidos do app",
-            meta: "Aprovar com data real",
+            meta: "Aprovar pedido",
+          },
+          {
+            href: "#subscription-payments",
+            label: "Pagamentos",
+            meta: "Ativar no app",
           },
           {
             href: "#subscription-catalog",
@@ -406,7 +435,7 @@ export default async function SubscriptionsPage({
           {
             href: "#subscription-create",
             label: "Novo plano",
-            meta: "Criar pacote ou clube",
+            meta: "Criar plano ou pacote",
           },
           {
             href: "#subscription-base",
@@ -460,10 +489,10 @@ export default async function SubscriptionsPage({
       <section id="subscription-requests" className="card content-card">
         <div className="section-heading">
           <div>
-            <h2>Pedidos vindos do app cliente</h2>
+            <h2>Pedidos vindos do app do cliente</h2>
             <p className="muted">
-              Aprove com data real de início para a validade do pacote valer de
-              verdade no app e na operação do salão.
+              Aprove com a data real de início. O plano só entra no app quando
+              o salão confirmar o pagamento.
             </p>
           </div>
         </div>
@@ -472,7 +501,7 @@ export default async function SubscriptionsPage({
           <EmptyStateCard
             eyebrow="Fila vazia"
             title="Nenhum pedido pendente agora"
-            description="Quando uma cliente pedir um pacote pelo app, a aprovação aparece aqui e também na home do painel."
+            description="Quando uma cliente pedir um plano ou pacote pelo app, a aprovação aparece aqui e também na home do painel."
           />
         ) : (
           <div className="simple-list">
@@ -482,6 +511,10 @@ export default async function SubscriptionsPage({
               const activationGuidance = formatMembershipActivationGuidance(
                 offer?.membership_validity_days ?? null,
               );
+              const parsedNotes = parseMembershipRequestPreferredScheduleNotes(
+                request.notes,
+              );
+              const requestNote = parsedNotes.notes?.trim();
 
               return (
                 <article key={request.id} className="simple-row">
@@ -500,14 +533,14 @@ export default async function SubscriptionsPage({
                   <h3>{request.offer_title_snapshot}</h3>
                   <p className="muted">
                     {request.price_snapshot == null
-                      ? "Pedido feito no app cliente."
-                      : `${formatCurrency(Number(request.price_snapshot))} • pedido feito no app cliente.`}
+                      ? "Pedido feito no app do cliente."
+                      : `${formatCurrency(Number(request.price_snapshot))} • pedido feito no app do cliente.`}
                   </p>
                   <p className="list-meta">{activationGuidance}</p>
                   <small className="list-meta">
-                    {request.notes?.trim()
-                      ? `Mensagem da cliente: ${request.notes.trim()}`
-                      : "Sem observacao enviada pela cliente."}
+                    {requestNote
+                      ? `Mensagem da cliente: ${requestNote}`
+                      : "Sem observação enviada pela cliente."}
                   </small>
                   <div
                     className="simple-row__actions"
@@ -529,8 +562,10 @@ export default async function SubscriptionsPage({
                         value={request.id}
                       />
                       <div className="field">
-                        <label htmlFor={`membership-request-start-${request.id}`}>
-                          Inicio real da assinatura
+                        <label
+                          htmlFor={`membership-request-start-${request.id}`}
+                        >
+                          Início real da assinatura
                         </label>
                         <input
                           id={`membership-request-start-${request.id}`}
@@ -542,7 +577,7 @@ export default async function SubscriptionsPage({
                       </div>
                       <div className="row-actions">
                         <button type="submit" className="primary-button">
-                          Aprovar pedido
+                          Aprovar e aguardar pagamento
                         </button>
                       </div>
                     </form>
@@ -570,13 +605,110 @@ export default async function SubscriptionsPage({
         )}
       </section>
 
+      <section id="subscription-payments" className="card content-card">
+        <div className="section-heading">
+          <div>
+            <h2>Planos aguardando pagamento</h2>
+            <p className="muted">
+              O plano só fica ativo no aplicativo depois que o salão marcar o
+              pagamento como recebido.
+            </p>
+          </div>
+        </div>
+
+        {!awaitingPaymentRequests.length ? (
+          <EmptyStateCard
+            eyebrow="Sem pendência"
+            title="Nenhum plano aguardando pagamento"
+            description="Quando um pedido for aprovado e ainda faltar confirmação de pagamento, ele aparece aqui."
+          />
+        ) : (
+          <div className="simple-list">
+            {awaitingPaymentRequests.map((request) => {
+              const customer = firstRelation(request.customers);
+              const offer = offerById.get(request.offer_id) ?? null;
+              const activationGuidance = formatMembershipActivationGuidance(
+                offer?.membership_validity_days ?? null,
+              );
+              const parsedNotes = parseMembershipRequestPreferredScheduleNotes(
+                request.notes,
+              );
+              const requestNote = parsedNotes.notes?.trim();
+
+              return (
+                <article key={request.id} className="simple-row">
+                  <div
+                    className="inline-actions"
+                    style={{ marginBottom: 6, flexWrap: "wrap" }}
+                  >
+                    <span className="badge badge--pending">
+                      Aguardando pagamento
+                    </span>
+                    <span className="badge badge--soft">
+                      {customer?.name ?? "Cliente sem nome"}
+                    </span>
+                    <span className="badge badge--soft">
+                      {request.decided_at
+                        ? `Aprovado em ${formatDate(request.decided_at)}`
+                        : formatDate(request.requested_at)}
+                    </span>
+                  </div>
+                  <h3>{request.offer_title_snapshot}</h3>
+                  <p className="muted">
+                    {request.price_snapshot == null
+                      ? "Pedido aprovado e aguardando confirmação de pagamento."
+                      : `${formatCurrency(Number(request.price_snapshot))} • pedido aprovado e aguardando confirmação de pagamento.`}
+                  </p>
+                  <p className="list-meta">
+                    {request.approved_starts_on
+                      ? `Início programado: ${formatDate(request.approved_starts_on)} • ${activationGuidance}`
+                      : activationGuidance}
+                  </p>
+                  <small className="list-meta">
+                    {requestNote
+                      ? `Mensagem da cliente: ${requestNote}`
+                      : "Sem observação enviada pela cliente."}
+                  </small>
+                  <div
+                    className="simple-row__actions"
+                    style={{ flexWrap: "wrap", gap: 12 }}
+                  >
+                    <form
+                      action={markCustomerMembershipRequestPaidAction}
+                      className="simple-form"
+                      style={{ marginTop: 0 }}
+                    >
+                      <input
+                        type="hidden"
+                        name="returnPath"
+                        value="/dashboard/subscriptions"
+                      />
+                      <input
+                        type="hidden"
+                        name="requestId"
+                        value={request.id}
+                      />
+                      <div className="row-actions">
+                        <button type="submit" className="primary-button">
+                          Marcar como pago e ativar
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <section id="subscription-catalog" className="card content-card">
         <div className="section-heading">
           <div>
             <h2>Planos do salão</h2>
             <p className="muted">
-              Clubes e pacotes com edição simples. Pedidos feitos no app cliente
-              aparecem aqui e também na home do painel.
+              Planos mensais e pacotes com edição simples. Pedidos feitos no app
+              do cliente aparecem aqui e também na home do painel.
             </p>
           </div>
         </div>
@@ -616,6 +748,11 @@ export default async function SubscriptionsPage({
                     >
                       {offer.is_active ? "Ativo" : "Pausado"}
                     </span>
+                    <span className="badge badge--soft">
+                      {resolveMembershipOfferLabel(
+                        offer.membership_validity_days,
+                      )}
+                    </span>
                     {isPopular ? (
                       <span className="badge badge--pending">Mais vendido</span>
                     ) : null}
@@ -631,7 +768,7 @@ export default async function SubscriptionsPage({
                   <p className="list-meta">
                     {offer.price == null
                       ? "Sob consulta"
-                      : `${formatCurrency(Number(offer.price))}/mês`}{" "}
+                      : formatCurrency(Number(offer.price))}{" "}
                     • {formatOperationalSummary(offer, serviceName)}
                   </p>
                   <p className="list-meta">
@@ -887,7 +1024,7 @@ export default async function SubscriptionsPage({
           <div>
             <h2>Novo plano</h2>
             <p className="muted">
-              Cadastre rapidamente um novo clube ou pacote.
+              Cadastre rapidamente um novo plano ou pacote.
             </p>
           </div>
         </div>

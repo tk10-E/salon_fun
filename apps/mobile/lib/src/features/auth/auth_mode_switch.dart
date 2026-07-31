@@ -22,7 +22,7 @@ class AuthModeSwitch extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: spec.panelColor.withValues(alpha: 0.84),
+        color: spec.panelColor.withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(color: spec.lineColor),
       ),
@@ -65,7 +65,7 @@ class _AuthModeChip extends StatelessWidget {
     final spec = AppTheme.spec(context);
     final activeBackground = spec.primaryColor;
     final activeForeground = Colors.white;
-    final inactiveBackground = Colors.white.withValues(alpha: 0.9);
+    final inactiveBackground = Colors.white.withValues(alpha: 0.97);
     final inactiveForeground = spec.inkColor;
 
     return Material(

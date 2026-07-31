@@ -4,11 +4,9 @@ import { supabaseUrl } from "@/lib/env";
 
 type SecurityRequest = Pick<NextRequest, "nextUrl" | "url">;
 
-const sensitiveRoutePrefixes = ["/dashboard", "/login", "/auth", "/api/internal"];
+const sensitiveRoutePrefixes = ["/dashboard", "/login", "/comecar", "/auth", "/api/internal"];
 const csrfExemptRoutePrefixes = [
-  "/api/meta/webhook",
   "/api/stripe/webhook",
-  "/api/internal/whatsapp/dispatch",
 ];
 
 export function normalizeSecurityOrigin(value: string | null | undefined) {

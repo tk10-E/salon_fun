@@ -113,6 +113,7 @@ describe("settings page UI", () => {
         booking_policy_deposit_amount: 35,
         booking_policy_deposit_reminder_lead_hours: 6,
         booking_policy_enabled: true,
+        booking_policy_auto_confirm_new_appointments: true,
         booking_policy_external_checkout_url: null,
         booking_policy_payment_instructions: "Pix pelo WhatsApp",
         booking_policy_payment_mode: "pix",
@@ -167,9 +168,12 @@ describe("settings page UI", () => {
     });
   });
 
-  it("renders branding, online schedule and join code forms", async () => {
+  it("renders a simplified settings flow with operational autopilot controls", async () => {
     const ui = await SettingsPage({
-      searchParams: { message: "Configurações salvas.", tone: "success" },
+      searchParams: Promise.resolve({
+        message: "Configurações salvas.",
+        tone: "success",
+      }),
     });
 
     render(ui);
@@ -179,122 +183,114 @@ describe("settings page UI", () => {
       screen.getByRole("heading", { name: "Studio Centro", level: 1 }),
     ).toBeInTheDocument();
     expect(
-      screen
-        .getAllByRole("link", { name: "Abrir vitrine pública" })
-        .every(
-          (link) =>
-            link.getAttribute("href") === "https://app.studiocentro.com.br",
-        ),
-    ).toBe(true);
-    expect(
-      screen.getByRole("heading", { name: "Identidade do salão" }),
+      screen.getByRole("heading", { name: /Comece por aqui/i }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Nome do salão")).toBeInTheDocument();
-    expect(screen.getByLabelText("Segmento do salão")).toBeInTheDocument();
+    expect(screen.getByText("Nome, cor, logo e vitrine")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Abrir vitrine/i }),
+    ).toHaveAttribute("href", "https://app.studiocentro.com.br");
+    expect(
+      screen.getByRole("link", { name: "Abrir identidade" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Abrir agenda" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Abrir regras" }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("heading", { name: /Identidade do sal/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nome do sal/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Segmento do sal/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Nome exibido no app")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Endereço da vitrine/)).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText(/WhatsApp público do salão/i),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "WhatsApp do salão" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Headline principal")).toBeInTheDocument();
-    expect(screen.getByLabelText("Título de boas-vindas")).toBeInTheDocument();
-    expect(screen.getByLabelText("Modelo de experiência")).toBeInTheDocument();
-    expect(screen.getByLabelText("CTA principal")).toBeInTheDocument();
-    expect(screen.getByLabelText("Ênfase da home")).toBeInTheDocument();
-    expect(screen.getByLabelText("Estilo visual")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Endere.* da vitrine/i)).toBeInTheDocument();
     expect(
       screen.getByRole("checkbox", { name: "White-label ativo" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Imagens do app"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByText("PNG, JPG ou WEBP • ate 3 MB • 1 por vez.").length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("checkbox", {
-        name: "Piloto automático comercial ativo",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Instagram do salão")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Política de privacidade"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Campanhas da central" }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Título").length).toBeGreaterThan(0);
-    expect(screen.getAllByLabelText("Destino do CTA").length).toBeGreaterThan(
-      0,
-    );
-    expect(
-      screen.getByRole("checkbox", { name: "Atalhos de serviços" }),
-    ).toBeInTheDocument();
     expect(screen.getByLabelText("Cor principal")).toBeInTheDocument();
+    expect(screen.getByText(/Mais ajustes do app/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Salvar identidade" }),
     ).toBeInTheDocument();
+
     expect(
-      screen.getByRole("heading", { name: "Agenda online" }),
+      screen.getByRole("heading", { name: /Agenda online/i }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Fuso horário")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Fuso hor/i)).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Intervalo entre horários"),
+      screen.getByLabelText(/Intervalo entre hor/i),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Salvar agenda" }),
     ).toBeInTheDocument();
+
     expect(
-      screen.getByRole("heading", { name: "Política de reserva" }),
+      screen.getByRole("heading", { name: /Pol.*tica de reserva/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("checkbox", { name: "Ativar política de reserva" }),
+      screen.getByRole("heading", { name: /Automa.* do sal/i }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Título da política")).toBeInTheDocument();
-    expect(screen.getByLabelText("Resumo da política")).toBeInTheDocument();
+    expect(screen.getByText("Piloto automático")).toBeInTheDocument();
+    expect(screen.getByText("Lançamentos do painel")).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Janela de cancelamento (horas)"),
+      screen.getByRole("checkbox", {
+        name: /Piloto autom.*tico do sal/i,
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Confirmação antes do horário (minutos)"),
+      screen.getByRole("checkbox", { name: /Ativar pol.*tica de reserva/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Aceitar sozinho horários lançados no painel",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Mensagem para a cliente/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/T.*tulo da pol/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Resumo da pol/i)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/Instru.*es de pagamento/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/Janela de cancelamento/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/^Confirma.*antes do hor.*\(minutos\)$/i),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("checkbox", { name: "Cobrar sinal no agendamento" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Forma de pagamento do sinal"),
+      screen.getByLabelText(/Forma de pagamento do sinal/i),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Chave Pix")).toBeInTheDocument();
     expect(screen.getByLabelText("Link de pagamento")).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Chave de integração do Asaas"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Instruções de pagamento"),
-    ).toBeInTheDocument();
     expect(screen.getByLabelText(/Valor do sinal/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Salvar política" }),
+      screen.getByRole("button", { name: /Salvar pol.*tica/i }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("heading", { name: /Seguran.* do painel/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Segurança do painel" }),
+      screen.getByRole("heading", { name: /Autenticador do painel/i }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Pa.*ses permitidos/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Autenticador do painel" }),
+      screen.getByRole("button", { name: /Salvar seguran.* do painel/i }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Países permitidos")).toBeInTheDocument();
+
     expect(
-      screen.getByRole("button", { name: "Salvar segurança do painel" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Código para clientes" }),
+      screen.getByRole("heading", { name: /C.*digo para clientes/i }),
     ).toBeInTheDocument();
     expect(screen.getByText("ABCD1234")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Gerar novo código" }),
+      screen.getByRole("button", { name: /Gerar novo c.*digo/i }),
     ).toBeInTheDocument();
   }, 10000);
 });

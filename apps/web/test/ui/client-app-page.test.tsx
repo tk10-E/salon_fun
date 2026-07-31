@@ -177,10 +177,10 @@ describe("client app page UI", () => {
     });
 
     const ui = await ClientAppPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         message: "Central do cliente atualizada.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);
@@ -190,7 +190,7 @@ describe("client app page UI", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Vitrine do app para a cliente",
+        name: "App do cliente",
       }),
     ).toBeInTheDocument();
     expect(
@@ -200,21 +200,21 @@ describe("client app page UI", () => {
       screen.getByRole("link", { name: "Abrir feed" }),
     ).toHaveAttribute("href", "/dashboard/feed");
     expect(
-      screen.getByRole("heading", { name: "Ações rápidas" }),
+      screen.getByRole("heading", { name: "O que mexer agora" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Clubes, pacotes e promoções" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Central ao vivo",
+        name: "O que a cliente vê",
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("Campanha flash liberada")).toBeInTheDocument();
     expect(screen.getByText("Morena iluminada glow")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Status da vitrine",
+        name: "Base do app",
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("Volte essa semana")).toBeInTheDocument();
@@ -223,7 +223,13 @@ describe("client app page UI", () => {
       screen.getByRole("link", { name: "Ver app público" }),
     ).toHaveAttribute("href", "/s/studio-solar");
     expect(
-      screen.getByRole("heading", { name: "Próximos ganhos rápidos" }),
+      screen.getByRole("link", { name: "Criar promoção" }),
+    ).toHaveAttribute("href", "/dashboard/benefits/promotions?compose=1");
+    expect(
+      screen.getByRole("link", { name: "Ajustar vitrine" }),
+    ).toHaveAttribute("href", "/dashboard/settings#brand-identity");
+    expect(
+      screen.getByRole("heading", { name: "Próximos passos" }),
     ).toBeInTheDocument();
     expect(screen.getByText("4/6 marca pronta")).toBeInTheDocument();
   });

@@ -1,12 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-
     <application
         android:label="Salon Fun"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false">
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-6849365246392733~4820135922" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="salon_updates_v2" />
@@ -34,8 +37,7 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-    <queries>
-        <intent>
+    <queries>        <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>

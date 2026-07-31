@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import {
@@ -9,11 +10,12 @@ import {
 import { FlashMessage } from "@/components/FlashMessage";
 import { SalonSecuritySettingsPanel } from "@/components/SalonSecuritySettingsPanel";
 import { SettingsBrandingForm } from "@/components/SettingsBrandingForm";
+import {
+  SettingsCampaignsField,
+  type SettingsClientAppCampaignDraft,
+} from "@/components/SettingsCampaignsField";
 import { requireOwnerSalon } from "@/lib/auth";
 import {
-  CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS,
-  CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS,
-  CLIENT_APP_CAMPAIGN_TARGET_OPTIONS,
   CLIENT_APP_BANNER_STYLE_OPTIONS,
   CLIENT_APP_BUTTON_STYLE_OPTIONS,
   CLIENT_APP_CARD_STYLE_OPTIONS,
@@ -28,6 +30,7 @@ import { coerceSalonSecurityPolicy } from "@/lib/panelSecurityPolicy";
 import { SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
 import { SALON_TIMEZONE_OPTIONS, SLOT_STEP_OPTIONS } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/server";
+import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 
 type SettingsPageProps = {
   searchParams?: Promise<{
@@ -38,25 +41,42 @@ type SettingsPageProps = {
 
 const UPDATE_SALON_BRANDING_PATH = "/api/internal/dashboard/settings/branding";
 
-type SettingsSummaryCardProps = {
-  eyebrow: string;
-  title: string;
-  description: string;
-};
-
-function SettingsSummaryCard({
-  eyebrow,
-  title,
-  description,
-}: SettingsSummaryCardProps) {
-  return (
-    <article className="settings-summary-card">
-      <span className="eyebrow">{eyebrow}</span>
-      <strong>{title}</strong>
-      <p>{description}</p>
-    </article>
-  );
-}
+const EXTRA_WORKSPACE_LINK_GROUPS = [
+  {
+    description: "Cadastros que você ajusta de vez em quando.",
+    links: [
+      { href: MANAGEMENT_ROUTES.services, label: "Serviços" },
+      { href: MANAGEMENT_ROUTES.professionals, label: "Equipe" },
+      { href: MANAGEMENT_ROUTES.categories, label: "Categorias" },
+      { href: MANAGEMENT_ROUTES.payments, label: "Pagamentos" },
+    ],
+    title: "Cadastro",
+  },
+  {
+    description: "Áreas operacionais que não precisam ficar no menu principal.",
+    links: [
+      { href: "/dashboard/operations/comandas", label: "Comandas" },
+      { href: "/dashboard/inventory", label: "Estoque" },
+      { href: "/dashboard/finance/despesas", label: "Despesas" },
+      { href: "/dashboard/billing", label: "Assinatura do sistema" },
+    ],
+    title: "Operação extra",
+  },
+  {
+    description: "Ferramentas de app, conteúdo e retorno para abrir só quando precisar.",
+    links: [
+      { href: "/dashboard/client-app", label: "App do cliente" },
+      { href: "/dashboard/feed", label: "Feed" },
+      { href: "/dashboard/notifications", label: "Lembretes" },
+      { href: "/dashboard/subscriptions", label: "Planos do salão" },
+      { href: "/dashboard/benefits/loyalty", label: "Fidelidade" },
+      { href: "/dashboard/benefits/automations", label: "Retenção" },
+      { href: "/dashboard/benefits/referrals", label: "Indicações" },
+      { href: "/dashboard/birthdays", label: "Aniversários" },
+    ],
+    title: "Cliente e retorno",
+  },
+] as const;
 
 type SettingsFormSectionProps = {
   id?: string;
@@ -154,26 +174,6 @@ function SettingsMediaCard({
   );
 }
 
-type SettingsClientAppCampaignDraft = {
-  slot: number;
-  id: string;
-  isActive: boolean;
-  priority: string;
-  startsAt: string;
-  endsAt: string;
-  audience: string;
-  eyebrow: string;
-  title: string;
-  message: string;
-  campaignLabel: string;
-  ctaLabel: string;
-  ctaTarget: string;
-};
-
-type SettingsCampaignCardProps = {
-  campaign: SettingsClientAppCampaignDraft;
-};
-
 function formatDateTimeLocalValue(value: string | null | undefined) {
   const normalized = value?.trim();
   if (!normalized) {
@@ -187,178 +187,31 @@ function buildSettingsCampaignDrafts(
   campaigns: ReturnType<
     typeof normalizeSalonClientAppConfig
   >["centralCampaigns"],
-  slotCount = 3,
 ): SettingsClientAppCampaignDraft[] {
-  return Array.from({ length: slotCount }, (_, index) => {
-    const campaign = campaigns[index];
-    const slot = index + 1;
-
-    return {
-      slot,
-      id: campaign?.id ?? `campaign-${slot}`,
-      isActive: campaign?.isActive ?? false,
-      priority: campaign?.priority ?? "medium",
-      startsAt: formatDateTimeLocalValue(campaign?.startsAt),
-      endsAt: formatDateTimeLocalValue(campaign?.endsAt),
-      audience: campaign?.audience ?? "all",
-      eyebrow: campaign?.eyebrow ?? "",
-      title: campaign?.title ?? "",
-      message: campaign?.message ?? "",
-      campaignLabel: campaign?.campaignLabel ?? "",
-      ctaLabel: campaign?.ctaLabel ?? "",
-      ctaTarget: campaign?.ctaTarget ?? "explore",
-    };
-  });
-}
-
-function SettingsCampaignCard({ campaign }: SettingsCampaignCardProps) {
-  return (
-    <article className="settings-upload-card">
-      <div className="settings-upload-card__header">
-        <strong>Campanha {campaign.slot}</strong>
-        <p>
-          Publicação que entra na home do app cliente com mensagem e atalho
-          direto.
-        </p>
-      </div>
-
-      <input
-        type="hidden"
-        name={`clientAppCampaignId_${campaign.slot}`}
-        defaultValue={campaign.id}
-      />
-
-      <label className="checkbox-field">
-        <input
-          type="checkbox"
-          name={`clientAppCampaignIsActive_${campaign.slot}`}
-          defaultChecked={campaign.isActive}
-        />
-        Publicar esta campanha na central do app
-      </label>
-
-      <div className="split-grid">
-        <label className="field">
-          <span>Prioridade</span>
-          <select
-            name={`clientAppCampaignPriority_${campaign.slot}`}
-            defaultValue={campaign.priority}
-          >
-            {CLIENT_APP_CAMPAIGN_PRIORITY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="field">
-          <span>Audiência</span>
-          <select
-            name={`clientAppCampaignAudience_${campaign.slot}`}
-            defaultValue={campaign.audience}
-          >
-            {CLIENT_APP_CAMPAIGN_AUDIENCE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="split-grid">
-        <label className="field">
-          <span>Selo curto</span>
-          <input
-            name={`clientAppCampaignEyebrow_${campaign.slot}`}
-            defaultValue={campaign.eyebrow}
-            placeholder="Ex.: Agora no app"
-          />
-        </label>
-
-        <label className="field">
-          <span>Rótulo interno</span>
-          <input
-            name={`clientAppCampaignLabel_${campaign.slot}`}
-            defaultValue={campaign.campaignLabel}
-            placeholder="Ex.: Retorno da semana"
-          />
-        </label>
-      </div>
-
-      <label className="field">
-        <span>Título</span>
-        <input
-          name={`clientAppCampaignTitle_${campaign.slot}`}
-          defaultValue={campaign.title}
-          placeholder="Ex.: Volte essa semana"
-        />
-      </label>
-
-      <label className="field">
-        <span>Mensagem</span>
-        <textarea
-          name={`clientAppCampaignMessage_${campaign.slot}`}
-          defaultValue={campaign.message}
-          rows={3}
-          placeholder="Explique o motivo da campanha e o próximo passo."
-        />
-      </label>
-
-      <div className="split-grid">
-        <label className="field">
-          <span>CTA</span>
-          <input
-            name={`clientAppCampaignCtaLabel_${campaign.slot}`}
-            defaultValue={campaign.ctaLabel}
-            placeholder="Ex.: Reservar agora"
-          />
-        </label>
-
-        <label className="field">
-          <span>Destino do CTA</span>
-          <select
-            name={`clientAppCampaignCtaTarget_${campaign.slot}`}
-            defaultValue={campaign.ctaTarget}
-          >
-            {CLIENT_APP_CAMPAIGN_TARGET_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="split-grid">
-        <label className="field">
-          <span>Começa em</span>
-          <input
-            type="datetime-local"
-            name={`clientAppCampaignStartsAt_${campaign.slot}`}
-            defaultValue={campaign.startsAt}
-          />
-        </label>
-
-        <label className="field">
-          <span>Termina em</span>
-          <input
-            type="datetime-local"
-            name={`clientAppCampaignEndsAt_${campaign.slot}`}
-            defaultValue={campaign.endsAt}
-          />
-        </label>
-      </div>
-    </article>
-  );
+  return campaigns.map((campaign, index) => ({
+    slot: index + 1,
+    id: campaign.id,
+    isActive: campaign.isActive,
+    priority: campaign.priority,
+    startsAt: formatDateTimeLocalValue(campaign.startsAt),
+    endsAt: formatDateTimeLocalValue(campaign.endsAt),
+    audience: campaign.audience,
+    eyebrow: campaign.eyebrow ?? "",
+    title: campaign.title,
+    message: campaign.message,
+    campaignLabel: campaign.campaignLabel ?? "",
+    ctaLabel: campaign.ctaLabel ?? "",
+    ctaTarget: campaign.ctaTarget,
+  }));
 }
 
 export default async function SettingsPage({
   searchParams: searchParamsPromise,
 }: SettingsPageProps) {
-  const searchParams = await searchParamsPromise;
-  const { salon } = await requireOwnerSalon();
+  const [searchParams, { salon }] = await Promise.all([
+    searchParamsPromise,
+    requireOwnerSalon(),
+  ]);
   const supabase = createClient() as any;
   const securitySettingsResult = await supabase
     .from("salon_security_settings")
@@ -376,14 +229,6 @@ export default async function SettingsPage({
   const clientAppConfig = normalizeSalonClientAppConfig(
     salon.client_app_config,
   );
-  const currencyFormatter = new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-  const salonSegmentLabel =
-    SALON_SEGMENT_OPTIONS.find(
-      (option) => option.value === (salon.business_segment ?? "beauty_salon"),
-    )?.label ?? "Salão";
   const publicSalonHref = clientAppConfig.customDomain
     ? `https://${clientAppConfig.customDomain}`
     : `/s/${salon.join_code}`;
@@ -398,14 +243,10 @@ export default async function SettingsPage({
     clientAppConfig.centralCampaigns,
   );
   const timezoneValue = salon.timezone ?? "America/Sao_Paulo";
-  const timezoneLabel =
-    SALON_TIMEZONE_OPTIONS.find((option) => option.value === timezoneValue)
-      ?.label ?? timezoneValue;
   const slotStepValue = salon.slot_step_minutes ?? 30;
-  const slotStepLabel =
-    SLOT_STEP_OPTIONS.find((option) => option.value === slotStepValue)?.label ??
-    `${slotStepValue} min`;
   const bookingPolicyEnabled = salon.booking_policy_enabled ?? false;
+  const bookingPolicyAutoConfirmNewAppointments =
+    salon.booking_policy_auto_confirm_new_appointments ?? false;
   const bookingPolicyConfirmationRequired =
     salon.booking_policy_confirmation_required ?? true;
   const bookingPolicyRequiresDeposit =
@@ -415,25 +256,16 @@ export default async function SettingsPage({
   );
   const bookingPolicyPaymentMode =
     salon.booking_policy_payment_mode ?? "manual";
-  const bookingPolicyPaymentModeLabel =
-    bookingPolicyPaymentMode === "pix"
-      ? "Pix do salão"
-      : bookingPolicyPaymentMode === "external_checkout"
-        ? "Link de pagamento"
-        : bookingPolicyPaymentMode === "asaas_pix"
-          ? "Pix automático"
-          : "Cobrança manual";
-  const bookingPolicyDepositLabel = bookingPolicyRequiresDeposit
-    ? bookingPolicyDepositAmount > 0
-      ? `Sinal de ${currencyFormatter.format(bookingPolicyDepositAmount)}`
-      : "Sinal ativo sem valor definido"
-    : "Sem sinal obrigatório";
-  const allowedCountryLabel =
-    securityPolicy.geoAllowlistEnabled &&
-    securityPolicy.allowedCountryCodes.length > 0
-      ? securityPolicy.allowedCountryCodes.join(", ")
-      : "Sem restrição por país";
-
+  const autoPilotStatusLabel = clientAppConfig.autoPilotEnabled
+    ? "Ligado"
+    : "Desligado";
+  const bookingPolicyStatusLabel = bookingPolicyEnabled ? "Ativa" : "Desligada";
+  const panelAutoAcceptStatusLabel = bookingPolicyAutoConfirmNewAppointments
+    ? "Ligado"
+    : "Desligado";
+  const publicAppReference = clientAppConfig.customDomain
+    ? clientAppConfig.customDomain
+    : `Código ${salon.join_code}`;
   return (
     <div className="page-grid workspace-page settings-page settings-lean">
       {searchParams?.message ? (
@@ -444,8 +276,87 @@ export default async function SettingsPage({
         <p className="eyebrow">Configurações</p>
         <h1>{salon.name}</h1>
         <p className="muted">
-          Ajuste marca, horários, política e código sem se perder.
+          Comece por marca, agenda e automação. O resto fica guardado para quando precisar.
         </p>
+      </section>
+
+      <section className="card content-card">
+        <div className="section-heading">
+          <div>
+            <h2>Comece por aqui</h2>
+            <p className="muted">O salão quase sempre só precisa mexer nestes três blocos.</p>
+          </div>
+        </div>
+        <div className="settings-summary-grid settings-summary-grid--three">
+          <article className="settings-summary-card">
+            <p className="eyebrow">App e marca</p>
+            <strong>Nome, cor, logo e vitrine</strong>
+            <p>Referência atual: {publicAppReference}.</p>
+            <Link href="#brand-identity" className="secondary-button">
+              Abrir identidade
+            </Link>
+          </article>
+
+          <article className="settings-summary-card">
+            <p className="eyebrow">Agenda</p>
+            <strong>Fuso e intervalo dos horários</strong>
+            <p>
+              Hoje: {timezoneValue} • {slotStepValue} min por faixa.
+            </p>
+            <Link href="#agenda-online" className="secondary-button">
+              Abrir agenda
+            </Link>
+          </article>
+
+          <article className="settings-summary-card">
+            <p className="eyebrow">Automação</p>
+            <strong>Reserva, confirmações e piloto</strong>
+            <p>
+              Piloto {autoPilotStatusLabel.toLowerCase()} • política{" "}
+              {bookingPolicyStatusLabel.toLowerCase()}.
+            </p>
+            <Link href="#reserva-protegida" className="secondary-button">
+              Abrir regras
+            </Link>
+          </article>
+        </div>
+      </section>
+
+      <section className="card content-card accordion">
+        <details>
+          <summary>
+            <div>
+              <h2>Áreas menos usadas</h2>
+              <p className="muted">
+                O que não precisa ficar no menu principal do dia a dia.
+              </p>
+            </div>
+            <span className="accordion__cta">Abrir</span>
+          </summary>
+
+          <div className="simple-list">
+            {EXTRA_WORKSPACE_LINK_GROUPS.map((group) => (
+              <article key={group.title} className="simple-row">
+                <h3>{group.title}</h3>
+                <p className="muted">{group.description}</p>
+                <div
+                  className="simple-row__actions"
+                  style={{ justifyContent: "flex-start", flexWrap: "wrap" }}
+                >
+                  {group.links.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="secondary-button"
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </details>
       </section>
 
       <section id="brand-identity" className="card content-card accordion">
@@ -457,47 +368,6 @@ export default async function SettingsPage({
             </div>
             <span className="accordion__cta">Editar</span>
           </summary>
-
-          <div className="settings-summary-grid">
-            <SettingsSummaryCard
-              eyebrow="Segmento"
-              title={salonSegmentLabel}
-              description={
-                salon.tagline?.trim() ||
-                "Defina uma descrição curta para deixar a proposta do salão mais clara."
-              }
-            />
-            <SettingsSummaryCard
-              eyebrow="Vitrine"
-              title={
-                clientAppConfig.customDomain?.trim() ||
-                `Código ${salon.join_code}`
-              }
-              description={
-                clientAppConfig.customDomain
-                  ? "Domínio próprio ativo para abrir a vitrine do salão."
-                  : "Sem domínio próprio. A vitrine pública continua disponível pelo código."
-              }
-            />
-            <SettingsSummaryCard
-              eyebrow="Marca"
-              title={
-                salon.logo_path?.trim()
-                  ? "Identidade visual publicada"
-                  : "Logo principal pendente"
-              }
-              description={
-                salon.logo_path?.trim()
-                  ? "Logo e base visual já estão disponíveis para o painel e para a vitrine do salão."
-                  : "Publique a logo principal para deixar a marca mais consistente no app e na vitrine."
-              }
-            />
-            <SettingsSummaryCard
-              eyebrow="Home do app"
-              title={`${visibleHomeModules.length} blocos ativos`}
-              description="Escolha o que aparece primeiro para a cliente quando ela abre o app."
-            />
-          </div>
 
           <SettingsBrandingForm
             action={UPDATE_SALON_BRANDING_PATH}
@@ -570,7 +440,10 @@ export default async function SettingsPage({
                       defaultValue={clientAppConfig.customDomain ?? ""}
                       placeholder="app.seusalao.com.br"
                     />
-                    <small className="muted">Opcional.</small>
+                    <small className="muted">
+                      Opcional. Pode colar o link completo que o painel salva
+                      só o domínio.
+                    </small>
                   </label>
                 </div>
 
@@ -594,7 +467,8 @@ export default async function SettingsPage({
                       accept="image/png,image/jpeg,image/webp,image/svg+xml"
                     />
                     <small className="muted">
-                      PNG, JPG, WEBP ou SVG • ate 2 MB.
+                      PNG, JPG, WEBP ou SVG • até 2 MB. Essa logo também
+                      aparece no topo do painel quando estiver publicada.
                     </small>
                   </label>
                 </div>
@@ -608,22 +482,25 @@ export default async function SettingsPage({
                     />
                     White-label ativo
                   </label>
-
-                  <label className="checkbox-field">
-                    <input
-                      type="checkbox"
-                      name="clientAppAutoPilotEnabled"
-                      defaultChecked={clientAppConfig.autoPilotEnabled}
-                    />
-                    Piloto automático comercial ativo
-                  </label>
                 </div>
               </SettingsFormSection>
 
-              <SettingsFormSection
-                title="Conteúdo e visual do app"
-                description="Mensagens, cores e estilo."
-              >
+              <details className="settings-inline-advanced">
+                <summary>
+                  <div>
+                    <strong>Mais ajustes do app</strong>
+                    <span>
+                      Abra só quando quiser mexer em visual, capas, campanhas e links.
+                    </span>
+                  </div>
+                  <span className="accordion__cta">Abrir</span>
+                </summary>
+
+                <div className="settings-inline-advanced__body settings-section-stack">
+                  <SettingsFormSection
+                    title="Conteúdo e visual do app"
+                    description="Mensagens, cores e estilo."
+                  >
                 <div className="split-grid">
                   <label className="field">
                     <span>Headline principal</span>
@@ -853,12 +730,12 @@ export default async function SettingsPage({
                     <small className="muted">Nota e total de avaliações.</small>
                   </label>
                 </div>
-              </SettingsFormSection>
+                  </SettingsFormSection>
 
-              <SettingsFormSection
-                title="Capas do app"
-                description="Use de 0 a 3 imagens: principal, galeria e perfil."
-              >
+                  <SettingsFormSection
+                    title="Capas do app"
+                    description="Use de 0 a 3 imagens: principal, galeria e perfil."
+                  >
                 <div className="settings-upload-grid">
                   <SettingsMediaCard
                     title="Imagem principal"
@@ -870,14 +747,14 @@ export default async function SettingsPage({
                     fileId="clientAppHeroImageFile"
                     fileName="clientAppHeroImageFile"
                     fileLabel="Arquivo da imagem principal"
-                    fileHint="PNG, JPG ou WEBP • ate 3 MB • 1 por vez."
+                    fileHint="PNG, JPG ou WEBP • até 3 MB • 1 por vez."
                     removeName="removeClientAppHeroImage"
                     removeLabel="Remover imagem principal atual"
                   />
 
                   <SettingsMediaCard
                     title="Capa da galeria"
-                    description="Imagem da area de fotos."
+                    description="Imagem da área de fotos."
                     urlId="clientAppGalleryCoverImageUrl"
                     urlName="clientAppGalleryCoverImageUrl"
                     urlLabel="URL da capa da galeria"
@@ -885,14 +762,14 @@ export default async function SettingsPage({
                     fileId="clientAppGalleryCoverImageFile"
                     fileName="clientAppGalleryCoverImageFile"
                     fileLabel="Arquivo da capa da galeria"
-                    fileHint="PNG, JPG ou WEBP • ate 3 MB • 1 por vez."
+                    fileHint="PNG, JPG ou WEBP • até 3 MB • 1 por vez."
                     removeName="removeClientAppGalleryCoverImage"
                     removeLabel="Remover capa da galeria atual"
                   />
 
                   <SettingsMediaCard
                     title="Capa do perfil"
-                    description="Imagem da area institucional."
+                    description="Imagem da área institucional."
                     urlId="clientAppProfileCoverImageUrl"
                     urlName="clientAppProfileCoverImageUrl"
                     urlLabel="URL da capa do perfil"
@@ -900,41 +777,25 @@ export default async function SettingsPage({
                     fileId="clientAppProfileCoverImageFile"
                     fileName="clientAppProfileCoverImageFile"
                     fileLabel="Arquivo da capa do perfil"
-                    fileHint="PNG, JPG ou WEBP • ate 3 MB • 1 por vez."
+                    fileHint="PNG, JPG ou WEBP • até 3 MB • 1 por vez."
                     removeName="removeClientAppProfileCoverImage"
                     removeLabel="Remover capa do perfil atual"
                   />
                 </div>
-              </SettingsFormSection>
+                  </SettingsFormSection>
 
-              <SettingsFormSection
-                title="Campanhas da central"
-                description="Ate 3 campanhas na home."
-              >
-                <div className="settings-upload-grid">
-                  {campaignDrafts.map((campaign) => (
-                    <SettingsCampaignCard
-                      key={`client-app-campaign-${campaign.slot}`}
-                      campaign={campaign}
-                    />
-                  ))}
-                </div>
-              </SettingsFormSection>
+                  <SettingsFormSection
+                    title="Campanhas da central"
+                    description="Comece com uma campanha principal e adicione novas quando quiser."
+                  >
+                    <SettingsCampaignsField initialCampaigns={campaignDrafts} />
+                  </SettingsFormSection>
 
-              <SettingsFormSection
-                title="Links e presença pública"
-                description="Instagram, suporte e documentos."
-              >
-                <div className="split-grid">
-                  <label className="field">
-                    <span>Instagram do salão</span>
-                    <input
-                      id="clientAppInstagramUrl"
-                      name="clientAppInstagramUrl"
-                      defaultValue={clientAppConfig.instagramUrl ?? ""}
-                      placeholder="https://instagram.com/seusalao"
-                    />
-                  </label>
+                  <SettingsFormSection
+                    title="Links e presença pública"
+                    description="Suporte, localização e documentos."
+                  >
+                    <div className="split-grid">
 
                   <label className="field">
                     <span>Endereço exibido</span>
@@ -945,83 +806,86 @@ export default async function SettingsPage({
                       placeholder="Rua, número, bairro e cidade"
                     />
                   </label>
-                </div>
 
-                <div className="split-grid">
-                  <label className="field">
-                    <span>Link do mapa</span>
-                    <input
-                      id="clientAppMapUrl"
-                      name="clientAppMapUrl"
-                      defaultValue={clientAppConfig.mapUrl ?? ""}
-                      placeholder="https://maps.app..."
-                    />
-                  </label>
+                    </div>
 
-                  <label className="field">
-                    <span>Link de suporte</span>
-                    <input
-                      id="clientAppSupportUrl"
-                      name="clientAppSupportUrl"
-                      defaultValue={clientAppConfig.supportUrl ?? ""}
-                      placeholder="https://..."
-                    />
-                  </label>
-                </div>
+                    <div className="split-grid">
+                      <label className="field">
+                        <span>Link do mapa</span>
+                        <input
+                          id="clientAppMapUrl"
+                          name="clientAppMapUrl"
+                          defaultValue={clientAppConfig.mapUrl ?? ""}
+                          placeholder="https://maps.app..."
+                        />
+                      </label>
 
-                <div className="split-grid">
-                  <label className="field">
-                    <span>E-mail de suporte</span>
-                    <input
-                      id="clientAppSupportEmail"
-                      name="clientAppSupportEmail"
-                      defaultValue={clientAppConfig.supportEmail ?? ""}
-                      placeholder="suporte@seusalao.com"
-                    />
-                  </label>
+                      <label className="field">
+                        <span>Link de suporte</span>
+                        <input
+                          id="clientAppSupportUrl"
+                          name="clientAppSupportUrl"
+                          defaultValue={clientAppConfig.supportUrl ?? ""}
+                          placeholder="https://..."
+                        />
+                      </label>
+                    </div>
 
-                  <label className="field">
-                    <span>Política de privacidade</span>
-                    <input
-                      id="clientAppPrivacyPolicyUrl"
-                      name="clientAppPrivacyPolicyUrl"
-                      defaultValue={clientAppConfig.privacyPolicyUrl ?? ""}
-                      placeholder="https://..."
-                    />
-                  </label>
-                </div>
+                    <div className="split-grid">
+                      <label className="field">
+                        <span>E-mail de suporte</span>
+                        <input
+                          id="clientAppSupportEmail"
+                          name="clientAppSupportEmail"
+                          defaultValue={clientAppConfig.supportEmail ?? ""}
+                          placeholder="suporte@seusalao.com"
+                        />
+                      </label>
 
-                <label className="field">
-                  <span>Termos de uso</span>
-                  <input
-                    id="clientAppTermsOfUseUrl"
-                    name="clientAppTermsOfUseUrl"
-                    defaultValue={clientAppConfig.termsOfUseUrl ?? ""}
-                    placeholder="https://..."
-                  />
-                </label>
-              </SettingsFormSection>
+                      <label className="field">
+                        <span>Política de privacidade</span>
+                        <input
+                          id="clientAppPrivacyPolicyUrl"
+                          name="clientAppPrivacyPolicyUrl"
+                          defaultValue={clientAppConfig.privacyPolicyUrl ?? ""}
+                          placeholder="https://..."
+                        />
+                      </label>
+                    </div>
 
-              <SettingsFormSection
-                title="Blocos visíveis na home"
-                description="Escolha o que aparece na home."
-              >
-                <div className="settings-module-grid">
-                  {supportedHomeModules.map((module) => (
-                    <label key={module.value} className="checkbox-field">
+                    <label className="field">
+                      <span>Termos de uso</span>
                       <input
-                        type="checkbox"
-                        name="clientAppVisibleHomeModules"
-                        value={module.value}
-                        defaultChecked={visibleHomeModules.includes(
-                          module.value,
-                        )}
+                        id="clientAppTermsOfUseUrl"
+                        name="clientAppTermsOfUseUrl"
+                        defaultValue={clientAppConfig.termsOfUseUrl ?? ""}
+                        placeholder="https://..."
                       />
-                      {module.label}
                     </label>
-                  ))}
+                  </SettingsFormSection>
+
+                  <SettingsFormSection
+                    title="Blocos visíveis na home"
+                    description="Escolha o que aparece na home."
+                  >
+                    <div className="settings-module-grid">
+                      {supportedHomeModules.map((module) => (
+                        <label key={module.value} className="checkbox-field">
+                          <input
+                            type="checkbox"
+                            name="clientAppVisibleHomeModules"
+                            value={module.value}
+                            defaultChecked={visibleHomeModules.includes(
+                              module.value,
+                            )}
+                          />
+                          {module.label}
+                        </label>
+                      ))}
+                    </div>
+                  </SettingsFormSection>
                 </div>
-              </SettingsFormSection>
+              </details>
             </div>
 
             <div className="settings-submit-bar">
@@ -1042,24 +906,6 @@ export default async function SettingsPage({
             </div>
             <span className="accordion__cta">Editar</span>
           </summary>
-
-          <div className="settings-summary-grid settings-summary-grid--three">
-            <SettingsSummaryCard
-              eyebrow="Fuso"
-              title={timezoneLabel}
-              description="Base usada para mostrar horários e automações no horário certo."
-            />
-            <SettingsSummaryCard
-              eyebrow="Intervalo"
-              title={slotStepLabel}
-              description="Define a cadência dos horários disponíveis para reserva."
-            />
-            <SettingsSummaryCard
-              eyebrow="Impacto"
-              title="Agenda pública"
-              description="Esses ajustes controlam a leitura da agenda no painel e no app do cliente."
-            />
-          </div>
 
           <form
             action={updateSalonScheduleAction}
@@ -1105,13 +951,6 @@ export default async function SettingsPage({
                   </label>
                 </div>
 
-                <article className="settings-status-card">
-                  <strong>Como isso afeta a agenda</strong>
-                  <p>
-                    O fuso define a referência de horário. O intervalo controla
-                    a frequência com que os slots aparecem na reserva online.
-                  </p>
-                </article>
               </SettingsFormSection>
             </div>
 
@@ -1134,35 +973,6 @@ export default async function SettingsPage({
             <span className="accordion__cta">Editar</span>
           </summary>
 
-          <div className="settings-summary-grid">
-            <SettingsSummaryCard
-              eyebrow="Status"
-              title={
-                bookingPolicyEnabled ? "Política ativa" : "Política desligada"
-              }
-              description="Liga ou pausa as regras extras de confirmação, cancelamento e cobrança."
-            />
-            <SettingsSummaryCard
-              eyebrow="Confirmação"
-              title={
-                bookingPolicyConfirmationRequired
-                  ? "Obrigatória"
-                  : "Sem confirmação extra"
-              }
-              description="Define se a cliente precisa confirmar o atendimento antes do horário."
-            />
-            <SettingsSummaryCard
-              eyebrow="Sinal"
-              title={bookingPolicyDepositLabel}
-              description="Use para proteger horários mais disputados ou reduzir faltas."
-            />
-            <SettingsSummaryCard
-              eyebrow="Cobrança"
-              title={bookingPolicyPaymentModeLabel}
-              description="Escolha como a cliente confirma o sinal quando a reserva protegida estiver ativa."
-            />
-          </div>
-
           <form
             action={updateSalonBookingPolicyAction}
             className="form-grid settings-identity-form"
@@ -1172,9 +982,26 @@ export default async function SettingsPage({
 
             <div className="settings-section-stack">
               <SettingsFormSection
-                title="Ativação e comunicação"
-                description="Ligue a política, defina como ela aparece para a cliente e quando a confirmação passa a ser obrigatória."
+                title="Automação do salão"
+                description="Deixe a agenda aceitar, concluir e marcar falta seguindo suas regras."
               >
+                <div className="settings-summary-grid settings-summary-grid--three">
+                  <article className="settings-status-card">
+                    <strong>Piloto automático</strong>
+                    <p>{autoPilotStatusLabel}</p>
+                  </article>
+
+                  <article className="settings-status-card">
+                    <strong>Política de reserva</strong>
+                    <p>{bookingPolicyStatusLabel}</p>
+                  </article>
+
+                  <article className="settings-status-card">
+                    <strong>Lançamentos do painel</strong>
+                    <p>{panelAutoAcceptStatusLabel}</p>
+                  </article>
+                </div>
+
                 <div className="settings-toggle-grid">
                   <label className="checkbox-field" style={{ marginTop: 4 }}>
                     <input
@@ -1188,6 +1015,24 @@ export default async function SettingsPage({
                   <label className="checkbox-field" style={{ marginTop: 4 }}>
                     <input
                       type="checkbox"
+                      name="clientAppAutoPilotEnabled"
+                      defaultChecked={clientAppConfig.autoPilotEnabled}
+                    />
+                    Piloto automático do salão
+                  </label>
+
+                  <label className="checkbox-field" style={{ marginTop: 4 }}>
+                    <input
+                      type="checkbox"
+                      name="bookingPolicyAutoConfirmNewAppointments"
+                      defaultChecked={bookingPolicyAutoConfirmNewAppointments}
+                    />
+                    Aceitar sozinho horários lançados no painel
+                  </label>
+
+                  <label className="checkbox-field" style={{ marginTop: 4 }}>
+                    <input
+                      type="checkbox"
                       name="bookingPolicyConfirmationRequired"
                       defaultChecked={bookingPolicyConfirmationRequired}
                     />
@@ -1195,6 +1040,17 @@ export default async function SettingsPage({
                   </label>
                 </div>
 
+                <p className="muted">
+                  Horários escolhidos pela cliente no app entram confirmados
+                  automaticamente quando a vaga está disponível. Use esta opção
+                  para deixar o sistema cuidar do fluxo sem depender de botão do salão.
+                </p>
+              </SettingsFormSection>
+
+              <SettingsFormSection
+                title="Mensagem para a cliente"
+                description="Defina como a reserva aparece e o que a cliente precisa ler."
+              >
                 <div className="split-grid">
                   <label className="field">
                     <span>Título da política</span>
@@ -1279,13 +1135,6 @@ export default async function SettingsPage({
                     Cancelar automaticamente sem confirmação
                   </label>
 
-                  <article className="settings-status-card">
-                    <strong>Fluxo recomendado</strong>
-                    <p>
-                      Use confirmação obrigatória com cancelamento automático
-                      para reduzir no-shows em horários concorridos.
-                    </p>
-                  </article>
                 </div>
 
                 <label className="field">
@@ -1380,14 +1229,6 @@ export default async function SettingsPage({
                     </select>
                   </label>
 
-                  <article className="settings-status-card">
-                    <strong>Como isso aparece para a cliente</strong>
-                    <p>
-                      Pix e link de pagamento usam os dados do seu salão. O Pix
-                      automático só aparece quando essa opção já estiver
-                      liberada para a sua conta.
-                    </p>
-                  </article>
                 </div>
 
                 <div className="split-grid">
@@ -1460,32 +1301,6 @@ export default async function SettingsPage({
             </div>
             <span className="accordion__cta">Editar</span>
           </summary>
-
-          <div className="settings-summary-grid settings-summary-grid--three">
-            <SettingsSummaryCard
-              eyebrow="MFA"
-              title={
-                securityPolicy.mfaTotpEnabled
-                  ? "Obrigatório no painel"
-                  : "Opcional"
-              }
-              description="Use um autenticador TOTP para exigir uma segunda etapa no login."
-            />
-            <SettingsSummaryCard
-              eyebrow="Países"
-              title={
-                securityPolicy.geoAllowlistEnabled
-                  ? "Allowlist ativa"
-                  : "Sem bloqueio geográfico"
-              }
-              description={allowedCountryLabel}
-            />
-            <SettingsSummaryCard
-              eyebrow="Sessão"
-              title="Dispositivo e IP monitorados"
-              description="O painel mantém vínculo de sessão com dispositivo, IP e sinais de risco."
-            />
-          </div>
 
           <SalonSecuritySettingsPanel
             action={updateSalonSecurityPolicyAction}

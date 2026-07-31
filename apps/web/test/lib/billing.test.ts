@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { createClientMock } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
@@ -15,10 +15,6 @@ async function importBillingModule() {
   vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_123");
   vi.stubEnv("STRIPE_PRICE_STARTER_MONTHLY", "price_starter_m");
   vi.stubEnv("STRIPE_PRICE_STARTER_YEARLY", "price_starter_y");
-  vi.stubEnv("STRIPE_PRICE_GROWTH_MONTHLY", "price_growth_m");
-  vi.stubEnv("STRIPE_PRICE_GROWTH_YEARLY", "price_growth_y");
-  vi.stubEnv("STRIPE_PRICE_PREMIUM_MONTHLY", "price_premium_m");
-  vi.stubEnv("STRIPE_PRICE_PREMIUM_YEARLY", "price_premium_y");
 
   return import("@/lib/billing");
 }
@@ -80,12 +76,13 @@ describe("billing helpers", () => {
 
     expect(snapshot.isUsingFallback).toBe(true);
     expect(snapshot.currentPlan.id).toBe("starter");
+    expect(snapshot.currentPlan.displayName).toBe("Plano Único");
     expect(snapshot.subscription.status).toBe("paused");
     expect(snapshot.isLocked).toBe(true);
     expect(snapshot.statusLabel).toBe("Aguardando assinatura");
   });
 
-  it("hydrates the current plan and access state from billing tables", async () => {
+  it("collapses public catalog data into a single commercial plan", async () => {
     const { getSalonBillingSnapshot } = await importBillingModule();
 
     createClientMock.mockReturnValue({
@@ -100,8 +97,8 @@ describe("billing helpers", () => {
                       id: "starter",
                       display_name: "Starter",
                       description: "Base",
-                      monthly_price: 79,
-                      yearly_price: 790,
+                      monthly_price: 89,
+                      yearly_price: 1068,
                       currency_code: "BRL",
                       trial_days: 14,
                       max_staff_members: 3,
@@ -182,8 +179,13 @@ describe("billing helpers", () => {
     const snapshot = await getSalonBillingSnapshot("salon-growth");
 
     expect(snapshot.isUsingFallback).toBe(false);
-    expect(snapshot.currentPlan.id).toBe("growth");
+    expect(snapshot.plans).toHaveLength(1);
+    expect(snapshot.currentPlan.id).toBe("starter");
+    expect(snapshot.currentPlan.displayName).toBe("Plano Único");
+    expect(snapshot.currentPlan.monthlyPrice).toBe(89);
+    expect(snapshot.currentPlan.maxStaffMembers).toBeNull();
     expect(snapshot.currentPlan.includesFeedVideo).toBe(true);
+    expect(snapshot.subscription.billingInterval).toBe("yearly");
     expect(snapshot.accessState).toBe("healthy");
     expect(snapshot.statusLabel).toBe("Ativa");
     expect(snapshot.nextBillingDateLabel).toBeTruthy();
@@ -192,8 +194,105 @@ describe("billing helpers", () => {
   it("formats price and limits for the billing UI", async () => {
     const { formatBillingPrice, formatLimitLabel } = await importBillingModule();
 
-    expect(formatBillingPrice(149)).toMatch(/149/);
+    expect(formatBillingPrice(89)).toMatch(/89/);
     expect(formatLimitLabel(null, "serviço", "serviços")).toBe("Ilimitado");
     expect(formatLimitLabel(3, "profissional", "profissionais")).toBe("3 profissionais");
   });
+
+  it("ignores raw catalog limits and keeps the unified commercial offer", async () => {
+    const { getSalonBillingSnapshot } = await importBillingModule();
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "saas_plan_catalog") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                order: vi.fn().mockResolvedValue({
+                  data: [
+                    {
+                      id: "starter",
+                      display_name: "Starter",
+                      description: "Base",
+                      monthly_price: -89,
+                      yearly_price: -1068,
+                      currency_code: "BRL",
+                      trial_days: -14,
+                      max_staff_members: -3,
+                      max_services: -25,
+                      max_monthly_notifications: -1500,
+                      includes_growth_automation: false,
+                      includes_feed_video: false,
+                      includes_custom_branding: false,
+                      includes_priority_support: false,
+                      is_default: true,
+                      is_public: true,
+                      sort_order: -10,
+                      metadata: { highlight: "Starter" },
+                    },
+                  ],
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_subscriptions") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              })),
+            })),
+            upsert: vi.fn(() => ({
+              select: vi.fn(() => ({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: "sub-sanitized",
+                    salon_id: "salon-sanitized",
+                    plan_id: "starter",
+                    status: "paused",
+                    billing_interval: "monthly",
+                    trial_started_at: null,
+                    trial_ends_at: null,
+                    current_period_started_at: null,
+                    current_period_ends_at: null,
+                    grace_ends_at: null,
+                    activated_at: null,
+                    canceled_at: null,
+                    payment_provider: null,
+                    provider_customer_id: null,
+                    provider_subscription_id: null,
+                    created_at: "2026-04-02T12:00:00.000Z",
+                    updated_at: "2026-04-02T12:00:00.000Z",
+                  },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const snapshot = await getSalonBillingSnapshot("salon-sanitized");
+
+    expect(snapshot.currentPlan.displayName).toBe("Plano Único");
+    expect(snapshot.currentPlan.monthlyPrice).toBe(89);
+    expect(snapshot.currentPlan.yearlyPrice).toBe(890);
+    expect(snapshot.currentPlan.maxStaffMembers).toBeNull();
+    expect(snapshot.currentPlan.maxServices).toBeNull();
+    expect(snapshot.currentPlan.maxMonthlyNotifications).toBeNull();
+    expect(snapshot.currentPlan.includesGrowthAutomation).toBe(true);
+    expect(snapshot.currentPlan.includesFeedVideo).toBe(true);
+    expect(snapshot.currentPlan.includesPrioritySupport).toBe(true);
+  });
 });
+
+

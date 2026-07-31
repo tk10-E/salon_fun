@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createSalonAction } from "@/app/actions";
 import { FlashMessage } from "@/components/FlashMessage";
 import { getOwnerSalon, requireUser } from "@/lib/auth";
+import { resolveOnboardingReturnPath } from "@/lib/onboardingActivation";
 import { SALON_SEGMENT_OPTIONS } from "@/lib/salonSegments";
 
 export const dynamic = "force-dynamic";
@@ -10,13 +11,17 @@ export const dynamic = "force-dynamic";
 type OnboardingPageProps = {
   searchParams?: Promise<{
     message?: string;
+    returnPath?: string;
     tone?: string;
   }>;
 };
 
 export default async function OnboardingPage({ searchParams: searchParamsPromise }: OnboardingPageProps) {
-  const searchParams = await searchParamsPromise;
-  const { user } = await requireUser();
+  const [searchParams, { user }] = await Promise.all([
+    searchParamsPromise,
+    requireUser(),
+  ]);
+  const returnPath = resolveOnboardingReturnPath(searchParams?.returnPath);
 
   const existingSalon = await getOwnerSalon(user.id);
 
@@ -28,14 +33,16 @@ export default async function OnboardingPage({ searchParams: searchParamsPromise
     <div className="setup-page">
       <section className="setup-card card">
         <span className="eyebrow">Primeiros passos</span>
-        <h1>Falta pouco para o seu salão ficar pronto.</h1>
-        <p>Informe o nome do salão e escolha o segmento. O app já nasce com um preset visual e comercial mais próximo do seu negócio.</p>
+        <h1>Falta pouco para o seu salão começar.</h1>
+        <p>Informe o nome do salão e escolha o segmento. Na próxima etapa, você escolhe a assinatura para liberar o painel.</p>
 
         <div className="setup-highlight">
-          <strong>Em instantes você já pode cadastrar serviços, entrar com um visual-base do seu segmento e compartilhar o acesso com seus clientes.</strong>
+          <strong>Primeiro você cria o salão. Depois escolhe a assinatura para liberar agenda, clientes, caixa e o restante do painel.</strong>
         </div>
 
         <form action={createSalonAction} className="form-grid">
+          <input type="hidden" name="returnPath" value={returnPath} />
+
           <div className="field">
             <label htmlFor="salon-name">Nome do salão</label>
             <input id="salon-name" name="name" placeholder="Studio Beleza Centro" required />

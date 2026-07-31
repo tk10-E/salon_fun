@@ -6,13 +6,13 @@ import {
   closeTabAction,
   openTabAction,
 } from "@/app/actions";
-import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
-import { WorkspaceSectionNav } from "@/components/WorkspaceSectionNav";
 import { requireOwnerSalon } from "@/lib/auth";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { createClient } from "@/lib/supabase/server";
+
+import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -86,18 +86,22 @@ function formatTabStatusLabel(status: string) {
 function formatPaymentMethodLabel(method: string) {
   switch (method) {
     case "card":
-      return "Cartao";
+      return "Cartão";
     case "cash":
       return "Dinheiro";
     case "voucher":
       return "Voucher";
     case "transfer":
-      return "Transferencia";
+      return "Transferência";
     case "other":
       return "Outro";
     default:
       return "Pix";
   }
+}
+
+function formatCountLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function buildNextActionSummary({
@@ -113,15 +117,15 @@ function buildNextActionSummary({
 }) {
   if (!itemCount) {
     return {
-      title: "Lancar atendimento",
-      note: "Inclua o primeiro servico ou produto antes de cobrar.",
+      title: "Lançar atendimento",
+      note: "Inclua o primeiro serviço ou produto antes de cobrar.",
     };
   }
 
   if (totalAmount <= 0) {
     return {
       title: "Definir valor",
-      note: "Revise quantidade e preco para formar a conta.",
+      note: "Revise quantidade e preço para formar a conta.",
     };
   }
 
@@ -134,8 +138,8 @@ function buildNextActionSummary({
 
   if (!paymentCount) {
     return {
-      title: "Registrar primeira cobranca",
-      note: `Ha ${formatCurrency(totalAmount)} em aberto nessa comanda.`,
+      title: "Registrar primeira cobrança",
+      note: `Há ${formatCurrency(totalAmount)} em aberto nesta comanda.`,
     };
   }
 
@@ -154,6 +158,34 @@ function getDateValue(value: string | null | undefined) {
 
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function initials(value?: string | null) {
+  return (
+    value
+      ?.split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "SF"
+  );
+}
+
+function badgeClass(
+  tone: "accent" | "soft" | "success" | "warm" | "danger",
+) {
+  switch (tone) {
+    case "accent":
+      return styles.badgeAccent;
+    case "success":
+      return styles.badgeSuccess;
+    case "warm":
+      return styles.badgeWarm;
+    case "danger":
+      return styles.badgeDanger;
+    default:
+      return styles.badgeSoft;
+  }
 }
 
 export default async function ComandasPage({
@@ -256,7 +288,7 @@ export default async function ComandasPage({
 
     const service = serviceCatalog.get(serviceId) ?? {
       id: serviceId,
-      name: serviceRelation?.name ?? "Servico sugerido",
+      name: serviceRelation?.name ?? "Serviço sugerido",
       price: Number(serviceRelation?.price ?? 0),
     };
     const current = topServiceMap.get(serviceId);
@@ -383,717 +415,684 @@ export default async function ComandasPage({
   const topOpportunityLabel = topProductSuggestion
     ? topProductSuggestion.name
     : topServiceSuggestion?.name ?? "Sem sugestao forte no momento";
+  const openTabsHref = "/dashboard/operations/comandas#comandas-abertas";
+  const createTabHref = "/dashboard/operations/comandas#abrir-comanda";
 
   return (
-    <div className="page-grid workspace-page operations-page operations-simple operations-comandas-page">
+    <div className={styles.page}>
       {searchParams?.message ? (
         <FlashMessage message={searchParams.message} tone={searchParams.tone} />
       ) : null}
 
-      <DashboardWorkspaceHero
-        eyebrow="Caixa do salao"
-        title="Comandas"
-        description="Abra, lance itens, receba e feche sem complicar."
-        highlight={{
-          label: "Em aberto",
-          value: formatCurrency(pendingAmount),
-          note: openTabs.length
-            ? `${openTabs.length} comanda(s) aberta(s) agora.`
-            : "Nenhuma comanda aberta neste momento.",
-        }}
-        signals={[
-          {
-            label: "Recebido",
-            value: formatCurrency(receivedAmount),
-            tone: receivedAmount > 0 ? "success" : "soft",
-          },
-          {
-            label: "Prontas para fechar",
-            value: tabsReadyToClose,
-            tone: tabsReadyToClose > 0 ? "success" : "soft",
-          },
-          {
-            label: "Sugestao",
-            value: topOpportunityLabel,
-            tone:
-              topProductSuggestion || topServiceSuggestion ? "warm" : "soft",
-          },
-        ]}
-        stats={[
-          {
-            label: "Abertas agora",
-            value: openTabs.length,
-            note: "Comandas ainda em atendimento.",
-            tone: openTabs.length ? "accent" : "soft",
-          },
-          {
-            label: "Lancamentos ativos",
-            value: openItemEntries,
-            note: "Itens ja registrados nas abertas.",
-            tone: openItemEntries ? "accent" : "soft",
-          },
-          {
-            label: "Cobrancas registradas",
-            value: openPaymentEntries,
-            note: "Pagamentos parciais ou totais em andamento.",
-            tone: openPaymentEntries ? "success" : "soft",
-          },
-          {
-            label: "Sem cliente",
-            value: tabsWithoutCustomer,
-            note: "Abertas sem cadastro vinculado.",
-            tone: tabsWithoutCustomer ? "warm" : "soft",
-          },
-        ]}
-        aside={
-          <div className="operations-comandas-page__hero-aside">
-            <h3>Hoje</h3>
-            <p>
+      <section className={styles.hero}>
+        <div className={styles.headerRow}>
+          <div className={styles.headerContent}>
+            <p className={styles.eyebrow}>Caixa do salão</p>
+            <h1>Comandas</h1>
+            <p className={styles.lead}>
+              Abra, lance itens, receba e feche sem parar a operação.
+            </p>
+          </div>
+
+          <div className={styles.headerActions}>
+            <a href="#historico-comandas" className={styles.secondaryButton}>
+              Histórico
+            </a>
+            <a href="#abrir-comanda" className={styles.primaryButton}>
+              Nova comanda
+            </a>
+          </div>
+        </div>
+
+        <div className={styles.metricGrid}>
+          <article className={styles.metricCard}>
+            <span className={styles.metricLabel}>Em aberto</span>
+            <strong className={styles.metricValue}>
+              {formatCurrency(pendingAmount)}
+            </strong>
+            <p className={styles.metricMeta}>
+              {openTabs.length
+                ? `${formatCountLabel(openTabs.length, "comanda aberta", "comandas abertas")} agora.`
+                : "Nenhuma comanda aberta neste momento."}
+            </p>
+          </article>
+          <article className={styles.metricCard}>
+            <span className={styles.metricLabel}>Recebido</span>
+            <strong className={styles.metricValue}>
+              {formatCurrency(receivedAmount)}
+            </strong>
+            <p className={styles.metricMeta}>Já entrou no caixa das comandas.</p>
+          </article>
+          <article className={styles.metricCard}>
+            <span className={styles.metricLabel}>Ticket médio</span>
+            <strong className={styles.metricValue}>
+              {formatCurrency(openTabsAverage)}
+            </strong>
+            <p className={styles.metricMeta}>Média das comandas em atendimento.</p>
+          </article>
+          <article className={styles.metricCard}>
+            <span className={styles.metricLabel}>Prontas para fechar</span>
+            <strong className={styles.metricValue}>{tabsReadyToClose}</strong>
+            <p className={styles.metricMeta}>Contas com valor total quitado.</p>
+          </article>
+          <article className={styles.metricCard}>
+            <span className={styles.metricLabel}>Abertas agora</span>
+            <strong className={styles.metricValue}>{openTabs.length}</strong>
+            <p className={styles.metricMeta}>
+              {formatCountLabel(openItemEntries, "lançamento", "lançamentos")} e{" "}
+              {formatCountLabel(openPaymentEntries, "cobrança", "cobranças")} registradas.
+            </p>
+          </article>
+          <article className={styles.metricCard}>
+            <span className={styles.metricLabel}>Sugestão em alta</span>
+            <strong className={styles.metricTitle}>{topOpportunityLabel}</strong>
+            <p className={styles.metricMeta}>
               {largestOpenTab
                 ? `Maior comanda: ${formatCurrency(
                     Number(largestOpenTab.total_items ?? 0),
-                  )} de ${
-                    firstRelation(largestOpenTab.customers)?.name ??
-                    "cliente sem cadastro"
-                  }.`
-                : "Sem comandas abertas agora."}
+                  )}.`
+                : "Sem oportunidade forte no momento."}
             </p>
+          </article>
+        </div>
+      </section>
 
-            <div className="operations-comandas-page__hero-grid">
-              <article>
-                <span>Pendente</span>
-                <strong>{formatCurrency(pendingAmount)}</strong>
-              </article>
-              <article>
-                <span>Recebido</span>
-                <strong>{formatCurrency(receivedAmount)}</strong>
-              </article>
-              <article>
-                <span>Prontas para fechar</span>
+      <div className={styles.contentGrid}>
+        <div className={styles.mainColumn}>
+          <section id="comandas-abertas" className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Operação viva</p>
+                <h2>Comandas em andamento</h2>
+                <p className={styles.panelCopy}>Tudo o que esta aberto agora.</p>
+              </div>
+              <div className={styles.pillRow}>
+                <span className={styles.countPill}>Abertas agora: {openTabs.length}</span>
+                <span className={styles.countPill}>
+                  Sem cliente: {tabsWithoutCustomer}
+                </span>
+              </div>
+            </div>
+
+            {!orderedOpenTabs.length ? (
+              <EmptyStateCard
+                eyebrow="Caixa livre"
+                title="Nenhuma comanda em andamento"
+                description="Abra uma quando precisar somar itens e fechar depois."
+              />
+            ) : (
+              <div className={styles.tabGrid}>
+                {orderedOpenTabs.map((tab) => {
+                  const customer = firstRelation(tab.customers);
+                  const items = tab.customer_tab_items ?? [];
+                  const payments = tab.customer_tab_payments ?? [];
+                  const totalAmount = Number(tab.total_items ?? 0);
+                  const paidAmount = Number(tab.total_paid ?? 0);
+                  const dueAmount = Math.max(0, totalAmount - paidAmount);
+                  const overpaidAmount = Math.max(0, paidAmount - totalAmount);
+                  const itemEntriesCount = items.length;
+                  const paymentEntriesCount = payments.length;
+                  const serviceEntriesCount = items.filter((item) =>
+                    Boolean(item.service_id),
+                  ).length;
+                  const productEntriesCount = items.filter((item) =>
+                    Boolean(item.inventory_product_id),
+                  ).length;
+                  const paymentProgress =
+                    totalAmount > 0
+                      ? Math.min(
+                          100,
+                          Math.round(
+                            (Math.min(paidAmount, totalAmount) / totalAmount) * 100,
+                          ),
+                        )
+                      : paymentEntriesCount
+                        ? 100
+                        : 0;
+                  const nextAction = buildNextActionSummary({
+                    itemCount: itemEntriesCount,
+                    paidAmount,
+                    paymentCount: paymentEntriesCount,
+                    totalAmount,
+                  });
+                  const hasServiceItem = serviceEntriesCount > 0;
+                  const hasProductItem = productEntriesCount > 0;
+                  return (
+                    <article key={tab.id} className={styles.tabCard}>
+                      <div className={styles.tabHeader}>
+                        <div className={styles.customerBlock}>
+                          <div className={styles.customerAvatar}>
+                            {initials(customer?.name)}
+                          </div>
+                          <div>
+                            <div className={styles.badgeRow}>
+                              <span className={`${styles.badge} ${badgeClass("accent")}`}>
+                                {formatTabStatusLabel(tab.status)}
+                              </span>
+                              <span className={`${styles.badge} ${badgeClass("soft")}`}>
+                                Aberta {formatDateTime(tab.opened_at)}
+                              </span>
+                              <span className={`${styles.badge} ${badgeClass("warm")}`}>
+                                Em aberto {formatCurrency(dueAmount)}
+                              </span>
+                              {!customer ? (
+                                <span className={`${styles.badge} ${badgeClass("soft")}`}>
+                                  Sem cliente
+                                </span>
+                              ) : null}
+                            </div>
+                            <h3>{customer?.name ?? "Cliente sem cadastro"}</h3>
+                            <p className={styles.tabCopy}>
+                              {tab.notes?.trim() ? tab.notes : "Sem observação."}
+                            </p>
+                            <small className={styles.metaLine}>
+                              {customer?.phone
+                                ? `Contato: ${customer.phone}`
+                                : customer
+                                  ? "Cadastro sem telefone"
+                                  : "Atendimento sem cliente"}
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className={styles.totalGrid}>
+                          <article className={styles.statCard}>
+                            <small>Total</small>
+                            <strong>{formatCurrency(totalAmount)}</strong>
+                          </article>
+                          <article className={styles.statCard}>
+                            <small>Pago</small>
+                            <strong>{formatCurrency(paidAmount)}</strong>
+                          </article>
+                          <article className={styles.statCard}>
+                            <small>Falta</small>
+                            <strong>{formatCurrency(dueAmount)}</strong>
+                          </article>
+                        </div>
+                      </div>
+
+                      <div className={styles.metaGrid}>
+                        <article className={styles.metaCard}>
+                          <small>Itens</small>
+                          <strong>{itemEntriesCount}</strong>
+                          <span>
+                            {itemEntriesCount
+                              ? `${formatCountLabel(serviceEntriesCount, "serviço", "serviços")} e ${formatCountLabel(productEntriesCount, "produto", "produtos")}`
+                              : "Nada lançado"}
+                          </span>
+                        </article>
+                        <article className={styles.metaCard}>
+                          <small>Pagamentos</small>
+                          <strong>{paymentEntriesCount}</strong>
+                          <span>
+                            {paymentEntriesCount ? "Já registrado" : "Sem registro"}
+                          </span>
+                        </article>
+                        <article className={styles.metaCard}>
+                          <small>Cliente</small>
+                          <strong>{customer?.name ?? "Avulsa"}</strong>
+                          <span>
+                            {customer?.phone
+                              ? customer.phone
+                              : customer
+                                ? "Sem telefone"
+                                : "Sem cliente"}
+                          </span>
+                        </article>
+                        <article className={styles.metaCard}>
+                          <small>Próxima ação</small>
+                          <strong>{nextAction.title}</strong>
+                          <span>{nextAction.note}</span>
+                        </article>
+                      </div>
+
+                      <div className={styles.progressCard}>
+                        <div className={styles.progressHeader}>
+                          <div>
+                            <small>Liquidação da conta</small>
+                            <strong>{paymentProgress}% recebido</strong>
+                          </div>
+                          <span className={styles.metaLine}>
+                            {overpaidAmount > 0
+                              ? `Credito de ${formatCurrency(overpaidAmount)} acima do total.`
+                              : dueAmount > 0
+                                ? `${formatCurrency(dueAmount)} ainda em aberto.`
+                                : "Conta quitada e pronta para fechar."}
+                          </span>
+                        </div>
+                        <div className={styles.progressTrack}>
+                          <span style={{ width: `${paymentProgress}%` }} />
+                        </div>
+                      </div>
+
+                      <div className={styles.bodyGrid}>
+                        <div className={styles.bodyCard}>
+                          <div className={styles.sectionHead}>
+                            <h4>Itens</h4>
+                          </div>
+                          {!items.length ? (
+                            <p className={styles.emptyCopy}>Nenhum item ainda.</p>
+                          ) : (
+                            <ul className={styles.bulletList}>
+                              {items.map((item) => (
+                                <li key={item.id}>
+                                  {item.description} • {item.quantity} x{" "}
+                                  {formatCurrency(Number(item.unit_price ?? 0))} ={" "}
+                                  {formatCurrency(Number(item.total ?? 0))}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+
+                          <form action={addTabItemAction} className={styles.form}>
+                            <input type="hidden" name="returnPath" value={openTabsHref} />
+                            <input type="hidden" name="tabId" value={tab.id} />
+                            <div className={styles.formGrid}>
+                              <label className={styles.field}>
+                                <span>Descrição</span>
+                                <input
+                                  name="description"
+                                  placeholder="Ex.: corte + barba"
+                                  required
+                                />
+                              </label>
+                              <label className={styles.field}>
+                                <span>Quantidade</span>
+                                <input
+                                  name="quantity"
+                                  type="number"
+                                  step="0.1"
+                                  min="0.1"
+                                  defaultValue="1"
+                                  required
+                                />
+                              </label>
+                              <label className={styles.field}>
+                                <span>Preco</span>
+                                <input
+                                  name="unitPrice"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  defaultValue="0"
+                                  required
+                                />
+                              </label>
+                              <label className={styles.field}>
+                                <span>Serviço</span>
+                                <select name="serviceId" defaultValue="">
+                                  <option value="">Opcional</option>
+                                  {services.map((service) => (
+                                    <option key={service.id} value={service.id}>
+                                      {service.name} (
+                                      {formatCurrency(Number(service.price ?? 0))})
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className={styles.field}>
+                                <span>Produto</span>
+                                <select name="productId" defaultValue="">
+                                  <option value="">Opcional</option>
+                                  {products.map((product) => (
+                                    <option key={product.id} value={product.id}>
+                                      {product.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <button type="submit" className={styles.secondaryButton}>
+                              Adicionar item
+                            </button>
+                          </form>
+                        </div>
+
+                        <div className={styles.bodyCard}>
+                          <div className={styles.sectionHead}>
+                            <h4>Pagamentos</h4>
+                          </div>
+                          {!payments.length ? (
+                            <p className={styles.emptyCopy}>Nenhum pagamento ainda.</p>
+                          ) : (
+                            <ul className={styles.bulletList}>
+                              {payments.map((payment) => (
+                                <li key={payment.id}>
+                                  {formatPaymentMethodLabel(payment.method)} •{" "}
+                                  {formatCurrency(Number(payment.amount ?? 0))}
+                                  {payment.note ? ` • ${payment.note}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+
+                          <form action={addTabPaymentAction} className={styles.form}>
+                            <input type="hidden" name="returnPath" value={openTabsHref} />
+                            <input type="hidden" name="tabId" value={tab.id} />
+                            <div className={styles.formGrid}>
+                              <label className={styles.field}>
+                                <span>Valor</span>
+                                <input
+                                  name="amount"
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  required
+                                />
+                              </label>
+                              <label className={styles.field}>
+                                <span>Forma</span>
+                                <select name="method" defaultValue="pix">
+                                  <option value="pix">Pix</option>
+                                  <option value="card">Cartão</option>
+                                  <option value="cash">Dinheiro</option>
+                                  <option value="voucher">Voucher</option>
+                                  <option value="transfer">Transferência</option>
+                                  <option value="other">Outro</option>
+                                </select>
+                              </label>
+                              <label className={styles.field}>
+                                <span>Obs.</span>
+                                <input name="note" placeholder="Ex.: sinal" />
+                              </label>
+                            </div>
+                            <button type="submit" className={styles.secondaryButton}>
+                              Registrar pagamento
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+
+                      {((hasServiceItem && !hasProductItem && topProductSuggestion) ||
+                        (hasProductItem && !hasServiceItem && topServiceSuggestion) ||
+                        (!items.length &&
+                          (topProductSuggestion || topServiceSuggestion))) ? (
+                        <div className={styles.suggestionGrid}>
+                          {(hasServiceItem || !items.length) &&
+                          !hasProductItem &&
+                          topProductSuggestion ? (
+                            <div className={styles.suggestionCard}>
+                              <p className={styles.eyebrow}>Sugestão</p>
+                              <h4>{topProductSuggestion.name}</h4>
+                              <p className={styles.panelCopy}>
+                                Complemento com boa saída.{" "}
+                                {formatCurrency(topProductSuggestion.price)}
+                              </p>
+                              <form action={addTabItemAction} className={styles.quickForm}>
+                                <input type="hidden" name="returnPath" value={openTabsHref} />
+                                <input type="hidden" name="tabId" value={tab.id} />
+                                <input
+                                  type="hidden"
+                                  name="description"
+                                  value={topProductSuggestion.name}
+                                />
+                                <input type="hidden" name="quantity" value="1" />
+                                <input
+                                  type="hidden"
+                                  name="unitPrice"
+                                  value={topProductSuggestion.price.toFixed(2)}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="productId"
+                                  value={topProductSuggestion.productId ?? ""}
+                                />
+                                <button type="submit" className={styles.secondaryButton}>
+                                  Adicionar produto sugerido
+                                </button>
+                              </form>
+                            </div>
+                          ) : null}
+
+                          {(hasProductItem || !items.length) &&
+                          !hasServiceItem &&
+                          topServiceSuggestion ? (
+                            <div className={styles.suggestionCard}>
+                              <p className={styles.eyebrow}>Retorno</p>
+                              <h4>{topServiceSuggestion.name}</h4>
+                              <p className={styles.panelCopy}>
+                                Serviço recorrente com valor real de{" "}
+                                {formatCurrency(topServiceSuggestion.price)}.
+                              </p>
+                              <form action={addTabItemAction} className={styles.quickForm}>
+                                <input type="hidden" name="returnPath" value={openTabsHref} />
+                                <input type="hidden" name="tabId" value={tab.id} />
+                                <input
+                                  type="hidden"
+                                  name="description"
+                                  value={topServiceSuggestion.name}
+                                />
+                                <input type="hidden" name="quantity" value="1" />
+                                <input
+                                  type="hidden"
+                                  name="unitPrice"
+                                  value={topServiceSuggestion.price.toFixed(2)}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="serviceId"
+                                  value={topServiceSuggestion.id}
+                                />
+                                <button type="submit" className={styles.secondaryButton}>
+                                  Adicionar serviço sugerido
+                                </button>
+                              </form>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div className={styles.footerActions}>
+                        <form action={closeTabAction}>
+                          <input type="hidden" name="returnPath" value={openTabsHref} />
+                          <input type="hidden" name="tabId" value={tab.id} />
+                          <input type="hidden" name="status" value="closed" />
+                          <button type="submit" className={styles.primaryButton}>
+                            Fechar comanda
+                          </button>
+                        </form>
+                        <form action={closeTabAction}>
+                          <input type="hidden" name="returnPath" value={openTabsHref} />
+                          <input type="hidden" name="tabId" value={tab.id} />
+                          <input type="hidden" name="status" value="cancelled" />
+                          <button type="submit" className={styles.secondaryButton}>
+                            Cancelar
+                          </button>
+                        </form>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section id="historico-comandas" className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Histórico</p>
+                <h2>Encerradas recentemente</h2>
+                <p className={styles.panelCopy}>Fechadas ou canceladas.</p>
+              </div>
+              <span className={styles.countPill}>
+                {formatCountLabel(recentTabs.length, "conta recente", "contas recentes")}
+              </span>
+            </div>
+
+            {!recentTabs.length ? (
+              <EmptyStateCard
+                eyebrow="Sem histórico"
+                title="Nenhuma comanda encerrada ainda"
+                description="As contas fechadas e canceladas passam a aparecer aqui."
+              />
+            ) : (
+              <div className={styles.historyList}>
+                {recentTabs.map((tab) => {
+                  const customer = firstRelation(tab.customers);
+                  const totalAmount = Number(tab.total_items ?? 0);
+                  const paidAmount = Number(tab.total_paid ?? 0);
+                  const historyTone = tab.status === "closed" ? "success" : "danger";
+
+                  return (
+                    <article key={tab.id} className={styles.historyRow}>
+                      <div className={styles.historyMain}>
+                        <div className={styles.badgeRow}>
+                          <span className={`${styles.badge} ${badgeClass(historyTone)}`}>
+                            {formatTabStatusLabel(tab.status)}
+                          </span>
+                          <span className={`${styles.badge} ${badgeClass("soft")}`}>
+                            Aberta {formatDateTime(tab.opened_at)}
+                          </span>
+                          {tab.closed_at ? (
+                            <span className={`${styles.badge} ${badgeClass("soft")}`}>
+                              Encerrada {formatDateTime(tab.closed_at)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <h3>{customer?.name ?? "Cliente sem cadastro"}</h3>
+                        <p className={styles.tabCopy}>
+                          {tab.notes?.trim()
+                            ? tab.notes
+                            : tab.status === "cancelled"
+                              ? "Comanda encerrada sem venda."
+                              : "Conta encerrada com sucesso no caixa."}
+                        </p>
+                        <small className={styles.metaLine}>
+                          {customer?.phone
+                            ? `Contato: ${customer.phone}`
+                            : customer
+                              ? "Cadastro sem telefone"
+                              : "Comanda avulsa"}
+                        </small>
+                      </div>
+
+                      <div className={styles.historyMetrics}>
+                        <article className={styles.statCard}>
+                          <small>Total</small>
+                          <strong>{formatCurrency(totalAmount)}</strong>
+                        </article>
+                        <article className={styles.statCard}>
+                          <small>Pago</small>
+                          <strong>{formatCurrency(paidAmount)}</strong>
+                        </article>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className={styles.sidebarColumn}>
+          <section id="abrir-comanda" className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.eyebrow}>Abertura rapida</p>
+                <h2>Abrir comanda</h2>
+                <p className={styles.panelCopy}>
+                  Cliente e observação são opcionais.
+                </p>
+              </div>
+            </div>
+
+            <form action={openTabAction} className={styles.form}>
+              <input type="hidden" name="returnPath" value={createTabHref} />
+              <div className={styles.formGrid}>
+                <label className={styles.field}>
+                  <span>Cliente</span>
+                  <select name="customerId" defaultValue="">
+                    <option value="">Selecionar</option>
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span>Observação</span>
+                  <input name="notes" placeholder="Ex.: cadeira 2" />
+                </label>
+              </div>
+              <button type="submit" className={styles.primaryButton}>
+                Abrir comanda
+              </button>
+            </form>
+          </section>
+
+          <section className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.eyebrow}>Painel da fila</p>
+                <h2>Leitura executiva</h2>
+              </div>
+            </div>
+
+            <div className={styles.insightList}>
+              <article className={styles.insightRow}>
+                <span>Maior comanda aberta</span>
                 <strong>
-                  {tabsReadyToClose
-                    ? `${tabsReadyToClose} pronta(s)`
-                    : "Nenhuma pronta"}
+                  {largestOpenTab
+                    ? formatCurrency(Number(largestOpenTab.total_items ?? 0))
+                    : "R$ 0,00"}
                 </strong>
+                <small>
+                  {largestOpenTab
+                    ? firstRelation(largestOpenTab.customers)?.name ??
+                      "Cliente sem cadastro"
+                    : "Sem destaque agora"}
+                </small>
               </article>
-              <article>
-                <span>Ticket medio</span>
-                <strong>{formatCurrency(openTabsAverage)}</strong>
+              <article className={styles.insightRow}>
+                <span>Prontas para fechar</span>
+                <strong>{tabsReadyToClose}</strong>
+                <small>Contas liquidadas para limpar a fila.</small>
+              </article>
+              <article className={styles.insightRow}>
+                <span>Itens em aberto</span>
+                <strong>{openItemEntries}</strong>
+                <small>Lancamentos ativos nas comandas abertas.</small>
+              </article>
+              <article className={styles.insightRow}>
+                <span>Sem cliente vinculado</span>
+                <strong>{tabsWithoutCustomer}</strong>
+                <small>Vincule o cadastro para melhorar o histórico.</small>
               </article>
             </div>
-          </div>
-        }
-      />
+          </section>
 
-      <WorkspaceSectionNav
-        label="Ir para uma area"
-        items={[
-          {
-            href: "#abrir-comanda",
-            label: "Nova",
-            meta: "Abrir",
-          },
-          {
-            href: "#comandas-abertas",
-            label: "Abertas",
-            meta: `${orderedOpenTabs.length} aberta(s)`,
-          },
-          {
-            href: "#historico-comandas",
-            label: "Historico",
-            meta: `${recentTabs.length} recente(s)`,
-          },
-        ]}
-      />
-
-      <section className="operations-comandas-page__summary-grid">
-        <article className="stat-card">
-          <small>Abertas agora</small>
-          <strong>{openTabs.length}</strong>
-          <span className="muted">Em atendimento.</span>
-        </article>
-        <article className="stat-card">
-          <small>Em aberto</small>
-          <strong>{formatCurrency(pendingAmount)}</strong>
-          <span className="muted">Falta receber.</span>
-        </article>
-        <article className="stat-card">
-          <small>Recebido</small>
-          <strong>{formatCurrency(receivedAmount)}</strong>
-          <span className="muted">Ja entrou no caixa.</span>
-        </article>
-        <article className="stat-card">
-          <small>Prontas</small>
-          <strong>{tabsReadyToClose}</strong>
-          <span className="muted">Pode encerrar.</span>
-        </article>
-      </section>
-
-      <section
-        id="abrir-comanda"
-        className="card content-card operations-comandas-page__intro-card"
-      >
-        <div className="section-heading">
-          <div>
-            <h2>Abrir comanda</h2>
-            <p className="muted">Cliente e observacao sao opcionais.</p>
-          </div>
-        </div>
-        <form action={openTabAction} className="simple-form">
-          <div className="split-grid">
-            <div className="field">
-              <label htmlFor="customerId">Cliente</label>
-              <select id="customerId" name="customerId" defaultValue="">
-                <option value="">Selecionar</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}
-                  </option>
-                ))}
-              </select>
+          <section className={styles.sidebarCard}>
+            <div className={styles.sidebarHeader}>
+              <div>
+                <p className={styles.eyebrow}>Upsell</p>
+                <h2>Oportunidades rápidas</h2>
+              </div>
             </div>
-            <div className="field">
-              <label htmlFor="notes">Observacao</label>
-              <input id="notes" name="notes" placeholder="Ex.: cadeira 2" />
+
+            <div className={styles.insightList}>
+              <article className={styles.insightRow}>
+                <span>Serviço com melhor saída</span>
+                <strong>{topServiceSuggestion?.name ?? "Sem leitura"}</strong>
+                <small>
+                  {topServiceSuggestion
+                    ? formatCurrency(topServiceSuggestion.price)
+                    : "Sem serviço em destaque agora"}
+                </small>
+              </article>
+              <article className={styles.insightRow}>
+                <span>Produto com melhor saída</span>
+                <strong>{topProductSuggestion?.name ?? "Sem leitura"}</strong>
+                <small>
+                  {topProductSuggestion
+                    ? formatCurrency(topProductSuggestion.price)
+                    : "Sem produto destacado agora"}
+                </small>
+              </article>
             </div>
-          </div>
-          <button type="submit" className="primary-button" style={{ marginTop: 8 }}>
-            Abrir comanda
-          </button>
-        </form>
-      </section>
-
-      <section id="comandas-abertas" className="card content-card">
-        <div className="section-heading">
-          <div>
-            <h2>Comandas em andamento</h2>
-            <p className="muted">O que esta aberto agora.</p>
-          </div>
+          </section>
         </div>
-
-        {!orderedOpenTabs.length ? (
-          <EmptyStateCard
-            eyebrow="Caixa livre"
-            title="Nenhuma comanda em andamento"
-            description="Abra uma quando precisar somar itens e fechar depois."
-          />
-        ) : (
-          <div className="simple-list operations-comandas-page__stack">
-            {orderedOpenTabs.map((tab) => {
-              const customer = firstRelation(tab.customers);
-              const items = tab.customer_tab_items ?? [];
-              const payments = tab.customer_tab_payments ?? [];
-              const totalAmount = Number(tab.total_items ?? 0);
-              const paidAmount = Number(tab.total_paid ?? 0);
-              const dueAmount = Math.max(0, totalAmount - paidAmount);
-              const overpaidAmount = Math.max(0, paidAmount - totalAmount);
-              const itemEntriesCount = items.length;
-              const paymentEntriesCount = payments.length;
-              const serviceEntriesCount = items.filter(
-                (item) => Boolean(item.service_id),
-              ).length;
-              const productEntriesCount = items.filter(
-                (item) => Boolean(item.inventory_product_id),
-              ).length;
-              const paymentProgress =
-                totalAmount > 0
-                  ? Math.min(
-                      100,
-                      Math.round(
-                        (Math.min(paidAmount, totalAmount) / totalAmount) * 100,
-                      ),
-                    )
-                  : paymentEntriesCount
-                    ? 100
-                    : 0;
-              const nextAction = buildNextActionSummary({
-                itemCount: itemEntriesCount,
-                paidAmount,
-                paymentCount: paymentEntriesCount,
-                totalAmount,
-              });
-              const hasServiceItem = serviceEntriesCount > 0;
-              const hasProductItem = productEntriesCount > 0;
-              const suggestedServicePrice = topServiceSuggestion
-                ? Number((topServiceSuggestion.price * 0.9).toFixed(2))
-                : 0;
-
-              return (
-                <article
-                  key={tab.id}
-                  className="simple-row operations-comandas-page__tab-card operations-comandas-page__tab-card--active"
-                  style={{ borderColor: "var(--dashboard-border)" }}
-                >
-                  <div className="operations-comandas-page__tab-header">
-                    <div>
-                      <div
-                        className="inline-actions"
-                        style={{ flexWrap: "wrap", marginBottom: 8 }}
-                      >
-                        <span className="badge badge--accent">
-                          {formatTabStatusLabel(tab.status)}
-                        </span>
-                        <span className="badge badge--soft">
-                          Aberta {formatDateTime(tab.opened_at)}
-                        </span>
-                        <span className="badge badge--pending">
-                          Em aberto {formatCurrency(dueAmount)}
-                        </span>
-                        {!customer ? (
-                          <span className="badge badge--soft">Sem cliente</span>
-                        ) : null}
-                      </div>
-
-                      <h3>{customer?.name ?? "Cliente sem cadastro"}</h3>
-                      <p className="muted">
-                        {tab.notes?.trim()
-                          ? tab.notes
-                          : "Sem observacao."}
-                      </p>
-                      <small className="list-meta">
-                        {customer?.phone
-                          ? `Contato: ${customer.phone}`
-                          : customer
-                            ? "Cadastro sem telefone"
-                            : "Atendimento sem cliente vinculado"}
-                      </small>
-                    </div>
-
-                    <div className="operations-comandas-page__tab-totals">
-                      <article className="stat-card">
-                        <small>Total</small>
-                        <strong>{formatCurrency(totalAmount)}</strong>
-                      </article>
-                      <article className="stat-card">
-                        <small>Pago</small>
-                        <strong>{formatCurrency(paidAmount)}</strong>
-                      </article>
-                      <article className="stat-card">
-                        <small>Falta</small>
-                        <strong>{formatCurrency(dueAmount)}</strong>
-                      </article>
-                    </div>
-                  </div>
-
-                  <div className="operations-comandas-page__tab-overview">
-                    <article className="operations-comandas-page__overview-card">
-                      <small>Itens</small>
-                      <strong>{itemEntriesCount}</strong>
-                      <span>
-                        {itemEntriesCount
-                          ? `${serviceEntriesCount} servico(s) e ${productEntriesCount} produto(s)`
-                          : "Nada lancado"}
-                      </span>
-                    </article>
-                    <article className="operations-comandas-page__overview-card">
-                      <small>Pagamentos</small>
-                      <strong>{paymentEntriesCount}</strong>
-                      <span>
-                        {paymentEntriesCount
-                          ? "Ja registrado"
-                          : "Sem registro"}
-                      </span>
-                    </article>
-                    <article className="operations-comandas-page__overview-card">
-                      <small>Cliente</small>
-                      <strong>{customer?.name ?? "Avulsa"}</strong>
-                      <span>
-                        {customer?.phone
-                          ? customer.phone
-                          : customer
-                            ? "Sem telefone"
-                            : "Sem cliente"}
-                      </span>
-                    </article>
-                    <article className="operations-comandas-page__overview-card">
-                      <small>Proxima acao</small>
-                      <strong>{nextAction.title}</strong>
-                      <span>{nextAction.note}</span>
-                    </article>
-                  </div>
-
-                  <div className="operations-comandas-page__settlement-card">
-                    <div className="operations-comandas-page__settlement-head">
-                      <div>
-                        <small>Liquidacao da conta</small>
-                        <strong>{paymentProgress}% recebido</strong>
-                      </div>
-                      <span className="muted">
-                        {overpaidAmount > 0
-                          ? `Credito de ${formatCurrency(overpaidAmount)} acima do total.`
-                          : dueAmount > 0
-                            ? `${formatCurrency(dueAmount)} ainda em aberto.`
-                            : "Conta quitada e pronta para fechar."}
-                      </span>
-                    </div>
-                    <div className="operations-comandas-page__progress">
-                      <span style={{ width: `${paymentProgress}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="operations-comandas-page__body-grid">
-                    <div>
-                      <div className="operations-comandas-page__section-head">
-                        <div>
-                          <h4>Itens</h4>
-                        </div>
-                      </div>
-                      {!items.length ? (
-                        <p className="muted">Nenhum item ainda.</p>
-                      ) : (
-                        <ul className="muted operations-comandas-page__bullet-list">
-                          {items.map((item) => (
-                            <li key={item.id}>
-                              {item.description} • {item.quantity} x{" "}
-                              {formatCurrency(Number(item.unit_price ?? 0))} ={" "}
-                              {formatCurrency(Number(item.total ?? 0))}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      <form
-                        action={addTabItemAction}
-                        className="simple-form"
-                        style={{ marginTop: 8 }}
-                      >
-                        <input type="hidden" name="tabId" value={tab.id} />
-                        <div className="split-grid">
-                          <div className="field">
-                            <label>Descricao</label>
-                            <input
-                              name="description"
-                              placeholder="Ex.: corte + barba"
-                              required
-                            />
-                          </div>
-                          <div className="field">
-                            <label>Quantidade</label>
-                            <input
-                              name="quantity"
-                              type="number"
-                              step="0.1"
-                              min="0.1"
-                              defaultValue="1"
-                              required
-                            />
-                          </div>
-                          <div className="field">
-                            <label>Preco</label>
-                            <input
-                              name="unitPrice"
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              defaultValue="0"
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="split-grid" style={{ marginTop: 6 }}>
-                          <div className="field">
-                            <label>Servico</label>
-                            <select name="serviceId" defaultValue="">
-                              <option value="">Opcional</option>
-                              {services.map((service) => (
-                                <option key={service.id} value={service.id}>
-                                  {service.name} (
-                                  {formatCurrency(Number(service.price ?? 0))})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="field">
-                            <label>Produto</label>
-                            <select name="productId" defaultValue="">
-                              <option value="">Opcional</option>
-                              {products.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        <button
-                          type="submit"
-                          className="secondary-button"
-                          style={{ marginTop: 6 }}
-                        >
-                          Adicionar item
-                        </button>
-                      </form>
-                    </div>
-
-                    <div>
-                      <div className="operations-comandas-page__section-head">
-                        <div>
-                          <h4>Pagamentos</h4>
-                        </div>
-                      </div>
-                      {!payments.length ? (
-                        <p className="muted">Nenhum pagamento ainda.</p>
-                      ) : (
-                        <ul className="muted operations-comandas-page__bullet-list">
-                          {payments.map((payment) => (
-                            <li key={payment.id}>
-                              {formatPaymentMethodLabel(payment.method)} •{" "}
-                              {formatCurrency(Number(payment.amount ?? 0))}
-                              {payment.note ? ` • ${payment.note}` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      <form
-                        action={addTabPaymentAction}
-                        className="simple-form"
-                        style={{ marginTop: 8 }}
-                      >
-                        <input type="hidden" name="tabId" value={tab.id} />
-                        <div className="split-grid">
-                          <div className="field">
-                            <label>Valor</label>
-                            <input
-                              name="amount"
-                              type="number"
-                              step="0.01"
-                              min="0.01"
-                              required
-                            />
-                          </div>
-                          <div className="field">
-                            <label>Forma</label>
-                            <select name="method" defaultValue="pix">
-                              <option value="pix">Pix</option>
-                              <option value="card">Cartao</option>
-                              <option value="cash">Dinheiro</option>
-                              <option value="voucher">Voucher</option>
-                              <option value="transfer">Transferencia</option>
-                              <option value="other">Outro</option>
-                            </select>
-                          </div>
-                          <div className="field">
-                            <label>Obs.</label>
-                            <input
-                              name="note"
-                              placeholder="Ex.: sinal"
-                            />
-                          </div>
-                        </div>
-                        <button
-                          type="submit"
-                          className="secondary-button"
-                          style={{ marginTop: 6 }}
-                        >
-                          Registrar pagamento
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-
-                  {((hasServiceItem && !hasProductItem && topProductSuggestion) ||
-                    (hasProductItem && !hasServiceItem && topServiceSuggestion) ||
-                    (!items.length &&
-                      (topProductSuggestion || topServiceSuggestion))) ? (
-                    <div className="operations-comandas-page__suggestions">
-                      {(hasServiceItem || !items.length) &&
-                      !hasProductItem &&
-                      topProductSuggestion ? (
-                        <div
-                          className="card content-card operations-comandas-page__suggestion-card"
-                          style={{ padding: 16 }}
-                        >
-                          <p className="eyebrow">Sugestao</p>
-                          <h4>{topProductSuggestion.name}</h4>
-                          <p className="muted">
-                            Complemento de boa saida.{" "}
-                            {formatCurrency(topProductSuggestion.price)}
-                          </p>
-                          <form
-                            action={addTabItemAction}
-                            className="simple-form"
-                            style={{ marginTop: 8 }}
-                          >
-                            <input type="hidden" name="tabId" value={tab.id} />
-                            <input
-                              type="hidden"
-                              name="description"
-                              value={topProductSuggestion.name}
-                            />
-                            <input type="hidden" name="quantity" value="1" />
-                            <input
-                              type="hidden"
-                              name="unitPrice"
-                              value={topProductSuggestion.price.toFixed(2)}
-                            />
-                            <input
-                              type="hidden"
-                              name="productId"
-                              value={topProductSuggestion.productId ?? ""}
-                            />
-                            <button type="submit" className="secondary-button">
-                              Adicionar produto sugerido
-                            </button>
-                          </form>
-                        </div>
-                      ) : null}
-
-                      {(hasProductItem || !items.length) &&
-                      !hasServiceItem &&
-                      topServiceSuggestion ? (
-                        <div
-                          className="card content-card operations-comandas-page__suggestion-card"
-                          style={{ padding: 16 }}
-                        >
-                          <p className="eyebrow">Retorno</p>
-                          <h4>{topServiceSuggestion.name}</h4>
-                          <p className="muted">
-                            Valor sugerido:{" "}
-                            {formatCurrency(suggestedServicePrice)} em vez de{" "}
-                            {formatCurrency(topServiceSuggestion.price)}
-                          </p>
-                          <form
-                            action={addTabItemAction}
-                            className="simple-form"
-                            style={{ marginTop: 8 }}
-                          >
-                            <input type="hidden" name="tabId" value={tab.id} />
-                            <input
-                              type="hidden"
-                              name="description"
-                              value={`${topServiceSuggestion.name} (beneficio loja -10%)`}
-                            />
-                            <input type="hidden" name="quantity" value="1" />
-                            <input
-                              type="hidden"
-                              name="unitPrice"
-                              value={suggestedServicePrice.toFixed(2)}
-                            />
-                            <input
-                              type="hidden"
-                              name="serviceId"
-                              value={topServiceSuggestion.id}
-                            />
-                            <button type="submit" className="secondary-button">
-                              Adicionar servico com beneficio
-                            </button>
-                          </form>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <div
-                    className="simple-row__actions operations-comandas-page__footer-actions"
-                    style={{ flexWrap: "wrap", gap: 8, marginTop: 10 }}
-                  >
-                    <form action={closeTabAction}>
-                      <input type="hidden" name="tabId" value={tab.id} />
-                      <input type="hidden" name="status" value="closed" />
-                      <button type="submit" className="primary-button">
-                        Fechar comanda
-                      </button>
-                    </form>
-                    <form action={closeTabAction}>
-                      <input type="hidden" name="tabId" value={tab.id} />
-                      <input type="hidden" name="status" value="cancelled" />
-                      <button type="submit" className="secondary-button">
-                        Cancelar
-                      </button>
-                    </form>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section
-        id="historico-comandas"
-        className="card content-card operations-comandas-page__history-card"
-      >
-        <div className="section-heading">
-          <div>
-            <h2>Encerradas recentemente</h2>
-            <p className="muted">Fechadas ou canceladas.</p>
-          </div>
-        </div>
-
-        {!recentTabs.length ? (
-          <EmptyStateCard
-            eyebrow="Sem historico"
-            title="Nenhuma comanda encerrada ainda"
-            description="As contas fechadas e canceladas passam a aparecer aqui."
-          />
-        ) : (
-          <div className="simple-list operations-comandas-page__history-stack">
-            {recentTabs.map((tab) => {
-              const customer = firstRelation(tab.customers);
-              const totalAmount = Number(tab.total_items ?? 0);
-              const paidAmount = Number(tab.total_paid ?? 0);
-              const historyStatusClass =
-                tab.status === "closed"
-                  ? "badge badge--confirmed"
-                  : "badge badge--cancelled";
-
-              return (
-                <article
-                  key={tab.id}
-                  className="simple-row operations-comandas-page__history-row"
-                >
-                  <div className="operations-comandas-page__history-main">
-                    <div
-                      className="inline-actions"
-                      style={{ flexWrap: "wrap", marginBottom: 8 }}
-                    >
-                      <span className={historyStatusClass}>
-                        {formatTabStatusLabel(tab.status)}
-                      </span>
-                      <span className="badge badge--soft">
-                        Aberta {formatDateTime(tab.opened_at)}
-                      </span>
-                      {tab.closed_at ? (
-                        <span className="badge badge--soft">
-                          Encerrada {formatDateTime(tab.closed_at)}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <h3>{customer?.name ?? "Cliente sem cadastro"}</h3>
-                    <p className="muted">
-                      {tab.notes?.trim()
-                        ? tab.notes
-                        : tab.status === "cancelled"
-                          ? "Comanda encerrada sem venda."
-                          : "Conta encerrada com sucesso no caixa."}
-                    </p>
-                    <small className="list-meta">
-                      {customer?.phone
-                        ? `Contato: ${customer.phone}`
-                        : customer
-                          ? "Cadastro sem telefone"
-                          : "Comanda avulsa"}
-                    </small>
-                  </div>
-
-                  <div className="operations-comandas-page__history-metrics">
-                    <article className="stat-card">
-                      <small>Total</small>
-                      <strong>{formatCurrency(totalAmount)}</strong>
-                    </article>
-                    <article className="stat-card">
-                      <small>Pago</small>
-                      <strong>{formatCurrency(paidAmount)}</strong>
-                    </article>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      </div>
     </div>
   );
 }

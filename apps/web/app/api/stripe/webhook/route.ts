@@ -4,7 +4,10 @@ import type Stripe from "stripe";
 import { getStripeClient } from "@/lib/stripeBilling";
 import { getStripeWebhookSecret } from "@/lib/serverEnv";
 import { syncStripeSubscriptionRecord } from "@/lib/stripeBillingSync";
-import { recordSecurityAuditEvent } from "@/lib/security";
+import {
+  recordSecurityAuditEvent,
+  registerSecurityRequestReplay,
+} from "@/lib/security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -107,10 +110,27 @@ export async function POST(request: Request) {
   try {
     const stripe = getStripeClient();
     const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
-
     await handleStripeWebhookEvent(event);
+    const replayAccepted = await registerSecurityRequestReplay({
+      requestHash: event.id,
+      scope: "stripe.webhook.event",
+      ttlSeconds: 60 * 60 * 24 * 30,
+    });
 
-    return NextResponse.json({ received: true });
+    if (!replayAccepted) {
+      await recordSecurityAuditEvent({
+        eventType: "stripe.webhook_duplicate_event",
+        metadata: {
+          eventId: event.id,
+          eventType: event.type,
+        },
+        requestPath,
+        severity: "info",
+        userAgent: request.headers.get("user-agent"),
+      });
+    }
+
+    return NextResponse.json({ received: true, duplicate: !replayAccepted });
   } catch (error) {
     await recordSecurityAuditEvent({
       eventType: "stripe.webhook_failed",

@@ -251,10 +251,10 @@ describe("benefits page UI", () => {
     });
 
     const ui = await BenefitsPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         message: "Painel comercial atualizado.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);

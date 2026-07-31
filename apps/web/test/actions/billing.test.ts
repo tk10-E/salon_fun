@@ -7,6 +7,7 @@ import {
 } from "@/test/server-action-test-helpers";
 
 const {
+  billingRuntimeMock,
   buildAbsoluteUrlMock,
   createClientMock,
   getSalonBillingWorkspaceSnapshotMock,
@@ -18,6 +19,9 @@ const {
   revalidatePathMock,
   requireOwnerSalonMock,
 } = vi.hoisted(() => ({
+  billingRuntimeMock: {
+    disabled: false,
+  },
   buildAbsoluteUrlMock: vi.fn(),
   createClientMock: vi.fn(),
   getSalonBillingWorkspaceSnapshotMock: vi.fn(),
@@ -39,9 +43,13 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/billing", () => ({
-  BILLING_DISABLED: false,
+  get BILLING_DISABLED() {
+    return billingRuntimeMock.disabled;
+  },
   BILLING_PATH: "/dashboard/billing",
   PUBLIC_BILLING_PATH: "/planos",
+  SINGLE_BILLING_PLAN_ID: "starter",
+  SINGLE_BILLING_INTERVAL: "monthly",
   getSalonBillingWorkspaceSnapshot: getSalonBillingWorkspaceSnapshotMock,
 }));
 
@@ -76,7 +84,7 @@ function makeWorkspaceSnapshot(overrides?: Record<string, unknown>) {
   return {
     currentPlan: {
       id: "starter",
-      displayName: "Starter",
+      displayName: "Plano único",
     },
     subscription: {
       status: "paused",
@@ -99,6 +107,7 @@ function makeWorkspaceSnapshot(overrides?: Record<string, unknown>) {
 describe("billing actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    billingRuntimeMock.disabled = false;
     redirectMock.mockImplementation((location: string) => {
       throw new Error(`${TEST_REDIRECT_PREFIX}${location}`);
     });
@@ -119,11 +128,24 @@ describe("billing actions", () => {
       webhookConfigured: true,
       webhookUrl: "https://painel.salon.fun/api/stripe/webhook",
     });
-    resolveStripePriceIdMock.mockReturnValue("price_growth_yearly");
+    resolveStripePriceIdMock.mockReturnValue("price_starter_monthly");
     getSalonBillingWorkspaceSnapshotMock.mockResolvedValue(makeWorkspaceSnapshot());
   });
 
-  it("creates a Stripe checkout session for a new subscription", async () => {
+  it("blocks checkout when SaaS billing is disabled in the environment", async () => {
+    billingRuntimeMock.disabled = true;
+
+    const location = await captureRedirect(
+      startStripeCheckoutActionImpl(makeFormData({})),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard?message=Assinatura+desativada+no+painel.&tone=info",
+    );
+  });
+
+  it("creates a Stripe checkout session for the single paid subscription", async () => {
     const upsertSubscription = vi.fn().mockResolvedValue({ error: null });
     const stripeCustomerCreate = vi.fn().mockResolvedValue({ id: "cus_123" });
     const stripeCheckoutCreate = vi.fn().mockResolvedValue({
@@ -149,7 +171,7 @@ describe("billing actions", () => {
               eq: vi.fn(() => ({
                 eq: vi.fn(() => ({
                   maybeSingle: vi.fn().mockResolvedValue({
-                    data: { id: "growth", display_name: "Growth" },
+                    data: { id: "starter", display_name: "Starter", trial_days: 3 },
                     error: null,
                   }),
                 })),
@@ -169,12 +191,7 @@ describe("billing actions", () => {
     });
 
     const location = await captureRedirect(
-      startStripeCheckoutActionImpl(
-        makeFormData({
-          planId: "growth",
-          billingInterval: "yearly",
-        }),
-      ),
+      startStripeCheckoutActionImpl(makeFormData({})),
       redirectMock,
     );
 
@@ -193,14 +210,168 @@ describe("billing actions", () => {
       }),
       { onConflict: "salon_id" },
     );
+    expect(resolveStripePriceIdMock).toHaveBeenCalledWith("starter", "monthly");
     expect(stripeCheckoutCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         customer: "cus_123",
         client_reference_id: "salon-1",
-        line_items: [{ price: "price_growth_yearly", quantity: 1 }],
+        customer_update: {
+          address: "auto",
+          name: "auto",
+        },
+        line_items: [{ price: "price_starter_monthly", quantity: 1 }],
+        metadata: expect.objectContaining({
+          planId: "starter",
+          billingInterval: "monthly",
+        }),
+        subscription_data: expect.objectContaining({
+          trial_period_days: 3,
+          metadata: expect.objectContaining({
+            planId: "starter",
+            billingInterval: "monthly",
+          }),
+        }),
       }),
     );
     expect(location).toBe("https://checkout.stripe.com/session_123");
+  });
+
+  it("creates a yearly Stripe checkout session for the discounted annual offer", async () => {
+    const upsertSubscription = vi.fn().mockResolvedValue({ error: null });
+    const stripeCustomerCreate = vi.fn().mockResolvedValue({ id: "cus_123" });
+    const stripeCheckoutCreate = vi.fn().mockResolvedValue({
+      url: "https://checkout.stripe.com/session_yearly",
+    });
+
+    resolveStripePriceIdMock.mockReturnValue("price_starter_yearly");
+    getStripeClientMock.mockReturnValue({
+      customers: {
+        create: stripeCustomerCreate,
+      },
+      checkout: {
+        sessions: {
+          create: stripeCheckoutCreate,
+        },
+      },
+    });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "saas_plan_catalog") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: "starter", display_name: "Starter", trial_days: 3 },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_subscriptions") {
+          return {
+            upsert: upsertSubscription,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      startStripeCheckoutActionImpl(makeFormData({ billingInterval: "yearly" })),
+      redirectMock,
+    );
+
+    expect(resolveStripePriceIdMock).toHaveBeenCalledWith("starter", "yearly");
+    expect(stripeCheckoutCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_starter_yearly", quantity: 1 }],
+        metadata: expect.objectContaining({
+          planId: "starter",
+          billingInterval: "yearly",
+        }),
+        subscription_data: expect.objectContaining({
+          metadata: expect.objectContaining({
+            planId: "starter",
+            billingInterval: "yearly",
+          }),
+        }),
+      }),
+    );
+    expect(location).toBe("https://checkout.stripe.com/session_yearly");
+  });
+
+  it("does not grant a second trial when the salon already used billing before", async () => {
+    const upsertSubscription = vi.fn().mockResolvedValue({ error: null });
+    const stripeCustomerCreate = vi.fn().mockResolvedValue({ id: "cus_123" });
+    const stripeCheckoutCreate = vi.fn().mockResolvedValue({
+      url: "https://checkout.stripe.com/session_456",
+    });
+
+    getSalonBillingWorkspaceSnapshotMock.mockResolvedValue(
+      makeWorkspaceSnapshot({
+        status: "canceled",
+        activatedAt: "2026-04-01T12:00:00.000Z",
+        currentPeriodStartedAt: "2026-04-01T12:00:00.000Z",
+        currentPeriodEndsAt: "2026-05-01T12:00:00.000Z",
+        canceledAt: "2026-05-01T12:00:00.000Z",
+      }),
+    );
+    getStripeClientMock.mockReturnValue({
+      customers: {
+        create: stripeCustomerCreate,
+      },
+      checkout: {
+        sessions: {
+          create: stripeCheckoutCreate,
+        },
+      },
+    });
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "saas_plan_catalog") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: "starter", display_name: "Starter", trial_days: 3 },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_subscriptions") {
+          return {
+            upsert: upsertSubscription,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      startStripeCheckoutActionImpl(makeFormData({})),
+      redirectMock,
+    );
+
+    expect(stripeCheckoutCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subscription_data: expect.not.objectContaining({
+          trial_period_days: expect.anything(),
+        }),
+      }),
+    );
+    expect(location).toBe("https://checkout.stripe.com/session_456");
   });
 
   it("redirects to the billing portal instead of creating a duplicate subscription", async () => {
@@ -244,12 +415,7 @@ describe("billing actions", () => {
     });
 
     const location = await captureRedirect(
-      startStripeCheckoutActionImpl(
-        makeFormData({
-          planId: "growth",
-          billingInterval: "yearly",
-        }),
-      ),
+      startStripeCheckoutActionImpl(makeFormData({})),
       redirectMock,
     );
 
@@ -260,6 +426,62 @@ describe("billing actions", () => {
     });
     expect(stripeCheckoutCreate).not.toHaveBeenCalled();
     expect(location).toBe("https://billing.stripe.com/session_existing");
+  });
+
+  it("preserves the public billing interval in the return path for linked subscriptions", async () => {
+    const stripePortalCreate = vi.fn().mockResolvedValue({
+      url: "https://billing.stripe.com/session_interval",
+    });
+    const stripeRetrieveSubscription = vi.fn().mockResolvedValue({
+      id: "sub_123",
+      status: "active",
+    });
+
+    buildAbsoluteUrlMock.mockImplementation(
+      (path: string) => `https://painel.salon.fun${path}`,
+    );
+    getSalonBillingWorkspaceSnapshotMock.mockResolvedValue(
+      makeWorkspaceSnapshot({
+        status: "active",
+        paymentProvider: "stripe",
+        providerCustomerId: "cus_123",
+        providerSubscriptionId: "sub_123",
+        activatedAt: "2026-04-01T12:00:00.000Z",
+      }),
+    );
+    getStripeClientMock.mockReturnValue({
+      subscriptions: {
+        retrieve: stripeRetrieveSubscription,
+      },
+      billingPortal: {
+        sessions: {
+          create: stripePortalCreate,
+        },
+      },
+      checkout: {
+        sessions: {
+          create: vi.fn(),
+        },
+      },
+    });
+    createClientMock.mockReturnValue({
+      from: vi.fn(() => {
+        throw new Error("Supabase should not be queried before portal redirection.");
+      }),
+    });
+
+    const location = await captureRedirect(
+      startStripeCheckoutActionImpl(
+        makeFormData({ returnPath: "/planos?interval=yearly" }),
+      ),
+      redirectMock,
+    );
+
+    expect(stripePortalCreate).toHaveBeenCalledWith({
+      customer: "cus_123",
+      return_url: "https://painel.salon.fun/planos?interval=yearly",
+    });
+    expect(location).toBe("https://billing.stripe.com/session_interval");
   });
 
   it("blocks direct local plan changes when the Stripe subscription is already linked", async () => {
@@ -273,12 +495,7 @@ describe("billing actions", () => {
     );
 
     const location = await captureRedirect(
-      changeSalonPlanActionImpl(
-        makeFormData({
-          planId: "growth",
-          billingInterval: "yearly",
-        }),
-      ),
+      changeSalonPlanActionImpl(makeFormData({ planId: "growth", billingInterval: "yearly" })),
       redirectMock,
     );
 
@@ -318,5 +535,18 @@ describe("billing actions", () => {
       return_url: "https://painel.salon.fun/dashboard/billing",
     });
     expect(location).toBe("https://billing.stripe.com/session_123");
+  });
+
+  it("blocks the billing portal when SaaS billing is disabled in the environment", async () => {
+    billingRuntimeMock.disabled = true;
+
+    const location = await captureRedirect(
+      startStripeBillingPortalActionImpl(),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard?message=Assinatura+desativada+no+painel.&tone=info",
+    );
   });
 });

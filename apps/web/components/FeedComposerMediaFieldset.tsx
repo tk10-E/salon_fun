@@ -9,9 +9,16 @@ import {
 
 import { CuratedImageUploadField } from "./CuratedImageUploadField";
 
-export function FeedComposerMediaFieldset() {
-  const [postType, setPostType] = useState<FeedComposerPostType>("standard");
+type FeedComposerMediaFieldsetProps = {
+  initialPostType?: FeedComposerPostType;
+};
+
+export function FeedComposerMediaFieldset({
+  initialPostType = "standard",
+}: FeedComposerMediaFieldsetProps) {
+  const [postType, setPostType] = useState<FeedComposerPostType>(initialPostType);
   const spec = FEED_COMPOSER_SPECS[postType];
+  const mediaContext = postType === "story" ? "story" : "feed";
 
   return (
     <>
@@ -27,7 +34,8 @@ export function FeedComposerMediaFieldset() {
         >
           <option value="standard">Foto ou galeria</option>
           <option value="before_after">Antes e depois</option>
-          <option value="reel">Vídeo curto</option>
+          <option value="reel">Video curto</option>
+          <option value="story">Story do salão</option>
         </select>
       </div>
 
@@ -57,13 +65,31 @@ export function FeedComposerMediaFieldset() {
         <CuratedImageUploadField
           id="feed-images"
           name="images"
-          context="feed"
-          multiple={postType !== "reel"}
+          context={mediaContext}
+          multiple={postType !== "reel" && postType !== "story"}
           required
           helperText={spec.imageHelper}
         />
         <small className="muted">{spec.imageHelper}</small>
       </div>
+
+      {postType === "story" ? (
+        <div className="field">
+          <label htmlFor="feed-story-duration">Tempo de story</label>
+          <select
+            id="feed-story-duration"
+            name="storyDurationHours"
+            defaultValue="24"
+          >
+            <option value="12">12 horas</option>
+            <option value="24">24 horas</option>
+            <option value="48">48 horas</option>
+          </select>
+          <small className="muted">
+            Depois desse prazo, o story sai sozinho do app do cliente.
+          </small>
+        </div>
+      ) : null}
 
       <div className="field">
         <label htmlFor="feed-video">Vídeo curto</label>

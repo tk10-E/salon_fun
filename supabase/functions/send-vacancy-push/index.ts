@@ -67,6 +67,8 @@ type DispatchAttemptStatus =
   | "delivery_failed"
   | "skipped";
 
+type NotificationPushPriority = "HIGH" | "NORMAL";
+
 type FcmErrorResponse = {
   error?: {
     status?: string;
@@ -113,6 +115,12 @@ function normalizeNonEmptyString(value: unknown): string | null {
 
   const normalized = value.trim();
   return normalized.length ? normalized : null;
+}
+
+function resolvePushPriority(
+  _notification: CustomerNotificationRow,
+): NotificationPushPriority {
+  return "HIGH";
 }
 
 function isRetryablePushStatus(status: number): boolean {
@@ -331,31 +339,231 @@ async function resolveSalonLogoUrl(args: {
 function buildDisplayedPushTitle(args: {
   semanticTitle: string;
   salonName: string | null;
+  notificationType?: string | null;
 }): string {
-  return args.salonName ?? args.semanticTitle;
+  const type = normalizeNonEmptyString(args.notificationType)?.toLowerCase() ?? "";
+
+  if (type === "appointment_confirmation_required") {
+    return "Confirme sua presença";
+  }
+
+  if (type === "appointment_reminder_24h") {
+    return "Lembrete do seu horário";
+  }
+
+  if (type === "appointment_reminder_3h") {
+    return "Faltam 3 horas para o seu horário";
+  }
+
+  if (type === "appointment_reminder_1h") {
+    return "Seu horário está chegando";
+  }
+
+  if (type === "appointment_reminder_15m") {
+    return "Seu horário começa em 15 minutos";
+  }
+
+  if (type === "appointment_rescheduled") {
+    return "Seu horário mudou";
+  }
+
+  if (type === "appointment_no_show") {
+    return "Seu atendimento foi marcado como falta";
+  }
+
+  if (type === "haircut_rebook_reminder" || type === "smart_rebook_prompt") {
+    return "Hora de voltar ao salão";
+  }
+
+  if (
+    type === "loyalty_balance_reminder" ||
+    type.includes("loyalty") ||
+    type.includes("referral") ||
+    type.includes("membership") ||
+    type.includes("benefit")
+  ) {
+    return "Benefício do salão";
+  }
+
+  if (type === "service_published" || type === "staff_published") {
+    return "Novidade do salão";
+  }
+
+  if (
+    type === "service_updated" ||
+    type === "client_app_updated" ||
+    type === "staff_reactivated" ||
+    type.includes("updated")
+  ) {
+    return "Atualização do salão";
+  }
+
+  if (type === "vacancy_alert") {
+    return "Horário disponível";
+  }
+
+  const semanticTitle = normalizeNonEmptyString(args.semanticTitle);
+  if (semanticTitle) {
+    return uppercaseFirstCharacter(semanticTitle);
+  }
+
+  const formattedSalonName = formatSalonPushName(args.salonName);
+  return formattedSalonName ?? "Atualização do salão";
 }
 
 function buildDisplayedPushBody(args: {
   semanticTitle: string;
   semanticBody: string;
   salonName: string | null;
+  notificationType?: string | null;
+  payload?: Record<string, unknown> | null;
 }): string {
-  const semanticTitle = args.semanticTitle.trim();
-  const semanticBody = args.semanticBody.trim();
+  const semanticTitle = normalizeNonEmptyString(args.semanticTitle);
+  const semanticBody = normalizeNonEmptyString(args.semanticBody);
+  const formattedSalonName = formatSalonPushName(args.salonName);
+  const type = normalizeNonEmptyString(args.notificationType)?.toLowerCase() ?? "";
+  const payload = args.payload ?? null;
 
-  if (!args.salonName) {
-    return semanticBody || semanticTitle;
+  const resolvedBody =
+    buildTypedPushBody({
+      type,
+      payload,
+      fallbackTitle: semanticTitle,
+      fallbackBody: semanticBody,
+    }) ??
+    semanticBody ??
+    semanticTitle ??
+    "Abra o app para conferir a atualização.";
+
+  return formattedSalonName
+    ? `${formattedSalonName}\n${uppercaseFirstCharacter(resolvedBody)}`
+    : uppercaseFirstCharacter(resolvedBody);
+}
+
+function buildTypedPushBody(args: {
+  type: string;
+  payload: Record<string, unknown> | null;
+  fallbackTitle: string | null;
+  fallbackBody: string | null;
+}): string | null {
+  const { type, payload, fallbackTitle, fallbackBody } = args;
+
+  const serviceName = formatEntityName(
+    normalizeNonEmptyString(payload?.serviceName) ??
+      normalizeNonEmptyString(payload?.recommendedServiceName),
+  );
+  const category = normalizeNonEmptyString(payload?.category);
+  const staffName = formatEntityName(
+    normalizeNonEmptyString(payload?.staffMemberName),
+  );
+
+  if (type === "service_updated" && serviceName) {
+    return category
+      ? `O serviço ${serviceName} foi atualizado em ${category}. Confira preço, duração e detalhes no app.`
+      : `O serviço ${serviceName} foi atualizado. Confira preço, duração e detalhes no app.`;
   }
 
-  if (!semanticTitle) {
-    return semanticBody;
+  if (type === "service_published" && serviceName) {
+    return category
+      ? `${serviceName} entrou no catálogo de ${category} e já pode ser agendado pelo app.`
+      : `${serviceName} entrou no catálogo e já pode ser agendado pelo app.`;
   }
 
-  if (!semanticBody || semanticBody === semanticTitle) {
-    return semanticTitle;
+  if (type === "appointment_reminder_1h") {
+    return fallbackBody ??
+      "Seu atendimento está próximo. Vale sair com calma para chegar no horário.";
   }
 
-  return `${semanticTitle}\n${semanticBody}`;
+  if (type === "appointment_reminder_24h") {
+    return fallbackBody ??
+      "Seu horário está confirmado. Se precisar ajustar algo, faça isso com antecedência no app.";
+  }
+
+  if (type === "appointment_reminder_3h") {
+    return fallbackBody ??
+      "Seu atendimento se aproxima. Vale se organizar para chegar sem correria.";
+  }
+
+  if (type === "appointment_confirmation_required") {
+    return fallbackBody ??
+      "Seu atendimento está perto. Confirme no app para manter esse horário reservado.";
+  }
+
+  if (type === "appointment_reminder_15m") {
+    return fallbackBody ??
+      "Seu atendimento começa em instantes. Aproveite para se preparar sem pressa.";
+  }
+
+  if (type === "haircut_rebook_reminder") {
+    return fallbackBody ??
+      "Seu retorno já pode ser planejado. Abra o app e reserve o próximo horário.";
+  }
+
+  if (type === "appointment_rescheduled") {
+    return fallbackBody ??
+      "O salão ajustou o seu horário. Abra o app para revisar data, profissional e detalhes.";
+  }
+
+  if (type === "appointment_no_show") {
+    return fallbackBody ??
+      "O salão marcou esse horário como falta. Se precisar revisar, fale com a equipe pelo app.";
+  }
+
+  if (type === "staff_published" && staffName) {
+    return fallbackBody ??
+      `${staffName} já está disponível no app para novos agendamentos.`;
+  }
+
+  if (type === "staff_reactivated" && staffName) {
+    return fallbackBody ??
+      `${staffName} voltou para a agenda do salão. Confira os horários no app.`;
+  }
+
+  return fallbackBody ?? fallbackTitle;
+}
+
+function formatSalonPushName(salonName: string | null): string | null {
+  const normalized = normalizeNonEmptyString(salonName);
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized === normalized.toLowerCase() || normalized === normalized.toUpperCase()) {
+    return normalized
+      .split(/\s+/)
+      .map((part) => {
+        if (!part) {
+          return part;
+        }
+
+        if (part.length <= 3 && part === part.toUpperCase()) {
+          return part;
+        }
+
+        return uppercaseFirstCharacter(part.toLowerCase());
+      })
+      .join(" ");
+  }
+
+  return normalized;
+}
+
+function formatEntityName(value: string | null): string | null {
+  const normalized = normalizeNonEmptyString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return uppercaseFirstCharacter(normalized);
+}
+
+function uppercaseFirstCharacter(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  return `${normalized[0]!.toUpperCase()}${normalized.slice(1)}`;
 }
 
 async function deactivateInvalidTokens(
@@ -402,9 +610,10 @@ async function sendPushMessage(args: {
   title: string;
   body: string;
   channelId: string;
+  priority: NotificationPushPriority;
   data: Record<string, string>;
 }): Promise<{ ok: true } | { ok: false; invalidToken: boolean }> {
-  const { accessToken, projectId, token, title, body, channelId, data } = args;
+  const { accessToken, projectId, token, title, body, channelId, priority, data } = args;
   const maskedToken = maskToken(token);
 
   for (let attempt = 1; attempt <= maxPushSendAttempts; attempt += 1) {
@@ -426,7 +635,7 @@ async function sendPushMessage(args: {
               },
               data,
               android: {
-                priority: "HIGH",
+                priority,
                 notification: {
                   channel_id: channelId,
                   sound: "default",
@@ -496,6 +705,7 @@ async function sendPushBatch(args: {
   title: string;
   body: string;
   channelId: string;
+  priority: NotificationPushPriority;
   data: Record<string, string>;
 }): Promise<PushBatchResult> {
   const {
@@ -506,6 +716,7 @@ async function sendPushBatch(args: {
     title,
     body,
     channelId,
+    priority,
     data,
   } = args;
   const uniqueTokens = dedupePushTokens(tokens);
@@ -524,6 +735,7 @@ async function sendPushBatch(args: {
           title,
           body,
           channelId,
+          priority,
           data,
         }).then((result) => ({ token: tokenRow.token, result })),
       ),
@@ -556,8 +768,11 @@ Deno.serve(async (request: Request) => {
   let dispatchId: string | null = null;
 
   try {
-    if (request.method !== "POST") {
-      return jsonResponse({ error: "method_not_allowed" }, 405);
+    if (request.method.toUpperCase() !== "POST") {
+      return jsonResponse({
+        error: "method_not_allowed",
+        method: request.method,
+      }, 405);
     }
 
     const expectedSecret = Deno.env.get("VACANCY_PUSH_WEBHOOK_SECRET");
@@ -716,13 +931,16 @@ Deno.serve(async (request: Request) => {
         title: buildDisplayedPushTitle({
           semanticTitle: alert.headline,
           salonName,
+          notificationType: "vacancy_alert",
         }),
         body: buildDisplayedPushBody({
           semanticTitle: alert.headline,
           semanticBody: alert.body,
           salonName,
+          notificationType: "vacancy_alert",
         }),
         channelId: vacancyChannelId,
+        priority: "HIGH",
         data: {
           type: "vacancy_alert",
           alertId: alert.id,
@@ -856,13 +1074,17 @@ Deno.serve(async (request: Request) => {
       title: buildDisplayedPushTitle({
         semanticTitle: notification.title,
         salonName,
+        notificationType: notification.notification_type,
       }),
       body: buildDisplayedPushBody({
         semanticTitle: notification.title,
         semanticBody: notification.body,
         salonName,
+        notificationType: notification.notification_type,
+        payload: notification.payload,
       }),
       channelId: updatesChannelId,
+      priority: resolvePushPriority(notification),
       data: buildDataPayload(
         {
           type: notification.notification_type,

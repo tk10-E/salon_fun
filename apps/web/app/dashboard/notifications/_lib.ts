@@ -24,9 +24,17 @@ type NotificationsHistoryItem = {
   dispatchStatus: NotificationDispatchSnapshot["status"] | null;
   failedCount: number | null;
   id: string;
-  responseStatus: number | null;
   sentCount: number | null;
   title: string;
+};
+
+type NotificationsInternalAlertItem = {
+  body: string;
+  href: string;
+  id: string;
+  label: string;
+  title: string;
+  tone: "warning" | "danger";
 };
 
 export type NotificationsPageData = {
@@ -51,6 +59,12 @@ export type NotificationsPageData = {
     exportHref: string;
     issueOnPageCount: number;
     totalCount: number;
+  };
+  internalAlerts: {
+    dueFinancialCount: number;
+    items: NotificationsInternalAlertItem[];
+    lowStockCount: number;
+    operationalCount: number;
   };
   history: {
     currentPagePath: string;

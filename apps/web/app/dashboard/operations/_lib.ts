@@ -9,6 +9,27 @@ type GoalCard = {
 };
 
 export type OperationsPageData = {
+  autopilot: {
+    active: boolean;
+    cards: Array<{
+      id: string;
+      label: string;
+      note: string;
+      value: string;
+    }>;
+    queue: Array<{
+      badgeClassName: string;
+      badgeLabel: string;
+      id: string;
+      meta: string;
+      note: string;
+      signalBadges: string[];
+      title: string;
+    }>;
+    rules: string[];
+    schedulerReady: boolean;
+    statusNote: string;
+  };
   customersAttention: {
     lostCustomers: Array<{
       contactSummary: string;
@@ -17,9 +38,7 @@ export type OperationsPageData = {
       lastVisitLabel: string | null;
       name: string;
       phoneValue: string;
-      stageBadges: string[];
-      whatsappUrl: string | null;
-    }>;
+      stageBadges: string[];    }>;
     stageCounters: {
       fidelizado: number;
       novo: number;

@@ -5,12 +5,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-const { deleteSalonNotificationActionMock } = vi.hoisted(() => ({
-  deleteSalonNotificationActionMock: vi.fn(),
-}));
-
 vi.mock("@/app/actions", () => ({
-  deleteSalonNotificationAction: deleteSalonNotificationActionMock,
+  deleteSalonNotificationAction: "/__test/delete-salon-notification",
 }));
 
 import { NotificationsList } from "@/app/dashboard/notifications/NotificationsList";

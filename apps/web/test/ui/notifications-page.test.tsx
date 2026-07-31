@@ -2,15 +2,13 @@
 
 import { createElement, type ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   createClientMock,
-  deleteSalonNotificationActionMock,
   requireOwnerSalonMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
-  deleteSalonNotificationActionMock: vi.fn(),
   requireOwnerSalonMock: vi.fn(),
 }));
 
@@ -20,7 +18,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("@/app/actions", () => ({
-  deleteSalonNotificationAction: deleteSalonNotificationActionMock,
+  deleteSalonNotificationAction: "/__test/delete-salon-notification",
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -37,7 +35,7 @@ function createListQuery(data: unknown) {
   const query = {
     eq: vi.fn(() => query),
     order: vi.fn(() => query),
-    range: vi.fn().mockResolvedValue({ data, error: null }),
+    range: vi.fn().mockResolvedValue({ data, count: 32, error: null }),
     or: vi.fn(() => query),
     gte: vi.fn(() => query),
     lte: vi.fn(() => query),
@@ -50,13 +48,20 @@ function createListQuery(data: unknown) {
 
 describe("notifications page UI", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T12:00:00.000Z"));
     vi.clearAllMocks();
     requireOwnerSalonMock.mockResolvedValue({
       salon: {
         id: "salon-1",
         join_code: "ABCD1234",
+        timezone: "America/Sao_Paulo",
       },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders delivery readiness, push reach and the notification history", async () => {
@@ -72,26 +77,6 @@ describe("notifications page UI", () => {
         customers: null,
       },
     ]);
-    const notificationCountQuery = {
-      count: 32,
-      error: null,
-      eq: vi.fn((column: string, value: string) => {
-        if (column === "audience" && value === "salon_customers") {
-          return { count: 24, error: null };
-        }
-
-        if (column === "audience" && value === "single_customer") {
-          return { count: 8, error: null };
-        }
-
-        return notificationCountQuery;
-      }),
-      gte: vi.fn().mockResolvedValue({ count: 18, error: null }),
-      or: vi.fn(() => notificationCountQuery),
-      lte: vi.fn(() => notificationCountQuery),
-      in: vi.fn(() => notificationCountQuery),
-      not: vi.fn(() => notificationCountQuery),
-    };
     const pushTokensQuery = {
       count: 12,
       error: null,
@@ -103,12 +88,6 @@ describe("notifications page UI", () => {
         if (table === "salon_customer_notifications") {
           return {
             select: vi.fn((columns: string, options?: { head?: boolean }) => {
-              if (options?.head) {
-                return {
-                  eq: vi.fn(() => notificationCountQuery),
-                };
-              }
-
               if (columns.includes("customers(name)")) {
                 return {
                   eq: vi.fn(() => listQuery),
@@ -125,6 +104,243 @@ describe("notifications page UI", () => {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 eq: vi.fn(() => pushTokensQuery),
+              })),
+            })),
+          };
+        }
+
+        if (table === "inventory_products") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn().mockResolvedValue({
+                  data: [
+                    {
+                      id: "product-1",
+                      name: "Pomada forte",
+                      current_stock: 1,
+                      minimum_stock: 3,
+                      unit: "un",
+                      is_active: true,
+                    },
+                  ],
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_payables") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  lte: vi.fn(() => ({
+                    order: vi.fn(() => ({
+                      limit: vi.fn().mockResolvedValue({
+                        data: [
+                          {
+                            id: "payable-1",
+                            title: "Aluguel",
+                            amount: 900,
+                            due_on: "2026-04-19",
+                            status: "pending",
+                          },
+                        ],
+                        error: null,
+                      }),
+                    })),
+                  })),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_recurring_expenses") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  lte: vi.fn(() => ({
+                    order: vi.fn(() => ({
+                      limit: vi.fn().mockResolvedValue({
+                        data: [],
+                        error: null,
+                      }),
+                    })),
+                  })),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "appointments") {
+          return {
+            select: vi.fn((columns: string, options?: { count?: string }) => {
+              if (columns === "date, customers(name), services(name)") {
+                return {
+                  eq: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                      eq: vi.fn(() => ({
+                        gte: vi.fn(() => ({
+                          order: vi.fn(() => ({
+                            limit: vi.fn().mockResolvedValue({
+                              data: [
+                                {
+                                  date: "2026-04-20T14:00:00.000Z",
+                                  customers: { name: "Ana" },
+                                  services: { name: "TranÃ§a" },
+                                },
+                              ],
+                              count: options?.count === "exact" ? 1 : null,
+                              error: null,
+                            }),
+                          })),
+                        })),
+                      })),
+                    })),
+                  })),
+                };
+              }
+
+              if (columns.includes("cancelled_at")) {
+                return {
+                  eq: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                      eq: vi.fn(() => ({
+                        gte: vi.fn(() => ({
+                          order: vi.fn(() => ({
+                            limit: vi.fn().mockResolvedValue({
+                              data: [
+                                {
+                                  id: "appointment-1",
+                                  date: "2026-04-20T14:00:00.000Z",
+                                  cancelled_at: "2026-04-19T10:00:00.000Z",
+                                  cancellation_reason: "Imprevisto",
+                                  customers: { name: "Ana" },
+                                  services: { name: "Trança" },
+                                },
+                              ],
+                              count: options?.count === "exact" ? 1 : null,
+                              error: null,
+                            }),
+                          })),
+                        })),
+                      })),
+                    })),
+                  })),
+                };
+              }
+
+              if (columns.includes("commission_rate_percent")) {
+                return {
+                  eq: vi.fn(() => ({
+                    eq: vi.fn(() => ({
+                      not: vi.fn(() => ({
+                        gte: vi.fn().mockResolvedValue({
+                          data: [
+                            {
+                              date: "2026-04-18T14:00:00.000Z",
+                              completed_at: "2026-04-18T15:00:00.000Z",
+                              service_price_snapshot: 120,
+                              services: { price: 100 },
+                              staff_members: {
+                                commission_rate_percent: 40,
+                                commission_flat_fee: 0,
+                              },
+                            },
+                          ],
+                          error: null,
+                        }),
+                      })),
+                    })),
+                  })),
+                };
+              }
+
+              throw new Error(`Unexpected select on ${table}: ${columns}`);
+            }),
+          };
+        }
+
+        if (table === "customer_product_orders") {
+          return {
+            select: vi.fn((columns: string, options?: { count?: string }) => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  not: vi.fn(() => ({
+                    lte: vi.fn(() => ({
+                      order: vi.fn(() => ({
+                        limit: vi.fn().mockResolvedValue({
+                          data: [
+                            {
+                              id: "order-1",
+                              order_number: 204,
+                              ready_at: "2026-04-18T09:00:00.000Z",
+                              customers: { name: "Bruna" },
+                              customer_product_order_items: [
+                                { product_name_snapshot: "Pomada forte" },
+                              ],
+                            },
+                          ],
+                          count: options?.count === "exact" ? 1 : null,
+                          error: null,
+                        }),
+                      })),
+                    })),
+                  })),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "customer_tabs") {
+          return {
+            select: vi.fn((columns: string, options?: { count?: string }) => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  lte: vi.fn(() => ({
+                    order: vi.fn(() => ({
+                      limit: vi.fn().mockResolvedValue({
+                        data: [
+                          {
+                            id: "tab-1",
+                            opened_at: "2026-04-18T08:00:00.000Z",
+                            total_items: 180,
+                            total_paid: 50,
+                            customers: { name: "Carlos" },
+                          },
+                        ],
+                        count: options?.count === "exact" ? 1 : null,
+                        error: null,
+                      }),
+                    })),
+                  })),
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_financial_transactions") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  gte: vi.fn().mockResolvedValue({
+                    data: [
+                      {
+                        amount: 10,
+                        occurred_on: "2026-04-18",
+                      },
+                    ],
+                    error: null,
+                  }),
+                })),
               })),
             })),
           };
@@ -177,7 +393,7 @@ describe("notifications page UI", () => {
     render(ui);
 
     expect(
-      screen.getByRole("heading", { name: "Lembretes, push e avisos do salão" }),
+      screen.getByRole("heading", { name: "Lembretes e avisos do salão" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Filtro rápido" }),
@@ -186,12 +402,25 @@ describe("notifications page UI", () => {
       screen.getByRole("heading", { name: "Histórico" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { name: "Alertas internos do salão" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("link", { name: "Exportar CSV" }),
     ).toHaveAttribute("href", "/dashboard/notifications/export");
     expect(screen.getByText(/12 clientes com app ativo/i)).toBeInTheDocument();
     expect(screen.getByText(/9 ativos recentemente/i)).toBeInTheDocument();
     expect(screen.getByText("Novidade VIP")).toBeInTheDocument();
     expect(screen.getByText("Cashback dobrado até sexta.")).toBeInTheDocument();
+    expect(screen.getByText(/Pomada forte está com 1 un/i)).toBeInTheDocument();
+    expect(screen.getByText("Vencidos agora: 1")).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 despesa\(s\) seguem vencidas e ainda n.o foram baixadas no caixa/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 horário\(s\) foram cancelados pela cliente/i)).toBeInTheDocument();
+    expect(screen.getByText(/pedido #204 de Bruna desde/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 comanda\(s\) seguem abertas há mais de 24h/i)).toBeInTheDocument();
+    expect(screen.getByText(/38,00 seguem pendentes para repasse/i)).toBeInTheDocument();
+    expect(screen.getByText(/4 operação pedindo ação/i)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Retenção" }),
     ).toHaveAttribute("href", "/dashboard/benefits/automations");

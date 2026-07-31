@@ -1,0 +1,395 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.hero,
+.catalogPanel,
+.sidebarCard,
+.formPanel {
+  border: 1px solid rgba(214, 198, 184, 0.84);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top right, rgba(123, 84, 245, 0.08), transparent 30%),
+    radial-gradient(circle at left bottom, rgba(255, 153, 85, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 244, 0.96));
+  box-shadow: 0 28px 70px rgba(93, 71, 49, 0.08);
+}
+
+.hero {
+  display: grid;
+  gap: 22px;
+  padding: 26px;
+}
+
+.eyebrow,
+.sidebarEyebrow {
+  margin: 0;
+  color: #9b6948;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.headerRow,
+.panelHeader,
+.sidebarHeader,
+.offerHeader,
+.groupHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hero h1,
+.catalogPanel h2,
+.formPanel h2,
+.sidebarCard h3,
+.offerCard h4,
+.offerGroup h3 {
+  margin: 0;
+  color: #241914;
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.04em;
+}
+
+.hero h1 {
+  margin-top: 8px;
+  font-size: clamp(2.25rem, 4vw, 3.2rem);
+  line-height: 0.96;
+}
+
+.lead,
+.metricMeta,
+.offerHighlight,
+.offerMeta,
+.offerHint,
+.sidebarCard p,
+.alertRow span,
+.groupHeader span {
+  margin: 0;
+  color: #715d50;
+}
+
+.headerTools {
+  display: grid;
+  gap: 14px;
+  min-width: min(100%, 600px);
+}
+
+.searchBar,
+.headerActions,
+.badgeRow {
+  display: flex;
+}
+
+.searchBar input,
+.filterSearch input,
+.filterSelect,
+.iconButton,
+.secondaryButton,
+.primaryButton,
+.dangerButton,
+.disclosure summary {
+  min-height: 48px;
+  border-radius: 18px;
+  border: 1px solid rgba(214, 197, 182, 0.84);
+  background: rgba(255, 254, 252, 0.92);
+  color: #30241d;
+  box-shadow: 0 14px 30px rgba(118, 87, 64, 0.06);
+}
+
+.searchBar input,
+.filterSearch input {
+  width: 100%;
+  padding: 0 16px;
+  font: inherit;
+}
+
+.headerActions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.secondaryButton,
+.primaryButton,
+.dangerButton,
+.iconButton,
+.disclosure summary,
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.secondaryButton,
+.iconButton {
+  color: #4f3b30;
+}
+
+.primaryButton {
+  border-color: rgba(97, 74, 215, 0.28);
+  background: linear-gradient(135deg, #5b35b4, #6c41d4);
+  color: #fff;
+}
+
+.dangerButton {
+  border-color: rgba(202, 71, 71, 0.28);
+  background: rgba(255, 242, 242, 0.98);
+  color: #8d2f2f;
+}
+
+.inlineLink {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #6d51b8;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metricCard {
+  display: grid;
+  gap: 12px;
+  min-height: 148px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(222, 207, 192, 0.84);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.metricLabel {
+  display: block;
+  color: #775f52;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.metricValue {
+  color: #231812;
+  font-size: clamp(1.3rem, 1rem + 1vw, 1.9rem);
+  line-height: 1.05;
+}
+
+.metricSpark {
+  align-self: end;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(237, 226, 216, 0.94);
+  overflow: hidden;
+}
+
+.metricSpark span {
+  display: block;
+  width: 58%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.86fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.mainColumn,
+.sidebarColumn,
+.groupStack,
+.offerGroup,
+.editStack,
+.alertList {
+  display: grid;
+  gap: 18px;
+}
+
+.catalogPanel,
+.sidebarCard,
+.formPanel {
+  padding: 18px;
+}
+
+.badgeRow {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.countPill,
+.kindBadge,
+.badgeValue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 197, 182, 0.8);
+  background: rgba(255, 255, 255, 0.8);
+  color: #5f4b41;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.kindBadge {
+  background: rgba(242, 236, 255, 0.9);
+  color: #6f58a8;
+}
+
+.badgeValue {
+  min-width: 52px;
+  color: #6d51b8;
+}
+
+.filterRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) repeat(4, minmax(0, auto));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.filterSearch {
+  display: flex;
+}
+
+.filterSelect {
+  min-width: 154px;
+  padding: 0 14px;
+  font: inherit;
+}
+
+.offerGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.offerCard {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 26px;
+  border: 1px solid rgba(222, 207, 192, 0.84);
+  background: rgba(255, 255, 255, 0.82);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.offerCard:hover {
+  transform: translateY(-3px);
+  border-color: rgba(126, 91, 239, 0.32);
+  box-shadow: 0 24px 54px rgba(93, 71, 49, 0.1);
+}
+
+.offerValue {
+  color: #251914;
+  font-size: 1.12rem;
+  font-weight: 800;
+}
+
+.offerHint {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(247, 240, 255, 0.82);
+  color: #6b579d;
+}
+
+.disclosure summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inlineForm {
+  display: grid;
+  gap: 12px;
+}
+
+.checkboxField {
+  align-self: end;
+}
+
+.sidebarMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.sidebarMetricCard,
+.alertRow {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(222, 207, 192, 0.84);
+  background: rgba(255, 251, 247, 0.9);
+}
+
+.sidebarMetricCard span {
+  color: #866a59;
+  font-size: 0.82rem;
+}
+
+.sidebarMetricCard strong {
+  color: #231812;
+  font-size: 1rem;
+}
+
+@media (max-width: 1180px) {
+  .metricGrid,
+  .offerGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .headerRow,
+  .panelHeader,
+  .sidebarHeader,
+  .offerHeader,
+  .groupHeader {
+    flex-direction: column;
+  }
+
+  .headerTools {
+    min-width: 100%;
+  }
+
+  .metricGrid,
+  .offerGrid,
+  .sidebarMetricGrid,
+  .fieldGrid,
+  .filterRow {
+    grid-template-columns: 1fr;
+  }
+
+  .headerActions {
+    flex-direction: column;
+  }
+}

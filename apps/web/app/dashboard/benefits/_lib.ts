@@ -8,9 +8,22 @@ export type NoticeSearchParams = {
 };
 
 export type OfferSearchParams = NoticeSearchParams & {
+  aiGoal?: SearchParamValue;
+  aiNotes?: SearchParamValue;
+  compose?: SearchParamValue;
   offerKind?: SearchParamValue;
   offerQ?: SearchParamValue;
   offerState?: SearchParamValue;
+  prefillDescription?: SearchParamValue;
+  prefillEndsOn?: SearchParamValue;
+  prefillHighlight?: SearchParamValue;
+  prefillKind?: SearchParamValue;
+  prefillPrice?: SearchParamValue;
+  prefillServiceId?: SearchParamValue;
+  prefillSessionsIncluded?: SearchParamValue;
+  prefillStartsOn?: SearchParamValue;
+  prefillTitle?: SearchParamValue;
+  prefillValidityDays?: SearchParamValue;
 };
 
 export type ReferralSearchParams = NoticeSearchParams & {
@@ -234,12 +247,15 @@ export type BenefitsOverviewData = {
 export type PromotionsPageData = {
   activeOffersCount: number;
   activeMembershipsCount: number;
+  featuredOffer: OfferRow | null;
   groupedOffers: Record<string, OfferRow[]>;
   hasOfferFilters: boolean;
+  lifecycleCounts: Record<OfferLifecycle, number>;
   offerKindFilter: string;
   offerQuery: string;
   offerStateFilter: string;
   offers: OfferRow[];
+  scheduledOffers: OfferRow[];
   serviceOptions: ReferralServiceOption[];
   today: string;
 };

@@ -18,6 +18,18 @@ const SUPABASE_AUTH_COOKIE_PATTERN =
 const SECURITY_CACHE_COOKIE_NAME = "sf_panel_security_ok";
 const SECURITY_CACHE_TTL_SECONDS = 30;
 const SECURITY_CACHE_VERSION = "v1";
+const INTERNAL_SESSION_PING_PATH = "/api/internal/session/ping";
+const SUPABASE_AUTH_LOOKUP_TIMEOUT_MS = 2500;
+const SESSION_ACCESS_EVALUATION_TIMEOUT_MS = 2500;
+const SUPABASE_SESSION_REFRESH_TIMEOUT_MS = 2500;
+const API_UNAUTHORIZED_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+} as const;
+
+type MiddlewareResponseCookie = {
+  name: string;
+  value: string;
+} & Partial<CookieOptions>;
 
 type SecurityCacheContext = {
   accessToken: string;
@@ -25,6 +37,19 @@ type SecurityCacheContext = {
   deviceId: string;
   userAgent: string;
   userId: string;
+};
+
+type SessionAccessEvaluation = {
+  accessPolicyEvaluation: Awaited<ReturnType<typeof evaluatePanelAccessPolicy>>;
+  canUseCachedSecurity: boolean;
+  securityCacheContext: SecurityCacheContext;
+  securityEvaluation: Awaited<ReturnType<typeof evaluateSessionSecurity>>;
+  timedOut: boolean;
+};
+
+type TimedOperationResult<T> = {
+  timedOut: boolean;
+  value: T;
 };
 
 function normalizeCachePart(value: string | null | undefined) {
@@ -160,7 +185,10 @@ async function securityCacheMatches(
 
   const expiresAt = Number(parts[1]);
 
-  if (!Number.isFinite(expiresAt) || expiresAt <= Math.floor(Date.now() / 1000)) {
+  if (
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= Math.floor(Date.now() / 1000)
+  ) {
     return false;
   }
 
@@ -250,6 +278,197 @@ function hasSupabaseAuthCookie(request: NextRequest) {
     .some((cookie) => SUPABASE_AUTH_COOKIE_PATTERN.test(cookie.name));
 }
 
+function isInternalSessionPingRequest(request: NextRequest) {
+  return (
+    request.nextUrl.pathname === INTERNAL_SESSION_PING_PATH ||
+    request.headers.has("x-panel-keepalive") ||
+    request.headers.has("x-panel-session-ready")
+  );
+}
+
+function buildUnauthorizedApiResponse(args: {
+  request: NextRequest;
+  response: NextResponse;
+}) {
+  const unauthorizedResponse = NextResponse.json(
+    {
+      error: "unauthorized",
+      ok: false,
+    },
+    {
+      headers: API_UNAUTHORIZED_HEADERS,
+      status: 401,
+    },
+  );
+
+  for (const cookie of args.response.cookies.getAll()) {
+    unauthorizedResponse.cookies.set(cookie);
+  }
+
+  return applySecurityHeaders(unauthorizedResponse, args.request);
+}
+
+function rebuildResponseWithRequest(
+  request: NextRequest,
+  currentResponse: NextResponse,
+) {
+  const nextResponse = NextResponse.next({
+    request,
+  });
+
+  for (const [headerName, headerValue] of currentResponse.headers.entries()) {
+    if (headerName.toLowerCase() === "set-cookie") {
+      continue;
+    }
+
+    nextResponse.headers.set(headerName, headerValue);
+  }
+
+  for (const cookie of currentResponse.cookies.getAll()) {
+    nextResponse.cookies.set(cookie);
+  }
+
+  return nextResponse;
+}
+
+async function withTimeoutFallback<T>(args: {
+  fallback: () => T;
+  operation: () => Promise<T>;
+  timeoutMs: number;
+}): Promise<TimedOperationResult<T>> {
+  const timeoutToken = Symbol("timeout");
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const result = await Promise.race([
+      args.operation(),
+      new Promise<typeof timeoutToken>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(timeoutToken), args.timeoutMs);
+      }),
+    ]);
+
+    if (result === timeoutToken) {
+      return {
+        timedOut: true,
+        value: args.fallback(),
+      };
+    }
+
+    return {
+      timedOut: false,
+      value: result,
+    };
+  } catch {
+    return {
+      timedOut: false,
+      value: args.fallback(),
+    };
+  } finally {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+function buildAllowedSecurityEvaluation() {
+  return {
+    action: "allow" as const,
+    allowed: true,
+    idleTimeoutSeconds: 28800,
+    riskLevel: "low" as const,
+    sessionId: null,
+    suspiciousEvents: 0,
+    suspiciousReason: null,
+  };
+}
+
+function buildAllowedAccessPolicyEvaluation(countryCode: string) {
+  return {
+    action: "allow" as const,
+    allowed: true as const,
+    countryCode: countryCode === "-" ? null : countryCode,
+    geoAllowlistEnabled: false,
+    mfaCurrentLevel: null,
+    mfaTotpEnabled: false,
+    reason: null,
+    salonId: null as string | null,
+  };
+}
+
+async function evaluateSessionAccess(args: {
+  accessToken: string;
+  request: NextRequest;
+  requestDeviceId: string;
+  userId: string;
+}) {
+  const securityCacheContext = {
+    accessToken: args.accessToken,
+    countryCode: getRequestCountryCode(args.request),
+    deviceId: args.requestDeviceId,
+    userAgent: getRequestUserAgent(args.request),
+    userId: args.userId,
+  };
+  const canUseCachedSecurity =
+    canUseSecurityCache(args.request) &&
+    (await securityCacheMatches(args.request, securityCacheContext));
+  const securityEvaluation = canUseCachedSecurity
+    ? buildAllowedSecurityEvaluation()
+    : null;
+  const accessPolicyEvaluation = canUseCachedSecurity
+    ? buildAllowedAccessPolicyEvaluation(securityCacheContext.countryCode)
+    : null;
+
+  const [securityResult, accessPolicyResult] = canUseCachedSecurity
+    ? [
+        {
+          timedOut: false,
+          value: securityEvaluation ?? buildAllowedSecurityEvaluation(),
+        },
+        {
+          timedOut: false,
+          value:
+            accessPolicyEvaluation ??
+            buildAllowedAccessPolicyEvaluation(securityCacheContext.countryCode),
+        },
+      ]
+    : await Promise.all([
+        withTimeoutFallback({
+          fallback: buildAllowedSecurityEvaluation,
+          operation: () =>
+            evaluateSessionSecurity({
+              accessToken: args.accessToken,
+              deviceId: args.requestDeviceId,
+              headerStore: args.request.headers,
+              requestPath: args.request.nextUrl.pathname,
+              userId: args.userId,
+            }),
+          timeoutMs: SESSION_ACCESS_EVALUATION_TIMEOUT_MS,
+        }),
+        withTimeoutFallback({
+          fallback: () =>
+            buildAllowedAccessPolicyEvaluation(
+              securityCacheContext.countryCode,
+            ),
+          operation: () =>
+            evaluatePanelAccessPolicy({
+              accessToken: args.accessToken,
+              headerStore: args.request.headers,
+              requestPath: args.request.nextUrl.pathname,
+              userId: args.userId,
+            }),
+          timeoutMs: SESSION_ACCESS_EVALUATION_TIMEOUT_MS,
+        }),
+      ]);
+
+  return {
+    accessPolicyEvaluation: accessPolicyResult.value,
+    canUseCachedSecurity,
+    securityCacheContext,
+    securityEvaluation: securityResult.value,
+    timedOut: securityResult.timedOut || accessPolicyResult.timedOut,
+  } satisfies SessionAccessEvaluation;
+}
+
 export async function updateSession(request: NextRequest) {
   const canonicalOrigin = getCanonicalOrigin();
   const isMutatingRequest =
@@ -287,8 +506,10 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request,
   });
-  const requestDeviceId = resolveRequestDeviceId(request) ?? crypto.randomUUID();
+  const requestDeviceId =
+    resolveRequestDeviceId(request) ?? crypto.randomUUID();
   const shouldSetDeviceCookie = resolveRequestDeviceId(request) == null;
+  const isInternalPingRequest = isInternalSessionPingRequest(request);
 
   if (!hasSupabaseAuthCookie(request)) {
     if (shouldSetDeviceCookie) {
@@ -304,78 +525,143 @@ export async function updateSession(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get(name: string) {
-        return request.cookies.get(name)?.value;
+      getAll() {
+        return request.cookies.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
-        request.cookies.set({ name, value, ...options });
-        response = NextResponse.next({
-          request,
-        });
-        response.cookies.set({ name, value, ...options });
-      },
-      remove(name: string, options: CookieOptions) {
-        request.cookies.set({ name, value: "", ...options });
-        response = NextResponse.next({
-          request,
-        });
-        response.cookies.set({ name, value: "", ...options, maxAge: 0 });
+      setAll(cookiesToSet: MiddlewareResponseCookie[]) {
+        for (const cookie of cookiesToSet) {
+          request.cookies.set(cookie);
+        }
+
+        response = rebuildResponseWithRequest(request, response);
+
+        for (const cookie of cookiesToSet) {
+          response.cookies.set(cookie);
+        }
       },
     },
   });
 
+  const timeoutReasons: string[] = [];
+  const getUserResult = await withTimeoutFallback({
+    fallback: () =>
+      ({
+        data: { user: null },
+        error: null,
+      }) as unknown as Awaited<ReturnType<typeof supabase.auth.getUser>>,
+    operation: () => supabase.auth.getUser(),
+    timeoutMs: SUPABASE_AUTH_LOOKUP_TIMEOUT_MS,
+  });
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = getUserResult.value;
+
+  if (getUserResult.timedOut) {
+    timeoutReasons.push("get-user");
+  }
 
   if (user) {
+    const getSessionResult = await withTimeoutFallback({
+      fallback: () =>
+        ({
+          data: { session: null },
+          error: null,
+        }) as unknown as Awaited<ReturnType<typeof supabase.auth.getSession>>,
+      operation: () => supabase.auth.getSession(),
+      timeoutMs: SUPABASE_AUTH_LOOKUP_TIMEOUT_MS,
+    });
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } = getSessionResult.value;
+
+    if (getSessionResult.timedOut) {
+      timeoutReasons.push("get-session");
+    }
 
     if (session?.access_token) {
-      const securityCacheContext = {
+      let evaluation = await evaluateSessionAccess({
         accessToken: session.access_token,
-        countryCode: getRequestCountryCode(request),
-        deviceId: requestDeviceId,
-        userAgent: getRequestUserAgent(request),
+        request,
+        requestDeviceId,
         userId: user.id,
-      };
-      const canUseCachedSecurity =
-        canUseSecurityCache(request) &&
-        await securityCacheMatches(request, securityCacheContext);
-      const securityEvaluation = canUseCachedSecurity
-        ? {
-            action: "allow" as const,
-            allowed: true,
-            idleTimeoutSeconds: 28800,
-            riskLevel: "low" as const,
-            sessionId: null,
-            suspiciousEvents: 0,
-            suspiciousReason: null,
-          }
-        : await evaluateSessionSecurity({
-            accessToken: session.access_token,
-            deviceId: requestDeviceId,
-            headerStore: request.headers,
-            requestPath: request.nextUrl.pathname,
-            userId: user.id,
-          });
+      });
+
+      if (evaluation.timedOut) {
+        timeoutReasons.push("session-access");
+      }
 
       response.headers.set(
         "X-Panel-Security-Cache",
-        canUseCachedSecurity ? "hit" : "miss",
+        evaluation.canUseCachedSecurity ? "hit" : "miss",
       );
 
-      if (!securityEvaluation.allowed) {
+      if (
+        !evaluation.securityEvaluation.allowed &&
+        evaluation.securityEvaluation.action === "expired"
+      ) {
+        const refreshSessionResult = await withTimeoutFallback({
+          fallback: () =>
+            ({
+              data: { session: null },
+              error: null,
+            }) as unknown as Awaited<
+              ReturnType<typeof supabase.auth.refreshSession>
+            >,
+          operation: () => supabase.auth.refreshSession(),
+          timeoutMs: SUPABASE_SESSION_REFRESH_TIMEOUT_MS,
+        });
+        const { data: refreshedSessionData, error: refreshError } =
+          refreshSessionResult.value;
+        const refreshedAccessToken =
+          refreshedSessionData.session?.access_token?.trim() ?? "";
+
+        if (refreshSessionResult.timedOut) {
+          timeoutReasons.push("refresh-session");
+        }
+
+        if (!refreshError && refreshedAccessToken) {
+          evaluation = await evaluateSessionAccess({
+            accessToken: refreshedAccessToken,
+            request,
+            requestDeviceId,
+            userId: user.id,
+          });
+
+          if (evaluation.timedOut) {
+            timeoutReasons.push("session-access");
+          }
+          response.headers.set("X-Panel-Session-Recovered", "refreshed");
+          response.headers.set(
+            "X-Panel-Security-Cache",
+            evaluation.canUseCachedSecurity ? "hit" : "miss",
+          );
+        }
+      }
+
+      if (!evaluation.securityEvaluation.allowed) {
         await supabase.auth.signOut({ scope: "local" });
+
+        if (isInternalPingRequest) {
+          if (shouldSetDeviceCookie) {
+            ensureResponseDeviceId({
+              deviceId: requestDeviceId,
+              request,
+              response,
+            });
+          }
+
+          return buildUnauthorizedApiResponse({
+            request,
+            response,
+          });
+        }
 
         response = buildSecurityRedirectResponse(
           request,
           response,
-          securityEvaluation.action === "expired"
-            ? "Sessao encerrada por inatividade. Entre novamente para continuar."
-            : "Sessao bloqueada por seguranca. Entre novamente para continuar.",
+          evaluation.securityEvaluation.action === "expired"
+            ? "Sessão encerrada por inatividade. Entre novamente para continuar."
+            : "Sessão bloqueada por segurança. Entre novamente para continuar.",
         );
 
         if (shouldSetDeviceCookie) {
@@ -389,34 +675,33 @@ export async function updateSession(request: NextRequest) {
         return applySecurityHeaders(response, request);
       }
 
-      if (securityEvaluation.action === "allow_with_warning") {
-        response.headers.set("X-Session-Risk", securityEvaluation.riskLevel);
+      if (evaluation.securityEvaluation.action === "allow_with_warning") {
+        response.headers.set(
+          "X-Session-Risk",
+          evaluation.securityEvaluation.riskLevel,
+        );
       }
 
-      const accessPolicyEvaluation = canUseCachedSecurity
-        ? {
-            action: "allow" as const,
-            allowed: true,
-            countryCode:
-              securityCacheContext.countryCode === "-"
-                ? null
-                : securityCacheContext.countryCode,
-            geoAllowlistEnabled: false,
-            mfaCurrentLevel: null,
-            mfaTotpEnabled: false,
-            reason: null,
-            salonId: null,
-          }
-        : await evaluatePanelAccessPolicy({
-            accessToken: session.access_token,
-            headerStore: request.headers,
-            requestPath: request.nextUrl.pathname,
-            userId: user.id,
-          });
-
-      if (!accessPolicyEvaluation.allowed) {
-        if (accessPolicyEvaluation.action === "mfa_required") {
+      if (!evaluation.accessPolicyEvaluation.allowed) {
+        if (evaluation.accessPolicyEvaluation.action === "mfa_required") {
           if (request.nextUrl.pathname !== "/login") {
+            if (isInternalPingRequest) {
+              await supabase.auth.signOut({ scope: "local" });
+
+              if (shouldSetDeviceCookie) {
+                ensureResponseDeviceId({
+                  deviceId: requestDeviceId,
+                  request,
+                  response,
+                });
+              }
+
+              return buildUnauthorizedApiResponse({
+                request,
+                response,
+              });
+            }
+
             response = buildSecurityRedirectResponse(
               request,
               response,
@@ -437,6 +722,21 @@ export async function updateSession(request: NextRequest) {
         } else {
           await supabase.auth.signOut({ scope: "local" });
 
+          if (isInternalPingRequest) {
+            if (shouldSetDeviceCookie) {
+              ensureResponseDeviceId({
+                deviceId: requestDeviceId,
+                request,
+                response,
+              });
+            }
+
+            return buildUnauthorizedApiResponse({
+              request,
+              response,
+            });
+          }
+
           response = buildSecurityRedirectResponse(
             request,
             response,
@@ -456,20 +756,28 @@ export async function updateSession(request: NextRequest) {
       }
 
       if (
-        !canUseCachedSecurity &&
+        !evaluation.canUseCachedSecurity &&
+        !evaluation.timedOut &&
         canUseSecurityCache(request) &&
-        securityEvaluation.allowed &&
-        securityEvaluation.action === "allow" &&
-        accessPolicyEvaluation.allowed &&
-        accessPolicyEvaluation.action === "allow"
+        evaluation.securityEvaluation.allowed &&
+        evaluation.securityEvaluation.action === "allow" &&
+        evaluation.accessPolicyEvaluation.allowed &&
+        evaluation.accessPolicyEvaluation.action === "allow"
       ) {
         await setSecurityCacheCookie({
-          context: securityCacheContext,
+          context: evaluation.securityCacheContext,
           request,
           response,
         });
       }
     }
+  }
+
+  if (timeoutReasons.length > 0) {
+    response.headers.set(
+      "X-Panel-Session-Timeout",
+      Array.from(new Set(timeoutReasons)).join(","),
+    );
   }
 
   if (shouldSetDeviceCookie) {

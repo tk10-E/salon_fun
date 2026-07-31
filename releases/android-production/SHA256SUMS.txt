@@ -1,0 +1,2 @@
+173fcafff42c8762a011a42270ee07c357eb217898f95f0457c118b84a681e4a  releases/android-production/salonfun-1.0.9-10-release.aab
+15104b23ad10160b4c7416c17f76a68ff26ebc9b38903fd7e92e106f4da3693c  releases/android-production/salonfun-1.0.9-10-release.apk

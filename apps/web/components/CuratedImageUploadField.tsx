@@ -48,7 +48,7 @@ export function CuratedImageUploadField({
       />
       <small className="muted">
         {helperText ??
-          `${preset.helperText} Ate ${formatPresetMegabytes(
+          `${preset.helperText} Até ${formatPresetMegabytes(
             preset.maxInputBytes,
           )} MB por arquivo.`}
       </small>
@@ -104,7 +104,11 @@ function resolvePreviewLabel(context: MediaUploadContext, index: number) {
   }
 
   if (context === "service") {
-    return "Preview do servico";
+    return "Preview do serviço";
+  }
+
+  if (context === "story") {
+    return "Preview do story";
   }
 
   return index === 0 ? "Capa do feed" : `Imagem ${index + 1}`;

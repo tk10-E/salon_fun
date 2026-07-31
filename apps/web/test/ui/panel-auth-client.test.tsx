@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   completeFirebaseRedirectLoginIfNeededMock,
   createClientMock,
+  fetchMock,
+  prefetchMock,
+  replaceMock,
   resetPasswordForEmailMock,
   restorePanelSessionFromFirebaseIfNeededMock,
   setRuntimeFirebaseWebConfigMock,
@@ -15,10 +18,14 @@ const {
   signOutPanelFirebaseSessionMock,
   signInWithOAuthMock,
   signInWithPasswordMock,
+  signUpWithFirebasePasswordMock,
   signUpMock,
 } = vi.hoisted(() => ({
   completeFirebaseRedirectLoginIfNeededMock: vi.fn(),
   createClientMock: vi.fn(),
+  fetchMock: vi.fn(),
+  prefetchMock: vi.fn(),
+  replaceMock: vi.fn(),
   resetPasswordForEmailMock: vi.fn(),
   restorePanelSessionFromFirebaseIfNeededMock: vi.fn(),
   setRuntimeFirebaseWebConfigMock: vi.fn(),
@@ -27,6 +34,7 @@ const {
   signOutPanelFirebaseSessionMock: vi.fn(),
   signInWithOAuthMock: vi.fn(),
   signInWithPasswordMock: vi.fn(),
+  signUpWithFirebasePasswordMock: vi.fn(),
   signUpMock: vi.fn(),
 }));
 
@@ -43,7 +51,7 @@ vi.mock("@/lib/firebase/panelAuth", () => ({
   signInWithFirebaseGoogle: signInWithFirebaseGoogleMock,
   signInWithFirebasePassword: signInWithFirebasePasswordMock,
   signOutPanelFirebaseSession: signOutPanelFirebaseSessionMock,
-  signUpWithFirebasePassword: vi.fn(),
+  signUpWithFirebasePassword: signUpWithFirebasePasswordMock,
 }));
 
 vi.mock("@/lib/firebase/runtimeConfig", () => ({
@@ -56,6 +64,13 @@ vi.mock("@/lib/passwordPolicy", () => ({
 
 vi.mock("@/lib/supabase/browser", () => ({
   createClient: createClientMock,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    prefetch: prefetchMock,
+    replace: replaceMock,
+  }),
 }));
 
 import { PanelAuthClient } from "@/components/auth/PanelAuthClient";
@@ -95,10 +110,16 @@ function createSupabaseClient() {
 describe("panel auth client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("fetch", fetchMock);
     delete process.env.NEXT_PUBLIC_ENABLE_SUPABASE_GOOGLE_FALLBACK;
     completeFirebaseRedirectLoginIfNeededMock.mockResolvedValue(false);
     restorePanelSessionFromFirebaseIfNeededMock.mockResolvedValue(false);
     signOutPanelFirebaseSessionMock.mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue({
+      status: 204,
+    });
+    prefetchMock.mockReset();
+    replaceMock.mockReset();
     createClientMock.mockImplementation(() => createSupabaseClient());
     signInWithPasswordMock.mockResolvedValue({
       data: {
@@ -110,13 +131,6 @@ describe("panel auth client", () => {
   });
 
   it("does not force the MFA step when the salon policy is enabled but no verified factor exists", async () => {
-    const assignMock = vi.fn();
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign: assignMock,
-      origin: "https://painel.jc7desenvovimento.online",
-    });
-
     createClientMock.mockReturnValue({
       auth: {
         getSession: vi.fn().mockResolvedValue({
@@ -161,11 +175,18 @@ describe("panel auth client", () => {
       from: vi.fn((table: string) => ({
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            maybeSingle: vi.fn().mockResolvedValue(
-              table === "salons"
-                ? { data: { id: "salon-1" }, error: null }
-                : { data: { mfa_totp_enabled: true }, error: null },
-            ),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data:
+                table === "salons"
+                  ? {
+                      id: "salon-1",
+                      salon_security_settings: {
+                        mfa_totp_enabled: true,
+                      },
+                    }
+                  : null,
+              error: null,
+            }),
           })),
         })),
       })),
@@ -184,24 +205,16 @@ describe("panel auth client", () => {
     );
 
     await waitFor(() => {
-      expect(assignMock).toHaveBeenCalledWith("/dashboard");
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard");
     });
     expect(screen.queryByText("Confirmar acesso")).not.toBeInTheDocument();
-
-    vi.unstubAllGlobals();
   });
 
   it("waits for the authenticated session before redirecting to dashboard", async () => {
     const user = userEvent.setup();
-    const assignMock = vi.fn();
     let authStateChangeHandler:
       | ((event: string, session: { user: { email?: string | null; id: string } } | null) => void)
       | null = null;
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign: assignMock,
-      origin: "https://painel.jc7desenvovimento.online",
-    });
 
     signInWithFirebasePasswordMock.mockResolvedValue(undefined);
     createClientMock.mockReturnValue({
@@ -232,11 +245,18 @@ describe("panel auth client", () => {
       from: vi.fn((table: string) => ({
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            maybeSingle: vi.fn().mockResolvedValue(
-              table === "salons"
-                ? { data: { id: "salon-1" }, error: null }
-                : { data: { mfa_totp_enabled: false }, error: null },
-            ),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data:
+                table === "salons"
+                  ? {
+                      id: "salon-1",
+                      salon_security_settings: {
+                        mfa_totp_enabled: false,
+                      },
+                    }
+                  : null,
+              error: null,
+            }),
           })),
         })),
       })),
@@ -267,7 +287,7 @@ describe("panel auth client", () => {
     await waitFor(() => {
       expect(signInWithFirebasePasswordMock).toHaveBeenCalled();
     });
-    expect(assignMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
     expect(authStateChangeHandler).not.toBeNull();
 
     await act(async () => {
@@ -280,21 +300,13 @@ describe("panel auth client", () => {
     });
 
     await waitFor(() => {
-      expect(assignMock).toHaveBeenCalledWith("/dashboard");
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard");
     });
-
-    vi.unstubAllGlobals();
   });
 
-  it("uses the session returned by the Firebase bridge without waiting for an auth event", async () => {
+  it("waits for the server session confirmation before redirecting to the panel", async () => {
     const user = userEvent.setup();
-    const assignMock = vi.fn();
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign: assignMock,
-      origin: "https://painel.jc7desenvovimento.online",
-    });
-
+    let serverChecks = 0;
     signInWithFirebasePasswordMock.mockResolvedValue({
       user: {
         id: "user-1",
@@ -325,11 +337,107 @@ describe("panel auth client", () => {
       from: vi.fn((table: string) => ({
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            maybeSingle: vi.fn().mockResolvedValue(
-              table === "salons"
-                ? { data: { id: "salon-1" }, error: null }
-                : { data: { mfa_totp_enabled: false }, error: null },
-            ),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data:
+                table === "salons"
+                  ? {
+                      id: "salon-1",
+                      salon_security_settings: {
+                        mfa_totp_enabled: false,
+                      },
+                    }
+                  : null,
+              error: null,
+            }),
+          })),
+        })),
+      })),
+    });
+    fetchMock.mockImplementation(async () => {
+      serverChecks += 1;
+
+      return {
+        status: serverChecks === 1 ? 401 : 204,
+      };
+    });
+
+    render(
+      <PanelAuthClient
+        firebaseConfig={{
+          apiKey: "test-key",
+          authDomain: "panel.example.com",
+          appId: "app-1",
+          messagingSenderId: "sender-1",
+          projectId: "project-1",
+        }}
+      />,
+    );
+
+    await user.type(
+      screen.getByLabelText("E-mail", { selector: "#signin-email" }),
+      "tecnologijc@gmail.com",
+    );
+    await user.type(
+      screen.getByLabelText("Senha", { selector: "#signin-password" }),
+      "Senha123!",
+    );
+    await user.click(screen.getByRole("button", { name: /^entrar$/i }));
+
+    await waitFor(
+      () => {
+        expect(replaceMock).toHaveBeenCalledWith("/dashboard");
+      },
+      {
+        timeout: 4000,
+      },
+    );
+    expect(serverChecks).toBeGreaterThanOrEqual(2);
+  });
+
+  it("uses the session returned by the Firebase bridge without waiting for an auth event", async () => {
+    const user = userEvent.setup();
+    signInWithFirebasePasswordMock.mockResolvedValue({
+      user: {
+        id: "user-1",
+        email: "owner@salon.fun",
+      },
+    });
+    createClientMock.mockReturnValue({
+      auth: {
+        getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+        onAuthStateChange: vi.fn(() => ({
+          data: {
+            subscription: {
+              unsubscribe: vi.fn(),
+            },
+          },
+        })),
+        signInWithOAuth: signInWithOAuthMock,
+        signInWithPassword: signInWithPasswordMock,
+        signUp: signUpMock,
+        resetPasswordForEmail: resetPasswordForEmailMock,
+        mfa: {
+          getAuthenticatorAssuranceLevel: vi
+            .fn()
+            .mockResolvedValue({ data: { currentLevel: "aal1" } }),
+          listFactors: vi.fn().mockResolvedValue({ data: { all: [] } }),
+        },
+      },
+      from: vi.fn((table: string) => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data:
+                table === "salons"
+                  ? {
+                      id: "salon-1",
+                      salon_security_settings: {
+                        mfa_totp_enabled: false,
+                      },
+                    }
+                  : null,
+              error: null,
+            }),
           })),
         })),
       })),
@@ -358,10 +466,8 @@ describe("panel auth client", () => {
     await user.click(screen.getByRole("button", { name: /^entrar$/i }));
 
     await waitFor(() => {
-      expect(assignMock).toHaveBeenCalledWith("/dashboard");
+      expect(replaceMock).toHaveBeenCalledWith("/dashboard");
     });
-
-    vi.unstubAllGlobals();
   });
 
   it("uses Firebase for Google instead of the Supabase OAuth client when Firebase is enabled", async () => {
@@ -390,63 +496,8 @@ describe("panel auth client", () => {
     expect(signInWithOAuthMock).not.toHaveBeenCalled();
   });
 
-  it("uses Supabase OAuth for Facebook from the panel login", async () => {
-    const user = userEvent.setup();
-    const assignMock = vi.fn();
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign: assignMock,
-      origin: "https://painel.jc7desenvovimento.online",
-    });
-
-    signInWithOAuthMock.mockResolvedValue({
-      data: {
-        url: "https://igfitysewvsguvoisytr.supabase.co/auth/v1/authorize?provider=facebook",
-      },
-      error: null,
-    });
-
-    render(
-      <PanelAuthClient
-        firebaseConfig={{
-          apiKey: "test-key",
-          authDomain: "panel.example.com",
-          appId: "app-1",
-          messagingSenderId: "sender-1",
-          projectId: "project-1",
-        }}
-      />,
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: /continuar com facebook/i }),
-    );
-
-    await waitFor(() => {
-      expect(signInWithOAuthMock).toHaveBeenCalledWith({
-        provider: "facebook",
-        options: {
-          redirectTo:
-            "https://painel.jc7desenvovimento.online/auth/callback?next=/dashboard",
-        },
-      });
-    });
-    expect(signInWithFirebaseGoogleMock).not.toHaveBeenCalled();
-    expect(assignMock).toHaveBeenCalledWith(
-      "https://igfitysewvsguvoisytr.supabase.co/auth/v1/authorize?provider=facebook",
-    );
-
-    vi.unstubAllGlobals();
-  });
-
   it("falls back to Supabase password login when Firebase auth is unavailable", async () => {
     const user = userEvent.setup();
-    const assignMock = vi.fn();
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign: assignMock,
-      origin: "https://painel.jc7desenvovimento.online",
-    });
     signInWithFirebasePasswordMock.mockRejectedValue(
       new Error(
         "A configuração do Firebase Web do painel precisa ser atualizada no deploy.",
@@ -488,20 +539,12 @@ describe("panel auth client", () => {
     });
     expect(signOutPanelFirebaseSessionMock).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(assignMock).toHaveBeenCalledWith("/onboarding");
+      expect(replaceMock).toHaveBeenCalledWith("/onboarding");
     });
-
-    vi.unstubAllGlobals();
   });
 
   it("falls back to Supabase password login when Firebase cannot sync the session", async () => {
     const user = userEvent.setup();
-    const assignMock = vi.fn();
-    vi.stubGlobal("location", {
-      ...window.location,
-      assign: assignMock,
-      origin: "https://painel.jc7desenvovimento.online",
-    });
     signInWithFirebasePasswordMock.mockRejectedValue(
       new Error(
         "A configuração atual do painel não conseguiu validar sua conta do Firebase.",
@@ -539,10 +582,8 @@ describe("panel auth client", () => {
 
     expect(signOutPanelFirebaseSessionMock).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(assignMock).toHaveBeenCalledWith("/onboarding");
+      expect(replaceMock).toHaveBeenCalledWith("/onboarding");
     });
-
-    vi.unstubAllGlobals();
   });
 
   it("shows the Firebase recovery error when Supabase Google fallback is disabled", async () => {
@@ -625,5 +666,52 @@ describe("panel auth client", () => {
       });
     });
     expect(signOutPanelFirebaseSessionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the explicit existing-account message when sign up hits an email that is already registered", async () => {
+    const user = userEvent.setup();
+    signUpWithFirebasePasswordMock.mockRejectedValue(
+      new Error(
+        "Este e-mail já está cadastrado. Entre no painel ou use Recuperar senha.",
+      ),
+    );
+
+    render(
+      <PanelAuthClient
+        firebaseConfig={{
+          apiKey: "test-key",
+          authDomain: "panel.example.com",
+          appId: "app-1",
+          messagingSenderId: "sender-1",
+          projectId: "project-1",
+        }}
+      />,
+    );
+
+    await user.type(
+      screen.getByLabelText("E-mail", { selector: "#signup-email" }),
+      "owner@salon.fun",
+    );
+    await user.type(
+      screen.getByLabelText("Senha", { selector: "#signup-password" }),
+      "Senha123!",
+    );
+    await user.type(
+      screen.getByLabelText("Confirmar senha", {
+        selector: "#signup-password-confirmation",
+      }),
+      "Senha123!",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /criar conta com e-mail/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Este e-mail já está cadastrado. Entre no painel ou use Recuperar senha.",
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });

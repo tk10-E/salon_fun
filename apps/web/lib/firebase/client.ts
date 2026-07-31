@@ -1,9 +1,14 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { browserLocalPersistence, getAuth, setPersistence } from "firebase/auth";
+import {
+  browserLocalPersistence,
+  getAuth,
+  setPersistence,
+  type Auth,
+} from "firebase/auth";
 
 import { getRuntimeFirebaseWebConfig } from "@/lib/firebase/runtimeConfig";
 
-let firebasePersistencePromise: Promise<void> | null = null;
+let firebasePersistencePromise: Promise<Auth> | null = null;
 
 export function getFirebaseApp() {
   const config = getRuntimeFirebaseWebConfig();
@@ -21,9 +26,24 @@ export function getFirebaseApp() {
 export function getFirebasePanelAuth() {
   const auth = getAuth(getFirebaseApp());
 
-  if (firebasePersistencePromise == null) {
-    firebasePersistencePromise = setPersistence(auth, browserLocalPersistence).catch(() => undefined);
-  }
+  void ensureFirebasePanelAuthReady(auth);
 
   return auth;
+}
+
+export async function getReadyFirebasePanelAuth() {
+  return ensureFirebasePanelAuthReady(getAuth(getFirebaseApp()));
+}
+
+function ensureFirebasePanelAuthReady(auth: Auth) {
+  if (firebasePersistencePromise == null) {
+    firebasePersistencePromise = setPersistence(
+      auth,
+      browserLocalPersistence,
+    )
+      .then(() => auth)
+      .catch(() => auth);
+  }
+
+  return firebasePersistencePromise;
 }

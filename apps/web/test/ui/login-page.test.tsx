@@ -68,7 +68,7 @@ describe("login page UI", () => {
 
   it("renders both access forms and the flash message", () => {
     return LoginPage({
-      searchParams: { message: "Conta criada com sucesso.", tone: "success" },
+      searchParams: Promise.resolve({ message: "Conta criada com sucesso.", tone: "success" }),
     }).then((page) => {
       render(page);
 
@@ -101,18 +101,12 @@ describe("login page UI", () => {
     });
   });
 
-  it("shows the security onboarding message when no flash is provided", () => {
+  it("does not inject a default notice when no flash is provided", () => {
     return LoginPage({}).then((page) => {
       render(page);
 
-      expect(
-        screen.getByText(
-          "No primeiro acesso, pode ser necessário configurar o autenticador.",
-        ),
-      ).toBeInTheDocument();
       expect(panelAuthClientMock).toHaveBeenCalledWith({
-        initialMessage:
-          "No primeiro acesso, pode ser necessário configurar o autenticador.",
+        initialMessage: undefined,
         initialTone: "info",
         firebaseConfig: null,
       });

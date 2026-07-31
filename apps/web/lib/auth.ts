@@ -13,11 +13,49 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 
 type Salon = Database["public"]["Tables"]["salons"]["Row"];
+type AuthMetadataRecord = Record<string, unknown>;
+type InternalAiAccessSubject = Pick<User, "app_metadata" | "email" | "user_metadata">;
 type FlashTone = "success" | "error" | "info";
 
-const SESSION_EXPIRED_MESSAGE = "Sessao expirada. Entre novamente para continuar.";
+const SESSION_EXPIRED_MESSAGE = "Sessão expirada. Entre novamente para continuar.";
 const SUPABASE_AUTH_COOKIE_PATTERN =
   /^(sb-.+-auth-token(?:\.\d+)?|sb-access-token|sb-refresh-token|supabase-auth-token)$/;
+const INTERNAL_AI_ACCESS_FLAG_KEYS = [
+  "ai_observability_access",
+  "can_access_ai_observability",
+  "is_internal_ai_operator",
+  "is_internal_admin",
+] as const;
+const INTERNAL_AI_ACCESS_PERMISSION_KEYS = [
+  "permissions",
+  "internal_permissions",
+  "feature_access",
+  "feature_flags",
+] as const;
+const INTERNAL_AI_ACCESS_ROLE_KEYS = [
+  "internal_role",
+  "internal_roles",
+  "app_role",
+  "app_roles",
+  "platform_role",
+  "platform_roles",
+] as const;
+const INTERNAL_AI_ACCESS_ROLE_VALUES = new Set([
+  "ai_observability_admin",
+  "developer",
+  "internal_admin",
+  "internal_operator",
+  "platform_admin",
+  "support_engineer",
+  "super_admin",
+  "superadmin",
+]);
+const INTERNAL_AI_ACCESS_PERMISSION_VALUES = new Set([
+  "ai:observability:read",
+  "ai_observability.read",
+  "internal.ai_observability",
+  "internal:ai:observability",
+]);
 const withCache = typeof cache === "function"
   ? cache
   : (<T extends (...args: never[]) => unknown>(fn: T) => fn);
@@ -150,6 +188,113 @@ export async function getAuthenticatedPanelEntryPath() {
   return billingSnapshot.isLocked ? PUBLIC_BILLING_PATH : "/dashboard";
 }
 
+function readMetadataRecord(value: unknown): AuthMetadataRecord | null {
+  return value && typeof value === "object"
+    ? value as AuthMetadataRecord
+    : null;
+}
+
+function getAuthMetadataSources(user: InternalAiAccessSubject) {
+  return [
+    readMetadataRecord(user.app_metadata),
+    readMetadataRecord(user.user_metadata),
+  ].filter((item): item is AuthMetadataRecord => Boolean(item));
+}
+
+function normalizeMetadataToken(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function collectMetadataTokens(
+  user: InternalAiAccessSubject,
+  keys: readonly string[],
+) {
+  const tokens: string[] = [];
+
+  for (const metadata of getAuthMetadataSources(user)) {
+    for (const key of keys) {
+      const rawValue = metadata[key];
+
+      if (typeof rawValue === "string") {
+        tokens.push(
+          ...rawValue
+            .split(/[,\n;]/)
+            .map(normalizeMetadataToken)
+            .filter(Boolean),
+        );
+        continue;
+      }
+
+      if (Array.isArray(rawValue)) {
+        tokens.push(
+          ...rawValue
+            .filter((item): item is string => typeof item === "string")
+            .map(normalizeMetadataToken)
+            .filter(Boolean),
+        );
+      }
+    }
+  }
+
+  return tokens;
+}
+
+function readMetadataBoolean(
+  user: InternalAiAccessSubject,
+  keys: readonly string[],
+) {
+  for (const metadata of getAuthMetadataSources(user)) {
+    for (const key of keys) {
+      const rawValue = metadata[key];
+
+      if (typeof rawValue === "boolean") {
+        return rawValue;
+      }
+
+      if (typeof rawValue === "string") {
+        const normalized = normalizeMetadataToken(rawValue);
+
+        if (["1", "true", "yes"].includes(normalized)) {
+          return true;
+        }
+
+        if (["0", "false", "no"].includes(normalized)) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+export function hasInternalAiObservabilityAccess(
+  user: InternalAiAccessSubject | null | undefined,
+) {
+  if (!user) {
+    return false;
+  }
+
+  if (readMetadataBoolean(user, INTERNAL_AI_ACCESS_FLAG_KEYS)) {
+    return true;
+  }
+
+  const roles = collectMetadataTokens(user, INTERNAL_AI_ACCESS_ROLE_KEYS);
+
+  if (roles.some((role) => INTERNAL_AI_ACCESS_ROLE_VALUES.has(role))) {
+    return true;
+  }
+
+  const permissions = collectMetadataTokens(
+    user,
+    INTERNAL_AI_ACCESS_PERMISSION_KEYS,
+  );
+
+  return permissions.some((permission) =>
+    INTERNAL_AI_ACCESS_PERMISSION_VALUES.has(permission)
+  );
+}
+
 function readUserMetadataValue(
   user: User,
   keys: string[],
@@ -197,6 +342,7 @@ function getAuthenticatedUserAvatarUrl(user: User) {
 export async function requireOwnerSalon(): Promise<{
   salon: Salon;
   user: {
+    canAccessInternalAiObservability: boolean;
     id: string;
     email?: string | null;
     displayName?: string | null;
@@ -208,6 +354,7 @@ export async function requireOwnerSalon(options: {
 }): Promise<{
   salon: Salon;
   user: {
+    canAccessInternalAiObservability: boolean;
     id: string;
     email?: string | null;
     displayName?: string | null;
@@ -240,6 +387,7 @@ export async function requireOwnerSalon(options?: {
   return {
     salon,
     user: {
+      canAccessInternalAiObservability: hasInternalAiObservabilityAccess(user),
       id: user.id,
       email: user.email,
       displayName: getAuthenticatedUserDisplayName(user),

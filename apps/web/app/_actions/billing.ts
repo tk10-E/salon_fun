@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache";
+﻿import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
@@ -6,6 +6,8 @@ import {
   BILLING_DISABLED,
   BILLING_PATH,
   PUBLIC_BILLING_PATH,
+  SINGLE_BILLING_INTERVAL,
+  SINGLE_BILLING_PLAN_ID,
   getSalonBillingWorkspaceSnapshot,
   type SalonBillingSnapshot,
   type BillingInterval,
@@ -64,6 +66,30 @@ function parseBillingInterval(value: string): BillingInterval | null {
   return null;
 }
 
+function normalizeTrialDays(value: unknown) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.trunc(parsed));
+}
+
+function isEligibleForIntroductoryTrial(snapshot: SalonBillingSnapshot) {
+  const subscription = snapshot.subscription;
+
+  return !(
+    subscription.activatedAt ||
+    subscription.trialStartedAt ||
+    subscription.trialEndsAt ||
+    subscription.currentPeriodStartedAt ||
+    subscription.currentPeriodEndsAt ||
+    subscription.canceledAt ||
+    subscription.providerSubscriptionId
+  );
+}
+
 function addBillingCycle(start: Date, billingInterval: BillingInterval) {
   const nextDate = new Date(start);
   nextDate.setUTCDate(nextDate.getUTCDate() + (billingInterval === "yearly" ? 365 : 30));
@@ -80,11 +106,26 @@ function revalidateBillingWorkspace() {
 function resolveBillingReturnPath(rawPath: FormDataEntryValue | null) {
   const value = typeof rawPath === "string" ? rawPath.trim() : "";
 
-  if (value === PUBLIC_BILLING_PATH) {
-    return PUBLIC_BILLING_PATH;
+  if (!value.startsWith("/")) {
+    return BILLING_PATH;
+  }
+
+  try {
+    const parsed = new URL(value, "https://dashboard.local");
+
+    if (parsed.pathname === PUBLIC_BILLING_PATH) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch {
+    return BILLING_PATH;
   }
 
   return BILLING_PATH;
+}
+
+function resolveRequestedBillingInterval(rawValue: FormDataEntryValue | null) {
+  return parseBillingInterval(typeof rawValue === "string" ? rawValue.trim() : "")
+    ?? SINGLE_BILLING_INTERVAL;
 }
 
 async function buildBillingAbsoluteUrl(pathname = BILLING_PATH) {
@@ -225,10 +266,11 @@ async function ensureStripeCustomer(params: {
   return customer.id;
 }
 
-export async function changeSalonPlanActionImpl(formData: FormData) {
+export async function changeSalonPlanActionImpl(_formData: FormData) {
   redirectIfBillingDisabled();
-  const requestedPlanId = String(formData.get("planId") ?? "").trim();
-  const requestedInterval = parseBillingInterval(String(formData.get("billingInterval") ?? "").trim());
+  const requestedInterval = resolveRequestedBillingInterval(
+    _formData.get("billingInterval"),
+  );
   const { salon } = await requireOwnerSalon({ allowLocked: true });
   await redirectStripeManagedActionIfNeeded({
     salonId: salon.id,
@@ -236,19 +278,15 @@ export async function changeSalonPlanActionImpl(formData: FormData) {
   });
   const supabase = createClient();
 
-  if (!requestedPlanId || !requestedInterval) {
-    redirect(buildRedirectNotice(BILLING_PATH, "Selecione um plano e um ciclo válidos.", "error"));
-  }
-
   const { data: requestedPlan, error: requestedPlanError } = await supabase
     .from("saas_plan_catalog")
-    .select("id, display_name")
-    .eq("id", requestedPlanId)
+    .select("id, display_name, trial_days")
+    .eq("id", SINGLE_BILLING_PLAN_ID)
     .eq("is_public", true)
     .maybeSingle();
 
   if (requestedPlanError || !requestedPlan) {
-    redirect(buildRedirectNotice(BILLING_PATH, "Não foi possível localizar o plano escolhido.", "error"));
+    redirect(buildRedirectNotice(BILLING_PATH, "Não foi possível localizar a assinatura mensal.", "error"));
   }
 
   const now = new Date();
@@ -279,7 +317,7 @@ export async function changeSalonPlanActionImpl(formData: FormData) {
   redirect(
     buildRedirectNotice(
       BILLING_PATH,
-      `${requestedPlan.display_name} ativado com cobrança ${requestedInterval === "yearly" ? "anual" : "mensal"}.`,
+      "Assinatura mensal ativada por R$ 89 ao mês.",
       "success",
     ),
   );
@@ -354,8 +392,10 @@ export async function resumeSalonSubscriptionActionImpl() {
 }
 
 export async function startStripeCheckoutActionImpl(formData: FormData) {
-  const requestedPlanId = String(formData.get("planId") ?? "").trim();
-  const requestedInterval = parseBillingInterval(String(formData.get("billingInterval") ?? "").trim());
+  redirectIfBillingDisabled();
+  const requestedInterval = resolveRequestedBillingInterval(
+    formData.get("billingInterval"),
+  );
   const returnPath = resolveBillingReturnPath(formData.get("returnPath"));
   const readiness = getStripeBillingReadiness();
   const { salon, user } = await requireOwnerSalon({ allowLocked: true });
@@ -369,10 +409,6 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
         "error",
       ),
     );
-  }
-
-  if (!requestedPlanId || !requestedInterval) {
-    redirect(buildRedirectNotice(returnPath, "Selecione um plano e um ciclo válidos.", "error"));
   }
 
   const operationalStatus = await getStripeOperationalStatus();
@@ -418,13 +454,13 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
 
   const { data: requestedPlan, error: requestedPlanError } = await supabase
     .from("saas_plan_catalog")
-    .select("id, display_name")
-    .eq("id", requestedPlanId)
+    .select("id, display_name, trial_days")
+    .eq("id", SINGLE_BILLING_PLAN_ID)
     .eq("is_public", true)
     .maybeSingle();
 
   if (requestedPlanError || !requestedPlan) {
-    redirect(buildRedirectNotice(returnPath, "Não foi possível localizar o plano escolhido.", "error"));
+    redirect(buildRedirectNotice(returnPath, "Não foi possível localizar a assinatura mensal.", "error"));
   }
 
   let checkoutUrl: string | null = null;
@@ -439,13 +475,23 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
       ownerUserId: user.id,
       ownerEmail: user.email,
     });
-    const priceId = resolveStripePriceId(requestedPlan.id, requestedInterval);
+    const priceId = resolveStripePriceId(SINGLE_BILLING_PLAN_ID, requestedInterval);
+    const sanitizedTrialDays = normalizeTrialDays(requestedPlan.trial_days);
+    const trialPeriodDays =
+      isEligibleForIntroductoryTrial(billingSnapshot) && sanitizedTrialDays > 0
+        ? sanitizedTrialDays
+        : undefined;
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       client_reference_id: salon.id,
       allow_promotion_codes: true,
       billing_address_collection: "auto",
+      customer_update: {
+        address: "auto",
+        name: "auto",
+      },
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       success_url: `${billingUrl}?message=Checkout+conclu%C3%ADdo.+A+assinatura+ser%C3%A1+atualizada+assim+que+o+Stripe+confirmar+o+pagamento.&tone=success`,
       cancel_url: `${billingUrl}?message=Checkout+cancelado.+Voc%C3%AA+pode+tentar+novamente+quando+quiser.&tone=info`,
       line_items: [
@@ -457,16 +503,17 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
       metadata: {
         salonId: salon.id,
         ownerUserId: user.id,
-        planId: requestedPlan.id,
+        planId: SINGLE_BILLING_PLAN_ID,
         billingInterval: requestedInterval,
       },
       subscription_data: {
         metadata: {
           salonId: salon.id,
           ownerUserId: user.id,
-          planId: requestedPlan.id,
+          planId: SINGLE_BILLING_PLAN_ID,
           billingInterval: requestedInterval,
         },
+        ...(trialPeriodDays ? { trial_period_days: trialPeriodDays } : {}),
       },
     });
 
@@ -493,6 +540,7 @@ export async function startStripeCheckoutActionImpl(formData: FormData) {
 }
 
 export async function startStripeBillingPortalActionImpl() {
+  redirectIfBillingDisabled();
   const readiness = getStripeBillingReadiness();
   const { salon } = await requireOwnerSalon({ allowLocked: true });
   const billingSnapshot = await getSalonBillingWorkspaceSnapshot(salon.id);
@@ -551,3 +599,8 @@ export async function startStripeBillingPortalActionImpl() {
     );
   }
 }
+
+
+
+
+

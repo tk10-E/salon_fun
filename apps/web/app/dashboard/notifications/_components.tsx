@@ -22,6 +22,7 @@ export function NotificationsPageContent({
   return (
     <>
       <NotificationsHeader header={data.header} />
+      <NotificationsInternalAlertsSection alerts={data.internalAlerts} />
       <NotificationsFilterSection filters={data.filters} />
       <NotificationsHistorySection history={data.history} />
     </>
@@ -37,7 +38,7 @@ function NotificationsHeader({
     <header className="simple-header">
       <div>
         <p className="eyebrow">Lembretes</p>
-        <h1>Lembretes, push e avisos do salão</h1>
+        <h1>Lembretes e avisos do salão</h1>
         <p className="muted">Filtre, exporte e revise sem poluição visual.</p>
         <div className="inline-actions" style={{ marginTop: 8, flexWrap: "wrap" }}>
           <span className="badge badge--confirmed">
@@ -79,6 +80,95 @@ function NotificationsHeader({
         </Link>
       </div>
     </header>
+  );
+}
+
+function NotificationsInternalAlertsSection({
+  alerts,
+}: {
+  alerts: NotificationsPageData["internalAlerts"];
+}) {
+  return (
+    <section className="card content-card">
+      <div className="section-heading">
+        <div>
+          <h2>Alertas internos do salão</h2>
+          <p className="muted">
+            Leitura operacional em tempo real para agenda, loja, comandas, estoque e financeiro.
+          </p>
+        </div>
+        <div className="inline-actions" style={{ flexWrap: "wrap" }}>
+          <span
+            className={
+              alerts.operationalCount > 0
+                ? "badge badge--pending"
+                : "badge badge--soft"
+            }
+          >
+            {alerts.operationalCount} operação pedindo ação
+          </span>
+          <span
+            className={
+              alerts.lowStockCount > 0
+                ? "badge badge--pending"
+                : "badge badge--soft"
+            }
+          >
+            {alerts.lowStockCount} estoque baixo
+          </span>
+          <span
+            className={
+              alerts.dueFinancialCount > 0
+                ? "badge badge--cancelled"
+                : "badge badge--soft"
+            }
+          >
+            {alerts.dueFinancialCount} financeiro em alerta
+          </span>
+        </div>
+      </div>
+
+      {!alerts.items.length ? (
+        <EmptyStateCard
+          eyebrow="Tudo em ordem"
+          title="Nenhum alerta interno agora"
+          description="Quando estoque ou financeiro pedirem atenção, eles aparecem aqui."
+        />
+      ) : (
+        <div className="simple-list">
+          {alerts.items.map((item) => (
+            <article key={item.id} className="simple-row">
+              <div
+                className="inline-actions"
+                style={{ marginBottom: 6, flexWrap: "wrap" }}
+              >
+                <span
+                  className={
+                    item.tone === "danger"
+                      ? "badge badge--cancelled"
+                      : "badge badge--pending"
+                  }
+                >
+                  {item.label}
+                </span>
+                <span className="badge badge--soft">
+                  {item.tone === "danger" ? "Ação urgente" : "Acompanhar agora"}
+                </span>
+              </div>
+
+              <h3>{item.title}</h3>
+              <p className="muted">{item.body}</p>
+
+              <div className="simple-row__actions" style={{ marginTop: 8 }}>
+                <Link href={item.href} className="secondary-button">
+                  Abrir área
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

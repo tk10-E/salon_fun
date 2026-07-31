@@ -454,7 +454,7 @@ function BenefitsBirthdaysSection({
         <div>
           <h2>Aniversários do mês</h2>
           <p className="muted">
-            Envie um push rápido para quem faz aniversário.
+            Envie um aviso rápido para quem faz aniversário.
           </p>
         </div>
         <span className="badge badge--soft">{birthdaysThisMonth} no mês</span>

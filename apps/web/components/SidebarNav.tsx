@@ -18,17 +18,39 @@ type NavGroup = {
   items: NavItem[];
 };
 
+type RouteWarmupPlan = {
+  immediate: string[];
+  extended: string[];
+};
+
+type ScheduledTask =
+  | {
+      handle: number;
+      kind: "idle";
+    }
+  | {
+      handle: number;
+      kind: "timeout";
+    };
+
+const FEED_PATH = "/dashboard/feed";
+const INVENTORY_PATH = "/dashboard/inventory";
+const CLIENT_APP_PATH = "/dashboard/client-app";
+const FINANCE_PATH = "/dashboard/finance";
+const CAMPAIGNS_PATH = "/dashboard/benefits/promotions";
+const SETTINGS_PATH = "/dashboard/settings";
+
 const primaryNav: NavItem[] = [
   {
     href: "/dashboard",
-    label: "Início",
-    description: "Resumo do salão",
+    label: "Hoje",
+    description: "Resumo do dia",
     icon: "home",
   },
   {
     href: MANAGEMENT_ROUTES.appointments,
     label: "Agenda",
-    description: "Horários e status",
+    description: "Horários do dia",
     icon: "calendar",
   },
   {
@@ -40,7 +62,7 @@ const primaryNav: NavItem[] = [
   {
     href: MANAGEMENT_ROUTES.services,
     label: "Serviços",
-    description: "Catálogo e preços",
+    description: "Catálogo do salão",
     icon: "sparkles",
   },
   {
@@ -50,122 +72,283 @@ const primaryNav: NavItem[] = [
     icon: "team",
   },
   {
-    href: "/dashboard/whatsapp",
-    label: "WhatsApp",
-    description: "Canal e envios",
-    icon: "whatsapp",
+    href: FINANCE_PATH,
+    label: "Caixa",
+    description: "Receita e comandas",
+    icon: "wallet",
   },
   {
-    href: "/dashboard/settings",
-    label: "Configurações",
-    description: "Marca e operação",
-    icon: "gear",
+    href: FEED_PATH,
+    label: "Feed",
+    description: "Posts e stories",
+    icon: "gallery",
+  },
+  {
+    href: INVENTORY_PATH,
+    label: "Loja",
+    description: "Produtos e pedidos",
+    icon: "box",
   },
 ];
 
 const extraNavGroups: NavGroup[] = [
   {
-    label: "Comunicação e vitrine",
+    label: "Cliente",
     items: [
       {
-        href: "/dashboard/benefits",
+        href: CAMPAIGNS_PATH,
         label: "Campanhas",
-        description: "Ofertas",
+        description: "Ofertas e retorno",
         icon: "bolt",
       },
       {
-        href: "/dashboard/feed",
-        label: "Feed",
-        description: "Conteúdo",
-        icon: "gallery",
-      },
-      {
-        href: "/dashboard/instagram",
-        label: "Instagram",
-        description: "Integração",
-        icon: "instagram",
-      },
-      {
-        href: "/dashboard/notifications",
-        label: "Lembretes",
-        description: "Push e avisos",
-        icon: "bell",
-      },
-      {
-        href: "/dashboard/client-app",
-        label: "Vitrine do app",
-        description: "App do cliente",
+        href: CLIENT_APP_PATH,
+        label: "App do cliente",
+        description: "Vitrine e atalhos",
         icon: "phone",
       },
     ],
   },
   {
-    label: "Operação e caixa",
+    label: "Painel",
     items: [
       {
-        href: MANAGEMENT_ROUTES.categories,
-        label: "Categorias",
-        description: "Organização",
-        icon: "box",
-      },
-      {
-        href: MANAGEMENT_ROUTES.payments,
-        label: "Recebimentos",
-        description: "Pagamentos",
-        icon: "receipt",
-      },
-      {
-        href: MANAGEMENT_ROUTES.commissions,
-        label: "Repasse",
-        description: "Comissões",
-        icon: "chart",
-      },
-      {
-        href: "/dashboard/operations",
-        label: "Operações",
-        description: "Avançado",
-        icon: "chart",
-      },
-      {
-        href: "/dashboard/operations/comandas",
-        label: "Comandas",
-        description: "Atendimento",
-        icon: "receipt",
-      },
-      {
-        href: "/dashboard/inventory",
-        label: "Estoque",
-        description: "Produtos",
-        icon: "box",
-      },
-      {
-        href: "/dashboard/finance",
-        label: "Caixa",
-        description: "Financeiro",
-        icon: "chart",
-      },
-    ],
-  },
-  {
-    label: "Plano e conta",
-    items: [
-      {
-        href: "/dashboard/subscriptions",
-        label: "Assinaturas",
-        description: "Planos",
-        icon: "crown",
-      },
-      {
-        href: "/dashboard/billing",
-        label: "Conta",
-        description: "Cobrança",
-        icon: "wallet",
+        href: SETTINGS_PATH,
+        label: "Ajustes",
+        description: "Marca e regras",
+        icon: "gear",
       },
     ],
   },
 ];
 
 const extraNav = extraNavGroups.flatMap((group) => group.items);
+
+const dashboardNavGroups: NavGroup[] = [
+  {
+    label: "Dia a dia",
+    items: [
+      primaryNav[0]!,
+      primaryNav[1]!,
+      primaryNav[5]!,
+    ],
+  },
+  {
+    label: "Clientes e vendas",
+    items: [
+      primaryNav[2]!,
+      primaryNav[6]!,
+      primaryNav[7]!,
+      extraNavGroups[0]!.items[0]!,
+      extraNavGroups[0]!.items[1]!,
+    ],
+  },
+  {
+    label: "Estrutura",
+    items: [
+      primaryNav[3]!,
+      primaryNav[4]!,
+      extraNavGroups[1]!.items[0]!,
+    ],
+  },
+];
+
+const dashboardNav = dashboardNavGroups.flatMap((group) => group.items);
+const lockedWorkspaceNav: NavItem[] = [
+  {
+    href: "/planos",
+    label: "Escolher plano",
+    description: "Ativação comercial",
+    icon: "wallet",
+  },
+];
+
+function buildRouteWarmupPlan(
+  pathname: string,
+  isWorkspaceLocked: boolean,
+): RouteWarmupPlan {
+  if (isWorkspaceLocked) {
+    return {
+      immediate: ["/planos"],
+      extended: [],
+    };
+  }
+
+  if (
+    pathname.startsWith("/dashboard/gestao") ||
+    pathname.startsWith("/dashboard/services") ||
+    pathname.startsWith("/dashboard/team")
+  ) {
+    return {
+      immediate: [
+        "/dashboard",
+        MANAGEMENT_ROUTES.appointments,
+        MANAGEMENT_ROUTES.clients,
+        FINANCE_PATH,
+      ],
+      extended: [
+        MANAGEMENT_ROUTES.services,
+        MANAGEMENT_ROUTES.professionals,
+        INVENTORY_PATH,
+        FEED_PATH,
+        CAMPAIGNS_PATH,
+      ],
+    };
+  }
+
+  if (pathname.startsWith("/dashboard/benefits")) {
+    return {
+      immediate: [
+        "/dashboard",
+        CAMPAIGNS_PATH,
+        FEED_PATH,
+        INVENTORY_PATH,
+      ],
+      extended: [
+        MANAGEMENT_ROUTES.clients,
+        MANAGEMENT_ROUTES.appointments,
+        FINANCE_PATH,
+        CLIENT_APP_PATH,
+      ],
+    };
+  }
+
+  if (pathname.startsWith(FINANCE_PATH)) {
+    return {
+      immediate: [
+        "/dashboard",
+        MANAGEMENT_ROUTES.appointments,
+        MANAGEMENT_ROUTES.clients,
+        INVENTORY_PATH,
+      ],
+      extended: [
+        MANAGEMENT_ROUTES.services,
+        MANAGEMENT_ROUTES.professionals,
+        FEED_PATH,
+        CAMPAIGNS_PATH,
+      ],
+    };
+  }
+
+  if (pathname.startsWith(SETTINGS_PATH)) {
+    return {
+      immediate: [
+        "/dashboard",
+        MANAGEMENT_ROUTES.appointments,
+        MANAGEMENT_ROUTES.clients,
+        FINANCE_PATH,
+      ],
+      extended: [FEED_PATH, INVENTORY_PATH, CLIENT_APP_PATH, CAMPAIGNS_PATH],
+    };
+  }
+
+  if (
+    pathname.startsWith(CLIENT_APP_PATH) ||
+    pathname.startsWith("/dashboard/notifications") ||
+    pathname.startsWith(FEED_PATH) ||
+    pathname.startsWith("/dashboard/birthdays") ||
+    pathname.startsWith(INVENTORY_PATH) ||
+    pathname.startsWith("/dashboard/operations") ||
+    pathname.startsWith("/dashboard/subscriptions") ||
+    pathname.startsWith("/dashboard/billing") ||
+    pathname.startsWith("/dashboard/ai")
+  ) {
+    return {
+      immediate: [
+        "/dashboard",
+        FEED_PATH,
+        INVENTORY_PATH,
+        MANAGEMENT_ROUTES.clients,
+      ],
+      extended: [
+        MANAGEMENT_ROUTES.appointments,
+        MANAGEMENT_ROUTES.services,
+        MANAGEMENT_ROUTES.professionals,
+        FINANCE_PATH,
+        CAMPAIGNS_PATH,
+      ],
+    };
+  }
+
+  return {
+    immediate: [
+      MANAGEMENT_ROUTES.appointments,
+      MANAGEMENT_ROUTES.clients,
+      MANAGEMENT_ROUTES.services,
+      FINANCE_PATH,
+    ],
+    extended: [
+      MANAGEMENT_ROUTES.professionals,
+      FEED_PATH,
+      INVENTORY_PATH,
+      CAMPAIGNS_PATH,
+      CLIENT_APP_PATH,
+    ],
+  };
+}
+
+function dedupeWarmupRoutes(pathname: string, routes: string[]) {
+  return routes.filter((href, index, collection) => {
+    return href !== pathname && collection.indexOf(href) === index;
+  });
+}
+
+function shouldRunExtendedWarmup() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const connection = (
+    navigator as Navigator & {
+      connection?: {
+        effectiveType?: string | null;
+        saveData?: boolean;
+      };
+    }
+  ).connection;
+
+  if (!connection) {
+    return true;
+  }
+
+  if (connection.saveData) {
+    return false;
+  }
+
+  const effectiveType = connection.effectiveType?.toLowerCase();
+  return effectiveType !== "slow-2g" && effectiveType !== "2g";
+}
+
+function scheduleWarmupTask(callback: () => void, timeout: number): ScheduledTask {
+  const supportsIdleCallback =
+    typeof window.requestIdleCallback === "function" &&
+    typeof window.cancelIdleCallback === "function";
+
+  if (supportsIdleCallback) {
+    return {
+      handle: window.requestIdleCallback(() => callback(), { timeout }),
+      kind: "idle",
+    };
+  }
+
+  return {
+    handle: window.setTimeout(callback, Math.min(timeout, 700)),
+    kind: "timeout",
+  };
+}
+
+function cancelWarmupTask(task: ScheduledTask | null) {
+  if (!task) {
+    return;
+  }
+
+  if (task.kind === "idle") {
+    window.cancelIdleCallback(task.handle);
+    return;
+  }
+
+  window.clearTimeout(task.handle);
+}
 
 function NavIcon({ name }: { name: string }) {
   switch (name) {
@@ -192,6 +375,15 @@ function NavIcon({ name }: { name: string }) {
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M11.23 4.54c.28-1.06 1.8-1.06 2.08 0l.46 1.74a1.5 1.5 0 0 0 1.06 1.06l1.74.46c1.06.28 1.06 1.8 0 2.08l-1.74.46a1.5 1.5 0 0 0-1.06 1.06l-.46 1.74c-.28 1.06-1.8 1.06-2.08 0l-.46-1.74a1.5 1.5 0 0 0-1.06-1.06l-1.74-.46c-1.06-.28-1.06-1.8 0-2.08l1.74-.46a1.5 1.5 0 0 0 1.06-1.06l.46-1.74Zm6.72 9.72c.18-.68 1.15-.68 1.33 0l.22.83c.12.43.45.76.88.88l.83.22c.68.18.68 1.15 0 1.33l-.83.22a1.25 1.25 0 0 0-.88.88l-.22.83c-.18.68-1.15.68-1.33 0l-.22-.83a1.25 1.25 0 0 0-.88-.88l-.83-.22c-.68-.18-.68-1.15 0-1.33l.83-.22c.43-.12.76-.45.88-.88l.22-.83Zm-9.9 2.36c.21-.8 1.35-.8 1.56 0l.29 1.08c.14.54.56.96 1.1 1.1l1.08.29c.8.21.8 1.35 0 1.56l-1.08.29c-.54.14-.96.56-1.1 1.1l-.29 1.08c-.21.8-1.35.8-1.56 0l-.29-1.08a1.56 1.56 0 0 0-1.1-1.1l-1.08-.29c-.8-.21-.8-1.35 0-1.56l1.08-.29c.54-.14.96-.56 1.1-1.1l.29-1.08Z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    case "heart":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 19.2 5.8 13a4 4 0 0 1 5.6-5.7L12 8l.6-.7a4 4 0 0 1 5.6 5.7L12 19.2Z"
             fill="currentColor"
           />
         </svg>
@@ -250,15 +442,6 @@ function NavIcon({ name }: { name: string }) {
           />
         </svg>
       );
-    case "instagram":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M8 4.25h8A3.75 3.75 0 0 1 19.75 8v8A3.75 3.75 0 0 1 16 19.75H8A3.75 3.75 0 0 1 4.25 16V8A3.75 3.75 0 0 1 8 4.25Zm0 1.5A2.25 2.25 0 0 0 5.75 8v8A2.25 2.25 0 0 0 8 18.25h8A2.25 2.25 0 0 0 18.25 16V8A2.25 2.25 0 0 0 16 5.75H8Zm4 2.5A3.75 3.75 0 1 1 8.25 12A3.75 3.75 0 0 1 12 8.25Zm0 1.5A2.25 2.25 0 1 0 14.25 12A2.25 2.25 0 0 0 12 9.75Zm4.13-2.13a.88.88 0 1 1 0 1.76a.88.88 0 0 1 0-1.76Z"
-            fill="currentColor"
-          />
-        </svg>
-      );
     case "box":
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -304,15 +487,6 @@ function NavIcon({ name }: { name: string }) {
           />
         </svg>
       );
-    case "whatsapp":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M12.02 4.25a7.73 7.73 0 0 1 7.73 7.73a7.68 7.68 0 0 1-1.14 4.04l.89 3.15a.75.75 0 0 1-.92.92l-3.08-.88a7.73 7.73 0 1 1-3.48-14.96Zm0 1.5a6.23 6.23 0 0 0-5.4 9.34a.75.75 0 0 1 .08.58l-.58 2.04l2-.57a.75.75 0 0 1 .57.06a6.23 6.23 0 1 0 3.33-11.45Zm-1.8 2.82c.23 0 .45.01.64.42l.37.86c.1.22.16.48.02.7c-.06.1-.14.22-.25.35c-.11.13-.23.27-.33.37c-.11.11-.22.23-.1.44c.12.22.53.87 1.14 1.41c.79.7 1.45.92 1.66 1.02c.2.1.32.09.43-.05c.12-.14.5-.58.63-.78c.13-.19.27-.16.46-.1c.18.06 1.17.55 1.36.65c.2.1.33.15.38.24c.05.1.05.56-.13 1.1c-.17.53-1 1.02-1.37 1.08c-.35.06-.8.08-1.3-.08c-.3-.1-.67-.22-1.14-.42c-2-.87-3.3-2.92-3.4-3.05c-.1-.14-.81-1.08-.81-2.06c0-.98.52-1.45.7-1.65c.18-.2.4-.25.53-.25h.41Z"
-            fill="currentColor"
-          />
-        </svg>
-      );
     case "home":
     default:
       return (
@@ -329,6 +503,7 @@ function NavIcon({ name }: { name: string }) {
 type SidebarNavProps = {
   isWorkspaceLocked?: boolean;
   allowedPathsWhenLocked?: readonly string[];
+  onNavigate?: () => void;
 };
 
 function matchesAllowedPath(pathname: string, allowedPaths: readonly string[]) {
@@ -341,113 +516,75 @@ function matchesAllowedPath(pathname: string, allowedPaths: readonly string[]) {
 export function SidebarNav({
   isWorkspaceLocked = false,
   allowedPathsWhenLocked = [],
+  onNavigate,
 }: SidebarNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const prefetchedHrefsRef = useRef<Set<string>>(new Set());
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [showExtras, setShowExtras] = useState<boolean>(true);
+  const navigationGroups = isWorkspaceLocked
+    ? [{ label: "Assinatura", items: lockedWorkspaceNav }]
+    : dashboardNavGroups;
+  const navigationItems = isWorkspaceLocked ? lockedWorkspaceNav : dashboardNav;
 
   useEffect(() => {
     setPendingHref(null);
   }, [pathname]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("salonfun:simple-nav");
-    if (stored === "collapsed") {
-      setShowExtras(false);
-    }
-  }, []);
+  const prefetchRoute = useCallback(
+    (href: string) => {
+      if (href === pathname || prefetchedHrefsRef.current.has(href)) {
+        return;
+      }
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      "salonfun:simple-nav",
-      showExtras ? "expanded" : "collapsed",
-    );
-  }, [showExtras]);
-
-  const prefetchRoute = useCallback((href: string) => {
-    if (href === pathname || prefetchedHrefsRef.current.has(href)) {
-      return;
-    }
-
-    prefetchedHrefsRef.current.add(href);
-    router.prefetch(href);
-  }, [pathname, router]);
+      prefetchedHrefsRef.current.add(href);
+      router.prefetch(href);
+    },
+    [pathname, router],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
-
-    const likelyRoutes = (() => {
-      if (pathname.startsWith("/dashboard/gestao")) {
-        return [
-          "/dashboard",
-          MANAGEMENT_ROUTES.appointments,
-          MANAGEMENT_ROUTES.clients,
-          MANAGEMENT_ROUTES.services,
-        ];
-      }
-
-      if (pathname.startsWith("/dashboard/benefits")) {
-        return [
-          "/dashboard/benefits",
-          "/dashboard/benefits/promotions",
-          "/dashboard/benefits/referrals",
-          "/dashboard/client-app",
-        ];
-      }
-
-      if (pathname.startsWith("/dashboard/operations")) {
-        return [
-          "/dashboard/operations",
-          "/dashboard/operations/comandas",
-          "/dashboard/inventory",
-          "/dashboard/finance",
-        ];
-      }
-
-      if (pathname.startsWith("/dashboard/whatsapp")) {
-        return [
-          "/dashboard/gestao/agendamentos",
-          "/dashboard/operations",
-          "/dashboard/client-app",
-          "/dashboard/settings",
-        ];
-      }
-
-      return [
-        "/dashboard",
-        MANAGEMENT_ROUTES.appointments,
-        MANAGEMENT_ROUTES.clients,
-        "/dashboard/feed",
-      ];
-    })().filter((href, index, collection) => {
-      return href !== pathname && collection.indexOf(href) === index;
-    });
-
-    const schedulePrefetch = () => {
-      likelyRoutes.forEach((href) => prefetchRoute(href));
-    };
-
-    const supportsIdleCallback =
-      typeof window.requestIdleCallback === "function" &&
-      typeof window.cancelIdleCallback === "function";
-
-    if (supportsIdleCallback) {
-      const handle = window.requestIdleCallback(() => schedulePrefetch(), {
-        timeout: 1200,
-      });
-
-      return () => window.cancelIdleCallback(handle);
+    if (document.visibilityState === "hidden") {
+      return;
     }
 
-    const timeout = window.setTimeout(schedulePrefetch, 650);
-    return () => window.clearTimeout(timeout);
-  }, [pathname, prefetchRoute, router]);
+    const plan = buildRouteWarmupPlan(pathname, isWorkspaceLocked);
+    const immediateRoutes = dedupeWarmupRoutes(pathname, plan.immediate);
+    const extendedRoutes = dedupeWarmupRoutes(pathname, plan.extended);
+    const runPrefetch = (routes: string[]) => {
+      routes.forEach((href) => prefetchRoute(href));
+    };
+
+    const immediateTask = scheduleWarmupTask(
+      () => runPrefetch(immediateRoutes),
+      420,
+    );
+    let extendedTask: ScheduledTask | null = null;
+    let extendedDelayHandle: number | null = null;
+
+    if (extendedRoutes.length > 0 && shouldRunExtendedWarmup()) {
+      extendedDelayHandle = window.setTimeout(() => {
+        extendedTask = scheduleWarmupTask(
+          () => runPrefetch(extendedRoutes),
+          1400,
+        );
+      }, 900);
+    }
+
+    return () => {
+      cancelWarmupTask(immediateTask);
+
+      if (extendedDelayHandle != null) {
+        window.clearTimeout(extendedDelayHandle);
+      }
+
+      cancelWarmupTask(extendedTask);
+    };
+  }, [isWorkspaceLocked, pathname, prefetchRoute]);
 
   const handleLinkClick = (
     event: MouseEvent<HTMLAnchorElement>,
@@ -466,6 +603,7 @@ export function SidebarNav({
       return;
     }
 
+    onNavigate?.();
     setPendingHref(href);
     prefetchRoute(href);
   };
@@ -557,47 +695,79 @@ export function SidebarNav({
       <div className="sidebar-section">
         <div className="sidebar-section__header">
           <div className="sidebar-section__copy">
-            <span className="sidebar-section__label">Dia a dia do salão</span>
+            <span className="sidebar-section__label">
+              {isWorkspaceLocked ? "Ativação do painel" : "Essencial"}
+            </span>
             <p className="sidebar-section__description">
-              Acesso rápido ao que move atendimento, agenda e operação.
+              {isWorkspaceLocked
+                ? "Finalize a assinatura para liberar a operação completa do salão."
+                : "O que move o salão e o app do cliente."}
             </p>
           </div>
           <span className="sidebar-section__count" aria-hidden="true">
-            {primaryNav.length}
+            {navigationItems.length}
           </span>
         </div>
 
-        <div className="sidebar-section__body">
-          {primaryNav.map((link) => renderNavItem(link))}
+        <div className="sidebar-section__body sidebar-section__body--stacked">
+          {navigationGroups.map((group) => (
+            <div key={group.label} className="sidebar-nav-group">
+              <div className="sidebar-nav-group__header">
+                <span className="sidebar-nav-group__label">{group.label}</span>
+                <span className="sidebar-nav-group__count" aria-hidden="true">
+                  {group.items.length}
+                </span>
+              </div>
+
+              <div className="sidebar-nav-group__body">
+                {group.items.map((link) =>
+                  renderNavItem(link, { compact: !isWorkspaceLocked }),
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
+      {false ? (
       <div className="sidebar-section sidebar-section--secondary">
         <div className="sidebar-section__header">
           <div className="sidebar-section__copy">
-            <span className="sidebar-section__label">Mais ferramentas</span>
+            <span className="sidebar-section__label">
+              {isWorkspaceLocked ? "Depois da assinatura" : "Complementos"}
+            </span>
             <p className="sidebar-section__description">
-              Áreas de apoio para crescer, operar e cobrar melhor.
+              {isWorkspaceLocked
+                ? "Assim que a assinatura for confirmada, as demais áreas aparecem aqui."
+                : "Campanhas, vitrine e ajustes que entram menos no fluxo."}
             </p>
           </div>
 
-          <button
-            type="button"
-            className="sidebar-section__toggle"
-            onClick={() => setShowExtras((value) => !value)}
-            aria-expanded={showExtras}
-          >
-            <span>{showExtras ? "Recolher" : "Expandir"}</span>
-            <strong>{extraNav.length}</strong>
-          </button>
+          {!isWorkspaceLocked ? (
+            <button
+              type="button"
+              className="sidebar-section__toggle"
+              onClick={() => setShowExtras((value) => !value)}
+              aria-expanded={showExtras}
+            >
+              <span>{showExtras ? "Recolher" : "Expandir"}</span>
+              <strong>{navigationItems.length}</strong>
+            </button>
+          ) : (
+            <span className="sidebar-section__count" aria-hidden="true">
+              {navigationItems.length}
+            </span>
+          )}
         </div>
 
-        {showExtras ? (
+        {showExtras || isWorkspaceLocked ? (
           <div className="sidebar-section__body sidebar-section__body--stacked">
-            {extraNavGroups.map((group) => (
+            {navigationGroups.map((group) => (
               <div key={group.label} className="sidebar-nav-group">
                 <div className="sidebar-nav-group__header">
-                  <span className="sidebar-nav-group__label">{group.label}</span>
+                  <span className="sidebar-nav-group__label">
+                    {group.label}
+                  </span>
                   <span className="sidebar-nav-group__count" aria-hidden="true">
                     {group.items.length}
                   </span>
@@ -613,6 +783,7 @@ export function SidebarNav({
           </div>
         ) : null}
       </div>
+      ) : null}
     </nav>
   );
 }

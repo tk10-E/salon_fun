@@ -5,23 +5,26 @@ import {
   startStripeBillingPortalAction,
   startStripeCheckoutAction,
 } from "@/app/actions";
-import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
 import { FlashMessage } from "@/components/FlashMessage";
+import { requireOwnerSalon } from "@/lib/auth";
 import {
   BILLING_DISABLED,
   PUBLIC_BILLING_PATH,
   formatBillingPrice,
   formatLimitLabel,
   getSalonBillingWorkspaceSnapshot,
+  SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE,
+  SINGLE_BILLING_PLAN_YEARLY_SAVINGS,
   type SalonBillingPlan,
 } from "@/lib/billing";
-import { requireOwnerSalon } from "@/lib/auth";
+import { measureServerRender } from "@/lib/serverPerformance";
 import {
   getStripeBillingReadiness,
   getStripeOperationalStatus,
 } from "@/lib/stripeBilling";
-import { measureServerRender } from "@/lib/serverPerformance";
+
+import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +32,7 @@ type BillingPageProps = {
   searchParams?: Promise<{
     message?: string;
     tone?: string;
+    interval?: string;
   }>;
 };
 
@@ -89,14 +93,14 @@ function getEnvironmentDescription(args: {
   }
 
   if (args.billingDisabled && args.mode === "test") {
-    return "Os planos já aparecem por aqui, mas os pagamentos reais ainda não foram liberados.";
+    return "A assinatura já aparece por aqui, mas os pagamentos reais ainda não foram liberados.";
   }
 
   if (args.liveReady) {
-    return "A assinatura do painel já pode ser ativada, renovada e atualizada automaticamente.";
+    return "A assinatura já pode ser ativada, renovada e atualizada automaticamente.";
   }
 
-  return "A cobrança já foi conectada, mas ainda precisa de alguns ajustes antes de ser liberada.";
+  return "A cobrança já foi conectada, mas ainda precisa de alguns ajustes antes da liberação.";
 }
 
 function formatBillingIssueForOwner(issue: string) {
@@ -115,7 +119,7 @@ function formatBillingIssueForOwner(issue: string) {
   }
 
   if (normalized.includes("stripe_price_") || normalized.includes("price")) {
-    return "Ainda faltam cadastrar ou revisar os valores dos planos.";
+    return "Ainda falta cadastrar ou revisar o valor da assinatura.";
   }
 
   if (normalized.includes("customer portal")) {
@@ -131,7 +135,7 @@ function formatBillingIssueForOwner(issue: string) {
   }
 
   if (normalized.includes("misturam itens de teste e produção")) {
-    return "Os valores da cobrança precisam ser revisados antes da liberação.";
+    return "Os dados da assinatura precisam ser revisados antes da liberação.";
   }
 
   if (normalized.includes("ativação final do billing")) {
@@ -147,6 +151,7 @@ function formatBillingIssueForOwner(issue: string) {
 
 function buildPlanHighlights(plan: SalonBillingPlan) {
   const items = [
+    ...(plan.trialDays > 0 ? [`${plan.trialDays} dias grátis na 1ª assinatura`] : []),
     plan.maxStaffMembers === null
       ? "Equipe ilimitada"
       : `${formatLimitLabel(
@@ -185,6 +190,32 @@ function buildPlanHighlights(plan: SalonBillingPlan) {
   return items;
 }
 
+function getSinglePlanActionLabel(
+  plan: SalonBillingPlan,
+  billingInterval: "monthly" | "yearly",
+) {
+  if (plan.trialDays > 0 && billingInterval === "monthly") {
+    return `Começar com ${plan.trialDays} dias grátis`;
+  }
+
+  if (billingInterval === "yearly") {
+    return `Ativar anual por ${formatBillingPrice(plan.yearlyPrice, plan.currencyCode)}`;
+  }
+
+  return `Ativar mensal por ${formatBillingPrice(plan.monthlyPrice, plan.currencyCode)}`;
+}
+
+function hasSignedSystem(
+  snapshot: Awaited<ReturnType<typeof getSalonBillingWorkspaceSnapshot>>,
+) {
+  return (
+    Boolean(snapshot.subscription.activatedAt) ||
+    Boolean(snapshot.subscription.providerSubscriptionId) ||
+    snapshot.subscription.status === "active" ||
+    snapshot.subscription.status === "trialing"
+  );
+}
+
 export default async function BillingPage({
   searchParams: searchParamsPromise,
 }: BillingPageProps) {
@@ -209,9 +240,12 @@ export default async function BillingPage({
       operationalStatus.portalConfigured &&
       billingSnapshot.subscription.paymentProvider === "stripe" &&
       Boolean(billingSnapshot.subscription.providerCustomerId);
-    const planChangesManagedInPortal =
+    const portalManagedSubscription =
       portalEnabled &&
       Boolean(billingSnapshot.subscription.providerSubscriptionId);
+    const signedSystem = hasSignedSystem(billingSnapshot);
+    const selectedInterval =
+      searchParams?.interval === "yearly" ? "yearly" : "monthly";
     const issues = [
       ...(!billingEnabled && readiness.configured && operationalStatus.mode === "live"
         ? ["A ativação final do billing ainda não foi ligada neste ambiente."]
@@ -219,330 +253,302 @@ export default async function BillingPage({
       ...(operationalStatus.issues.length > 0
         ? operationalStatus.issues
         : readiness.missing.map((item) => `Missing ${item}.`)),
-    ].map(formatBillingIssueForOwner).filter((value, index, array) => array.indexOf(value) === index);
+    ]
+      .map(formatBillingIssueForOwner)
+      .filter((value, index, array) => array.indexOf(value) === index);
+
+    const currentPlan = billingSnapshot.plans[0] ?? billingSnapshot.currentPlan ?? null;
+    const currentPlanName = billingSnapshot.currentPlan?.displayName ?? "Plano do sistema";
+    const currentCycleLabel =
+      billingSnapshot.subscription.billingInterval === "yearly"
+        ? "Anual"
+        : "Mensal";
+    const managementLabel = portalEnabled
+      ? "Portal liberado"
+      : checkoutEnabled
+        ? "Pronta para liberar"
+        : "Em preparação";
 
     return (
-      <div className="page-grid billing-page">
+      <div className={`page-grid ${styles.page}`}>
         {searchParams?.message ? (
-          <FlashMessage
-            message={searchParams.message}
-            tone={searchParams.tone}
-          />
+          <FlashMessage message={searchParams.message} tone={searchParams.tone} />
         ) : null}
 
-        <DashboardWorkspaceHero
-          eyebrow="Assinatura do sistema"
-          title={`${billingSnapshot.currentPlan.displayName} para ${salon.name}`}
-          description="Organize a assinatura do painel sem misturar com os planos e pacotes que o salão vende para as clientes."
-          highlight={{
-            label: "Status atual",
-            value: billingSnapshot.statusLabel,
-            note: billingSnapshot.statusDetail,
-          }}
-          signals={[
-            {
-              label: "Cobrança",
-              value: getModeLabel(operationalStatus.mode),
-              tone: checkoutEnabled ? "success" : "warm",
-            },
-            {
-              label: "Liberação",
-              value: billingEnabled ? "Ativa" : "Em preparação",
-              tone: billingEnabled ? "accent" : "soft",
-            },
-          ]}
-          stats={[
-            {
-              label: "Ciclo do plano",
-              value:
-                billingSnapshot.subscription.billingInterval === "yearly"
-                  ? "Anual"
-                  : "Mensal",
-              note: billingSnapshot.currentPlan.displayName,
-              tone: "soft",
-            },
-            {
-              label: "Próxima virada",
-              value: billingSnapshot.nextBillingDateLabel ?? "Em definição",
-              note:
-                billingSnapshot.subscription.status === "trialing"
-                  ? "Fim do trial ou primeira cobrança"
-                  : billingSnapshot.isLocked
-                    ? "Liberação do painel após a assinatura"
-                    : "Renovação da assinatura",
-              tone: billingSnapshot.isLocked ? "danger" : "accent",
-            },
-            {
-              label: "Área da assinatura",
-              value: portalEnabled
-                ? "Liberada"
-                : checkoutEnabled
-                  ? "Pronta para liberar"
-                  : "Em preparação",
-              note: portalEnabled
-                ? "O salão já consegue ajustar pagamento e renovação."
-                : "Assim que a cobrança for liberada, o acesso aparece aqui.",
-              tone: portalEnabled ? "success" : "soft",
-            },
-          ]}
-          actions={
-            <>
-              {portalEnabled ? (
-                <form action={startStripeBillingPortalAction}>
-                  <button type="submit" className="primary-button">
-                    Gerenciar assinatura
-                  </button>
-                </form>
-              ) : null}
-
-              {!billingSnapshot.isLocked ? (
-                <Link href="/dashboard/subscriptions" className="secondary-button">
-                  Ver planos do salão
-                </Link>
-              ) : null}
-            </>
-          }
-          aside={
-            <div className="billing-page__aside">
-              <span className="eyebrow">Situação da cobrança</span>
-              <h3>
-                {getEnvironmentHeadline({
-                  billingDisabled: BILLING_DISABLED,
-                  configured: readiness.configured,
-                  liveReady: operationalStatus.liveReady,
-                  mode: operationalStatus.mode,
-                })}
-              </h3>
+        <section className={styles.surface}>
+          <header className={styles.header}>
+            <div className={styles.headerCopy}>
+              <span className={styles.eyebrow}>Assinatura do sistema</span>
+              <h1>
+                {signedSystem
+                  ? "Sistema assinado e em operação."
+                  : "Assinatura do sistema pendente."}
+              </h1>
               <p>
-                {getEnvironmentDescription({
-                  billingDisabled: BILLING_DISABLED,
-                  configured: readiness.configured,
-                  liveReady: operationalStatus.liveReady,
-                  mode: operationalStatus.mode,
-                })}
+                {signedSystem
+                  ? "Esta área gerencia apenas a assinatura do painel do salão. As clientes não compram nada aqui."
+                  : "Esta cobrança libera o painel do salão. Não é uma compra para a cliente final."}
               </p>
             </div>
-          }
-        />
 
-        <section className="billing-page__status-grid">
-          <article className="card metric-card metric-card--soft">
-            <span className="eyebrow">Cadastro</span>
-            <strong>{readiness.configured ? "Completo" : "Em ajuste"}</strong>
-            <p>
-              {readiness.configured
-                ? "Os dados principais da cobrança já foram preenchidos."
-                : "Ainda falta completar a base da cobrança para liberar os pagamentos."}
-            </p>
-          </article>
-
-          <article className="card metric-card metric-card--accent">
-            <span className="eyebrow">Atualização automática</span>
-            <strong>
-              {operationalStatus.webhookConfigured ? "Ativa" : "Pendente"}
-            </strong>
-            <p>
-              {operationalStatus.webhookConfigured
-                ? "A assinatura do painel já consegue atualizar acesso sozinha."
-                : "Sem essa etapa, o pagamento não atualiza a assinatura automaticamente."}
-            </p>
-          </article>
-
-          <article className="card metric-card metric-card--warm">
-            <span className="eyebrow">Área da assinatura</span>
-            <strong>
-              {operationalStatus.portalConfigured ? "Liberada" : "Pendente"}
-            </strong>
-            <p>
-              {operationalStatus.portalConfigured
-                ? "O salão já consegue revisar pagamento e renovação por conta própria."
-                : "Libere essa área para o salão conseguir gerenciar a assinatura."}
-            </p>
-          </article>
-        </section>
-
-        {issues.length ? (
-          <section className="dashboard-panel billing-page__panel">
-            <div className="dashboard-panel__header">
-              <div className="dashboard-panel__title">
-                <span className="eyebrow">Antes de liberar a cobrança</span>
-                <h2>O que ainda falta concluir</h2>
-              </div>
+            <div className={styles.headerBadges}>
+              <span className={styles.badge}>{billingSnapshot.statusLabel}</span>
+              <span className={styles.badge}>{getModeLabel(operationalStatus.mode)}</span>
             </div>
+          </header>
 
-            <div className="billing-page__checklist">
-              {issues.map((issue) => (
-                <article key={issue} className="billing-page__checklist-item">
-                  <strong>{issue}</strong>
+          <div className={styles.layout}>
+            <section className={styles.summaryPanel}>
+              <article className={styles.calloutCard}>
+                <span className={styles.cardEyebrow}>Cobrança do sistema</span>
+                <strong>
+                  {signedSystem
+                    ? "Assinatura operacional ativa"
+                    : "Ativação operacional necessária"}
+                </strong>
+                <p>
+                  {signedSystem
+                    ? "O painel já está coberto pela assinatura do sistema. Use esta tela para acompanhar renovação, status e gestão comercial."
+                    : "O salão ainda precisa ativar a assinatura do sistema para liberar a operação completa do painel."}
+                </p>
+              </article>
+
+              <div className={styles.metricGrid}>
+                <article className={styles.metricCard}>
+                  <span>Status</span>
+                  <strong>{billingSnapshot.statusLabel}</strong>
+                  <p>{billingSnapshot.statusDetail}</p>
                 </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
 
-        <section className="dashboard-panel billing-page__panel">
-          <div className="dashboard-panel__header">
-            <div className="dashboard-panel__title">
-              <span className="eyebrow">Planos do sistema</span>
-              <h2>Cobrança do painel por estabelecimento</h2>
-              <p>
-                A cliente final continua usando o app do salão sem pagar. Quem
-                assina o sistema é o estabelecimento.
-              </p>
-            </div>
-          </div>
+                <article className={styles.metricCard}>
+                  <span>Recorrência</span>
+                  <strong>{currentCycleLabel}</strong>
+                  <p>Plano do sistema: R$ 89 por mês ou R$ 890 no anual.</p>
+                </article>
 
-          <div className="billing-page__plans">
-            {billingSnapshot.plans.map((plan) => {
-              const isCurrentPlan = billingSnapshot.currentPlan.id === plan.id;
-
-              return (
-                <article
-                  key={plan.id}
-                  className={`billing-plan-card${
-                    isCurrentPlan ? " billing-plan-card--current" : ""
-                  }`}
-                >
-                  <div className="billing-plan-card__header">
-                    <div>
-                      <span className="eyebrow">{plan.displayName}</span>
-                      <h3>{plan.tagline ?? plan.description}</h3>
-                    </div>
-                    {isCurrentPlan ? (
-                      <span className="badge badge--confirmed">
-                        {billingSnapshot.isLocked &&
-                        !billingSnapshot.subscription.activatedAt
-                          ? "Plano inicial"
-                          : "Plano atual"}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {plan.highlight ? (
-                    <p className="billing-plan-card__highlight">
-                      {plan.highlight}
-                    </p>
-                  ) : null}
-
-                  <div className="billing-plan-card__prices">
-                    <div>
-                      <span>Mensal</span>
-                      <strong>
-                        {formatBillingPrice(plan.monthlyPrice, plan.currencyCode)}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Anual</span>
-                      <strong>
-                        {formatBillingPrice(plan.yearlyPrice, plan.currencyCode)}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="billing-plan-card__limits">
-                    {buildPlanHighlights(plan).map((item) => (
-                      <span key={item} className="badge badge--soft">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="billing-plan-card__actions">
-                    {planChangesManagedInPortal ? (
-                      <span className="badge badge--soft">
-                        Alterações e regularização seguem pela área da assinatura.
-                      </span>
-                    ) : (
-                      <>
-                        <form action={startStripeCheckoutAction}>
-                          <input type="hidden" name="planId" value={plan.id} />
-                          <input
-                            type="hidden"
-                            name="billingInterval"
-                            value="monthly"
-                          />
-                          <button
-                            type="submit"
-                            className="primary-button"
-                            disabled={!checkoutEnabled}
-                          >
-                            Assinar mensal
-                          </button>
-                        </form>
-
-                        <form action={startStripeCheckoutAction}>
-                          <input type="hidden" name="planId" value={plan.id} />
-                          <input
-                            type="hidden"
-                            name="billingInterval"
-                            value="yearly"
-                          />
-                          <button
-                            type="submit"
-                            className="secondary-button"
-                            disabled={!checkoutEnabled}
-                          >
-                            Assinar anual
-                          </button>
-                        </form>
-                      </>
-                    )}
-                  </div>
-
-                  <p className="billing-plan-card__footnote">
-                    {planChangesManagedInPortal
-                      ? "Para evitar cobrança duplicada, trocas de plano, cartão e regularização seguem pela gestão da assinatura."
-                      : checkoutEnabled
-                      ? billingSnapshot.isLocked
-                        ? "Ao concluir o pagamento, o painel completo é liberado automaticamente."
-                        : "Ao assinar, o plano do painel é atualizado sem mexer no app das clientes."
-                      : "Assim que a cobrança real for liberada, os botões passam a funcionar por aqui."}
+                <article className={styles.metricCard}>
+                  <span>Próxima cobrança</span>
+                  <strong>{billingSnapshot.nextBillingDateLabel ?? "Em definição"}</strong>
+                  <p>
+                    {billingSnapshot.subscription.status === "trialing"
+                      ? "Fim do trial ou primeira cobrança"
+                      : "Renovação da assinatura do painel"}
                   </p>
                 </article>
-              );
-            })}
+
+                <article className={styles.metricCard}>
+                  <span>Gestão da assinatura</span>
+                  <strong>{managementLabel}</strong>
+                  <p>
+                    {portalEnabled
+                      ? "Cartão, renovação e ciclo já podem ser gerenciados pelo portal."
+                      : getEnvironmentDescription({
+                          billingDisabled: BILLING_DISABLED,
+                          configured: readiness.configured,
+                          liveReady: operationalStatus.liveReady,
+                          mode: operationalStatus.mode,
+                        })}
+                  </p>
+                </article>
+              </div>
+
+              {issues.length ? (
+                <div className={styles.issueList}>
+                  {issues.map((issue) => (
+                    <article key={issue} className={styles.issueItem}>
+                      <strong>{issue}</strong>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+
+            <section className={styles.managementPanel}>
+              {signedSystem ? (
+                <article className={styles.subscriptionCard}>
+                  <span className={styles.cardEyebrow}>Sistema assinado</span>
+                  <h2>{currentPlanName}</h2>
+                  <p>
+                    O sistema de {salon.name} já está assinado. Esta tela existe para
+                    acompanhamento e ajustes da assinatura. Não é uma venda dentro do
+                    próprio painel.
+                  </p>
+
+                  <div className={styles.detailList}>
+                    <div>
+                      <span>Plano atual</span>
+                      <strong>{currentPlanName}</strong>
+                    </div>
+                    <div>
+                      <span>Recorrência atual</span>
+                      <strong>{currentCycleLabel}</strong>
+                    </div>
+                    <div>
+                      <span>Próxima cobrança</span>
+                      <strong>{billingSnapshot.nextBillingDateLabel ?? "Em definição"}</strong>
+                    </div>
+                    <div>
+                      <span>Gestão da assinatura</span>
+                      <strong>{managementLabel}</strong>
+                    </div>
+                  </div>
+
+                  {currentPlan ? (
+                    <div className={styles.includedList}>
+                      {buildPlanHighlights(currentPlan).slice(0, 4).map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className={styles.actionStack}>
+                    {portalEnabled ? (
+                      <form action={startStripeBillingPortalAction}>
+                        <button type="submit" className={styles.primaryButton}>
+                          Gerenciar assinatura
+                        </button>
+                      </form>
+                    ) : (
+                      <div className={styles.portalNotice}>
+                        <strong>
+                          {getEnvironmentHeadline({
+                            billingDisabled: BILLING_DISABLED,
+                            configured: readiness.configured,
+                            liveReady: operationalStatus.liveReady,
+                            mode: operationalStatus.mode,
+                          })}
+                        </strong>
+                        <span>
+                          Assim que o portal estiver pronto, os ajustes de cartão,
+                          renovação e ciclo passam a ser feitos aqui.
+                        </span>
+                      </div>
+                    )}
+
+                    <Link href="/dashboard/subscriptions" className={styles.secondaryButton}>
+                      Abrir planos vendidos pelo salão
+                    </Link>
+                  </div>
+
+                  {portalManagedSubscription ? (
+                    <p className={styles.footnote}>
+                      Toda troca posterior de cartão, renovação ou regularização segue
+                      pela área da assinatura.
+                    </p>
+                  ) : null}
+                </article>
+              ) : currentPlan ? (
+                <article className={styles.subscriptionCard}>
+                  <span className={styles.cardEyebrow}>Ativação do sistema</span>
+                  <h2>Escolha o ciclo da assinatura operacional</h2>
+                  <p>
+                    Esta cobrança libera o painel do salão. Não é uma compra para as
+                    clientes e não aparece no aplicativo final.
+                  </p>
+
+                  <div className={styles.intervalSwitch}>
+                    <Link
+                      href="/dashboard/billing?interval=monthly"
+                      className={`${styles.intervalOption} ${
+                        selectedInterval === "monthly" ? styles.intervalOptionActive : ""
+                      }`}
+                    >
+                      <strong>Mensal</strong>
+                      <span>Cobrança mensal</span>
+                    </Link>
+                    <Link
+                      href="/dashboard/billing?interval=yearly"
+                      className={`${styles.intervalOption} ${
+                        selectedInterval === "yearly" ? styles.intervalOptionActive : ""
+                      }`}
+                    >
+                      <strong>Anual</strong>
+                      <span>Economia no ciclo</span>
+                    </Link>
+                  </div>
+
+                  <div className={styles.activationGrid}>
+                    <article
+                      className={`${styles.choiceCard} ${
+                        selectedInterval === "monthly" ? styles.choiceCardActive : ""
+                      }`}
+                    >
+                      <span className={styles.choiceLabel}>Mensal</span>
+                      <strong>
+                        {formatBillingPrice(
+                          currentPlan.monthlyPrice,
+                          currentPlan.currencyCode,
+                        )}
+                      </strong>
+                      <p>
+                        {currentPlan.trialDays > 0
+                          ? "1ª cobrança após o teste grátis"
+                          : "Cobrança mensal do sistema"}
+                      </p>
+                      <form action={startStripeCheckoutAction}>
+                        <input type="hidden" name="billingInterval" value="monthly" />
+                        <button
+                          type="submit"
+                          className={styles.primaryButton}
+                          disabled={!checkoutEnabled}
+                        >
+                          {getSinglePlanActionLabel(currentPlan, "monthly")}
+                        </button>
+                      </form>
+                    </article>
+
+                    <article
+                      className={`${styles.choiceCard} ${
+                        selectedInterval === "yearly" ? styles.choiceCardActive : ""
+                      }`}
+                    >
+                      <span className={styles.choiceLabel}>Anual</span>
+                      <strong>
+                        {formatBillingPrice(
+                          currentPlan.yearlyPrice,
+                          currentPlan.currencyCode,
+                        )}
+                      </strong>
+                      <p>
+                        de{" "}
+                        <s>
+                          {formatBillingPrice(
+                            SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE,
+                            currentPlan.currencyCode,
+                          )}
+                        </s>{" "}
+                        por ano
+                      </p>
+                      <p className={styles.savingsText}>
+                        economia de{" "}
+                        {formatBillingPrice(
+                          SINGLE_BILLING_PLAN_YEARLY_SAVINGS,
+                          currentPlan.currencyCode,
+                        )}{" "}
+                        no ano
+                      </p>
+                      <form action={startStripeCheckoutAction}>
+                        <input type="hidden" name="billingInterval" value="yearly" />
+                        <button
+                          type="submit"
+                          className={styles.secondaryButton}
+                          disabled={!checkoutEnabled}
+                        >
+                          {getSinglePlanActionLabel(currentPlan, "yearly")}
+                        </button>
+                      </form>
+                    </article>
+                  </div>
+                </article>
+              ) : (
+                <EmptyStateCard
+                  eyebrow="Plano indisponível"
+                  title="Ainda não há um plano carregado nesta área"
+                  description="Revise a configuração comercial para exibir a assinatura ativa do painel."
+                />
+              )}
+            </section>
           </div>
-        </section>
-
-        <section className="dashboard-panel billing-page__panel">
-          <div className="dashboard-panel__header">
-            <div className="dashboard-panel__title">
-              <span className="eyebrow">Como funciona</span>
-              <h2>Como a assinatura funciona</h2>
-            </div>
-          </div>
-
-          <div className="billing-page__journey">
-            <article className="billing-page__journey-step">
-              <strong>1. O salão cria a conta</strong>
-              <p>
-                O cadastro cria a estrutura do salão e leva direto para a ativação da assinatura do painel.
-              </p>
-            </article>
-
-            <article className="billing-page__journey-step">
-              <strong>2. Salão escolhe o plano</strong>
-              <p>
-                A assinatura do painel é ativada em uma página segura de pagamento, sem mexer no app das clientes.
-              </p>
-            </article>
-
-            <article className="billing-page__journey-step">
-              <strong>3. Clientes do salão usam de graça</strong>
-              <p>
-                O app cliente continua liberado via código do salão. A cobrança
-                fica só no estabelecimento.
-              </p>
-            </article>
-          </div>
-
-          {!portalEnabled && !checkoutEnabled ? (
-            <EmptyStateCard
-              eyebrow="Cobrança protegida"
-              title="A assinatura fica protegida até a liberação final"
-              description="Quando a cobrança estiver pronta, o salão ativa o plano e o painel completo é liberado automaticamente."
-            />
-          ) : null}
         </section>
       </div>
     );

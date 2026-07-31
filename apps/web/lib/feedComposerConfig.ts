@@ -1,4 +1,8 @@
-export type FeedComposerPostType = "standard" | "before_after" | "reel";
+export type FeedComposerPostType =
+  | "standard"
+  | "before_after"
+  | "reel"
+  | "story";
 
 export const FEED_STANDARD_MAX_IMAGES = 5;
 
@@ -83,10 +87,37 @@ export const FEED_COMPOSER_SPECS: Record<
       "Movimento e acabamento",
     ],
   },
+  story: {
+    title: "Story do salao",
+    summary:
+      "Use para vagas do dia, resultado fresco, bastidor rapido ou chamada curta que desaparece sozinha.",
+    imageFieldLabel: "Foto do story",
+    imageHelper:
+      "Envie 1 imagem vertical ou centralizada. Ela fica ativa por 24h no app cliente.",
+    imageRules: [
+      "Story pede leitura imediata e texto curto.",
+      "Use foto com rosto, detalhe forte ou vaga disponivel do dia.",
+      "Evite excesso de elementos para a cliente entender em segundos.",
+    ],
+    videoHelper:
+      "Story desta versao trabalha com foto. Video continua no formato video curto.",
+    videoRequired: false,
+    videoEnabled: false,
+    visualNotes: [
+      "1 foto",
+      "Ate 24 horas",
+      "Chamada rapida",
+    ],
+  },
 };
 
 export function isFeedComposerPostType(
   value: string,
 ): value is FeedComposerPostType {
-  return value === "standard" || value === "before_after" || value === "reel";
+  return (
+    value === "standard" ||
+    value === "before_after" ||
+    value === "reel" ||
+    value === "story"
+  );
 }

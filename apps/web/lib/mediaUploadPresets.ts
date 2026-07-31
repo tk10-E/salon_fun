@@ -1,4 +1,9 @@
-export type MediaUploadContext = "service" | "product" | "feed" | "offer";
+export type MediaUploadContext =
+  | "service"
+  | "product"
+  | "feed"
+  | "story"
+  | "offer";
 
 export type MediaUploadPreset = {
   previewAspectRatio: number;
@@ -78,6 +83,26 @@ export const MEDIA_UPLOAD_PRESETS: Record<
     emptyTitle: "Imagens da publicacao",
     emptyDescription:
       "Suba imagens com foco no resultado final para o feed nascer com cara de conteudo premium.",
+  },
+  story: {
+    previewAspectRatio: 9 / 16,
+    previewFit: "cover",
+    maxWidth: 1080,
+    maxHeight: 1920,
+    maxInputBytes: 10 * 1024 * 1024,
+    maxFiles: 1,
+    browserQuality: 0.9,
+    serverQuality: 90,
+    badges: [
+      "Proporcao sugerida 9:16",
+      "Ate 1080x1920",
+      "Story vertical no topo do feed",
+    ],
+    helperText:
+      "Stories performam melhor com foto vertical, leitura rapida e foco no rosto, resultado ou vaga do dia.",
+    emptyTitle: "Foto do story",
+    emptyDescription:
+      "Escolha uma foto vertical para o story abrir com cara de Instagram no app cliente.",
   },
   offer: {
     previewAspectRatio: 4 / 3,

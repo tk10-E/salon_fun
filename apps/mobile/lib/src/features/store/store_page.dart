@@ -90,29 +90,52 @@ class _StorePageState extends State<StorePage> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final results = await Future.wait<dynamic>([
-      widget.storeRepository.fetchCatalog(),
-      widget.storeRepository.fetchOrders(),
-    ]);
+    try {
+      final results = await Future.wait<dynamic>([
+        widget.storeRepository.fetchCatalog(),
+        widget.storeRepository.fetchOrders(),
+      ]);
+      final nextCatalog = results[0] as List<StoreProduct>;
+      final nextOrders = results[1] as List<StoreOrder>;
+      final nextCart = _reconcileCartWithCatalog(_cart, nextCatalog);
 
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _catalog = nextCatalog;
+        _orders = nextOrders;
+        _cart
+          ..clear()
+          ..addAll(nextCart);
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('$error'.replaceFirst('Exception: ', ''))),
+        );
     }
-
-    setState(() {
-      _catalog = results[0] as List<StoreProduct>;
-      _orders = results[1] as List<StoreOrder>;
-      _loading = false;
-    });
   }
 
   void _changeQuantity(StoreProduct product, int nextQuantity) {
-    if (nextQuantity <= 0) {
+    final maxOrderableQuantity = _maxOrderableQuantity(product);
+    if (nextQuantity <= 0 || maxOrderableQuantity <= 0) {
       setState(() => _cart.remove(product.id));
       return;
     }
 
-    final safeQuantity = nextQuantity.clamp(1, product.maxPurchaseQuantity);
+    final safeQuantity = _clampOrderQuantity(
+      nextQuantity,
+      maxOrderableQuantity,
+    );
     setState(() {
       _cart[product.id] = CartLine(product: product, quantity: safeQuantity);
     });
@@ -132,7 +155,7 @@ class _StorePageState extends State<StorePage> {
                 20,
                 8,
                 20,
-                20 + MediaQuery.of(context).viewInsets.bottom,
+                salonBottomActionInset(context),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -402,27 +425,49 @@ class _StorePageState extends State<StorePage> {
                           icon: Icons.inventory_2_outlined,
                         )
                       else
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _filteredCatalog.length,
-                          gridDelegate:
-                              const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 240,
-                                mainAxisSpacing: 12,
-                                crossAxisSpacing: 12,
-                                mainAxisExtent: 334,
-                              ),
-                          itemBuilder: (context, index) {
-                            final product = _filteredCatalog[index];
-                            final currentQuantity =
-                                _cart[product.id]?.quantity ?? 0;
-                            return _StoreProductCard(
-                              product: product,
-                              accent: accent,
-                              quantity: currentQuantity,
-                              onChangeQuantity: (next) =>
-                                  _changeQuantity(product, next),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final crossAxisCount = constraints.maxWidth >= 900
+                                ? 4
+                                : constraints.maxWidth >= 680
+                                ? 3
+                                : constraints.maxWidth >= 420
+                                ? 2
+                                : 1;
+                            final itemWidth =
+                                (constraints.maxWidth -
+                                    ((crossAxisCount - 1) * 12)) /
+                                crossAxisCount;
+                            final itemHeight = itemWidth < 170
+                                ? 482.0
+                                : itemWidth < 320
+                                ? 442.0
+                                : 394.0;
+                            final delegate =
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: crossAxisCount,
+                                  mainAxisSpacing: 12,
+                                  crossAxisSpacing: 12,
+                                  mainAxisExtent: itemHeight,
+                                );
+
+                            return GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _filteredCatalog.length,
+                              gridDelegate: delegate,
+                              itemBuilder: (context, index) {
+                                final product = _filteredCatalog[index];
+                                final currentQuantity =
+                                    _cart[product.id]?.quantity ?? 0;
+                                return _StoreProductCard(
+                                  product: product,
+                                  accent: accent,
+                                  quantity: currentQuantity,
+                                  onChangeQuantity: (next) =>
+                                      _changeQuantity(product, next),
+                                );
+                              },
                             );
                           },
                         ),
@@ -535,6 +580,8 @@ class _OrderHighlightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final imageItem = _firstOrderItemWithImage(order);
+
     return SalonPanel(
       accent: _orderStatusTone(order.status, accent),
       child: Column(
@@ -560,17 +607,38 @@ class _OrderHighlightCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            '${order.totalItems} itens • ${formatCurrency(order.subtotalAmount)}',
-            style: Theme.of(context).textTheme.titleLarge,
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (imageItem != null) ...[
+                _OrderProductThumbnail(
+                  key: ValueKey('store-order-item-image-${imageItem.id}'),
+                  item: imageItem,
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${order.totalItems} itens • ${formatCurrency(order.subtotalAmount)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      formatCompactDateTime(order.createdAt),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            formatCompactDateTime(order.createdAt),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             order.items.isEmpty
                 ? 'Pedido enviado pelo app.'
@@ -578,7 +646,7 @@ class _OrderHighlightCard extends StatelessWidget {
                       .take(3)
                       .map((item) => item.productName)
                       .join(' • '),
-            maxLines: 3,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -606,6 +674,109 @@ class _OrderHighlightCard extends StatelessWidget {
   }
 }
 
+StoreOrderItem? _firstOrderItemWithImage(StoreOrder order) {
+  for (final item in order.items) {
+    if (item.imageUrl?.trim().isNotEmpty == true) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
+class _OrderProductThumbnail extends StatelessWidget {
+  const _OrderProductThumbnail({super.key, required this.item});
+
+  final StoreOrderItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      image: true,
+      label: 'Produto comprado: ${item.productName}',
+      child: SizedBox(
+        width: 54,
+        child: NetworkCardImage(
+          imageUrl: item.imageUrl,
+          height: 54,
+          borderRadius: 16,
+        ),
+      ),
+    );
+  }
+}
+
+class _StoreCatalogImage extends StatelessWidget {
+  const _StoreCatalogImage({
+    required this.imageUrl,
+    required this.height,
+    required this.borderRadius,
+  });
+
+  final String? imageUrl;
+  final double height;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final spec = AppTheme.spec(context);
+    final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
+        child: !hasImage
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      spec.primaryColor.withValues(alpha: 0.18),
+                      spec.secondaryColor.withValues(alpha: 0.1),
+                    ],
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.shopping_bag_rounded,
+                    size: 30,
+                    color: spec.inkColor.withValues(alpha: 0.58),
+                  ),
+                ),
+              )
+            : ColoredBox(
+                color: Colors.white,
+                child: LayoutBuilder(
+                  builder: (context, _) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
+                      child: SalonNetworkImage(
+                        imageUrl: imageUrl!,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.center,
+                        backgroundColor: Colors.white,
+                        cacheScale: 1.25,
+                        error: Center(
+                          child: Text(
+                            'Imagem indisponível',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                        placeholder: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2.4),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+      ),
+    );
+  }
+}
+
 class _StoreProductCard extends StatelessWidget {
   const _StoreProductCard({
     required this.product,
@@ -622,6 +793,12 @@ class _StoreProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final spec = AppTheme.spec(context);
+    final availableUnits = _availableStoreUnits(product.stock);
+    final maxOrderableQuantity = _maxOrderableQuantity(product);
+    final imageStageColor = theme.brightness == Brightness.dark
+        ? spec.panelColor.withValues(alpha: 0.94)
+        : Colors.white.withValues(alpha: 0.98);
     return SalonPanel(
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -629,10 +806,18 @@ class _StoreProductCard extends StatelessWidget {
         children: [
           Stack(
             children: [
-              NetworkCardImage(
-                imageUrl: product.imageUrl,
-                height: 124,
-                borderRadius: 18,
+              Container(
+                decoration: BoxDecoration(
+                  color: imageStageColor,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: spec.lineColor),
+                ),
+                padding: const EdgeInsets.all(6),
+                child: _StoreCatalogImage(
+                  imageUrl: product.imageUrl,
+                  height: 176,
+                  borderRadius: 14,
+                ),
               ),
               Positioned(
                 left: 8,
@@ -689,7 +874,7 @@ class _StoreProductCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Estoque: ${product.stock.toStringAsFixed(0)} ${product.unit}',
+            _stockCountLabel(product.stock, product.unit),
             style: theme.textTheme.bodySmall,
           ),
           const Spacer(),
@@ -697,7 +882,7 @@ class _StoreProductCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: product.stock <= 0
+                onPressed: availableUnits <= 0
                     ? null
                     : () => onChangeQuantity(1),
                 icon: const Icon(Icons.add_shopping_cart_rounded),
@@ -729,9 +914,7 @@ class _StoreProductCard extends StatelessWidget {
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    onPressed:
-                        quantity >= product.maxPurchaseQuantity ||
-                            quantity >= product.stock
+                    onPressed: quantity >= maxOrderableQuantity
                         ? null
                         : () => onChangeQuantity(quantity + 1),
                     icon: const Icon(Icons.add_rounded),
@@ -787,21 +970,88 @@ class _OrderLine extends StatelessWidget {
   }
 }
 
+Map<String, CartLine> _reconcileCartWithCatalog(
+  Map<String, CartLine> currentCart,
+  List<StoreProduct> catalog,
+) {
+  if (currentCart.isEmpty) {
+    return const <String, CartLine>{};
+  }
+
+  final catalogById = {for (final product in catalog) product.id: product};
+  final nextCart = <String, CartLine>{};
+
+  for (final entry in currentCart.entries) {
+    final latestProduct = catalogById[entry.key];
+    if (latestProduct == null) {
+      continue;
+    }
+
+    final maxOrderableQuantity = _maxOrderableQuantity(latestProduct);
+    if (maxOrderableQuantity <= 0) {
+      continue;
+    }
+
+    nextCart[entry.key] = CartLine(
+      product: latestProduct,
+      quantity: _clampOrderQuantity(entry.value.quantity, maxOrderableQuantity),
+    );
+  }
+
+  return nextCart;
+}
+
+int _availableStoreUnits(double stock) {
+  final availableUnits = stock.floor();
+  return availableUnits < 0 ? 0 : availableUnits;
+}
+
+int _maxOrderableQuantity(StoreProduct product) {
+  final availableUnits = _availableStoreUnits(product.stock);
+  if (availableUnits <= 0 || product.maxPurchaseQuantity <= 0) {
+    return 0;
+  }
+
+  return availableUnits < product.maxPurchaseQuantity
+      ? availableUnits
+      : product.maxPurchaseQuantity;
+}
+
+int _clampOrderQuantity(int quantity, int maxOrderableQuantity) {
+  if (quantity <= 1) {
+    return 1;
+  }
+
+  return quantity > maxOrderableQuantity ? maxOrderableQuantity : quantity;
+}
+
+String _stockCountLabel(double stock, String unit) {
+  final normalizedUnit = unit.trim().isEmpty ? 'un' : unit.trim();
+  final availableUnits = _availableStoreUnits(stock);
+
+  if (availableUnits <= 0 && stock > 0) {
+    return 'Estoque: menos de 1 $normalizedUnit disponível';
+  }
+
+  final availabilityLabel = availableUnits == 1 ? 'disponível' : 'disponíveis';
+  return 'Estoque: $availableUnits $normalizedUnit $availabilityLabel';
+}
+
 String _stockLabel(double stock) {
-  if (stock <= 0) {
+  if (_availableStoreUnits(stock) <= 0) {
     return 'Indisponível';
   }
-  if (stock <= 3) {
+  if (_availableStoreUnits(stock) <= 3) {
     return 'Últimas unidades';
   }
   return 'Pronta entrega';
 }
 
 Color _stockTone(double stock) {
-  if (stock <= 0) {
+  if (_availableStoreUnits(stock) <= 0) {
     return AppTheme.mutedInk;
   }
-  if (stock <= 3) {
+  if (_availableStoreUnits(stock) <= 3) {
     return AppTheme.accent;
   }
   return AppTheme.secondary;

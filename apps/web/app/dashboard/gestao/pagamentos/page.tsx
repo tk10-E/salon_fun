@@ -1,412 +1,430 @@
-import { DashboardWorkspaceHero } from "@/components/DashboardWorkspaceHero";
+import {
+  AsyncActionForm,
+  AsyncActionNoticeRegion,
+} from "@/components/AsyncActionForm";
 import { EmptyStateCard } from "@/components/EmptyStateCard";
-import { FlashMessage } from "@/components/FlashMessage";
-import { WorkspaceSectionNav } from "@/components/WorkspaceSectionNav";
 import {
   deleteManagementPaymentAction,
   upsertManagementPaymentAction,
 } from "@/app/_actions/management";
 import { requireOwnerSalon } from "@/lib/auth";
+import { formatCurrency } from "@/lib/formatters";
 import {
   PAYMENT_METHOD_OPTIONS,
   buildFilterHref,
+  formatAppointmentPaymentPreferenceLabel,
   formatDateTimeLabel,
   formatPaymentMethodLabel,
   formatTimeInput,
   getLocalDateKey,
   loadManagementPayments,
 } from "@/lib/management";
-import { formatCurrency } from "@/lib/formatters";
+
+import styles from "./page.module.css";
 
 type PagamentosPageProps = {
   searchParams?: Promise<{
+    appointmentId?: string;
+    compose?: string;
     dateFrom?: string;
     dateTo?: string;
-    paymentMethod?: string;
     message?: string;
+    paymentMethod?: string;
+    q?: string;
     tone?: string;
   }>;
 };
 
+function normalizeSearch(value: string) {
+  return value.trim().toLocaleLowerCase("pt-BR");
+}
+
+function matchesQuery(query: string, values: Array<string | null | undefined>) {
+  if (!query) {
+    return true;
+  }
+
+  const normalizedQuery = normalizeSearch(query);
+  return values.some((value) =>
+    normalizeSearch(value ?? "").includes(normalizedQuery),
+  );
+}
+
+function formatAmountInput(value: number) {
+  return value > 0 ? value.toFixed(2) : "";
+}
+
 export default async function PagamentosPage({
   searchParams: searchParamsPromise,
 }: PagamentosPageProps) {
-  const searchParams = await searchParamsPromise;
-  const { salon } = await requireOwnerSalon();
+  const [searchParams, { salon }] = await Promise.all([
+    searchParamsPromise,
+    requireOwnerSalon(),
+  ]);
   const timeZone = salon.timezone ?? "America/Sao_Paulo";
   const todayKey = getLocalDateKey(new Date(), timeZone);
   const dateFrom = searchParams?.dateFrom ?? todayKey;
-  const dateTo = searchParams?.dateTo ?? dateFrom;
+  const dateTo = searchParams?.dateTo ?? searchParams?.dateFrom ?? todayKey;
   const paymentMethod = searchParams?.paymentMethod ?? "";
+  const query = searchParams?.q?.trim() ?? "";
+  const composeOpen = searchParams?.compose === "1";
+  const requestedAppointmentId = searchParams?.appointmentId?.trim() ?? "";
   const currentPath = buildFilterHref(
     "/dashboard/gestao/pagamentos",
     searchParams,
-    {},
+    { appointmentId: undefined, compose: undefined },
   );
+  const composeHref = `${buildFilterHref("/dashboard/gestao/pagamentos", searchParams, {
+    compose: "1",
+  })}#payment-create`;
 
-  const data = await loadManagementPayments({
+  const paymentsData = await loadManagementPayments({
     salonId: salon.id,
     timeZone,
     dateFrom,
     dateTo,
     paymentMethod: paymentMethod || undefined,
   });
-  const cardTotal =
-    data.summary.byMethod.debit_card + data.summary.byMethod.credit_card;
-  const averageTicket = data.items.length
-    ? data.summary.totalReceived / data.items.length
+  const filteredPayments = paymentsData.items.filter((item) =>
+    matchesQuery(query, [
+      item.customerName,
+      item.serviceName,
+      item.professionalName,
+      item.notes,
+    ]),
+  );
+  const filteredTotalReceived = filteredPayments.reduce(
+    (sum, item) => sum + item.amountNumber,
+    0,
+  );
+  const filteredAverageTicket = filteredPayments.length
+    ? filteredTotalReceived / filteredPayments.length
     : 0;
-  const topMethod = [
-    { key: "pix", label: "Pix", value: data.summary.byMethod.pix },
-    { key: "cash", label: "Dinheiro", value: data.summary.byMethod.cash },
-    { key: "cards", label: "Cartões", value: cardTotal },
-  ].sort((left, right) => right.value - left.value)[0];
-  const latestPayment = data.items[0] ?? null;
-  const highestPayment =
-    [...data.items].sort((left, right) => right.amountNumber - left.amountNumber)[0] ?? null;
-  const periodLabel =
-    dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`;
-  const methodLabel = paymentMethod
-    ? PAYMENT_METHOD_OPTIONS.find((item) => item.value === paymentMethod)?.label ?? "Todas"
-    : "Todas";
+  const selectedUnpaidAppointment =
+    paymentsData.unpaidAppointments.find(
+      (item) => item.id === requestedAppointmentId,
+    ) ?? null;
+  const composeAppointmentId =
+    selectedUnpaidAppointment?.id ??
+    (paymentsData.unpaidAppointments[0]?.id ?? "");
+  const composeAmount = selectedUnpaidAppointment?.amount
+    ? formatAmountInput(selectedUnpaidAppointment.amount)
+    : "";
+  const composePaidAtDate = selectedUnpaidAppointment?.completedAt
+    ? getLocalDateKey(selectedUnpaidAppointment.completedAt, timeZone)
+    : todayKey;
+  const composePaidAtTime = selectedUnpaidAppointment?.completedAt
+    ? formatTimeInput(selectedUnpaidAppointment.completedAt, timeZone)
+    : formatTimeInput(new Date(), timeZone);
 
   return (
-    <div className="page-grid workspace-page management-page management-page--payments">
-      {searchParams?.message ? (
-        <FlashMessage message={searchParams.message} tone={searchParams.tone} />
-      ) : null}
+    <AsyncActionNoticeRegion
+      initialMessage={searchParams?.message}
+      initialTone={searchParams?.tone}
+    >
+      <div className={`page-grid workspace-page management-page ${styles.page}`}>
+        <section className={styles.hero}>
+          <div className={styles.heroHeader}>
+            <div>
+              <p className={styles.eyebrow}>Caixa</p>
+              <h1>Caixa do salao</h1>
+              <p className={styles.lead}>
+                Veja o que entrou, a media por pagamento e o que ainda falta
+                baixar.
+              </p>
+            </div>
 
-      <DashboardWorkspaceHero
-        id="payments-overview"
-        eyebrow="Recebimentos"
-        title="Recebimentos com leitura clara de caixa."
-        description="Recebimento, recorte do período e movimentações da operação em uma visão mais forte."
-        highlight={{
-          label: "Total recebido",
-          value: formatCurrency(data.summary.totalReceived),
-          note: data.items.length
-            ? `${data.items.length} pagamento(s) no recorte atual com ticket médio de ${formatCurrency(averageTicket)}.`
-            : "Sem movimento neste recorte. Registre um pagamento para começar a leitura.",
-        }}
-        signals={[
-          {
-            label: "Período",
-            value: periodLabel,
-            tone: "soft",
-          },
-          {
-            label: "Forma",
-            value: methodLabel,
-            tone: paymentMethod ? "accent" : "soft",
-          },
-          {
-            label: "Sem baixa",
-            value: data.unpaidAppointments.length,
-            tone: data.unpaidAppointments.length ? "warm" : "success",
-          },
-        ]}
-        stats={[
-          {
-            label: "Pix",
-            value: formatCurrency(data.summary.byMethod.pix),
-            note: "Recebido via chave instantânea.",
-            tone: data.summary.byMethod.pix ? "accent" : "soft",
-          },
-          {
-            label: "Dinheiro",
-            value: formatCurrency(data.summary.byMethod.cash),
-            note: "Caixa físico no período.",
-            tone: data.summary.byMethod.cash ? "warm" : "soft",
-          },
-          {
-            label: "Cartões",
-            value: formatCurrency(cardTotal),
-            note: "Débito + crédito.",
-            tone: cardTotal ? "success" : "soft",
-          },
-          {
-            label: "Método forte",
-            value: topMethod?.label ?? "Sem movimento",
-            note: topMethod?.value
-              ? `${formatCurrency(topMethod.value)} no recorte atual.`
-              : "Assim que o caixa girar, o método líder aparece aqui.",
-            tone: topMethod?.value ? "soft" : "neutral",
-          },
-        ]}
-        actions={
-          <div className="row-actions">
-            <a href="#payment-create" className="primary-button">
-              Registrar pagamento
-            </a>
-            <a href="#payment-list" className="secondary-button">
-              Ver caixa
+            <a href={composeHref} className={styles.primaryButton}>
+              Novo recebimento
             </a>
           </div>
-        }
-        aside={
-          <>
-            <span className="workspace-panel__eyebrow">Leitura do movimento</span>
-            <h3>{highestPayment ? formatCurrency(highestPayment.amountNumber) : "Sem caixa no período"}</h3>
-            <p>
-              {highestPayment
-                ? `${highestPayment.customerName} em ${highestPayment.serviceName} com ${formatPaymentMethodLabel(highestPayment.payment_method)}.`
-                : "Assim que o primeiro recebimento entrar, o maior valor do período aparece aqui."}
-            </p>
-            <div className="management-hero-pill-grid">
-              <div className="workspace-signal-pill workspace-hero__stat--soft">
-                <span>Último recebimento</span>
-                <strong>
-                  {latestPayment
-                    ? formatDateTimeLabel(latestPayment.paid_at, timeZone)
-                    : "Sem movimento"}
-                </strong>
+
+          <div className={styles.heroStats}>
+            <article className={styles.metricCard}>
+              <div className={styles.metricHeader}>
+                <span className={styles.metricLabel}>Entrou no filtro</span>
               </div>
-              <div className="workspace-signal-pill workspace-hero__stat--accent">
-                <span>Pendentes</span>
-                <strong>{data.unpaidAppointments.length}</strong>
+              <strong className={styles.metricValue}>
+                {formatCurrency(filteredTotalReceived)}
+              </strong>
+              <small className={styles.metricMeta}>
+                {filteredPayments.length} pagamento(s) encontrados
+              </small>
+            </article>
+
+            <article className={styles.metricCard}>
+              <div className={styles.metricHeader}>
+                <span className={styles.metricLabel}>Ticket medio</span>
               </div>
-            </div>
-          </>
-        }
-      />
+              <strong className={styles.metricValue}>
+                {formatCurrency(filteredAverageTicket)}
+              </strong>
+              <small className={styles.metricMeta}>Media por recebimento</small>
+            </article>
 
-      <WorkspaceSectionNav
-        label="Atalhos do caixa"
-        items={[
-          { href: "#payment-create", label: "Registrar", meta: "Nova baixa" },
-          { href: "#payment-filters", label: "Filtros", meta: "Período e método" },
-          { href: "#payment-list", label: "Movimentações", meta: "Histórico do caixa" },
-        ]}
-      />
+            <article className={styles.metricCard}>
+              <div className={styles.metricHeader}>
+                <span className={styles.metricLabel}>Pendentes para baixar</span>
+              </div>
+              <strong className={styles.metricValue}>
+                {paymentsData.unpaidAppointments.length}
+              </strong>
+              <small className={styles.metricMeta}>
+                Atendimento(s) aguardando baixa
+              </small>
+            </article>
+          </div>
+        </section>
 
-      <section className="workspace-subgrid management-summary-grid" aria-label="Resumo do caixa">
-        <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Canal forte</span>
-          <h3>{topMethod?.label ?? "Sem método dominante"}</h3>
-          <p>
-            {topMethod?.value
-              ? `${formatCurrency(topMethod.value)} liderando o caixa neste recorte.`
-              : "O método com maior volume aparece aqui quando houver movimentação."}
-          </p>
-        </article>
-
-        <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Recebimentos pendentes</span>
-          <h3>{data.unpaidAppointments.length} atendimento(s) sem baixa</h3>
-          <p>
-            {data.unpaidAppointments.length
-              ? "Use o registro rápido para limpar o caixa e fechar o recorte do dia."
-              : "Nenhum atendimento pendente de pagamento neste filtro."}
-          </p>
-        </article>
-
-        <article className="workspace-panel">
-          <span className="workspace-panel__eyebrow">Maior valor</span>
-          <h3>{highestPayment ? formatCurrency(highestPayment.amountNumber) : "Sem leitura"}</h3>
-          <p>
-            {highestPayment
-              ? `${highestPayment.customerName} gerou o maior recebimento do período.`
-              : "Assim que o caixa receber pagamentos, o maior valor aparece aqui."}
-          </p>
-        </article>
-      </section>
-
-      <section className="management-grid management-grid--two">
-        <article id="payment-create" className="card content-card management-card">
-          <div className="section-heading">
+        <section className={styles.operationsSection}>
+          <div className={styles.operationsHeader}>
             <div>
-              <h2>Registrar pagamento</h2>
-              <p className="muted">Vincule o recebimento a um atendimento concluído.</p>
+              <p className={styles.eyebrow}>Movimento</p>
+              <h2>Filtrar, registrar e conferir</h2>
+              <p className={styles.operationsLead}>
+                Tudo o que o salao usa no dia a dia fica aqui.
+              </p>
             </div>
           </div>
 
-          <form action={upsertManagementPaymentAction} className="simple-form">
-            <input type="hidden" name="returnPath" value={currentPath} />
-
-            <div className="field">
-              <label htmlFor="payment-appointment">Atendimento</label>
-              <select id="payment-appointment" name="appointmentId" required>
-                <option value="">Selecione</option>
-                {data.unpaidAppointments.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                    {item.secondary ? ` • ${item.secondary}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="split-grid">
-              <div className="field">
-                <label htmlFor="payment-amount">Valor</label>
-                <input
-                  id="payment-amount"
-                  name="amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="payment-method">Forma de pagamento</label>
-                <select id="payment-method" name="paymentMethod" required>
-                  {PAYMENT_METHOD_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="split-grid">
-              <div className="field">
-                <label htmlFor="payment-date">Data</label>
-                <input
-                  id="payment-date"
-                  name="paidAtDate"
-                  type="date"
-                  defaultValue={todayKey}
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="payment-time">Horário</label>
-                <input
-                  id="payment-time"
-                  name="paidAtTime"
-                  type="time"
-                  defaultValue={formatTimeInput(new Date(), timeZone)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="field">
-              <label htmlFor="payment-notes">Observação</label>
-              <textarea id="payment-notes" name="notes" rows={3} />
-            </div>
-
-            <button type="submit" className="primary-button">
-              Salvar pagamento
-            </button>
-          </form>
-        </article>
-
-        <article id="payment-filters" className="card content-card management-card">
-          <div className="section-heading">
-            <div>
-              <h2>Filtro do caixa</h2>
-              <p className="muted">Recorte por período e forma de pagamento.</p>
-            </div>
-          </div>
-
-          <form method="get" className="simple-form">
-            <div className="split-grid">
-              <div className="field">
-                <label htmlFor="payments-from">De</label>
-                <input
-                  id="payments-from"
-                  name="dateFrom"
-                  type="date"
-                  defaultValue={dateFrom}
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="payments-to">Até</label>
-                <input
-                  id="payments-to"
-                  name="dateTo"
-                  type="date"
-                  defaultValue={dateTo}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="field">
-              <label htmlFor="payments-method-filter">Forma de pagamento</label>
-              <select
-                id="payments-method-filter"
-                name="paymentMethod"
-                defaultValue={paymentMethod}
-              >
-                <option value="">Todas</option>
-                {PAYMENT_METHOD_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="inline-actions">
-              <button type="submit" className="secondary-button">
-                Aplicar
-              </button>
-              <a href="/dashboard/gestao/pagamentos" className="secondary-button">
-                Limpar
-              </a>
-            </div>
-          </form>
-        </article>
-      </section>
-
-      <section id="payment-list" className="card content-card management-card">
-        <div className="section-heading">
-          <div>
-            <h2>Movimentações do caixa</h2>
-            <p className="muted">
-              {data.items.length
-                ? `${data.items.length} pagamento(s) no período`
-                : "Nenhum pagamento encontrado"}
-            </p>
-          </div>
-        </div>
-
-        {!data.items.length ? (
-          <EmptyStateCard
-            eyebrow="Caixa sem movimento"
-            title="Nenhum pagamento nesse recorte"
-            description="Registre um recebimento para acompanhar o caixa do salão."
-          />
-        ) : (
-          <div className="management-payment-list">
-            {data.items.map((item) => (
-              <article key={item.id} className="management-payment-card">
-                <div className="management-payment-card__header">
+          <div
+            className={`${styles.operationsGrid} ${
+              !composeOpen ? styles.operationsGridSingle : ""
+            }`}
+          >
+            {composeOpen ? (
+              <article id="payment-create" className={styles.formCard}>
+                <div className={styles.formCardHeader}>
                   <div>
-                    <strong>{item.customerName}</strong>
-                    <p className="muted">
-                      {item.serviceName} • {item.professionalName}
-                    </p>
+                    <h3>Novo recebimento</h3>
+                    <p>Registre a baixa de um atendimento concluido.</p>
                   </div>
-                  <strong>{formatCurrency(item.amountNumber)}</strong>
+                  <a href={currentPath} className={styles.inlineLink}>
+                    Fechar
+                  </a>
                 </div>
 
-                <div className="management-payment-card__meta">
-                  <span>{formatPaymentMethodLabel(item.payment_method)}</span>
-                  <span>{formatDateTimeLabel(item.paid_at, timeZone)}</span>
-                </div>
-
-                {item.notes ? (
-                  <p className="management-inline-note">{item.notes}</p>
-                ) : null}
-
-                <form action={deleteManagementPaymentAction}>
+                <AsyncActionForm
+                  action={upsertManagementPaymentAction}
+                  className="simple-form"
+                  resetOnSuccess
+                >
                   <input type="hidden" name="returnPath" value={currentPath} />
-                  <input type="hidden" name="paymentId" value={item.id} />
-                  <button type="submit" className="danger-button">
-                    Remover pagamento
+
+                  <div className="field">
+                    <label htmlFor="payment-appointment">Atendimento</label>
+                    <select
+                      id="payment-appointment"
+                      name="appointmentId"
+                      defaultValue={composeAppointmentId}
+                      required
+                    >
+                      <option value="">Selecione</option>
+                      {paymentsData.unpaidAppointments.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                          {item.secondary ? ` - ${item.secondary}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedUnpaidAppointment ? (
+                      <small>
+                        Valor oficial{" "}
+                        {formatCurrency(selectedUnpaidAppointment.amount)}.
+                        {selectedUnpaidAppointment.paymentPreference
+                          ? ` Forma prevista: ${formatAppointmentPaymentPreferenceLabel(selectedUnpaidAppointment.paymentPreference)}.`
+                          : " Forma ainda nao informada."}
+                      </small>
+                    ) : null}
+                  </div>
+
+                  <div className="split-grid">
+                    <div className="field">
+                      <label htmlFor="payment-amount">Valor</label>
+                      <input
+                        id="payment-amount"
+                        name="amount"
+                        defaultValue={composeAmount}
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="payment-method">Forma de pagamento</label>
+                      <select id="payment-method" name="paymentMethod" required>
+                        {PAYMENT_METHOD_OPTIONS.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="split-grid">
+                    <div className="field">
+                      <label htmlFor="payment-date">Data</label>
+                      <input
+                        id="payment-date"
+                        name="paidAtDate"
+                        type="date"
+                        defaultValue={composePaidAtDate}
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="payment-time">Horario</label>
+                      <input
+                        id="payment-time"
+                        name="paidAtTime"
+                        type="time"
+                        defaultValue={composePaidAtTime}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="payment-notes">Observacao</label>
+                    <textarea id="payment-notes" name="notes" rows={3} />
+                  </div>
+
+                  <button type="submit" className="primary-button">
+                    Salvar pagamento
                   </button>
-                </form>
+                </AsyncActionForm>
               </article>
-            ))}
+            ) : null}
+
+            <article id="payment-filters" className={styles.formCard}>
+              <div className={styles.formCardHeader}>
+                <div>
+                  <h3>Filtro do caixa</h3>
+                  <p>Filtre por periodo, forma de pagamento e busca.</p>
+                </div>
+              </div>
+
+              <form method="get" className="simple-form">
+                {composeOpen ? <input type="hidden" name="compose" value="1" /> : null}
+                <div className="split-grid">
+                  <div className="field">
+                    <label htmlFor="payments-from">De</label>
+                    <input
+                      id="payments-from"
+                      name="dateFrom"
+                      type="date"
+                      defaultValue={dateFrom}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="payments-to">Ate</label>
+                    <input
+                      id="payments-to"
+                      name="dateTo"
+                      type="date"
+                      defaultValue={dateTo}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="split-grid">
+                  <div className="field">
+                    <label htmlFor="payments-method-filter">Forma de pagamento</label>
+                    <select
+                      id="payments-method-filter"
+                      name="paymentMethod"
+                      defaultValue={paymentMethod}
+                    >
+                      <option value="">Todas</option>
+                      {PAYMENT_METHOD_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="payments-search-filter">Busca</label>
+                    <input
+                      id="payments-search-filter"
+                      name="q"
+                      defaultValue={query}
+                      placeholder="Cliente, servico ou observacao"
+                    />
+                  </div>
+                </div>
+
+                <div className="inline-actions">
+                  <button type="submit" className="secondary-button">
+                    Aplicar
+                  </button>
+                  <a href="/dashboard/gestao/pagamentos" className="secondary-button">
+                    Limpar
+                  </a>
+                </div>
+              </form>
+            </article>
           </div>
-        )}
-      </section>
-    </div>
+
+          <article id="payment-list" className={styles.listCard}>
+            <div className={styles.listHeader}>
+              <div>
+                <h3>Movimentacoes do caixa</h3>
+                <p>
+                  {filteredPayments.length
+                    ? `${filteredPayments.length} pagamento(s) no filtro atual`
+                    : "Nenhum pagamento encontrado no filtro atual"}
+                </p>
+              </div>
+            </div>
+
+            {!filteredPayments.length ? (
+              <EmptyStateCard
+                eyebrow="Caixa sem movimento"
+                title="Nenhum pagamento neste recorte"
+                description="Registre um recebimento ou limpe os filtros para voltar a carteira completa."
+              />
+            ) : (
+              <div className={styles.paymentList}>
+                {filteredPayments.map((item) => (
+                  <article key={item.id} className={styles.paymentCard}>
+                    <div className={styles.paymentHeader}>
+                      <div>
+                        <strong>{item.customerName}</strong>
+                        <p>
+                          {item.serviceName} - {item.professionalName}
+                        </p>
+                      </div>
+                      <strong>{formatCurrency(item.amountNumber)}</strong>
+                    </div>
+
+                    <div className={styles.paymentMeta}>
+                      <span>{formatPaymentMethodLabel(item.payment_method)}</span>
+                      <span>{formatDateTimeLabel(item.paid_at, timeZone)}</span>
+                    </div>
+
+                    {item.notes ? (
+                      <p className={styles.paymentNote}>{item.notes}</p>
+                    ) : null}
+
+                    <AsyncActionForm action={deleteManagementPaymentAction}>
+                      <input type="hidden" name="returnPath" value={currentPath} />
+                      <input type="hidden" name="paymentId" value={item.id} />
+                      <button type="submit" className="danger-button">
+                        Remover pagamento
+                      </button>
+                    </AsyncActionForm>
+                  </article>
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
+      </div>
+    </AsyncActionNoticeRegion>
   );
 }

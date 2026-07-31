@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 
 import { FlashMessage } from "@/components/FlashMessage";
@@ -217,7 +223,9 @@ export function SalonSecuritySettingsPanel({
       setPendingEnrollment(null);
       setTotpCode("");
       await refreshFactorState();
-      router.refresh();
+      startTransition(() => {
+        router.refresh();
+      });
       setNotice({
         message:
           "Autenticador confirmado. Agora você já pode exigir MFA no painel.",

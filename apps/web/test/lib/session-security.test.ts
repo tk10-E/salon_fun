@@ -10,11 +10,16 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 import { evaluatePanelAccessPolicy } from "@/lib/sessionSecurity";
 
-function buildAccessToken(aal: "aal1" | "aal2") {
+function buildAccessToken(
+  aal: "aal1" | "aal2",
+  extraPayload?: Record<string, unknown>,
+) {
   const header = Buffer.from(
     JSON.stringify({ alg: "HS256", typ: "JWT" }),
   ).toString("base64url");
-  const payload = Buffer.from(JSON.stringify({ aal })).toString("base64url");
+  const payload = Buffer.from(
+    JSON.stringify({ aal, ...extraPayload }),
+  ).toString("base64url");
 
   return `${header}.${payload}.signature`;
 }
@@ -62,6 +67,27 @@ function mockAdminClient(options?: {
 
   return {
     listFactors,
+  };
+}
+
+function mockSessionSecurityAdminClient(options?: {
+  rpcData?: Record<string, unknown> | null;
+  rpcError?: Error | { message: string } | null;
+}) {
+  const rpc = vi.fn().mockResolvedValue({
+    data: options?.rpcData ?? null,
+    error: options?.rpcError ?? null,
+  });
+
+  createAdminClientMock.mockReturnValue({
+    rpc,
+    from: vi.fn(() => ({
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    })),
+  });
+
+  return {
+    rpc,
   };
 }
 
@@ -126,6 +152,72 @@ describe("session security access policy", () => {
       mfaTotpEnabled: true,
       reason: "aal_upgrade_required",
       salonId: "salon-1",
+    });
+  });
+
+  it("maps the relaxed low-risk idle timeout returned by session security", async () => {
+    const { rpc } = mockSessionSecurityAdminClient({
+      rpcData: {
+        action: "allow",
+        allowed: true,
+        idle_timeout_seconds: 28800,
+        risk_level: "low",
+        suspicious_events: 0,
+        suspicious_reason: null,
+      },
+    });
+    const { evaluateSessionSecurity } = await import("@/lib/sessionSecurity");
+
+    const evaluation = await evaluateSessionSecurity({
+      accessToken: buildAccessToken("aal1", {
+        session_id: "session-1",
+      }),
+      deviceId: "550e8400-e29b-41d4-a716-446655440000",
+      headerStore: new Headers({
+        "user-agent": "Vitest",
+        "x-vercel-ip-country": "BR",
+      }),
+      requestPath: "/dashboard",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "upsert_session_security_context",
+      expect.objectContaining({
+        session_id_input: "session-1",
+      }),
+    );
+    expect(evaluation).toMatchObject({
+      action: "allow",
+      allowed: true,
+      idleTimeoutSeconds: 28800,
+      riskLevel: "low",
+      suspiciousEvents: 0,
+    });
+  });
+
+  it("falls back to the relaxed default timeout when the security rpc is unavailable", async () => {
+    mockSessionSecurityAdminClient({
+      rpcError: new Error("rpc_unavailable"),
+    });
+    const { evaluateSessionSecurity } = await import("@/lib/sessionSecurity");
+
+    const evaluation = await evaluateSessionSecurity({
+      accessToken: buildAccessToken("aal1"),
+      deviceId: "550e8400-e29b-41d4-a716-446655440000",
+      headerStore: new Headers({
+        "user-agent": "Vitest",
+        "x-vercel-ip-country": "BR",
+      }),
+      requestPath: "/dashboard",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+    });
+
+    expect(evaluation).toMatchObject({
+      action: "allow",
+      allowed: true,
+      idleTimeoutSeconds: 28800,
+      riskLevel: "low",
     });
   });
 });

@@ -25,9 +25,14 @@ class SalonCustomerApp extends StatefulWidget {
 class _SalonCustomerAppState extends State<SalonCustomerApp>
     with WidgetsBindingObserver {
   static const _biometricGracePeriod = Duration(seconds: 75);
+  // The app already reacts to realtime updates and resume events, so a
+  // gentler foreground polling interval keeps the UI more responsive.
+  static const _foregroundRefreshInterval = Duration(seconds: 45);
 
   String? _lastNotificationBindingKey;
+  String? _lastRuntimeRefreshBindingKey;
   DateTime? _backgroundedAt;
+  Timer? _foregroundRefreshTimer;
 
   @override
   void initState() {
@@ -38,6 +43,7 @@ class _SalonCustomerAppState extends State<SalonCustomerApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _foregroundRefreshTimer?.cancel();
     unawaited(widget.bootstrap.deviceNotificationService.dispose());
     super.dispose();
   }
@@ -53,14 +59,16 @@ class _SalonCustomerAppState extends State<SalonCustomerApp>
     if (state == AppLifecycleState.resumed) {
       final backgroundedAt = _backgroundedAt;
       _backgroundedAt = null;
+      final sessionController = widget.bootstrap.sessionController;
       if (backgroundedAt == null) {
         _refreshSalonRuntimeData();
         return;
       }
 
       final timeAway = DateTime.now().difference(backgroundedAt);
-      if (timeAway >= _biometricGracePeriod) {
-        widget.bootstrap.sessionController.lockForBiometrics();
+      if (sessionController.canUseBiometricUnlock &&
+          timeAway >= _biometricGracePeriod) {
+        sessionController.lockForBiometrics();
       }
 
       _refreshSalonRuntimeData();
@@ -74,6 +82,7 @@ class _SalonCustomerAppState extends State<SalonCustomerApp>
       builder: (context, _) {
         final sessionController = widget.bootstrap.sessionController;
         _syncDeviceNotifications(sessionController);
+        _syncForegroundRefresh(sessionController);
         final activePreview =
             sessionController.session?.landingData?.preview ??
             sessionController.joinPreview?.preview;
@@ -114,8 +123,13 @@ class _SalonCustomerAppState extends State<SalonCustomerApp>
 
   void _syncDeviceNotifications(SessionController sessionController) {
     final session = sessionController.session;
+    final canUseUnlockedSession = _canUseUnlockedAuthenticatedSession(
+      sessionController,
+    );
     final bindingKey = switch (sessionController.stage) {
-      SessionStage.authenticated => session?.customer.id ?? 'authenticated',
+      SessionStage.authenticated when canUseUnlockedSession =>
+        session?.customer.id ?? 'authenticated',
+      SessionStage.authenticated => 'authenticated_locked',
       SessionStage.loading => 'loading',
       SessionStage.signedOut => 'signed_out',
     };
@@ -130,7 +144,7 @@ class _SalonCustomerAppState extends State<SalonCustomerApp>
         return;
       }
 
-      if (sessionController.stage == SessionStage.authenticated) {
+      if (_canUseUnlockedAuthenticatedSession(sessionController)) {
         unawaited(
           widget.bootstrap.deviceNotificationService.bindSession(session),
         );
@@ -143,7 +157,7 @@ class _SalonCustomerAppState extends State<SalonCustomerApp>
 
   void _refreshPushBinding() {
     final sessionController = widget.bootstrap.sessionController;
-    if (sessionController.stage != SessionStage.authenticated) {
+    if (!_canUseUnlockedAuthenticatedSession(sessionController)) {
       return;
     }
 
@@ -155,13 +169,76 @@ class _SalonCustomerAppState extends State<SalonCustomerApp>
   }
 
   void _refreshSalonRuntimeData() {
+    _refreshSalonRuntimeDataInternal(force: true);
+  }
+
+  void _syncForegroundRefresh(SessionController sessionController) {
+    final bindingKey = switch (sessionController.stage) {
+      SessionStage.authenticated
+          when _canUseUnlockedAuthenticatedSession(sessionController) =>
+        sessionController.session?.customer.id,
+      SessionStage.authenticated => 'authenticated_locked',
+      SessionStage.loading => 'loading',
+      SessionStage.signedOut => 'signed_out',
+    };
+
+    if (_lastRuntimeRefreshBindingKey == bindingKey) {
+      return;
+    }
+
+    _lastRuntimeRefreshBindingKey = bindingKey;
+    _foregroundRefreshTimer?.cancel();
+
+    if (!_canUseUnlockedAuthenticatedSession(sessionController)) {
+      return;
+    }
+
+    _foregroundRefreshTimer = Timer.periodic(_foregroundRefreshInterval, (_) {
+      if (!mounted) {
+        return;
+      }
+
+      _refreshSalonRuntimeDataInternal(force: false);
+    });
+  }
+
+  void _refreshSalonRuntimeDataInternal({required bool force}) {
     final sessionController = widget.bootstrap.sessionController;
-    if (sessionController.stage != SessionStage.authenticated) {
+    if (!_canUseUnlockedAuthenticatedSession(sessionController)) {
+      return;
+    }
+
+    unawaited(_synchronizeForegroundSession(force: force));
+  }
+
+  Future<void> _synchronizeForegroundSession({required bool force}) async {
+    final sessionController = widget.bootstrap.sessionController;
+    if (!_canUseUnlockedAuthenticatedSession(sessionController)) {
+      return;
+    }
+
+    await (force
+        ? sessionController.refreshAuthenticatedSession()
+        : sessionController.refreshAuthenticatedSessionIfNeeded());
+
+    if (!mounted ||
+        sessionController.stage != SessionStage.authenticated ||
+        sessionController.requiresBiometricUnlock) {
       return;
     }
 
     _refreshPushBinding();
-    unawaited(sessionController.refreshLandingData());
+    await (force
+        ? sessionController.refreshLandingData()
+        : sessionController.refreshLandingDataIfNeeded());
+  }
+
+  bool _canUseUnlockedAuthenticatedSession(
+    SessionController sessionController,
+  ) {
+    return sessionController.stage == SessionStage.authenticated &&
+        !sessionController.requiresBiometricUnlock &&
+        sessionController.session != null;
   }
 }
 
@@ -232,15 +309,15 @@ class _BiometricLockPageState extends State<_BiometricLockPage> {
                 greeting: 'Olá de novo',
                 title: preview?.heroHeadline ?? preview?.welcomeHeadline,
                 description:
-                    'Seu acesso ao $salonName já está salvo neste aparelho. Confirme sua biometria para continuar.',
+                    'Seu acesso ao $salonName já está salvo neste aparelho. Confirme sua biometria ou o código do dispositivo para continuar.',
                 showImage: true,
                 bottom: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     FilledButton.icon(
                       onPressed: _unlock,
-                      icon: const Icon(Icons.fingerprint_rounded),
-                      label: const Text('Entrar com impressão digital'),
+                      icon: const Icon(Icons.phonelink_lock_rounded),
+                      label: const Text('Entrar com a segurança do aparelho'),
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton(

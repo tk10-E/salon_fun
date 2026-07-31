@@ -706,16 +706,21 @@ export type Database = {
           contraindications: string | null;
           created_at: string;
           crm_label: string | null;
+          email: string | null;
           id: string;
           internal_notes: string | null;
           last_assessment_at: string | null;
           name: string;
+          notes: string | null;
           phone: string | null;
           preferences: string | null;
+          profile_image_path: string | null;
           referral_code: string | null;
           referred_by_customer_id: string | null;
           salon_id: string;
           technical_notes: string | null;
+          updated_at: string;
+          whatsapp_phone: string | null;
         };
         Insert: {
           allergies?: string | null;
@@ -731,16 +736,21 @@ export type Database = {
           contraindications?: string | null;
           created_at?: string;
           crm_label?: string | null;
+          email?: string | null;
           id?: string;
           internal_notes?: string | null;
           last_assessment_at?: string | null;
           name: string;
+          notes?: string | null;
           phone?: string | null;
           preferences?: string | null;
+          profile_image_path?: string | null;
           referral_code?: string | null;
           referred_by_customer_id?: string | null;
           salon_id: string;
           technical_notes?: string | null;
+          updated_at?: string;
+          whatsapp_phone?: string | null;
         };
         Update: {
           allergies?: string | null;
@@ -756,16 +766,21 @@ export type Database = {
           contraindications?: string | null;
           created_at?: string;
           crm_label?: string | null;
+          email?: string | null;
           id?: string;
           internal_notes?: string | null;
           last_assessment_at?: string | null;
           name?: string;
+          notes?: string | null;
           phone?: string | null;
           preferences?: string | null;
+          profile_image_path?: string | null;
           referral_code?: string | null;
           referred_by_customer_id?: string | null;
           salon_id?: string;
           technical_notes?: string | null;
+          updated_at?: string;
+          whatsapp_phone?: string | null;
         };
         Relationships: [
           {
@@ -1854,6 +1869,7 @@ export type Database = {
           caption: string | null;
           created_at: string;
           created_by_user_id: string;
+          expires_at: string | null;
           external_author_avatar_url: string | null;
           external_author_username: string | null;
           external_media_url: string | null;
@@ -1875,6 +1891,7 @@ export type Database = {
           caption?: string | null;
           created_at?: string;
           created_by_user_id?: string;
+          expires_at?: string | null;
           external_author_avatar_url?: string | null;
           external_author_username?: string | null;
           external_media_url?: string | null;
@@ -1896,6 +1913,7 @@ export type Database = {
           caption?: string | null;
           created_at?: string;
           created_by_user_id?: string;
+          expires_at?: string | null;
           external_author_avatar_url?: string | null;
           external_author_username?: string | null;
           external_media_url?: string | null;
@@ -2309,6 +2327,7 @@ export type Database = {
           booking_policy_asaas_environment: string;
           booking_policy_asaas_webhook_token: string | null;
           booking_policy_auto_cancel_lead_minutes: number;
+          booking_policy_auto_confirm_new_appointments: boolean;
           booking_policy_auto_cancel_pending_deposit: boolean;
           booking_policy_auto_cancel_unconfirmed: boolean;
           booking_policy_cancellation_window_hours: number;
@@ -2350,6 +2369,7 @@ export type Database = {
           booking_policy_asaas_environment?: string;
           booking_policy_asaas_webhook_token?: string | null;
           booking_policy_auto_cancel_lead_minutes?: number;
+          booking_policy_auto_confirm_new_appointments?: boolean;
           booking_policy_auto_cancel_pending_deposit?: boolean;
           booking_policy_auto_cancel_unconfirmed?: boolean;
           booking_policy_cancellation_window_hours?: number;
@@ -2391,6 +2411,7 @@ export type Database = {
           booking_policy_asaas_environment?: string;
           booking_policy_asaas_webhook_token?: string | null;
           booking_policy_auto_cancel_lead_minutes?: number;
+          booking_policy_auto_confirm_new_appointments?: boolean;
           booking_policy_auto_cancel_pending_deposit?: boolean;
           booking_policy_auto_cancel_unconfirmed?: boolean;
           booking_policy_cancellation_window_hours?: number;
@@ -2565,6 +2586,7 @@ export type Database = {
           commission_rate_percent: number;
           created_at: string;
           id: string;
+          image_path: string | null;
           is_active: boolean;
           is_default: boolean;
           name: string;
@@ -2577,6 +2599,7 @@ export type Database = {
           commission_rate_percent?: number;
           created_at?: string;
           id?: string;
+          image_path?: string | null;
           is_active?: boolean;
           is_default?: boolean;
           name: string;
@@ -2589,6 +2612,7 @@ export type Database = {
           commission_rate_percent?: number;
           created_at?: string;
           id?: string;
+          image_path?: string | null;
           is_active?: boolean;
           is_default?: boolean;
           name?: string;

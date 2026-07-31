@@ -68,26 +68,26 @@ describe("management commissions page", () => {
 
   it("renders a stronger commissions overview without changing the filter workflow", async () => {
     const ui = await ComissoesPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         professionalId: "professional-1",
         dateFrom: "2026-04-01",
         dateTo: "2026-04-08",
-        message: "Comissão recalculada.",
+        message: "Comissao recalculada.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);
 
-    expect(screen.getByText("Comissão recalculada.")).toBeInTheDocument();
+    expect(screen.getByText("Comissao recalculada.")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: "Repasse claro para fechar o mês sem ruído.",
+        name: "Comissões da equipe",
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Comissão calculada").length).toBeGreaterThan(0);
-    expect(screen.getByText("Profissional em foco")).toBeInTheDocument();
-    expect(screen.getByText("Venda do período")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Profissional em foco" })).toBeInTheDocument();
+    expect(screen.getAllByText("Venda do período").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Filtro do período" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Resumo do período" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Comissões por profissional" })).toBeInTheDocument();

@@ -36,8 +36,8 @@ export function DashboardAccessGate({
           <Link href="/dashboard" className="primary-button">
             Voltar ao início
           </Link>
-          <Link href="/dashboard/settings" className="secondary-button">
-            Abrir ajustes do app
+          <Link href="/planos" className="secondary-button">
+            Escolher plano
           </Link>
         </div>
       </div>

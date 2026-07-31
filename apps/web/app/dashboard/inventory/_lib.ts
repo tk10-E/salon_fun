@@ -34,8 +34,15 @@ export type InventoryStoreOrder = {
   customerPhone: string | null;
   id: string;
   items: Array<{
+    lineTotalAmount: NumericValue;
+    productBrandSnapshot: string | null;
+    productId: string | null;
+    productImagePath: string | null;
     id: string;
     productNameSnapshot: string;
+    quantity: number;
+    unitPriceSnapshot: NumericValue;
+    unitSnapshot: string;
   }>;
   notes: string | null;
   orderMoment: string;
@@ -59,6 +66,10 @@ export type InventoryMovement = {
 };
 
 export type InventoryPageData = {
+  analytics: {
+    completedStoreOrders: InventoryStoreOrder[];
+    periodLabel: string;
+  };
   alerts: {
     lowStockProducts: Array<{
       currentStock: NumericValue;

@@ -1,26 +1,22 @@
-import {
-  loadBenefitsOverviewSnapshot,
-} from "@/app/dashboard/benefits/_lib";
+import { loadBenefitsOverviewSnapshot } from "@/app/dashboard/benefits/_lib";
 import {
   getClientAppVisualStyleOption,
   getClientExperienceModelOption,
   getClientHomeEmphasisOption,
   normalizeSalonClientAppConfig,
 } from "@/lib/clientAppConfig";
+import { resolveFeedStoryRecord } from "@/lib/feedStorySupport";
 import { requireOwnerSalon } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
-import {
-  getCategory,
-  type NotificationRow,
-} from "../notifications/shared";
+import { getCategory, type NotificationRow } from "../notifications/shared";
 import type { ClientAppHubData } from "./_lib";
 
 type FeedPostPreviewRow = {
   id: string;
   title: string;
   caption: string | null;
-  post_type: "standard" | "before_after" | "reel" | null;
+  post_type: "standard" | "before_after" | "reel" | "story" | null;
   created_at: string;
   services:
     | {
@@ -51,7 +47,10 @@ function firstRelation<T>(value: T | T[] | null | undefined) {
 function buildPublicSalonHref(joinCode: string, customDomain: string | null) {
   const normalizedJoinCode = joinCode.trim().toUpperCase();
   if (customDomain) {
-    return `https://${customDomain}`;
+    const normalizedDomain = customDomain
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/+$/g, "");
+    return `https://${normalizedDomain}`;
   }
 
   return `/s/${normalizedJoinCode}`;
@@ -67,44 +66,39 @@ export async function loadClientAppHubData(): Promise<ClientAppHubData> {
   const [
     benefitsOverviewSnapshot,
     servicesCountResult,
-    postsCountResult,
+    postsResult,
     recentNotificationsCountResult,
     activePushTokensCountResult,
     recentPushTokensResult,
-    instagramConnectionCountResult,
     recentNotificationsResult,
     recentPostsResult,
   ] = await Promise.all([
     loadBenefitsOverviewSnapshot(),
     supabase
       .from("services")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("is_active", true),
     supabase
       .from("salon_posts")
-      .select("*", { count: "exact", head: true })
+      .select("id,title,post_type,created_at")
       .eq("salon_id", salon.id),
     supabase
       .from("salon_customer_notifications")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .gte("created_at", recentWindowStart),
     supabase
       .from("customer_push_tokens")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("is_active", true),
     supabase
       .from("customer_push_tokens")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("salon_id", salon.id)
       .eq("is_active", true)
       .gte("last_seen_at", recentWindowStart),
-    supabase
-      .from("instagram_connections")
-      .select("*", { count: "exact", head: true })
-      .eq("salon_id", salon.id),
     supabase
       .from("salon_customer_notifications")
       .select("id, audience, notification_type, title, body, created_at")
@@ -117,6 +111,7 @@ export async function loadClientAppHubData(): Promise<ClientAppHubData> {
         "id,title,caption,post_type,created_at,services(name),salon_post_likes(customer_id),salon_post_comments(id)",
       )
       .eq("salon_id", salon.id)
+      .neq("post_type", "story")
       .order("created_at", { ascending: false })
       .limit(4),
   ]);
@@ -148,14 +143,14 @@ export async function loadClientAppHubData(): Promise<ClientAppHubData> {
       ready: Boolean(salon.tagline?.trim()),
       summary: salon.tagline?.trim()
         ? "Mensagem curta de marca configurada."
-        : "Falta uma tagline para contextualizar o salão.",
+        : "Falta uma frase de apoio para contextualizar o salão.",
     },
     {
       label: "WhatsApp",
       ready: Boolean(salon.whatsapp_phone?.trim()),
       summary: salon.whatsapp_phone?.trim()
-        ? "Canal oficial liberado no app."
-        : "Falta o contato direto para suporte rápido.",
+        ? "Canal oficial pronto para a cliente falar com o salão."
+        : "Falta um WhatsApp do salão para a cliente pedir ajuda rápido.",
     },
     {
       label: "Hero",
@@ -163,19 +158,19 @@ export async function loadClientAppHubData(): Promise<ClientAppHubData> {
         clientAppConfig.heroImageVariantUrl ?? clientAppConfig.heroImageUrl,
       ),
       summary:
-        clientAppConfig.heroImageVariantUrl ?? clientAppConfig.heroImageUrl
+        (clientAppConfig.heroImageVariantUrl ?? clientAppConfig.heroImageUrl)
           ? "Capa principal pronta para a home."
-          : "Sem imagem hero para a primeira impressão do app.",
+          : "Sem imagem hero para a primeira impressao do app.",
     },
     {
       label: "Galeria",
       ready: Boolean(
         clientAppConfig.galleryCoverImageVariantUrl ??
-          clientAppConfig.galleryCoverImageUrl,
+        clientAppConfig.galleryCoverImageUrl,
       ),
       summary:
-        clientAppConfig.galleryCoverImageVariantUrl ??
-        clientAppConfig.galleryCoverImageUrl
+        (clientAppConfig.galleryCoverImageVariantUrl ??
+        clientAppConfig.galleryCoverImageUrl)
           ? "Capa da central visual configurada."
           : "A central visual ainda não tem capa própria.",
     },
@@ -183,11 +178,11 @@ export async function loadClientAppHubData(): Promise<ClientAppHubData> {
       label: "Perfil",
       ready: Boolean(
         clientAppConfig.profileCoverImageVariantUrl ??
-          clientAppConfig.profileCoverImageUrl,
+        clientAppConfig.profileCoverImageUrl,
       ),
       summary:
-        clientAppConfig.profileCoverImageVariantUrl ??
-        clientAppConfig.profileCoverImageUrl
+        (clientAppConfig.profileCoverImageVariantUrl ??
+        clientAppConfig.profileCoverImageUrl)
           ? "Área de perfil do salão com acabamento visual."
           : "Falta capa para a área de perfil e benefícios.",
     },
@@ -215,25 +210,57 @@ export async function loadClientAppHubData(): Promise<ClientAppHubData> {
     createdAt: notification.created_at,
   }));
 
-  const recentPosts = (
-    (recentPostsResult.data ?? []) as FeedPostPreviewRow[]
-  ).map((post) => {
-    const service = firstRelation(post.services);
+  const recentPosts = ((recentPostsResult.data ?? []) as FeedPostPreviewRow[])
+    .filter((post) => {
+      const storyState = resolveFeedStoryRecord({
+        createdAt: post.created_at,
+        postType: post.post_type,
+        title: post.title,
+      });
+      return !storyState.isStory;
+    })
+    .map((post) => {
+      const storyState = resolveFeedStoryRecord({
+        createdAt: post.created_at,
+        postType: post.post_type,
+        title: post.title,
+      });
+      const service = firstRelation(post.services);
+      const postType: "standard" | "before_after" | "reel" =
+        post.post_type === "before_after" || post.post_type === "reel"
+          ? post.post_type
+          : "standard";
 
-    return {
-      id: post.id,
-      title: post.title,
-      caption: post.caption,
-      postType: post.post_type ?? "standard",
-      serviceName: service?.name ?? null,
-      createdAt: post.created_at,
-      likesCount: post.salon_post_likes?.length ?? 0,
-      commentsCount: post.salon_post_comments?.length ?? 0,
-    };
-  });
+      return {
+        id: post.id,
+        title: storyState.cleanTitle,
+        caption: post.caption,
+        postType,
+        serviceName: service?.name ?? null,
+        createdAt: post.created_at,
+        likesCount: post.salon_post_likes?.length ?? 0,
+        commentsCount: post.salon_post_comments?.length ?? 0,
+      };
+    });
+
+  const postsCount = (
+    (postsResult.data ?? []) as Array<{
+      created_at?: string | null;
+      id: string;
+      post_type?: string | null;
+      title?: string | null;
+    }>
+  ).filter((post) => {
+    const storyState = resolveFeedStoryRecord({
+      createdAt: post.created_at ?? null,
+      postType: post.post_type ?? null,
+      title: post.title ?? null,
+    });
+    return !storyState.isStory;
+  }).length;
 
   return {
-    salonName: salon.name?.trim() || "Salão",
+    salonName: salon.name?.trim() || "Salao",
     publicSalonPath: buildPublicSalonHref(
       salon.join_code,
       clientAppConfig.customDomain,
@@ -253,13 +280,12 @@ export async function loadClientAppHubData(): Promise<ClientAppHubData> {
     brandSignals,
     centralCampaigns: clientAppConfig.centralCampaigns,
     servicesCount: servicesCountResult.count ?? 0,
-    postsCount: postsCountResult.count ?? 0,
+    postsCount,
     activeOffersCount: benefitsOverview.activeOffersCount,
     activeMembershipsCount: benefitsOverview.activeMembershipsCount,
     recentNotificationsCount: recentNotificationsCountResult.count ?? 0,
     activePushTokensCount: activePushTokensCountResult.count ?? 0,
     recentPushTokensCount: recentPushTokensResult.count ?? 0,
-    instagramConnectionCount: instagramConnectionCountResult.count ?? 0,
     commercialDataHealth: benefitsOverviewSnapshot.diagnostics,
     growthAutomationSettings: benefitsOverview.growthAutomationSettings,
     growthAutomationOverview: benefitsOverview.growthAutomationOverview,

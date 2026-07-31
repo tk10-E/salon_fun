@@ -8,6 +8,7 @@ const {
   createClientMock,
   createSalonOfferActionPath,
   deleteSalonOfferActionPath,
+  markCustomerMembershipRequestPaidActionPath,
   rejectCustomerMembershipRequestActionPath,
   requireOwnerSalonMock,
   updateSalonOfferActionPath,
@@ -16,6 +17,7 @@ const {
   createClientMock: vi.fn(),
   createSalonOfferActionPath: "/__test/create-offer",
   deleteSalonOfferActionPath: "/__test/delete-offer",
+  markCustomerMembershipRequestPaidActionPath: "/__test/mark-request-paid",
   rejectCustomerMembershipRequestActionPath: "/__test/reject-request",
   requireOwnerSalonMock: vi.fn(),
   updateSalonOfferActionPath: "/__test/update-offer",
@@ -26,6 +28,8 @@ vi.mock("@/app/actions", () => ({
     approveCustomerMembershipRequestActionPath,
   createSalonOfferAction: createSalonOfferActionPath,
   deleteSalonOfferAction: deleteSalonOfferActionPath,
+  markCustomerMembershipRequestPaidAction:
+    markCustomerMembershipRequestPaidActionPath,
   rejectCustomerMembershipRequestAction:
     rejectCustomerMembershipRequestActionPath,
   updateSalonOfferAction: updateSalonOfferActionPath,
@@ -138,7 +142,7 @@ describe("subscriptions page UI", () => {
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
+                or: vi.fn(() => ({
                   order: vi.fn().mockResolvedValue({
                     data: [
                       {
@@ -146,11 +150,28 @@ describe("subscriptions page UI", () => {
                         customer_id: "customer-2",
                         offer_id: "offer-1",
                         offer_title_snapshot: "Clube Glow",
+                        approved_starts_on: null,
+                        decided_at: null,
+                        membership_id: null,
                         price_snapshot: 149.9,
                         notes: "Quero ativar ainda este mês.",
                         status: "pending",
                         requested_at: "2026-04-10T13:00:00.000Z",
                         customers: { name: "Joana" },
+                      },
+                      {
+                        id: "request-2",
+                        customer_id: "customer-3",
+                        offer_id: "offer-1",
+                        offer_title_snapshot: "Clube Glow",
+                        approved_starts_on: "2026-04-15",
+                        decided_at: "2026-04-11T10:00:00.000Z",
+                        membership_id: null,
+                        price_snapshot: 149.9,
+                        notes: "Pode deixar para eu pagar no balcão.",
+                        status: "approved",
+                        requested_at: "2026-04-10T18:00:00.000Z",
+                        customers: { name: "Bianca" },
                       },
                     ],
                     error: null,
@@ -166,10 +187,10 @@ describe("subscriptions page UI", () => {
     });
 
     const ui = await SubscriptionsPage({
-      searchParams: { message: "Planos atualizados.", tone: "success" },
+      searchParams: Promise.resolve({ message: "Planos atualizados.", tone: "success" }),
     });
 
-    render(ui);
+    const { container } = render(ui);
 
     expect(screen.getByText("Planos atualizados.")).toBeInTheDocument();
     expect(
@@ -200,18 +221,34 @@ describe("subscriptions page UI", () => {
       screen.getByRole("heading", { name: "Novo plano" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Pedidos feitos no app cliente aparecem aqui e também na home do painel/i),
+      screen.getByText(/Pedidos feitos no app do cliente aparecem aqui e também na home do painel/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Pedidos vindos do app cliente" }),
+      screen.getByRole("heading", { name: "Pedidos vindos do app do cliente" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Aprovar pedido" }),
+      screen.getByRole("button", { name: "Aprovar e aguardar pagamento" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Inicio real da assinatura"),
+      screen.getByRole("heading", { name: "Planos aguardando pagamento" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Marcar como pago e ativar" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Início real da assinatura"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Sessões incluídas")).toBeInTheDocument();
     expect(screen.getAllByLabelText("Foto da assinatura")).toHaveLength(2);
+    expect(
+      container.querySelectorAll(
+        'form[action="/__test/approve-request"] input[name="returnPath"][value="/dashboard/subscriptions"]',
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      container.querySelectorAll(
+        'form[action="/__test/mark-request-paid"] input[name="returnPath"][value="/dashboard/subscriptions"]',
+      ).length,
+    ).toBeGreaterThan(0);
   });
 });

@@ -30,7 +30,14 @@ describe("server performance helper", () => {
 
     expect(result).toBe("ok");
     expect(infoSpy).toHaveBeenCalledWith(
-      "[panel-perf] dashboard.home completed in 620ms",
+      JSON.stringify({
+        duration_ms: 620,
+        label: "dashboard.home",
+        level: "info",
+        outcome: "completed",
+        threshold_ms: 400,
+        type: "server_render",
+      }),
     );
   });
 
@@ -44,7 +51,14 @@ describe("server performance helper", () => {
     });
 
     expect(infoSpy).toHaveBeenCalledWith(
-      "[panel-perf] dashboard.feed completed in 40ms",
+      JSON.stringify({
+        duration_ms: 40,
+        label: "dashboard.feed",
+        level: "info",
+        outcome: "completed",
+        threshold_ms: 400,
+        type: "server_render",
+      }),
     );
   });
 
@@ -60,7 +74,14 @@ describe("server performance helper", () => {
     ).rejects.toThrow("database timeout");
 
     expect(errorSpy).toHaveBeenCalledWith(
-      "[panel-perf] dashboard.whatsapp failed after 380ms",
+      JSON.stringify({
+        duration_ms: 380,
+        label: "dashboard.whatsapp",
+        level: "error",
+        outcome: "failed",
+        threshold_ms: 400,
+        type: "server_render",
+      }),
       failure,
     );
   });

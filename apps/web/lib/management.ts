@@ -1,11 +1,27 @@
 import { createClient } from "@/lib/supabase/server";
 import {
+  APPOINTMENT_PAYMENT_PREFERENCE_OPTIONS,
+  formatAppointmentPaymentPreferenceLabel,
+  type AppointmentPaymentPreference,
+} from "@/lib/appointmentPaymentPreference";
+import {
+  calculateProjectedCommissionAmount,
+  resolveBookedAppointmentAmount,
+} from "@/lib/financialMetrics";
+import { listIgnoredPendingSettlementAppointmentIds } from "@/lib/pendingSettlementReconciliation";
+import { listResolvedAppointmentReviews } from "@/lib/appointmentReviews";
+import { listResolvedAppointmentPlanReservations } from "@/lib/appointmentPlanReservations";
+import {
   MANAGEMENT_BASE_PATH,
   MANAGEMENT_NAV_LINKS,
   MANAGEMENT_PATHS,
 } from "@/lib/management-navigation";
 
 export { MANAGEMENT_BASE_PATH, MANAGEMENT_NAV_LINKS, MANAGEMENT_PATHS };
+export {
+  APPOINTMENT_PAYMENT_PREFERENCE_OPTIONS,
+  formatAppointmentPaymentPreferenceLabel,
+};
 
 export const APPOINTMENT_STATUS_OPTIONS = [
   { value: "pending", label: "Agendado", badgeClass: "badge--pending" },
@@ -64,10 +80,12 @@ type ServiceRow = {
 };
 
 type ProfessionalRow = {
+  commission_flat_fee: number | string;
   id: string;
   name: string;
   role: string | null;
   phone: string | null;
+  image_path: string | null;
   is_active: boolean;
   commission_rate_percent: number | string;
   created_at: string;
@@ -78,41 +96,65 @@ type ClientRow = {
   id: string;
   name: string;
   phone: string | null;
-  whatsapp_phone: string | null;
   email: string | null;
   birth_date: string | null;
   notes: string | null;
+  profile_image_path: string | null;
   created_at: string;
   updated_at: string;
 };
 
 type AppointmentRow = {
+  booking_policy_snapshot?: string | null;
+  customer_confirmation_requested_at?: string | null;
   id: string;
+  customer_presence_confirmed_at?: string | null;
   customer_id: string;
+  deposit_amount?: number | string | null;
+  deposit_customer_reported_paid_at?: string | null;
+  deposit_customer_reported_paid_via?: string | null;
+  deposit_customer_reported_reference?: string | null;
+  deposit_paid_at?: string | null;
+  deposit_status?: string | null;
   service_id: string;
   staff_member_id: string;
   date: string;
   ends_at: string;
   status: ManagementAppointmentStatus;
   notes: string | null;
+  payment_preference?: AppointmentPaymentPreference | null;
+  protection_confirmation_required?: boolean | null;
+  service_price_snapshot?: number | string | null;
   completed_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
   customers: RelationValue<{
     id: string;
     name: string;
+    email?: string | null;
     phone?: string | null;
+    profile_image_path?: string | null;
   }>;
   services: RelationValue<{
     id: string;
+    duration?: number;
     name: string;
     price: number | string;
-    duration?: number;
   }>;
   staff_members: RelationValue<{
+    commission_flat_fee?: number | string | null;
+    commission_rate_percent?: number | string | null;
     id: string;
+    image_path?: string | null;
     name: string;
   }>;
+};
+
+type AppointmentReviewRow = {
+  appointment_id: string;
+  created_at: string;
+  rating: number | string;
+  staff_member_id: string;
 };
 
 type PaymentRow = {
@@ -134,6 +176,9 @@ type PaymentRow = {
   }>;
 };
 
+const SYSTEM_PLAN_COMPENSATION_CANCELLATION_REASON =
+  "Programacao automatica do plano revertida pelo sistema.";
+
 export type ManagementSelectOption = {
   id: string;
   label: string;
@@ -146,6 +191,16 @@ export type ManagementSelectOptions = {
   services: ManagementSelectOption[];
   professionals: ManagementSelectOption[];
   clients: ManagementSelectOption[];
+};
+
+export type ManagementSelectOptionsScope = Partial<
+  Record<keyof ManagementSelectOptions, boolean>
+>;
+
+export type ManagementServiceAssignmentOption = {
+  id: string;
+  isActive: boolean;
+  name: string;
 };
 
 export type DashboardProfessionalSummary = {
@@ -169,19 +224,52 @@ export type ManagementDashboardData = {
 };
 
 export type ManagementAppointmentItem = AppointmentRow & {
+  customerEmail: string | null;
   customerName: string;
+  customerPhone: string | null;
+  customerProfileImageUrl: string | null;
+  professionalProfileImageUrl?: string | null;
+  isMembershipPlanAppointment?: boolean;
+  membershipPlanExpiresAt?: string | null;
+  membershipPlanId?: string | null;
+  membershipPlanStartedAt?: string | null;
+  membershipPlanTitle?: string | null;
+  membershipPlanReservationStatus?: "scheduled" | "consumed" | null;
+  membershipSessionIndex?: number | null;
+  membershipSessionsIncluded?: number | null;
   serviceName: string;
+  serviceDurationMinutes: number | null;
   servicePrice: number;
   professionalName: string;
   payment?: {
     id: string;
     amount: number;
     paymentMethod: ManagementPaymentMethod;
+    notes?: string | null;
     paidAt: string;
   } | null;
 };
 
+export type ManagementAppointmentCounts = {
+  pending: number;
+  confirmed: number;
+  completed: number;
+  cancelled: number;
+  no_show: number;
+};
+
+export type ManagementAppointmentCollection = {
+  items: ManagementAppointmentItem[];
+  counts: ManagementAppointmentCounts;
+};
+
+export type ManagementStaleAppointmentQueue = {
+  items: ManagementAppointmentItem[];
+  total: number;
+};
+
 export type ManagementClientItem = ClientRow & {
+  profileImageUrl: string | null;
   upcomingCount: number;
   completedCount: number;
   lastVisitAt: string | null;
@@ -195,10 +283,14 @@ export type ManagementClientItem = ClientRow & {
 };
 
 export type ManagementProfessionalItem = ProfessionalRow & {
+  assignedServiceIds: string[];
   upcomingCount: number;
   completedCount: number;
   totalSold: number;
   commissionProjected: number;
+  imageUrl: string | null;
+  reviewAverage: number | null;
+  reviewCount: number;
 };
 
 export type ManagementCategoryItem = CategoryRow & {
@@ -219,13 +311,25 @@ export type ManagementPaymentItem = PaymentRow & {
   professionalName: string;
 };
 
+export type ManagementUnpaidAppointmentItem = {
+  amount: number;
+  completedAt: string;
+  customerName: string;
+  id: string;
+  label: string;
+  paymentPreference?: AppointmentPaymentPreference | null;
+  professionalName: string;
+  secondary?: string | null;
+  serviceName: string;
+};
+
 export type ManagementPaymentsData = {
   summary: {
     totalReceived: number;
     byMethod: Record<ManagementPaymentMethod, number>;
   };
   items: ManagementPaymentItem[];
-  unpaidAppointments: ManagementSelectOption[];
+  unpaidAppointments: ManagementUnpaidAppointmentItem[];
 };
 
 export type ManagementCommissionItem = {
@@ -236,6 +340,57 @@ export type ManagementCommissionItem = {
   totalSold: number;
   commissionAmount: number;
 };
+
+export function resolveManagementAppointmentCustomerName(args: {
+  email?: string | null;
+  name?: string | null;
+  phone?: string | null;
+}) {
+  const registeredName = args.name?.trim();
+  if (registeredName) {
+    return registeredName;
+  }
+
+  const registeredPhone = args.phone?.trim();
+  if (registeredPhone) {
+    return registeredPhone;
+  }
+
+  const registeredEmail = args.email?.trim();
+  if (registeredEmail) {
+    return registeredEmail;
+  }
+
+  return "Cliente app";
+}
+
+export function resolveManagementAgendaDisplayDay(args: {
+  requestedDay: string;
+  appointments: Array<{ date: string }>;
+  timeZone: string;
+}) {
+  const appointmentDays = Array.from(
+    new Set(
+      args.appointments.map((appointment) =>
+        getLocalDateKey(appointment.date, args.timeZone),
+      ),
+    ),
+  ).sort();
+
+  if (!appointmentDays.length) {
+    return args.requestedDay;
+  }
+
+  if (appointmentDays.includes(args.requestedDay)) {
+    return args.requestedDay;
+  }
+
+  return (
+    appointmentDays.find((dayKey) => dayKey >= args.requestedDay) ??
+    appointmentDays[appointmentDays.length - 1] ??
+    args.requestedDay
+  );
+}
 
 const MANAGEMENT_SERVICE_FORM_CATEGORY_PRESETS = [
   {
@@ -250,6 +405,17 @@ const MANAGEMENT_SERVICE_FORM_CATEGORY_PRESETS = [
   },
 ] as const;
 
+const DEFAULT_MANAGEMENT_SELECT_OPTIONS_SCOPE: Record<
+  keyof ManagementSelectOptions,
+  boolean
+> = {
+  categories: true,
+  serviceFormCategories: true,
+  services: true,
+  professionals: true,
+  clients: true,
+};
+
 function firstRelation<T>(value: RelationValue<T>) {
   if (Array.isArray(value)) {
     return value[0] ?? null;
@@ -263,8 +429,351 @@ function toNumber(value: number | string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeManagementErrorText(
+  error:
+    | {
+        code?: string | null;
+        details?: string | null;
+        hint?: string | null;
+        message?: string | null;
+      }
+    | null
+    | undefined,
+) {
+  return [error?.message, error?.details, error?.hint]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .trim()
+    .toLowerCase();
+}
+
+function isMissingManagementResourceError(
+  error:
+    | {
+        code?: string | null;
+        details?: string | null;
+        hint?: string | null;
+        message?: string | null;
+      }
+    | null
+    | undefined,
+  resourceName: string,
+) {
+  const normalizedText = normalizeManagementErrorText(error);
+  const normalizedResourceName = resourceName.trim().toLowerCase();
+
+  return (
+    normalizedText.includes(normalizedResourceName) &&
+    (normalizedText.includes("does not exist") ||
+      normalizedText.includes("schema cache") ||
+      normalizedText.includes("could not find") ||
+      normalizedText.includes("relationship")) &&
+    (error?.code === "42P01" ||
+      error?.code === "PGRST200" ||
+      error?.code === "PGRST204" ||
+      error?.code === "PGRST205" ||
+      normalizedText.length > 0)
+  );
+}
+
+function isMissingManagementPaymentPreferenceColumnError(
+  error:
+    | {
+        code?: string | null;
+        details?: string | null;
+        hint?: string | null;
+        message?: string | null;
+      }
+    | null
+    | undefined,
+) {
+  const normalizedText = normalizeManagementErrorText(error);
+
+  return (
+    error?.code === "42703" &&
+    normalizedText.includes("payment_preference") &&
+    normalizedText.includes("appointments")
+  );
+}
+
+const MANAGEMENT_FETCH_PAGE_SIZE = 1000;
+
 function normalizeManagementLabel(value: string) {
   return value.trim().toLocaleLowerCase("pt-BR");
+}
+
+function resolveManagementSelectOptionsScope(
+  scope?: ManagementSelectOptionsScope,
+) {
+  return {
+    ...DEFAULT_MANAGEMENT_SELECT_OPTIONS_SCOPE,
+    ...scope,
+  };
+}
+
+async function fetchAllManagementRows<T>(args: {
+  fetchPage: (
+    from: number,
+    to: number,
+  ) => Promise<{
+    data: T[] | null;
+    error?: { code?: string | null; message?: string | null } | null;
+  }>;
+  failureMessage: string;
+}): Promise<T[]> {
+  const rows: T[] = [];
+
+  for (let from = 0; ; from += MANAGEMENT_FETCH_PAGE_SIZE) {
+    const to = from + MANAGEMENT_FETCH_PAGE_SIZE - 1;
+    const result = await args.fetchPage(from, to);
+
+    if (result.error) {
+      throw new Error(args.failureMessage);
+    }
+
+    const page = result.data ?? [];
+    rows.push(...page);
+
+    if (page.length < MANAGEMENT_FETCH_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  return rows;
+}
+
+function buildSalonAssetImageUrl(args: {
+  height: number;
+  path?: string | null;
+  quality?: number;
+  supabase: any;
+  width: number;
+}) {
+  const normalizedPath = args.path?.trim();
+
+  if (!normalizedPath) {
+    return null;
+  }
+
+  if (isAbsoluteManagementImageUrl(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  // Public avatar transforms are returning 403 in production for staff photos.
+  // Use the stable bucket URL and let the UI crop with object-fit instead.
+  return args.supabase.storage
+    .from("salon-assets")
+    .getPublicUrl(normalizedPath).data.publicUrl;
+}
+
+function isAbsoluteManagementImageUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+function hasMissingImageColumnError(error: {
+  code?: string | null;
+  message?: string | null;
+} | null | undefined) {
+  if (error?.code !== "42703") {
+    return false;
+  }
+
+  const message = error.message?.toLowerCase() ?? "";
+  return message.includes("profile_image_path") || message.includes("image_path");
+}
+
+function createCustomerProfileImageUrlResolver(supabase: any) {
+  const cache = new Map<string, Promise<string | null>>();
+
+  return (path?: string | null) => {
+    const normalizedPath = path?.trim();
+
+    if (!normalizedPath) {
+      return Promise.resolve(null);
+    }
+
+    if (isAbsoluteManagementImageUrl(normalizedPath)) {
+      return Promise.resolve(normalizedPath);
+    }
+
+    const cached = cache.get(normalizedPath);
+
+    if (cached) {
+      return cached;
+    }
+
+    const pending = supabase.storage
+      .from("customer-profiles")
+      .createSignedUrl(normalizedPath, 60 * 60 * 12)
+      .then(
+        (signedUrlResult: {
+          data?: { signedUrl?: string | null } | null;
+        }) => signedUrlResult.data?.signedUrl ?? null,
+      )
+      .catch(() => null);
+
+    cache.set(normalizedPath, pending);
+    return pending;
+  };
+}
+
+async function hydrateManagementAppointments(args: {
+  appointments: AppointmentRow[];
+  salonId: string;
+  supabase: any;
+  resolveCustomerProfileImageUrl: (
+    path?: string | null,
+  ) => Promise<string | null>;
+}): Promise<ManagementAppointmentItem[]> {
+  const paymentIds = args.appointments.map((appointment) => appointment.id);
+  const paymentsResult = paymentIds.length
+    ? await args.supabase
+        .from("appointment_payments")
+        .select("id, appointment_id, amount, payment_method, paid_at, notes")
+        .in("appointment_id", paymentIds)
+    : { data: [] as PaymentRow[] };
+  const planReservations = paymentIds.length
+    ? await listResolvedAppointmentPlanReservations({
+        appointmentIds: paymentIds,
+        salonId: args.salonId,
+      })
+    : [];
+  const paymentsMap = new Map(
+    (
+      (paymentsResult.data ?? []) as Array<{
+        id: string;
+        appointment_id: string;
+        amount: number | string;
+        payment_method: ManagementPaymentMethod;
+        notes?: string | null;
+        paid_at: string;
+      }>
+    ).map((payment) => [
+      payment.appointment_id,
+      {
+        id: payment.id,
+        amount: toNumber(payment.amount),
+        paymentMethod: payment.payment_method,
+        notes: payment.notes ?? null,
+        paidAt: payment.paid_at,
+      },
+    ]),
+  );
+  const planReservationMap = new Map(
+    planReservations.map((reservation) => [
+      reservation.appointmentId,
+      reservation,
+    ]),
+  );
+
+  const customerImageUrls = await Promise.all(
+    Array.from(
+      new Map(
+        args.appointments
+          .map((appointment) => {
+            const customer = firstRelation(appointment.customers);
+            const imagePath = customer?.profile_image_path?.trim() ?? null;
+
+            return customer?.id ? ([customer.id, imagePath] as const) : null;
+          })
+          .filter(
+            (value): value is readonly [string, string | null] =>
+              value !== null,
+          ),
+      ),
+    ).map(async ([customerId, imagePath]) => {
+      if (!imagePath) {
+        return [customerId, null] as const;
+      }
+
+      return [
+        customerId,
+        await args.resolveCustomerProfileImageUrl(imagePath),
+      ] as const;
+    }),
+  );
+  const customerImageMap = new Map<string, string | null>(customerImageUrls);
+  const professionalImageMap = new Map(
+    Array.from(
+      new Map(
+        args.appointments
+          .map((appointment) => {
+            const professional = firstRelation(appointment.staff_members);
+            const imagePath = professional?.image_path?.trim() ?? null;
+
+            return professional?.id
+              ? ([professional.id, imagePath] as const)
+              : null;
+          })
+          .filter(
+            (value): value is readonly [string, string | null] =>
+              value !== null,
+          ),
+      ),
+    ).map(([professionalId, imagePath]) => [
+      professionalId,
+      buildSalonAssetImageUrl({
+        height: 320,
+        path: imagePath,
+        quality: 100,
+        supabase: args.supabase,
+        width: 320,
+      }),
+    ]),
+  );
+
+  return args.appointments.map((appointment) => {
+    const customer = firstRelation(appointment.customers);
+    const service = firstRelation(appointment.services);
+    const professional = firstRelation(appointment.staff_members);
+    const planReservation = planReservationMap.get(appointment.id) ?? null;
+
+    return {
+      ...appointment,
+      customerEmail: customer?.email ?? null,
+      customerName: resolveManagementAppointmentCustomerName({
+        email: customer?.email ?? null,
+        name: customer?.name ?? null,
+        phone: customer?.phone ?? null,
+      }),
+      customerPhone: customer?.phone ?? null,
+      customerProfileImageUrl: customer?.id
+        ? (customerImageMap.get(customer.id) ?? null)
+        : null,
+      professionalProfileImageUrl: professional?.id
+        ? (professionalImageMap.get(professional.id) ?? null)
+        : null,
+      serviceName: service?.name ?? "Serviço",
+      serviceDurationMinutes: service?.duration ?? null,
+      servicePrice: resolveBookedAppointmentAmount({
+        servicePrice: service?.price,
+        servicePriceSnapshot: appointment.service_price_snapshot,
+      }),
+      professionalName: professional?.name ?? "Profissional",
+      isMembershipPlanAppointment: planReservation != null,
+      membershipPlanExpiresAt: planReservation?.membershipExpiresAt ?? null,
+      membershipPlanId: planReservation?.membershipId ?? null,
+      membershipPlanReservationStatus:
+        planReservation?.reservationStatus ?? null,
+      membershipPlanStartedAt: planReservation?.membershipStartedAt ?? null,
+      membershipPlanTitle: planReservation?.membershipTitle ?? null,
+      membershipSessionIndex: planReservation?.sessionIndex ?? null,
+      membershipSessionsIncluded: planReservation?.sessionsIncluded ?? null,
+      payment: paymentsMap.get(appointment.id) ?? null,
+    };
+  });
+}
+
+function buildManagementAppointmentCounts(
+  items: ManagementAppointmentItem[],
+): ManagementAppointmentCounts {
+  return {
+    pending: items.filter((item) => item.status === "pending").length,
+    confirmed: items.filter((item) => item.status === "confirmed").length,
+    completed: items.filter((item) => item.status === "completed").length,
+    cancelled: items.filter((item) => item.status === "cancelled").length,
+    no_show: items.filter((item) => item.status === "no_show").length,
+  };
 }
 
 type ServiceCategoryOptionRow = Pick<
@@ -460,6 +969,41 @@ export function getUtcRangeForLocalDate(dayKey: string, timeZone: string) {
   };
 }
 
+export function getUtcRangeForLocalMonth(monthKey: string, timeZone: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const startKey = `${year}-${String(month).padStart(2, "0")}-01`;
+  const nextMonth = new Date(Date.UTC(year, month, 1));
+  const nextMonthKey = `${nextMonth.getUTCFullYear()}-${String(
+    nextMonth.getUTCMonth() + 1,
+  ).padStart(2, "0")}-01`;
+
+  return {
+    start: combineDateAndTimeToUtc(startKey, "00:00", timeZone),
+    end: combineDateAndTimeToUtc(nextMonthKey, "00:00", timeZone),
+  };
+}
+
+export function getUtcRangeForLocalWeek(dayKey: string, timeZone: string) {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const reference = new Date(Date.UTC(year, month - 1, day, 12));
+  const weekStart = new Date(reference);
+  weekStart.setUTCDate(reference.getUTCDate() - reference.getUTCDay());
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+
+  const startKey = `${weekStart.getUTCFullYear()}-${String(
+    weekStart.getUTCMonth() + 1,
+  ).padStart(2, "0")}-${String(weekStart.getUTCDate()).padStart(2, "0")}`;
+  const endKey = `${weekEnd.getUTCFullYear()}-${String(
+    weekEnd.getUTCMonth() + 1,
+  ).padStart(2, "0")}-${String(weekEnd.getUTCDate()).padStart(2, "0")}`;
+
+  return {
+    start: combineDateAndTimeToUtc(startKey, "00:00", timeZone),
+    end: combineDateAndTimeToUtc(endKey, "00:00", timeZone),
+  };
+}
+
 export function formatDateInput(value: string | Date, timeZone: string) {
   return getLocalDateKey(value, timeZone);
 }
@@ -568,42 +1112,81 @@ export function buildFilterHref(
 
 export async function loadManagementSelectOptions(
   salonId: string,
+  scope?: ManagementSelectOptionsScope,
 ): Promise<ManagementSelectOptions> {
   const supabase = createClient() as any;
+  const resolvedScope = resolveManagementSelectOptionsScope(scope);
+  const shouldLoadCategories =
+    resolvedScope.categories || resolvedScope.serviceFormCategories;
   const [categoryState, servicesResult, professionalsResult, clientsResult] =
     await Promise.all([
-      ensureManagementServiceFormCategories({
-        salonId,
-        supabase,
-      }),
-      supabase
-        .from("services")
-        .select("id, name, price")
-        .eq("salon_id", salonId)
-        .eq("is_active", true)
-        .order("category")
-        .order("name"),
-      supabase
-        .from("staff_members")
-        .select("id, name, role")
-        .eq("salon_id", salonId)
-        .eq("is_active", true)
-        .order("name"),
-      supabase
-        .from("customers")
-        .select("id, name, phone")
-        .eq("salon_id", salonId)
-        .order("name"),
+      shouldLoadCategories
+        ? ensureManagementServiceFormCategories({
+            salonId,
+            supabase,
+          })
+        : Promise.resolve<{
+            allCategories: ServiceCategoryOptionRow[];
+            formCategories: ManagementSelectOption[];
+          } | null>(null),
+      resolvedScope.services
+        ? supabase
+            .from("services")
+            .select("id, name, price")
+            .eq("salon_id", salonId)
+            .eq("is_active", true)
+            .order("category")
+            .order("name")
+        : Promise.resolve({
+            data: [] as Array<{
+              id: string;
+              name: string;
+              price?: number | string;
+            }>,
+          }),
+      resolvedScope.professionals
+        ? supabase
+            .from("staff_members")
+            .select("id, name, role")
+            .eq("salon_id", salonId)
+            .eq("is_active", true)
+            .order("name")
+        : Promise.resolve({
+            data: [] as Array<{
+              id: string;
+              name: string;
+              role?: string | null;
+            }>,
+          }),
+      resolvedScope.clients
+        ? supabase
+            .from("customers")
+            .select("id, name, phone")
+            .eq("salon_id", salonId)
+            .order("name")
+        : Promise.resolve({
+            data: [] as Array<{
+              id: string;
+              name: string;
+              phone?: string | null;
+            }>,
+          }),
     ]);
+  const allCategories = categoryState?.allCategories ?? [];
+  const formCategories = categoryState?.formCategories ?? [];
 
   return {
-    categories: categoryState.allCategories
-      .filter((item) => item.is_active)
-      .map((item) => ({
-        id: item.id,
-        label: item.name,
-      })),
-    serviceFormCategories: categoryState.formCategories,
+    categories: resolvedScope.categories
+      ? allCategories
+          .filter((item) => item.is_active)
+          .map((item) => ({
+            id: item.id,
+            label: item.name,
+          }))
+      : [],
+    serviceFormCategories: resolvedScope.serviceFormCategories
+      ? formCategories
+      : [],
     services: (
       (servicesResult.data ?? []) as Array<{
         id: string;
@@ -643,6 +1226,30 @@ export async function loadManagementSelectOptions(
   };
 }
 
+export async function loadManagementServiceAssignmentOptions(
+  salonId: string,
+): Promise<ManagementServiceAssignmentOption[]> {
+  const supabase = createClient() as any;
+  const servicesResult = await supabase
+    .from("services")
+    .select("id, name, is_active")
+    .eq("salon_id", salonId)
+    .order("is_active", { ascending: false })
+    .order("name");
+
+  return (
+    (servicesResult.data ?? []) as Array<{
+      id: string;
+      is_active: boolean;
+      name: string;
+    }>
+  ).map((item) => ({
+    id: item.id,
+    isActive: item.is_active,
+    name: item.name,
+  }));
+}
+
 export async function loadManagementDashboard(
   salonId: string,
   timeZone: string,
@@ -657,7 +1264,7 @@ export async function loadManagementDashboard(
       supabase
         .from("appointments")
         .select(
-          "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, completed_at, cancelled_at, cancellation_reason, customers(id, name, phone), services(id, name, price), staff_members(id, name)",
+          "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, service_price_snapshot, completed_at, cancelled_at, cancellation_reason, customers(id, name, phone), services(id, name, price), staff_members(id, name)",
         )
         .eq("salon_id", salonId)
         .gte("date", todayRange.start.toISOString())
@@ -666,7 +1273,7 @@ export async function loadManagementDashboard(
       supabase
         .from("appointments")
         .select(
-          "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, completed_at, cancelled_at, cancellation_reason, customers(id, name, phone), services(id, name, price), staff_members(id, name)",
+          "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, service_price_snapshot, completed_at, cancelled_at, cancellation_reason, customers(id, name, phone), services(id, name, price), staff_members(id, name)",
         )
         .eq("salon_id", salonId)
         .gte("date", now.toISOString())
@@ -723,7 +1330,11 @@ export async function loadManagementDashboard(
     if (appointment.status === "completed") {
       current.completedCount += 1;
       current.revenue +=
-        paymentByAppointment.get(appointment.id) ?? toNumber(service?.price);
+        paymentByAppointment.get(appointment.id) ??
+        resolveBookedAppointmentAmount({
+          servicePrice: service?.price,
+          servicePriceSnapshot: appointment.service_price_snapshot,
+        });
       servedCustomers.add(appointment.customer_id);
     }
 
@@ -758,37 +1369,116 @@ export async function loadManagementAppointments(args: {
   dayKey: string;
   professionalId?: string;
   status?: string;
-}) {
-  const supabase = createClient() as any;
+}): Promise<ManagementAppointmentCollection> {
   const dayRange = getUtcRangeForLocalDate(args.dayKey, args.timeZone);
-  let query = supabase
-    .from("appointments")
-    .select(
-      "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, completed_at, cancelled_at, cancellation_reason, customers(id, name, phone), services(id, name, price), staff_members(id, name)",
-    )
-    .eq("salon_id", args.salonId)
-    .gte("date", dayRange.start.toISOString())
-    .lt("date", dayRange.end.toISOString())
-    .order("date", { ascending: true });
 
-  if (args.professionalId) {
-    query = query.eq("staff_member_id", args.professionalId);
+  return loadManagementAppointmentsInRange({
+    salonId: args.salonId,
+    startIso: dayRange.start.toISOString(),
+    endIso: dayRange.end.toISOString(),
+    professionalId: args.professionalId,
+    status: args.status,
+  });
+}
+
+export async function loadManagementAppointmentsMonth(args: {
+  salonId: string;
+  timeZone: string;
+  monthKey: string;
+  professionalId?: string;
+  status?: string;
+}): Promise<ManagementAppointmentCollection> {
+  const monthRange = getUtcRangeForLocalMonth(args.monthKey, args.timeZone);
+
+  return loadManagementAppointmentsInRange({
+    salonId: args.salonId,
+    startIso: monthRange.start.toISOString(),
+    endIso: monthRange.end.toISOString(),
+    professionalId: args.professionalId,
+    status: args.status,
+  });
+}
+
+export async function loadManagementAppointmentsWeek(args: {
+  salonId: string;
+  timeZone: string;
+  dayKey: string;
+  professionalId?: string;
+  status?: string;
+}): Promise<ManagementAppointmentCollection> {
+  const weekRange = getUtcRangeForLocalWeek(args.dayKey, args.timeZone);
+
+  return loadManagementAppointmentsInRange({
+    salonId: args.salonId,
+    startIso: weekRange.start.toISOString(),
+    endIso: weekRange.end.toISOString(),
+    professionalId: args.professionalId,
+    status: args.status,
+  });
+}
+
+async function loadManagementAppointmentsInRange(args: {
+  salonId: string;
+  startIso: string;
+  endIso: string;
+  professionalId?: string;
+  status?: string;
+}): Promise<ManagementAppointmentCollection> {
+  const supabase = createClient() as any;
+  const resolveCustomerProfileImageUrl = createCustomerProfileImageUrlResolver(
+    supabase,
+  );
+  const buildAppointmentsQuery = (selectClause: string) => {
+    let query = supabase
+      .from("appointments")
+      .select(selectClause)
+      .eq("salon_id", args.salonId)
+      .gte("date", args.startIso)
+      .lt("date", args.endIso)
+      .order("date", { ascending: true });
+
+    if (args.professionalId) {
+      query = query.eq("staff_member_id", args.professionalId);
+    }
+
+    if (args.status) {
+      query = query.eq("status", args.status);
+    }
+
+    return query;
+  };
+
+  let appointmentsResult = await buildAppointmentsQuery(
+    "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, payment_preference, service_price_snapshot, completed_at, cancelled_at, cancellation_reason, booking_policy_snapshot, customer_confirmation_requested_at, customer_presence_confirmed_at, deposit_amount, deposit_customer_reported_paid_at, deposit_customer_reported_paid_via, deposit_customer_reported_reference, deposit_paid_at, deposit_status, protection_confirmation_required, customers(id, name, phone, email, profile_image_path), services(id, name, price, duration), staff_members(id, name, image_path)",
+  );
+
+  if (hasMissingImageColumnError(appointmentsResult.error)) {
+    appointmentsResult = await buildAppointmentsQuery(
+      "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, payment_preference, service_price_snapshot, completed_at, cancelled_at, cancellation_reason, booking_policy_snapshot, customer_confirmation_requested_at, customer_presence_confirmed_at, deposit_amount, deposit_customer_reported_paid_at, deposit_customer_reported_paid_via, deposit_customer_reported_reference, deposit_paid_at, deposit_status, protection_confirmation_required, customers(id, name, phone, email), services(id, name, price, duration), staff_members(id, name)",
+    );
   }
-
-  if (args.status) {
-    query = query.eq("status", args.status);
-  }
-
-  const appointmentsResult = await query;
-  const appointments = (appointmentsResult.data ?? []) as AppointmentRow[];
+  const appointments = ((appointmentsResult.data ?? []) as AppointmentRow[]).filter(
+    (appointment) =>
+      !(
+        appointment.status === "cancelled" &&
+        appointment.cancellation_reason ===
+          SYSTEM_PLAN_COMPENSATION_CANCELLATION_REASON
+      ),
+  );
 
   const paymentIds = appointments.map((appointment) => appointment.id);
   const paymentsResult = paymentIds.length
     ? await supabase
         .from("appointment_payments")
-        .select("id, appointment_id, amount, payment_method, paid_at")
+        .select("id, appointment_id, amount, payment_method, paid_at, notes")
         .in("appointment_id", paymentIds)
     : { data: [] as PaymentRow[] };
+  const planReservations = paymentIds.length
+    ? await listResolvedAppointmentPlanReservations({
+        appointmentIds: paymentIds,
+        salonId: args.salonId,
+      })
+    : [];
   const paymentsMap = new Map(
     (
       (paymentsResult.data ?? []) as Array<{
@@ -796,6 +1486,7 @@ export async function loadManagementAppointments(args: {
         appointment_id: string;
         amount: number | string;
         payment_method: ManagementPaymentMethod;
+        notes?: string | null;
         paid_at: string;
       }>
     ).map((payment) => [
@@ -804,8 +1495,71 @@ export async function loadManagementAppointments(args: {
         id: payment.id,
         amount: toNumber(payment.amount),
         paymentMethod: payment.payment_method,
+        notes: payment.notes ?? null,
         paidAt: payment.paid_at,
       },
+    ]),
+  );
+  const planReservationMap = new Map(
+    planReservations.map((reservation) => [
+      reservation.appointmentId,
+      reservation,
+    ]),
+  );
+
+  const customerImageUrls = await Promise.all(
+    Array.from(
+      new Map(
+        appointments
+          .map((appointment) => {
+            const customer = firstRelation(appointment.customers);
+            const imagePath = customer?.profile_image_path?.trim() ?? null;
+
+            return customer?.id ? ([customer.id, imagePath] as const) : null;
+          })
+          .filter(
+            (value): value is readonly [string, string | null] =>
+              value !== null,
+          ),
+      ),
+    ).map(async ([customerId, imagePath]) => {
+      if (!imagePath) {
+        return [customerId, null] as const;
+      }
+
+      return [
+        customerId,
+        await resolveCustomerProfileImageUrl(imagePath),
+      ] as const;
+    }),
+  );
+  const customerImageMap = new Map<string, string | null>(customerImageUrls);
+  const professionalImageMap = new Map(
+    Array.from(
+      new Map(
+        appointments
+          .map((appointment) => {
+            const professional = firstRelation(appointment.staff_members);
+            const imagePath = professional?.image_path?.trim() ?? null;
+
+            return professional?.id
+              ? ([professional.id, imagePath] as const)
+              : null;
+          })
+          .filter(
+            (value): value is readonly [string, string | null] =>
+              value !== null,
+          ),
+      ),
+    ).map(([professionalId, imagePath]) => [
+      professionalId,
+      buildSalonAssetImageUrl({
+        height: 320,
+        path: imagePath,
+        quality: 100,
+        supabase,
+        width: 320,
+      }),
     ]),
   );
 
@@ -813,13 +1567,39 @@ export async function loadManagementAppointments(args: {
     const customer = firstRelation(appointment.customers);
     const service = firstRelation(appointment.services);
     const professional = firstRelation(appointment.staff_members);
+    const planReservation = planReservationMap.get(appointment.id) ?? null;
 
     return {
       ...appointment,
-      customerName: customer?.name ?? "Cliente",
+      customerEmail: customer?.email ?? null,
+      customerName: resolveManagementAppointmentCustomerName({
+        email: customer?.email ?? null,
+        name: customer?.name ?? null,
+        phone: customer?.phone ?? null,
+      }),
+      customerPhone: customer?.phone ?? null,
+      customerProfileImageUrl: customer?.id
+        ? (customerImageMap.get(customer.id) ?? null)
+        : null,
+      professionalProfileImageUrl: professional?.id
+        ? (professionalImageMap.get(professional.id) ?? null)
+        : null,
       serviceName: service?.name ?? "Serviço",
-      servicePrice: toNumber(service?.price),
+      serviceDurationMinutes: service?.duration ?? null,
+      servicePrice: resolveBookedAppointmentAmount({
+        servicePrice: service?.price,
+        servicePriceSnapshot: appointment.service_price_snapshot,
+      }),
       professionalName: professional?.name ?? "Profissional",
+      isMembershipPlanAppointment: planReservation != null,
+      membershipPlanExpiresAt: planReservation?.membershipExpiresAt ?? null,
+      membershipPlanId: planReservation?.membershipId ?? null,
+      membershipPlanReservationStatus:
+        planReservation?.reservationStatus ?? null,
+      membershipPlanStartedAt: planReservation?.membershipStartedAt ?? null,
+      membershipPlanTitle: planReservation?.membershipTitle ?? null,
+      membershipSessionIndex: planReservation?.sessionIndex ?? null,
+      membershipSessionsIncluded: planReservation?.sessionsIncluded ?? null,
       payment: paymentsMap.get(appointment.id) ?? null,
     };
   });
@@ -838,15 +1618,69 @@ export async function loadManagementAppointments(args: {
   };
 }
 
+export async function loadManagementStaleAppointments(args: {
+  salonId: string;
+  professionalId?: string;
+  limit?: number;
+}): Promise<ManagementStaleAppointmentQueue> {
+  const supabase = createClient() as any;
+  const resolveCustomerProfileImageUrl = createCustomerProfileImageUrlResolver(
+    supabase,
+  );
+  const limit = Math.max(1, Math.min(args.limit ?? 8, 30));
+  const nowIso = new Date().toISOString();
+  const buildStaleQuery = (selectClause: string) => {
+    let query = supabase
+      .from("appointments")
+      .select(selectClause, { count: "exact" })
+      .eq("salon_id", args.salonId)
+      .in("status", ["pending", "confirmed"])
+      .lt("ends_at", nowIso)
+      .order("ends_at", { ascending: true })
+      .limit(limit);
+
+    if (args.professionalId) {
+      query = query.eq("staff_member_id", args.professionalId);
+    }
+
+    return query;
+  };
+
+  let staleAppointmentsResult = await buildStaleQuery(
+    "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, payment_preference, service_price_snapshot, completed_at, cancelled_at, cancellation_reason, booking_policy_snapshot, customer_confirmation_requested_at, customer_presence_confirmed_at, deposit_amount, deposit_customer_reported_paid_at, deposit_customer_reported_paid_via, deposit_customer_reported_reference, deposit_paid_at, deposit_status, protection_confirmation_required, customers(id, name, phone, email, profile_image_path), services(id, name, price, duration), staff_members(id, name, image_path)",
+  );
+
+  if (hasMissingImageColumnError(staleAppointmentsResult.error)) {
+    staleAppointmentsResult = await buildStaleQuery(
+      "id, customer_id, service_id, staff_member_id, date, ends_at, status, notes, payment_preference, service_price_snapshot, completed_at, cancelled_at, cancellation_reason, booking_policy_snapshot, customer_confirmation_requested_at, customer_presence_confirmed_at, deposit_amount, deposit_customer_reported_paid_at, deposit_customer_reported_paid_via, deposit_customer_reported_reference, deposit_paid_at, deposit_status, protection_confirmation_required, customers(id, name, phone, email), services(id, name, price, duration), staff_members(id, name)",
+    );
+  }
+
+  const items = await hydrateManagementAppointments({
+    appointments: (staleAppointmentsResult.data ?? []) as AppointmentRow[],
+    salonId: args.salonId,
+    supabase,
+    resolveCustomerProfileImageUrl,
+  });
+
+  return {
+    items,
+    total: staleAppointmentsResult.count ?? items.length,
+  };
+}
+
 export async function loadManagementClients(
   salonId: string,
   search = "",
 ): Promise<ManagementClientItem[]> {
   const supabase = createClient() as any;
+  const resolveCustomerProfileImageUrl = createCustomerProfileImageUrlResolver(
+    supabase,
+  );
   let query = supabase
     .from("customers")
     .select(
-      "id, name, phone, whatsapp_phone, email, birth_date, notes, created_at, updated_at",
+      "id, name, phone, email, birth_date, notes, profile_image_path, created_at, updated_at",
     )
     .eq("salon_id", salonId)
     .order("name", { ascending: true });
@@ -854,12 +1688,44 @@ export async function loadManagementClients(
   if (search.trim()) {
     const normalized = search.trim();
     query = query.or(
-      `name.ilike.%${normalized}%,phone.ilike.%${normalized}%,whatsapp_phone.ilike.%${normalized}%,email.ilike.%${normalized}%`,
+      `name.ilike.%${normalized}%,phone.ilike.%${normalized}%,email.ilike.%${normalized}%`,
     );
   }
 
-  const clientsResult = await query;
+  let clientsResult = await query;
+  if (
+    clientsResult.error?.code === "42703" &&
+    clientsResult.error.message?.toLowerCase().includes("profile_image_path")
+  ) {
+    let legacyQuery = supabase
+      .from("customers")
+      .select(
+        "id, name, phone, email, birth_date, notes, created_at, updated_at",
+      )
+      .eq("salon_id", salonId)
+      .order("name", { ascending: true });
+
+    if (search.trim()) {
+      const normalized = search.trim();
+      legacyQuery = legacyQuery.or(
+        `name.ilike.%${normalized}%,phone.ilike.%${normalized}%,email.ilike.%${normalized}%`,
+      );
+    }
+
+    clientsResult = await legacyQuery;
+  }
   const clients = (clientsResult.data ?? []) as ClientRow[];
+  const profileImageUrls = await Promise.all(
+    clients.map(async (client) => {
+      const imagePath = client.profile_image_path?.trim();
+      if (!imagePath) {
+        return [client.id, null] as const;
+      }
+
+      return [client.id, await resolveCustomerProfileImageUrl(imagePath)] as const;
+    }),
+  );
+  const profileImageMap = new Map<string, string | null>(profileImageUrls);
   const clientIds = clients.map((client) => client.id);
 
   const appointmentsResult = clientIds.length
@@ -927,6 +1793,7 @@ export async function loadManagementClients(
 
     return {
       ...client,
+      profileImageUrl: profileImageMap.get(client.id) ?? null,
       upcomingCount: summary?.upcomingCount ?? 0,
       completedCount: summary?.completedCount ?? 0,
       lastVisitAt: summary?.lastVisitAt ?? null,
@@ -935,78 +1802,245 @@ export async function loadManagementClients(
   });
 }
 
-export async function loadManagementProfessionals(
-  salonId: string,
-): Promise<ManagementProfessionalItem[]> {
+export async function loadManagementProfessionals(args: {
+  salonId: string;
+  timeZone: string;
+}): Promise<ManagementProfessionalItem[]> {
   const supabase = createClient() as any;
-  const [professionalsResult, appointmentsResult] = await Promise.all([
-    supabase
+  const currentMonthKey = getLocalDateKey(new Date(), args.timeZone).slice(
+    0,
+    7,
+  );
+  const currentMonthRange = getUtcRangeForLocalMonth(
+    currentMonthKey,
+    args.timeZone,
+  );
+  let professionalsResult = await supabase
+    .from("staff_members")
+    .select(
+      "id, name, role, phone, image_path, is_active, commission_rate_percent, commission_flat_fee, created_at, updated_at",
+    )
+    .eq("salon_id", args.salonId)
+    .order("is_active", { ascending: false })
+    .order("name", { ascending: true });
+
+  if (
+    professionalsResult.error?.code === "42703" &&
+    professionalsResult.error.message?.toLowerCase().includes("image_path")
+  ) {
+    professionalsResult = await supabase
       .from("staff_members")
       .select(
-        "id, name, role, phone, is_active, commission_rate_percent, created_at, updated_at",
+        "id, name, role, phone, is_active, commission_rate_percent, commission_flat_fee, created_at, updated_at",
       )
-      .eq("salon_id", salonId)
+      .eq("salon_id", args.salonId)
       .order("is_active", { ascending: false })
-      .order("name", { ascending: true }),
-    supabase
-      .from("appointments")
-      .select("id, staff_member_id, date, status, services(price)")
-      .eq("salon_id", salonId)
-      .gte("date", dayAtIso(-45))
-      .order("date", { ascending: false })
-      .limit(300),
-  ]);
+      .order("name", { ascending: true });
+  }
 
   const professionals = (professionalsResult.data ?? []) as ProfessionalRow[];
+  const professionalIds = professionals.map((professional) => professional.id);
+  const assignmentsResult = professionalIds.length
+    ? await supabase
+        .from("staff_service_assignments")
+        .select("staff_member_id, service_id")
+        .in("staff_member_id", professionalIds)
+    : { data: [] as Array<{ service_id: string; staff_member_id: string }> };
+  if (professionalIds.length && assignmentsResult.error) {
+    throw new Error(
+      "Não foi possível carregar os serviços habilitados da equipe.",
+    );
+  }
+  const nowIso = new Date().toISOString();
+  const upcomingAppointments = professionalIds.length
+    ? await fetchAllManagementRows<
+        AppointmentRow & {
+          staff_member_id: string;
+        }
+      >({
+        failureMessage: "Não foi possível carregar a agenda futura da equipe.",
+        fetchPage: (from, to) =>
+          supabase
+            .from("appointments")
+            .select("staff_member_id, date, status")
+            .eq("salon_id", args.salonId)
+            .gte("date", nowIso)
+            .in("status", ["pending", "confirmed"])
+            .order("date", { ascending: false })
+            .range(from, to),
+      })
+    : [];
+  const monthlyCompletedAppointments = professionalIds.length
+    ? await fetchAllManagementRows<
+        AppointmentRow & {
+          staff_member_id: string;
+        }
+      >({
+        failureMessage:
+          "Não foi possível carregar a produção mensal da equipe.",
+        fetchPage: (from, to) =>
+          supabase
+            .from("appointments")
+            .select(
+              "staff_member_id, status, completed_at, service_price_snapshot, services(price)",
+            )
+            .eq("salon_id", args.salonId)
+            .eq("status", "completed")
+            .not("completed_at", "is", null)
+            .gte("completed_at", currentMonthRange.start.toISOString())
+            .lt("completed_at", currentMonthRange.end.toISOString())
+            .order("completed_at", { ascending: false })
+            .range(from, to),
+      })
+    : [];
+  let appointmentReviews: AppointmentReviewRow[] = [];
+
+  if (professionalIds.length) {
+    try {
+      appointmentReviews = (
+        await listResolvedAppointmentReviews({
+          salonId: args.salonId,
+          staffMemberIds: professionalIds,
+        })
+      ).map((review) => ({
+        appointment_id: review.appointmentId,
+        created_at: review.createdAt,
+        rating: review.rating,
+        staff_member_id: review.staffMemberId,
+      }));
+    } catch {
+      throw new Error(
+        "Nao foi possivel carregar as avaliacoes reais do app da equipe.",
+      );
+    }
+  }
+
+  if (false && professionalIds.length) {
+    const reviewsResult = await supabase
+      .from("appointment_reviews")
+      .select("appointment_id, created_at, rating, staff_member_id")
+      .eq("salon_id", args.salonId)
+      .in("staff_member_id", professionalIds)
+      .order("created_at", { ascending: false });
+
+    if (
+      reviewsResult.error &&
+      !isMissingManagementResourceError(
+        reviewsResult.error,
+        "appointment_reviews",
+      )
+    ) {
+      throw new Error(
+        "Não foi possível carregar as avaliações reais do app da equipe.",
+      );
+    }
+
+    appointmentReviews = (reviewsResult.data ?? []) as AppointmentReviewRow[];
+  }
+
   const grouped = new Map<
     string,
     {
       upcomingCount: number;
       completedCount: number;
       totalSold: number;
+      reviewCount: number;
+      reviewSum: number;
     }
   >();
-  const nowIso = new Date().toISOString();
+  const assignedServiceIdsByProfessional = new Map<string, string[]>();
 
-  for (const appointment of (appointmentsResult.data ?? []) as Array<
-    AppointmentRow & {
-      staff_member_id: string;
-    }
-  >) {
+  for (const assignment of (assignmentsResult.data ?? []) as Array<{
+    service_id: string;
+    staff_member_id: string;
+  }>) {
+    const current =
+      assignedServiceIdsByProfessional.get(assignment.staff_member_id) ?? [];
+    current.push(assignment.service_id);
+    assignedServiceIdsByProfessional.set(assignment.staff_member_id, current);
+  }
+
+  for (const appointment of upcomingAppointments) {
     const current = grouped.get(appointment.staff_member_id) ?? {
       upcomingCount: 0,
       completedCount: 0,
       totalSold: 0,
+      reviewCount: 0,
+      reviewSum: 0,
     };
 
     if (
-      (appointment.status === "pending" ||
-        appointment.status === "confirmed") &&
-      appointment.date >= nowIso
+      appointment.status === "pending" ||
+      appointment.status === "confirmed"
     ) {
       current.upcomingCount += 1;
-    }
-
-    if (appointment.status === "completed") {
-      const service = firstRelation(appointment.services);
-      current.completedCount += 1;
-      current.totalSold += toNumber(service?.price);
     }
 
     grouped.set(appointment.staff_member_id, current);
   }
 
+  for (const appointment of monthlyCompletedAppointments) {
+    const current = grouped.get(appointment.staff_member_id) ?? {
+      upcomingCount: 0,
+      completedCount: 0,
+      totalSold: 0,
+      reviewCount: 0,
+      reviewSum: 0,
+    };
+    const service = firstRelation(appointment.services);
+    const amount = resolveBookedAppointmentAmount({
+      servicePrice: service?.price,
+      servicePriceSnapshot: appointment.service_price_snapshot,
+    });
+
+    current.completedCount += 1;
+    current.totalSold += amount;
+    grouped.set(appointment.staff_member_id, current);
+  }
+
+  for (const review of appointmentReviews) {
+    const current = grouped.get(review.staff_member_id) ?? {
+      upcomingCount: 0,
+      completedCount: 0,
+      totalSold: 0,
+      reviewCount: 0,
+      reviewSum: 0,
+    };
+
+    current.reviewCount += 1;
+    current.reviewSum += toNumber(review.rating);
+    grouped.set(review.staff_member_id, current);
+  }
+
   return professionals.map((professional) => {
     const summary = grouped.get(professional.id);
     const commissionRate = toNumber(professional.commission_rate_percent);
+    const commissionFlatFee = toNumber(professional.commission_flat_fee);
     const totalSold = summary?.totalSold ?? 0;
+    const completedCount = summary?.completedCount ?? 0;
+    const reviewCount = summary?.reviewCount ?? 0;
+    const imageUrl = buildSalonAssetImageUrl({
+      height: 480,
+      path: professional.image_path,
+      quality: 100,
+      supabase,
+      width: 480,
+    });
 
     return {
       ...professional,
+      assignedServiceIds:
+        assignedServiceIdsByProfessional.get(professional.id) ?? [],
       upcomingCount: summary?.upcomingCount ?? 0,
-      completedCount: summary?.completedCount ?? 0,
+      completedCount,
       totalSold,
-      commissionProjected: totalSold * (commissionRate / 100),
+      commissionProjected:
+        totalSold * (commissionRate / 100) + completedCount * commissionFlatFee,
+      imageUrl,
+      reviewAverage: reviewCount
+        ? Number(((summary?.reviewSum ?? 0) / reviewCount).toFixed(1))
+        : null,
+      reviewCount,
     };
   });
 }
@@ -1167,30 +2201,121 @@ export async function loadManagementPayments(args: {
     };
   });
 
-  const paidAppointmentIds = new Set(items.map((item) => item.appointment_id));
-  const recentCompletedResult = await supabase
+  let recentCompletedResult = await supabase
     .from("appointments")
-    .select("id, date, customers(name), services(name)")
+    .select(
+      "id, date, completed_at, payment_preference, service_price_snapshot, customers(name), services(name, price), staff_members(name)",
+    )
     .eq("salon_id", args.salonId)
     .eq("status", "completed")
-    .gte("date", dayAtIso(-30))
-    .order("date", { ascending: false })
-    .limit(50);
+    .not("completed_at", "is", null)
+    .gte("completed_at", dayAtIso(-30))
+    .order("completed_at", { ascending: false })
+    .limit(80);
+  if (
+    isMissingManagementPaymentPreferenceColumnError(
+      recentCompletedResult.error,
+    )
+  ) {
+    recentCompletedResult = await supabase
+      .from("appointments")
+      .select(
+        "id, date, completed_at, service_price_snapshot, customers(name), services(name, price), staff_members(name)",
+      )
+      .eq("salon_id", args.salonId)
+      .eq("status", "completed")
+      .not("completed_at", "is", null)
+      .gte("completed_at", dayAtIso(-30))
+      .order("completed_at", { ascending: false })
+      .limit(80);
+  }
 
-  const unpaidAppointments = (
-    (recentCompletedResult.data ?? []) as Array<{
-      id: string;
-      date: string;
-      customers: RelationValue<{ name: string }>;
-      services: RelationValue<{ name: string }>;
-    }>
-  )
-    .filter((appointment) => !paidAppointmentIds.has(appointment.id))
-    .map((appointment) => ({
-      id: appointment.id,
-      label: `${firstRelation(appointment.customers)?.name ?? "Cliente"} • ${firstRelation(appointment.services)?.name ?? "Serviço"}`,
-      secondary: formatDateTimeLabel(appointment.date, args.timeZone),
-    }));
+  if (recentCompletedResult.error) {
+    throw recentCompletedResult.error;
+  }
+
+  const recentCompletedAppointments = (recentCompletedResult.data ?? []) as Array<{
+    completed_at?: string | null;
+    customers: RelationValue<{ name: string }>;
+    date: string;
+    id: string;
+    payment_preference?: AppointmentPaymentPreference | null;
+    service_price_snapshot?: number | string | null;
+    services: RelationValue<{ name: string; price?: number | string | null }>;
+    staff_members: RelationValue<{ name: string }>;
+  }>;
+  const recentCompletedIds = recentCompletedAppointments.map(
+    (appointment) => appointment.id,
+  );
+  const [
+    recentPaymentsResult,
+    recentPlanReservations,
+    ignoredPendingSettlementAppointmentIds,
+  ] = await Promise.all([
+    recentCompletedIds.length
+      ? supabase
+          .from("appointment_payments")
+          .select("appointment_id")
+          .in("appointment_id", recentCompletedIds)
+      : Promise.resolve({
+          data: [] as Array<{ appointment_id: string }>,
+          error: null,
+        }),
+    recentCompletedIds.length
+      ? listResolvedAppointmentPlanReservations({
+          appointmentIds: recentCompletedIds,
+          salonId: args.salonId,
+        })
+      : Promise.resolve([]),
+    listIgnoredPendingSettlementAppointmentIds({
+      appointmentIds: recentCompletedIds,
+      salonId: args.salonId,
+    }),
+  ]);
+  const paidAppointmentIds = new Set<string>(
+    ((recentPaymentsResult.data ?? []) as Array<{ appointment_id: string }>).map(
+      (item) => item.appointment_id,
+    ),
+  );
+  if (recentPaymentsResult.error) {
+    throw recentPaymentsResult.error;
+  }
+  const membershipAppointmentIds = new Set(
+    recentPlanReservations.map((reservation) => reservation.appointmentId),
+  );
+
+  const unpaidAppointments = recentCompletedAppointments
+    .filter(
+      (appointment) =>
+        !paidAppointmentIds.has(appointment.id) &&
+        !membershipAppointmentIds.has(appointment.id) &&
+        !ignoredPendingSettlementAppointmentIds.has(appointment.id),
+    )
+    .map((appointment) => {
+      const customerName =
+        firstRelation(appointment.customers)?.name ?? "Cliente";
+      const service = firstRelation(appointment.services);
+      const serviceName = service?.name ?? "Servico";
+      const professionalName =
+        firstRelation(appointment.staff_members)?.name ?? "Profissional";
+      const completedAt = appointment.completed_at ?? appointment.date;
+      const amount = resolveBookedAppointmentAmount({
+        servicePrice: service?.price ?? null,
+        servicePriceSnapshot: appointment.service_price_snapshot ?? null,
+      });
+
+      return {
+        amount,
+        completedAt,
+        customerName,
+        id: appointment.id,
+        label: `${customerName} - ${serviceName}`,
+        paymentPreference: appointment.payment_preference ?? null,
+        professionalName,
+        secondary: formatDateTimeLabel(completedAt, args.timeZone),
+        serviceName,
+      };
+    });
 
   const byMethod: Record<ManagementPaymentMethod, number> = {
     pix: 0,
@@ -1233,13 +2358,14 @@ export async function loadManagementCommissions(args: {
   let query = supabase
     .from("appointments")
     .select(
-      "id, staff_member_id, date, completed_at, services(price), staff_members(name, commission_rate_percent)",
+      "id, staff_member_id, date, completed_at, service_price_snapshot, services(price), staff_members(name, commission_rate_percent, commission_flat_fee)",
     )
     .eq("salon_id", args.salonId)
     .eq("status", "completed")
-    .gte("date", fromRange.start.toISOString())
-    .lt("date", toRange.end.toISOString())
-    .order("date", { ascending: false });
+    .not("completed_at", "is", null)
+    .gte("completed_at", fromRange.start.toISOString())
+    .lt("completed_at", toRange.end.toISOString())
+    .order("completed_at", { ascending: false });
 
   if (args.professionalId) {
     query = query.eq("staff_member_id", args.professionalId);
@@ -1262,6 +2388,14 @@ export async function loadManagementCommissions(args: {
       (professional as { commission_rate_percent?: number | string })
         .commission_rate_percent,
     );
+    const commissionFlatFee = toNumber(
+      (professional as { commission_flat_fee?: number | string })
+        .commission_flat_fee,
+    );
+    const amount = resolveBookedAppointmentAmount({
+      servicePrice: service?.price,
+      servicePriceSnapshot: appointment.service_price_snapshot,
+    });
     const current = grouped.get(appointment.staff_member_id) ?? {
       professionalId: appointment.staff_member_id,
       professionalName: professional.name,
@@ -1272,8 +2406,12 @@ export async function loadManagementCommissions(args: {
     };
 
     current.appointmentsCount += 1;
-    current.totalSold += toNumber(service?.price);
-    current.commissionAmount = current.totalSold * (commissionRate / 100);
+    current.totalSold += amount;
+    current.commissionAmount += calculateProjectedCommissionAmount({
+      amount,
+      commissionFlatFee,
+      commissionRatePercent: commissionRate,
+    });
 
     grouped.set(appointment.staff_member_id, current);
   }

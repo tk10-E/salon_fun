@@ -108,7 +108,41 @@ describe("auth helpers", () => {
     const { requireUser } = await import("@/lib/auth");
 
     await expect(requireUser()).rejects.toThrow(
-      "REDIRECT:/login?message=Sessao+expirada.+Entre+novamente+para+continuar.&tone=info",
+      "REDIRECT:/login?message=Sess%C3%A3o+expirada.+Entre+novamente+para+continuar.&tone=info",
     );
+  });
+
+  it("grants internal ai observability access only for explicit internal metadata", async () => {
+    const { hasInternalAiObservabilityAccess } = await import("@/lib/auth");
+
+    expect(
+      hasInternalAiObservabilityAccess({
+        app_metadata: {
+          permissions: ["ai_observability.read"],
+        },
+        email: "ops@salon.fun",
+        user_metadata: {},
+      } as never),
+    ).toBe(true);
+
+    expect(
+      hasInternalAiObservabilityAccess({
+        app_metadata: {
+          internal_role: "internal_admin",
+        },
+        email: "ops@salon.fun",
+        user_metadata: {},
+      } as never),
+    ).toBe(true);
+
+    expect(
+      hasInternalAiObservabilityAccess({
+        app_metadata: {},
+        email: "owner@salon.fun",
+        user_metadata: {
+          role: "admin",
+        },
+      } as never),
+    ).toBe(false);
   });
 });

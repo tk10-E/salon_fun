@@ -139,7 +139,7 @@ describe("staff actions", () => {
       }),
     );
     expect(location).toBe(
-      "/dashboard/team?message=Profissional+adicionado+com+sucesso.&tone=success",
+      "/dashboard/gestao/profissionais?message=Profissional+adicionado+com+sucesso.&tone=success",
     );
   });
 
@@ -211,9 +211,11 @@ describe("staff actions", () => {
         title: "Equipe atualizada no salão",
       }),
     );
-    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/team");
+    expect(revalidatePathMock).toHaveBeenCalledWith(
+      "/dashboard/gestao/profissionais",
+    );
     expect(location).toBe(
-      "/dashboard/team?message=Profissional+reativado+com+sucesso.&tone=success",
+      "/dashboard/gestao/profissionais?message=Profissional+reativado+com+sucesso.&tone=success",
     );
   });
 
@@ -284,7 +286,7 @@ describe("staff actions", () => {
 
     expect(upsertBusinessHours).not.toHaveBeenCalled();
     expect(location).toBe(
-      "/dashboard/team?message=A+abertura+do+profissional+em+segunda+precisa+seguir+o+intervalo+oficial+da+agenda+do+sal%C3%A3o.&tone=error",
+      "/dashboard/gestao/profissionais?message=A+abertura+do+profissional+em+segunda+precisa+seguir+o+intervalo+oficial+da+agenda+do+sal%C3%A3o.&tone=error",
     );
   });
 });

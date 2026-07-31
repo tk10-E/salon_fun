@@ -27,13 +27,15 @@ async function findExistingSubscription(args: {
   activated_at: string | null;
   status: BillingStatus;
   grace_ends_at: string | null;
+  provider_customer_id: string | null;
+  provider_subscription_id: string | null;
 } | null> {
   const admin = createAdminClient() as any;
 
   if (args.providerSubscriptionId) {
     const { data } = await admin
       .from("salon_subscriptions")
-      .select("salon_id, plan_id, activated_at, status, grace_ends_at")
+      .select("salon_id, plan_id, activated_at, status, grace_ends_at, provider_customer_id, provider_subscription_id")
       .eq("provider_subscription_id", args.providerSubscriptionId)
       .maybeSingle();
 
@@ -44,6 +46,8 @@ async function findExistingSubscription(args: {
         activated_at: string | null;
         status: BillingStatus;
         grace_ends_at: string | null;
+        provider_customer_id: string | null;
+        provider_subscription_id: string | null;
       };
     }
   }
@@ -51,7 +55,7 @@ async function findExistingSubscription(args: {
   if (args.providerCustomerId) {
     const { data } = await admin
       .from("salon_subscriptions")
-      .select("salon_id, plan_id, activated_at, status, grace_ends_at")
+      .select("salon_id, plan_id, activated_at, status, grace_ends_at, provider_customer_id, provider_subscription_id")
       .eq("provider_customer_id", args.providerCustomerId)
       .maybeSingle();
 
@@ -62,11 +66,44 @@ async function findExistingSubscription(args: {
         activated_at: string | null;
         status: BillingStatus;
         grace_ends_at: string | null;
+        provider_customer_id: string | null;
+        provider_subscription_id: string | null;
       };
     }
   }
 
   return null;
+}
+
+async function findSalonSubscription(salonId: string): Promise<{
+  salon_id: string;
+  plan_id: string;
+  activated_at: string | null;
+  status: BillingStatus;
+  grace_ends_at: string | null;
+  provider_customer_id: string | null;
+  provider_subscription_id: string | null;
+} | null> {
+  const admin = createAdminClient() as any;
+  const { data } = await admin
+    .from("salon_subscriptions")
+    .select("salon_id, plan_id, activated_at, status, grace_ends_at, provider_customer_id, provider_subscription_id")
+    .eq("salon_id", salonId)
+    .maybeSingle();
+
+  if (!data) {
+    return null;
+  }
+
+  return data as {
+    salon_id: string;
+    plan_id: string;
+    activated_at: string | null;
+    status: BillingStatus;
+    grace_ends_at: string | null;
+    provider_customer_id: string | null;
+    provider_subscription_id: string | null;
+  };
 }
 
 function resolveGraceEndsAt(args: {
@@ -100,6 +137,9 @@ export async function syncStripeSubscriptionRecord(
     typeof subscription.customer === "string"
       ? subscription.customer
       : subscription.customer?.id ?? context?.providerCustomerId ?? null;
+  if (!providerCustomerId) {
+    throw new Error(`A assinatura Stripe ${subscription.id} não trouxe customer válido.`);
+  }
   const firstItem = subscription.items.data[0];
   const priceId = firstItem?.price?.id ?? null;
   const resolvedPricePlan = priceId ? resolvePlanIdFromStripePriceId(priceId) : null;
@@ -115,6 +155,23 @@ export async function syncStripeSubscriptionRecord(
 
   if (!salonId) {
     throw new Error(`Não foi possível resolver o salão da assinatura Stripe ${subscription.id}.`);
+  }
+
+  if (existingSubscription && existingSubscription.salon_id !== salonId) {
+    throw new Error(
+      `A assinatura Stripe ${subscription.id} já está vinculada a outro salão.`,
+    );
+  }
+
+  const salonScopedSubscription = await findSalonSubscription(salonId);
+
+  if (
+    salonScopedSubscription?.provider_customer_id &&
+    salonScopedSubscription.provider_customer_id !== providerCustomerId
+  ) {
+    throw new Error(
+      `O salão ${salonId} já possui outro customer Stripe vinculado.`,
+    );
   }
 
   const planId =

@@ -24,6 +24,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Usamos o Face ID para desbloquear sua conta com a segurança do aparelho.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usamos sua biblioteca para você escolher a foto de perfil que vai aparecer no seu cadastro do salão.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

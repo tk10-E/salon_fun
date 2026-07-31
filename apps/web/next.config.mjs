@@ -6,6 +6,15 @@ const supabaseHostname = process.env.NEXT_PUBLIC_SUPABASE_URL
 const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        source: "/preview/dashboard",
+        destination: "/dashboard",
+        permanent: false,
+      },
+    ];
+  },
   images: supabaseHostname
     ? {
         dangerouslyAllowSVG: false,

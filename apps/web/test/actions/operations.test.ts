@@ -42,7 +42,6 @@ vi.mock("next/cache", () => ({
 
 import {
   registerInventoryMovementActionImpl,
-  runSalonAutoPilotActionImpl,
   saveInventoryProductActionImpl,
   saveStaffCommissionSettingsActionImpl,
   updateCustomerProductOrderStatusActionImpl,
@@ -65,37 +64,6 @@ describe("operations actions", () => {
       processed: 0,
       sent: 0,
     });
-  });
-
-  it("runs appointment, growth and haircut reminders in auto pilot", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: {}, error: null });
-
-    createClientMock.mockReturnValue({ rpc });
-
-    const location = await captureRedirect(
-      runSalonAutoPilotActionImpl(makeFormData({})),
-      redirectMock,
-    );
-
-    expect(rpc).toHaveBeenCalledWith(
-      "queue_due_appointment_customer_notifications",
-      expect.objectContaining({ run_at: expect.any(String) }),
-    );
-    expect(rpc).toHaveBeenCalledWith(
-      "queue_due_customer_growth_notifications",
-      expect.objectContaining({ run_at: expect.any(String) }),
-    );
-    expect(rpc).toHaveBeenCalledWith(
-      "queue_due_haircut_rebook_notifications",
-      expect.objectContaining({ run_at: expect.any(String) }),
-    );
-    expect(dispatchPendingWhatsAppNotificationsMock).toHaveBeenCalledWith({
-      limit: 25,
-      salonId: "salon-1",
-    });
-    expect(location).toBe(
-      "/dashboard/operations?message=Modo+automatico+rodou+agora+e+nao+encontrou+mensagens+vencidas+para+disparar.&tone=success",
-    );
   });
 
   it("updates automatic commission settings for a staff member", async () => {
@@ -210,7 +178,7 @@ describe("operations actions", () => {
       }),
     );
     expect(location).toBe(
-      "/dashboard/operations?message=Shampoo+reconstrutor+adicionado+ao+estoque.&tone=success",
+      "/dashboard/inventory?message=Shampoo+reconstrutor+adicionado+ao+estoque.&tone=success",
     );
   });
 
@@ -297,6 +265,74 @@ describe("operations actions", () => {
     );
   });
 
+  it("keeps the inventory section anchor when a product update returns to the catalog", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "product-1",
+        name: "Pomada modeladora",
+        brand: "Salon Fun",
+        image_paths: [],
+        is_active: true,
+      },
+    });
+    const update = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })),
+    }));
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "inventory_products") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle,
+                })),
+              })),
+            })),
+            update,
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return { insert: insertNotification };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(),
+        })),
+      },
+    });
+
+    const location = await captureRedirect(
+      saveInventoryProductActionImpl(
+        makeFormData({
+          productId: "product-1",
+          returnPath: "/dashboard/inventory?status=low#inventory-products",
+          name: "Pomada modeladora premium",
+          brand: "Salon Fun",
+          sku: "SAL-01",
+          unit: "un",
+          currentStock: "9",
+          minimumStock: "3",
+          retailPrice: "55.00",
+          isActive: "on",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/inventory?status=low&message=Pomada+modeladora+atualizado+com+sucesso.&tone=success#inventory-products",
+    );
+  });
+
   it("shows a friendly error when stock movement exceeds inventory", async () => {
     const maybeSingle = vi.fn().mockResolvedValue({
       data: { id: "product-1", name: "Shampoo reconstrutor" },
@@ -345,7 +381,53 @@ describe("operations actions", () => {
       staff_member_id_input: null,
     });
     expect(location).toBe(
-      "/dashboard/operations?message=O+estoque+de+Shampoo+reconstrutor+n%C3%A3o+cobre+essa+sa%C3%ADda.&tone=error",
+      "/dashboard/inventory?message=O+estoque+de+Shampoo+reconstrutor+n%C3%A3o+cobre+essa+sa%C3%ADda.&tone=error",
+    );
+  });
+
+  it("preserves movement filters when an inventory adjustment fails", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: "product-1", name: "Pomada modeladora" },
+      error: null,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: "insufficient_inventory_stock" },
+    });
+
+    createClientMock.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table !== "inventory_products") {
+          throw new Error(`Unexpected table ${table}`);
+        }
+
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle,
+              })),
+            })),
+          })),
+        };
+      }),
+      rpc,
+    });
+
+    const location = await captureRedirect(
+      registerInventoryMovementActionImpl(
+        makeFormData({
+          productId: "product-1",
+          movementType: "out",
+          quantity: "20",
+          returnPath: "/dashboard/inventory?status=low#inventory-movements",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/inventory?status=low&message=O+estoque+de+Pomada+modeladora+n%C3%A3o+cobre+essa+sa%C3%ADda.&tone=error#inventory-movements",
     );
   });
 
@@ -361,8 +443,45 @@ describe("operations actions", () => {
       ],
       error: null,
     });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "order-1",
+        customer_id: "customer-1",
+        order_number: 204,
+        total_items: 1,
+        cancellation_reason: null,
+        customer_product_order_items: [
+          { product_name_snapshot: "Pomada modeladora" },
+        ],
+      },
+      error: null,
+    });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
 
-    createClientMock.mockReturnValue({ rpc });
+    createClientMock.mockReturnValue({
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "customer_product_orders") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle,
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
 
     const location = await captureRedirect(
       updateCustomerProductOrderStatusActionImpl(
@@ -382,8 +501,234 @@ describe("operations actions", () => {
     expect(revalidatePathMock.mock.calls.map(([path]) => path)).toEqual(
       expect.arrayContaining(["/dashboard/operations", "/dashboard"]),
     );
+    expect(insertNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audience: "single_customer",
+        customer_id: "customer-1",
+        notification_type: "store_order_ready",
+        salon_id: "salon-1",
+      }),
+    );
     expect(location).toBe(
       "/dashboard/operations?message=Pedido+%23204+marcado+como+pronto.&tone=success",
     );
   });
+
+  it("preserves the operations queue filter and section when store order status changes", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          order_id: "order-7",
+          order_number: 707,
+          status: "confirmed",
+          updated_at: "2026-04-04T12:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "order-7",
+        customer_id: "customer-7",
+        order_number: 707,
+        total_items: 1,
+        cancellation_reason: null,
+        customer_product_order_items: [
+          { product_name_snapshot: "Kit tratamento" },
+        ],
+      },
+      error: null,
+    });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "customer_product_orders") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle,
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateCustomerProductOrderStatusActionImpl(
+        makeFormData({
+          orderId: "order-7",
+          status: "confirmed",
+          returnPath: "/dashboard/operations?orderState=pending#store-orders",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/operations?orderState=pending&message=Pedido+%23707+confirmado+com+sucesso.&tone=success#store-orders",
+    );
+  });
+
+  it("preserves the inventory orders section when updating a store order from the loja screen", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          order_id: "order-9",
+          order_number: 901,
+          status: "ready",
+          updated_at: "2026-04-04T12:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "order-9",
+        customer_id: "customer-9",
+        order_number: 901,
+        total_items: 1,
+        cancellation_reason: null,
+        customer_product_order_items: [
+          { product_name_snapshot: "Condicionador hidratante" },
+        ],
+      },
+      error: null,
+    });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "customer_product_orders") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle,
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateCustomerProductOrderStatusActionImpl(
+        makeFormData({
+          orderId: "order-9",
+          status: "ready",
+          returnPath: "/dashboard/inventory#inventory-orders",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(location).toBe(
+      "/dashboard/inventory?message=Pedido+%23901+marcado+como+pronto.&tone=success#inventory-orders",
+    );
+  });
+
+  it("confirms a store order from the dashboard home without requiring a cancellation reason", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          order_id: "order-2",
+          order_number: 305,
+          status: "confirmed",
+          updated_at: "2026-04-04T12:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "order-2",
+        customer_id: "customer-2",
+        order_number: 305,
+        total_items: 2,
+        cancellation_reason: null,
+        customer_product_order_items: [
+          { product_name_snapshot: "Shampoo reconstrutor" },
+        ],
+      },
+      error: null,
+    });
+    const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+    createClientMock.mockReturnValue({
+      rpc,
+      from: vi.fn((table: string) => {
+        if (table === "customer_product_orders") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle,
+                })),
+              })),
+            })),
+          };
+        }
+
+        if (table === "salon_customer_notifications") {
+          return {
+            insert: insertNotification,
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    });
+
+    const location = await captureRedirect(
+      updateCustomerProductOrderStatusActionImpl(
+        makeFormData({
+          orderId: "order-2",
+          status: "confirmed",
+          returnPath: "/dashboard",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(rpc).toHaveBeenCalledWith("update_customer_product_order_status", {
+      order_id_input: "order-2",
+      status_input: "confirmed",
+      cancellation_reason_input: null,
+    });
+    expect(insertNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audience: "single_customer",
+        customer_id: "customer-2",
+        notification_type: "store_order_confirmed",
+        salon_id: "salon-1",
+      }),
+    );
+    expect(location).toBe(
+      "/dashboard?message=Pedido+%23305+confirmado+com+sucesso.&tone=success",
+    );
+  });
+
 });

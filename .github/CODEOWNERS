@@ -1,0 +1,33 @@
+# Owner confirmado no repositorio.
+# Quando houver mais revisores reais, acrescente os handles em cada regra.
+* @tk10-E
+
+# Produto web (Next.js)
+/apps/web/ @tk10-E
+
+# App cliente mobile (Flutter)
+/apps/mobile/ @tk10-E
+
+# Backend, banco e automacoes
+/supabase/ @tk10-E
+/scripts/ @tk10-E
+
+# Documentacao, release e operacao
+/docs/ @tk10-E
+/releases/ @tk10-E
+/README.md @tk10-E
+/CHANGELOG.md @tk10-E
+/CHECKUP_OPERACIONAL.md @tk10-E
+/GUIA_DEPLOY_MIGRATIONS.md @tk10-E
+/PACOTE_RELEASE_0037_0040.md @tk10-E
+
+# Governanca, CI e configuracao de entrega
+/.github/ @tk10-E
+/.vercel/ @tk10-E
+/.vscode/ @tk10-E
+/vercel.json @tk10-E
+/.vercelignore @tk10-E
+
+# Exemplo futuro:
+# /apps/web/ @tk10-E @handle-web
+# /apps/mobile/ @tk10-E @handle-mobile

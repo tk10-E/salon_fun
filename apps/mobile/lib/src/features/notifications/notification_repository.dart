@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/network/network_guard.dart';
 import 'notification_models.dart';
 import 'notification_navigation.dart';
 
@@ -18,15 +19,17 @@ class NotificationRepository {
       return const [];
     }
 
-    final rows = await safeClient
-        .from('salon_customer_notifications')
-        .select(
-          'id, salon_id, customer_id, audience, notification_type, title, body, payload, created_at',
-        )
-        .eq('salon_id', salonId)
-        .or('audience.eq.salon_customers,customer_id.eq.$customerId')
-        .order('created_at', ascending: false)
-        .limit(limit);
+    final rows = await runGuardedRead<dynamic>(
+      () => safeClient
+          .from('salon_customer_notifications')
+          .select(
+            'id, salon_id, customer_id, audience, notification_type, title, body, payload, created_at',
+          )
+          .eq('salon_id', salonId)
+          .or('audience.eq.salon_customers,customer_id.eq.$customerId')
+          .order('created_at', ascending: false)
+          .limit(limit),
+    );
 
     final rawNotifications = (rows as List<dynamic>)
         .map((entry) => Map<String, dynamic>.from(entry as Map))
@@ -41,12 +44,14 @@ class NotificationRepository {
         .where((id) => id.isNotEmpty)
         .toList();
 
-    final receipts = await safeClient
-        .from('customer_notification_receipts')
-        .select('source_id, read_at, archived_at')
-        .eq('customer_id', customerId)
-        .eq('source_type', 'salon_notification')
-        .inFilter('source_id', ids);
+    final receipts = await runGuardedRead<dynamic>(
+      () => safeClient
+          .from('customer_notification_receipts')
+          .select('source_id, read_at, archived_at')
+          .eq('customer_id', customerId)
+          .eq('source_type', 'salon_notification')
+          .inFilter('source_id', ids),
+    );
 
     final receiptById = <String, Map<String, dynamic>>{
       for (final entry in (receipts as List<dynamic>))
@@ -100,12 +105,14 @@ class NotificationRepository {
       return;
     }
 
-    await safeClient.rpc(
-      'mark_customer_notifications_read',
-      params: <String, dynamic>{
-        'salon_notification_ids': notificationIds,
-        'vacancy_alert_ids': const <String>[],
-      },
+    await runGuardedWrite<void>(
+      () => safeClient.rpc(
+        'mark_customer_notifications_read',
+        params: <String, dynamic>{
+          'salon_notification_ids': notificationIds,
+          'vacancy_alert_ids': const <String>[],
+        },
+      ),
     );
   }
 }

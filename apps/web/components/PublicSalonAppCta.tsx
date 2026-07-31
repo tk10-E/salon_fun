@@ -102,17 +102,17 @@ export function PublicSalonAppCta({
           onClick={handleCopyCode}
           className="public-salon-button public-salon-button--secondary"
         >
-          {copyState === "copied" ? "Codigo copiado" : "Copiar codigo"}
+          {copyState === "copied" ? "Código copiado" : "Copiar código"}
         </button>
       </div>
 
       <div className="public-salon-app-cta__feedback" aria-live="polite">
         {copyState === "error" ? (
-          <p>Copie manualmente o codigo {joinCode} se o navegador bloquear essa acao.</p>
+          <p>Copie manualmente o código {joinCode} se o navegador bloquear essa ação.</p>
         ) : null}
         {fallbackVisible ? (
           <p>
-            Se o app nao abrir agora, instale a versao oficial e use o codigo {joinCode}.
+            Se o app não abrir agora, instale a versão oficial e use o código {joinCode}.
           </p>
         ) : null}
       </div>

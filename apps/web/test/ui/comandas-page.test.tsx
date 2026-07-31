@@ -221,10 +221,10 @@ describe("comandas page", () => {
 
   it("renders a more operational comanda workspace without changing core actions", async () => {
     const ui = await ComandasPage({
-      searchParams: {
+      searchParams: Promise.resolve({
         message: "Comanda atualizada.",
         tone: "success",
-      },
+      }),
     });
 
     render(ui);
@@ -250,7 +250,7 @@ describe("comandas page", () => {
     expect(screen.getAllByText(/R\$\s?120,00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/R\$\s?210,00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Prontas para fechar").length).toBeGreaterThan(0);
-    expect(screen.getByText("Liquidacao da conta")).toBeInTheDocument();
+    expect(screen.getByText("Liquidação da conta")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fechar comanda" })).toBeInTheDocument();
   });
 });

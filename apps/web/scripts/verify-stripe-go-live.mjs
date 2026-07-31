@@ -94,11 +94,6 @@ async function main() {
   const expectedPortalReturnUrl = appOrigin ? `${appOrigin}/dashboard/billing` : null;
   const priceEnvNames = [
     "STRIPE_PRICE_STARTER_MONTHLY",
-    "STRIPE_PRICE_STARTER_YEARLY",
-    "STRIPE_PRICE_GROWTH_MONTHLY",
-    "STRIPE_PRICE_GROWTH_YEARLY",
-    "STRIPE_PRICE_PREMIUM_MONTHLY",
-    "STRIPE_PRICE_PREMIUM_YEARLY",
   ];
 
   const missing = [];
@@ -125,7 +120,7 @@ async function main() {
   console.log(`- APP_URL: ${appOrigin ?? "invalido ou ausente"}`);
   console.log(`- Secret mode: ${inferSecretMode(secretKey)}`);
   console.log(`- Webhook secret: ${boolLabel(Boolean(env.STRIPE_WEBHOOK_SECRET?.trim()))}`);
-  console.log(`- Price IDs: ${priceEnvNames.every((name) => Boolean(env[name]?.trim())) ? "ok" : "faltando"}`);
+  console.log(`- Preço ativo: ${priceEnvNames.every((name) => Boolean(env[name]?.trim())) ? "ok" : "faltando"}`);
 
   if (missing.length > 0) {
     console.log(`- Missing envs: ${missing.join(", ")}`);

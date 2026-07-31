@@ -1,4 +1,5 @@
 import { FlashMessage } from "@/components/FlashMessage";
+import { measureServerRender } from "@/lib/serverPerformance";
 
 import { loadLoyaltyPageData } from "../_lib";
 import { LoyaltyPageContent } from "../_loyalty-components";
@@ -11,15 +12,19 @@ type LoyaltyPageProps = {
 };
 
 export default async function LoyaltyPage({ searchParams: searchParamsPromise }: LoyaltyPageProps) {
-  const searchParams = await searchParamsPromise;
-  const data = await loadLoyaltyPageData();
+  return measureServerRender("dashboard.benefits.loyalty", async () => {
+    const [searchParams, data] = await Promise.all([
+      searchParamsPromise,
+      loadLoyaltyPageData(),
+    ]);
 
-  return (
-    <div className="page-grid marketing-simple">
-      {searchParams?.message ? (
-        <FlashMessage message={searchParams.message} tone={searchParams.tone} />
-      ) : null}
-      <LoyaltyPageContent data={data} />
-    </div>
-  );
+    return (
+      <div className="page-grid marketing-simple">
+        {searchParams?.message ? (
+          <FlashMessage message={searchParams.message} tone={searchParams.tone} />
+        ) : null}
+        <LoyaltyPageContent data={data} />
+      </div>
+    );
+  });
 }

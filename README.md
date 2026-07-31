@@ -15,12 +15,13 @@ O MVP funcional do painel está em [`/dashboard/gestao`](/mnt/c/Users/tsilv/Down
 
 ## Stack
 
-- Frontend: Next.js 14 + React + TypeScript
+- Frontend: Next.js 15 + React + TypeScript
 - Backend do painel: Server Components + Server Actions
 - Banco: PostgreSQL via Supabase
 - ORM de referência: Prisma 7
 - Validação: Zod
 - Auth do painel: Firebase Web + bridge para sessão Supabase
+- Login social complementar: Supabase OAuth para Facebook
 - Deploy sugerido: Vercel para `apps/web` + Supabase para banco/auth/storage
 
 ## Arquitetura
@@ -115,7 +116,20 @@ supabase db push
 
 3. Configure o provider de e-mail no Supabase.
 4. Configure o Firebase Web usado pelo login do painel.
-5. Faça o deploy da Edge Function de bridge se for usar o fluxo completo de autenticação do painel:
+5. Se quiser login com Facebook no painel, habilite o provider no Supabase e use a mesma Meta app do projeto:
+
+```bash
+cd apps/web
+npm run verify:auth-facebook
+```
+
+O script imprime:
+
+- a callback do Supabase que precisa ser cadastrada no Facebook Login
+- a callback pública do painel em `/auth/callback`
+- se o projeto já tem `META_APP_ID` e `META_APP_SECRET`
+
+6. Faça o deploy da Edge Function de bridge se for usar o fluxo completo de autenticação do painel:
 
 ```bash
 supabase functions deploy firebase-auth-bridge --no-verify-jwt
@@ -136,6 +150,8 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+META_APP_ID=...
+META_APP_SECRET=...
 DATABASE_URL=...
 DIRECT_URL=...
 ```
@@ -215,8 +231,20 @@ Actions principais:
 cd apps/web
 npm run dev
 npm run build
+npm run lint
+npm test
+npm run verify:auth-facebook
 npm run prisma:generate
 npm run prisma:seed
+```
+
+Para o app mobile:
+
+```bash
+cd apps/mobile
+flutter pub get
+flutter analyze
+flutter test
 ```
 
 ## Deploy

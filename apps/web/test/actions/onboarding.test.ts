@@ -73,6 +73,39 @@ describe("onboarding actions", () => {
     );
   });
 
+  it("preserves the selected billing interval when onboarding comes from the public activation flow", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null });
+    const match = vi.fn(() => ({ maybeSingle }));
+    const select = vi.fn(() => ({ match }));
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const supabase = {
+      from: vi.fn(() => ({
+        select,
+        insert,
+      })),
+    };
+
+    requireUserMock.mockResolvedValue({
+      supabase,
+      user: { id: "owner-1" },
+    });
+
+    const location = await captureRedirect(
+      createSalonActionImpl(
+        makeFormData({
+          name: "Studio Centro",
+          returnPath: "/planos?interval=yearly",
+        }),
+      ),
+      redirectMock,
+    );
+
+    expect(revalidatePathMock).toHaveBeenCalledWith("/planos?interval=yearly");
+    expect(location).toBe(
+      "/planos?interval=yearly&message=Sal%C3%A3o+criado+com+sucesso.+Agora+escolha+o+plano+para+liberar+o+painel.&tone=success",
+    );
+  });
+
   it("sends existing owners straight to the dashboard", async () => {
     const maybeSingle = vi.fn().mockResolvedValue({ data: { id: "salon-1" } });
     const match = vi.fn(() => ({ maybeSingle }));

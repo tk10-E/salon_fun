@@ -62,6 +62,8 @@ vi.mock("@/lib/billing", () => ({
     return billingRuntimeMock.disabled;
   },
   PUBLIC_BILLING_PATH: "/planos",
+  SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE: 1068,
+  SINGLE_BILLING_PLAN_YEARLY_SAVINGS: 178,
   formatBillingPrice: (price: number) =>
     new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -92,57 +94,37 @@ describe("billing page", () => {
     });
   });
 
-  it("renders the billing workspace without redirecting to salon memberships", async () => {
+  it("shows the dashboard as subscription management when the system is already signed", async () => {
     requireOwnerSalonMock.mockResolvedValue({
       salon: { id: "salon-1", name: "Studio Barber" },
     });
     getSalonBillingWorkspaceSnapshotMock.mockResolvedValue({
       currentPlan: {
-        id: "growth",
-        displayName: "Growth",
+        id: "starter",
+        displayName: "Plano único",
+        trialDays: 14,
       },
       plans: [
         {
           id: "starter",
-          displayName: "Starter",
-          description: "Base",
-          monthlyPrice: 79,
-          yearlyPrice: 790,
+          displayName: "Plano único",
+          description: "Todos os recursos liberados por um valor mensal.",
+          monthlyPrice: 89,
+          yearlyPrice: 890,
           currencyCode: "BRL",
           trialDays: 14,
-          maxStaffMembers: 3,
-          maxServices: 25,
-          maxMonthlyNotifications: 1500,
-          includesGrowthAutomation: false,
-          includesFeedVideo: false,
-          includesCustomBranding: true,
-          includesPrioritySupport: false,
-          isDefault: true,
-          isPublic: true,
-          sortOrder: 10,
-          highlight: "Entrada rápida com trial automático",
-          tagline: "Operação base e app do cliente no ar",
-        },
-        {
-          id: "growth",
-          displayName: "Growth",
-          description: "Scale",
-          monthlyPrice: 149,
-          yearlyPrice: 1490,
-          currencyCode: "BRL",
-          trialDays: 7,
-          maxStaffMembers: 8,
-          maxServices: 80,
-          maxMonthlyNotifications: 10000,
+          maxStaffMembers: null,
+          maxServices: null,
+          maxMonthlyNotifications: null,
           includesGrowthAutomation: true,
           includesFeedVideo: true,
           includesCustomBranding: true,
-          includesPrioritySupport: false,
-          isDefault: false,
+          includesPrioritySupport: true,
+          isDefault: true,
           isPublic: true,
-          sortOrder: 20,
-          highlight: "Vídeo no feed e automação inteligente",
-          tagline: "Mais equipe, mais campanhas, mais retenção",
+          sortOrder: 10,
+          highlight: "Mensal por R$ 89 ou anual por R$ 890",
+          tagline: "Uma assinatura mensal libera agenda, clientes, equipe, caixa e app",
         },
       ],
       subscription: {
@@ -153,7 +135,7 @@ describe("billing page", () => {
         activatedAt: "2026-04-10T12:00:00.000Z",
       },
       statusLabel: "Em trial",
-      statusDetail: "Trial do plano Growth ativo.",
+      statusDetail: "Trial do plano Plano único ativo.",
       nextBillingDateLabel: "17 de abril de 2026",
       isLocked: false,
     });
@@ -177,21 +159,18 @@ describe("billing page", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Growth para Studio Barber",
+        name: "Sistema assinado e em operação.",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Cobrança do painel por estabelecimento"),
+      screen.getByText(/As clientes não compram nada aqui/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("Cobrança em preparação")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Ver planos do salão" }),
-    ).toHaveAttribute("href", "/dashboard/subscriptions");
+      screen.getByRole("heading", { name: "Plano único" }),
+    ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("button", { name: "Assinar mensal" }),
-    ).toSatisfy((buttons: HTMLButtonElement[]) =>
-      buttons.every((button) => button.disabled),
-    );
+      screen.queryByRole("button", { name: /Começar com 14 dias grátis/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("preserves flash params while rendering the billing workspace", async () => {
@@ -201,7 +180,8 @@ describe("billing page", () => {
     getSalonBillingWorkspaceSnapshotMock.mockResolvedValue({
       currentPlan: {
         id: "starter",
-        displayName: "Starter",
+        displayName: "Plano único",
+        trialDays: 0,
       },
       plans: [],
       subscription: {
@@ -212,7 +192,7 @@ describe("billing page", () => {
         activatedAt: "2026-04-10T12:00:00.000Z",
       },
       statusLabel: "Ativa",
-      statusDetail: "Plano Starter ativo.",
+      statusDetail: "Plano Plano único ativo.",
       nextBillingDateLabel: "17 de abril de 2026",
       isLocked: false,
     });
@@ -242,9 +222,7 @@ describe("billing page", () => {
     );
 
     expect(screen.getByText("Billing revisado.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Cobrança ainda em preparação"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sistema assinado e em operação.")).toBeInTheDocument();
   });
 
   it("uses the portal as the only management path for linked Stripe subscriptions", async () => {
@@ -254,30 +232,31 @@ describe("billing page", () => {
     });
     getSalonBillingWorkspaceSnapshotMock.mockResolvedValue({
       currentPlan: {
-        id: "growth",
-        displayName: "Growth",
+        id: "starter",
+        displayName: "Plano único",
+        trialDays: 0,
       },
       plans: [
         {
-          id: "growth",
-          displayName: "Growth",
-          description: "Scale",
-          monthlyPrice: 149,
-          yearlyPrice: 1490,
+          id: "starter",
+          displayName: "Plano único",
+          description: "Todos os recursos liberados por um valor mensal.",
+          monthlyPrice: 89,
+          yearlyPrice: 890,
           currencyCode: "BRL",
           trialDays: 0,
-          maxStaffMembers: 8,
-          maxServices: 80,
-          maxMonthlyNotifications: 10000,
+          maxStaffMembers: null,
+          maxServices: null,
+          maxMonthlyNotifications: null,
           includesGrowthAutomation: true,
           includesFeedVideo: true,
           includesCustomBranding: true,
-          includesPrioritySupport: false,
-          isDefault: false,
+          includesPrioritySupport: true,
+          isDefault: true,
           isPublic: true,
-          sortOrder: 20,
-          highlight: "Vídeo no feed e automação inteligente",
-          tagline: "Mais equipe, mais campanhas, mais retenção",
+          sortOrder: 10,
+          highlight: "Mensal por R$ 89 ou anual por R$ 890",
+          tagline: "Uma assinatura mensal libera agenda, clientes, equipe, caixa e app",
         },
       ],
       subscription: {
@@ -289,7 +268,7 @@ describe("billing page", () => {
         activatedAt: "2026-04-10T12:00:00.000Z",
       },
       statusLabel: "Ativa",
-      statusDetail: "Plano Growth ativo.",
+      statusDetail: "Plano Plano único ativo.",
       nextBillingDateLabel: "10 de maio de 2026",
       isLocked: false,
     });
@@ -315,10 +294,12 @@ describe("billing page", () => {
       screen.getByRole("button", { name: "Gerenciar assinatura" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Assinar mensal" }),
+      screen.queryByRole("button", { name: /Ativar anual por R\$\s?890/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/trocas de plano, cartão e regularização seguem pela gestão da assinatura/i),
+      screen.getByText(
+        /Toda troca posterior de cartão, renovação ou regularização segue pela área da assinatura/i,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -329,29 +310,30 @@ describe("billing page", () => {
     getSalonBillingWorkspaceSnapshotMock.mockResolvedValue({
       currentPlan: {
         id: "starter",
-        displayName: "Starter",
+        displayName: "Plano único",
+        trialDays: 0,
       },
       plans: [
         {
           id: "starter",
-          displayName: "Starter",
-          description: "Base",
-          monthlyPrice: 79,
-          yearlyPrice: 790,
+          displayName: "Plano único",
+          description: "Todos os recursos liberados por um valor mensal.",
+          monthlyPrice: 89,
+          yearlyPrice: 890,
           currencyCode: "BRL",
           trialDays: 0,
-          maxStaffMembers: 3,
-          maxServices: 25,
-          maxMonthlyNotifications: 1500,
-          includesGrowthAutomation: false,
-          includesFeedVideo: false,
+          maxStaffMembers: null,
+          maxServices: null,
+          maxMonthlyNotifications: null,
+          includesGrowthAutomation: true,
+          includesFeedVideo: true,
           includesCustomBranding: true,
-          includesPrioritySupport: false,
+          includesPrioritySupport: true,
           isDefault: true,
           isPublic: true,
           sortOrder: 10,
           highlight: "Liberação do painel logo após o pagamento",
-          tagline: "Base operacional para entrar no ar com segurança",
+          tagline: "Uma assinatura mensal libera agenda, clientes, equipe, caixa e app",
         },
       ],
       subscription: {
@@ -362,7 +344,7 @@ describe("billing page", () => {
         activatedAt: null,
       },
       statusLabel: "Aguardando assinatura",
-      statusDetail: "Conta criada. Escolha um plano e conclua o pagamento para liberar o painel Starter.",
+      statusDetail: "Conta criada. Conclua a assinatura mensal de R$ 89 para liberar o painel completo.",
       nextBillingDateLabel: null,
       isLocked: true,
     });

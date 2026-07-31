@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
 import { getSalonBillingEntitlements } from "@/lib/billing";
+import { MANAGEMENT_ROUTES } from "@/lib/management-navigation";
 import {
   MEDIA_UPLOAD_PRESETS,
   formatPresetMegabytes,
@@ -17,11 +18,12 @@ import {
   buildRedirectNotice,
   buildServiceCatalogNotification,
   queueCustomerNotification,
+  rethrowIfRedirectError,
 } from "./shared";
 
-const SERVICES_PATH = "/dashboard/services";
+const SERVICES_PATH = MANAGEMENT_ROUTES.services;
 const DASHBOARD_PATH = "/dashboard";
-const TEAM_PATH = "/dashboard/team";
+const TEAM_PATH = MANAGEMENT_ROUTES.professionals;
 const FEED_PATH = "/dashboard/feed";
 const SERVICE_IMAGE_PRESET = MEDIA_UPLOAD_PRESETS.service;
 
@@ -120,7 +122,7 @@ export async function createServiceActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SERVICES_PATH,
-          `A foto do servico deve ter no maximo ${formatPresetMegabytes(
+          `A foto do serviço deve ter no máximo ${formatPresetMegabytes(
             SERVICE_IMAGE_PRESET.maxInputBytes,
           )} MB.`,
           "error",
@@ -136,7 +138,7 @@ export async function createServiceActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SERVICES_PATH,
-          "Nao foi possivel processar a foto do servico.",
+          "Não foi possível processar a foto do serviço.",
           "error",
         ),
       );
@@ -166,7 +168,8 @@ export async function createServiceActionImpl(formData: FormData) {
       categoryName: category,
       supabase,
     });
-  } catch {
+  } catch (error) {
+    rethrowIfRedirectError(error);
     if (imagePath) {
       await supabase.storage.from("salon-assets").remove([imagePath]).catch(() => undefined);
     }
@@ -269,7 +272,7 @@ export async function updateServiceCatalogActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SERVICES_PATH,
-          `A foto do servico deve ter no maximo ${formatPresetMegabytes(
+          `A foto do serviço deve ter no máximo ${formatPresetMegabytes(
             SERVICE_IMAGE_PRESET.maxInputBytes,
           )} MB.`,
           "error",
@@ -285,7 +288,7 @@ export async function updateServiceCatalogActionImpl(formData: FormData) {
       redirect(
         buildRedirectNotice(
           SERVICES_PATH,
-          "Nao foi possivel processar a foto do servico.",
+          "Não foi possível processar a foto do serviço.",
           "error",
         ),
       );
@@ -316,7 +319,8 @@ export async function updateServiceCatalogActionImpl(formData: FormData) {
       categoryName: category,
       supabase,
     });
-  } catch {
+  } catch (error) {
+    rethrowIfRedirectError(error);
     redirect(buildRedirectNotice(SERVICES_PATH, "Não foi possível preparar a categoria desse serviço.", "error"));
   }
 

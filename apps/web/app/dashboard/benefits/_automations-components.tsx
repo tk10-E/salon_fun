@@ -126,7 +126,7 @@ function AutomationSettingsSection({
         </div>
 
         <div className="field">
-          <label htmlFor="growth-title">Título do push</label>
+          <label htmlFor="growth-title">Título do aviso</label>
           <input
             id="growth-title"
             name="winbackTitle"

@@ -93,7 +93,7 @@ describe("public salon page", () => {
     });
 
     const ui = await PublicSalonPage({
-      params: { joinCode: "ABCD1234" },
+      params: Promise.resolve({ joinCode: "ABCD1234" }),
     });
 
     render(ui);
@@ -107,7 +107,7 @@ describe("public salon page", () => {
       screen.getByRole("button", { name: "Abrir no app" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Copiar codigo" }),
+      screen.getByRole("button", { name: "Copiar código" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Serviços principais")).toBeInTheDocument();
     expect(screen.getByText("Corte assinatura")).toBeInTheDocument();

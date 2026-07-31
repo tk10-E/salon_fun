@@ -2,12 +2,31 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireOwnerSalon } from "@/lib/auth";
+import { recordAiGenerationAudit } from "@/lib/ai/audit";
+import {
+  generateMarketingCampaignMessageWithAi,
+  isMarketingCampaignAiEnabled,
+} from "@/lib/ai/marketingCampaign";
+import { AI_FEATURE_REGISTRY } from "@/lib/ai/registry";
+import {
+  MARKETING_CAMPAIGN_PROMPT_PROFILE,
+  MARKETING_CAMPAIGN_PROMPT_VERSION,
+} from "@/lib/ai/prompts/marketingCampaignPrompt";
+import {
+  LEGACY_MANAGEMENT_ROUTES,
+  MANAGEMENT_ROUTES,
+} from "@/lib/management-navigation";
 import { createClient } from "@/lib/supabase/server";
 
-import { buildRedirectNotice, truncateNotificationText } from "./shared";
+import {
+  buildRedirectNotice,
+  prepareCustomerNotificationPayload,
+  truncateNotificationText,
+} from "./shared";
 
 const MARKETING_PATH = "/dashboard/benefits";
-const CUSTOMERS_PATH = "/dashboard/customers";
+const CUSTOMERS_PATH = MANAGEMENT_ROUTES.clients;
+const LEGACY_CUSTOMERS_PATH = LEGACY_MANAGEMENT_ROUTES.customers;
 const NOTIFICATIONS_PATH = "/dashboard/notifications";
 
 type MarketingCampaignType = "birthday_campaign" | "manual_reactivation";
@@ -27,11 +46,23 @@ function normalizeInteger(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : null;
 }
 
+function normalizeLegacyCustomersReturnPath(path: string) {
+  if (!path.startsWith(LEGACY_CUSTOMERS_PATH)) {
+    return path;
+  }
+
+  return `${CUSTOMERS_PATH}${path.slice(LEGACY_CUSTOMERS_PATH.length)}`;
+}
+
 function resolveMarketingReturnPath(value: FormDataEntryValue | null) {
   const path = String(value ?? "").trim();
 
   if (path.startsWith(MARKETING_PATH) || path.startsWith(CUSTOMERS_PATH)) {
     return path;
+  }
+
+  if (path.startsWith(LEGACY_CUSTOMERS_PATH)) {
+    return normalizeLegacyCustomersReturnPath(path);
   }
 
   return MARKETING_PATH;
@@ -70,16 +101,18 @@ export async function sendMarketingCustomerCampaignActionImpl(formData: FormData
     normalizeText(formData.get("customerName"), 120) ?? "Cliente do salão";
   const serviceName = normalizeText(formData.get("serviceName"), 120);
   const inactiveDays = normalizeInteger(formData.get("inactiveDays"));
+  const messageTitleOverride = normalizeText(formData.get("messageTitle"), 90);
+  const messageBodyOverride = normalizeText(formData.get("messageBody"), 320);
   const returnPath = resolveMarketingReturnPath(formData.get("returnPath"));
 
-  const { salon } = await requireOwnerSalon();
+  const { salon, user } = await requireOwnerSalon();
   const supabase = createClient();
 
   if (!campaignType || !customerId) {
     redirect(
       buildRedirectNotice(
         returnPath,
-        "Não foi possível identificar a cliente dessa campanha.",
+        "Não foi possível identificar a cliente desta campanha.",
         "error",
       ),
     );
@@ -124,6 +157,11 @@ export async function sendMarketingCustomerCampaignActionImpl(formData: FormData
   const customerName = customerResult.data.name?.trim() || fallbackCustomerName;
   const firstName = customerFirstName(customerName);
   const activeOfferTitle = normalizeText(activeOfferResult.data?.title ?? null, 120);
+  const automationSettings = automationSettingsResult.data;
+  const discountPercent = Number(automationSettings?.winback_discount_percent ?? 10);
+  const resolvedInactiveDays =
+    inactiveDays ?? Number(automationSettings?.winback_inactive_days ?? 30);
+  const resolvedServiceName = serviceName ?? "atendimento";
 
   let notificationType: string;
   let title: string;
@@ -147,15 +185,8 @@ export async function sendMarketingCustomerCampaignActionImpl(formData: FormData
       offerTitle: activeOfferTitle,
     };
   } else {
-    const automationSettings = automationSettingsResult.data;
-    const discountPercent = Number(
-      automationSettings?.winback_discount_percent ?? 10,
-    );
-    const resolvedInactiveDays =
-      inactiveDays ?? Number(automationSettings?.winback_inactive_days ?? 30);
     const defaultBody =
-      "Ja faz {inactive_days} dias desde seu ultimo {service_name}. Abra o app e confira a condição separada para seu retorno.";
-    const resolvedServiceName = serviceName ?? "atendimento";
+      "Já faz {inactive_days} dias desde seu último {service_name}. Abra o app e confira a condição separada para seu retorno.";
 
     notificationType = "manual_reactivation";
     title = fillTemplate(
@@ -186,6 +217,72 @@ export async function sendMarketingCustomerCampaignActionImpl(formData: FormData
     };
   }
 
+  if (messageTitleOverride) {
+    title = messageTitleOverride;
+  }
+
+  if (messageBodyOverride) {
+    body = messageBodyOverride;
+  } else if (isMarketingCampaignAiEnabled()) {
+    try {
+      const aiDraft = await generateMarketingCampaignMessageWithAi({
+        activeOfferTitle,
+        campaignType,
+        customerName,
+        discountPercent:
+          campaignType === "manual_reactivation" ? discountPercent : null,
+        inactiveDays:
+          campaignType === "manual_reactivation" ? resolvedInactiveDays : null,
+        salonName: salon.name,
+        serviceName:
+          campaignType === "manual_reactivation" ? resolvedServiceName : null,
+      });
+
+      title = aiDraft.title;
+      body = aiDraft.body;
+      payload = {
+        ...payload,
+        aiGenerated: true,
+        aiModel: aiDraft.model,
+      };
+      await recordAiGenerationAudit({
+        actorUserId: user.id,
+        feature: AI_FEATURE_REGISTRY.marketingCampaignMessage.feature,
+        metadata: {
+          aiModel: aiDraft.model,
+          campaignType,
+          usedFallback: aiDraft.model.includes("(fallback)"),
+        },
+        outcome: "generated",
+        promptProfile: MARKETING_CAMPAIGN_PROMPT_PROFILE,
+        promptVersion: MARKETING_CAMPAIGN_PROMPT_VERSION,
+        requestPath: MARKETING_PATH,
+        salonId: salon.id,
+        targetId: customerId,
+        targetType: "customer",
+      });
+    } catch {
+      payload = {
+        ...payload,
+        aiGenerated: false,
+      };
+      await recordAiGenerationAudit({
+        actorUserId: user.id,
+        feature: AI_FEATURE_REGISTRY.marketingCampaignMessage.feature,
+        metadata: {
+          campaignType,
+        },
+        outcome: "failed",
+        promptProfile: MARKETING_CAMPAIGN_PROMPT_PROFILE,
+        promptVersion: MARKETING_CAMPAIGN_PROMPT_VERSION,
+        requestPath: MARKETING_PATH,
+        salonId: salon.id,
+        targetId: customerId,
+        targetType: "customer",
+      });
+    }
+  }
+
   const { error } = await supabase.from("salon_customer_notifications").insert({
     salon_id: salon.id,
     customer_id: customerId,
@@ -193,14 +290,14 @@ export async function sendMarketingCustomerCampaignActionImpl(formData: FormData
     notification_type: notificationType,
     title: title.trim() || "Aviso do salão",
     body: truncateNotificationText(body),
-    payload,
+    payload: prepareCustomerNotificationPayload(notificationType, payload),
   });
 
   if (error) {
     redirect(
       buildRedirectNotice(
         returnPath,
-        "Não foi possível enviar a campanha para essa cliente agora.",
+        "Não foi possível enviar a campanha para esta cliente agora.",
         "error",
       ),
     );

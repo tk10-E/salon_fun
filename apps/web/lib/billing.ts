@@ -1,4 +1,4 @@
-import { cache as reactCache } from "react";
+﻿import { cache as reactCache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -8,18 +8,42 @@ import {
   getStripeWebhookSecret,
 } from "@/lib/serverEnv";
 
+export const SINGLE_BILLING_PLAN_ID = "starter" as const;
+export const SINGLE_BILLING_INTERVAL = "monthly" as const;
+export const SINGLE_BILLING_INTERVALS = ["monthly", "yearly"] as const;
+export const SINGLE_BILLING_PLAN_MONTHLY_PRICE = 89;
+export const SINGLE_BILLING_PLAN_YEARLY_PRICE = 890;
+export const SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE =
+  SINGLE_BILLING_PLAN_MONTHLY_PRICE * 12;
+export const SINGLE_BILLING_PLAN_YEARLY_SAVINGS =
+  SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE -
+  SINGLE_BILLING_PLAN_YEARLY_PRICE;
+export const SINGLE_BILLING_PLAN_CURRENCY_CODE = "BRL";
+export const SINGLE_BILLING_PLAN_MONTHLY_PRICE_LABEL = formatBillingPrice(
+  SINGLE_BILLING_PLAN_MONTHLY_PRICE,
+  SINGLE_BILLING_PLAN_CURRENCY_CODE,
+);
+export const SINGLE_BILLING_PLAN_YEARLY_PRICE_LABEL = formatBillingPrice(
+  SINGLE_BILLING_PLAN_YEARLY_PRICE,
+  SINGLE_BILLING_PLAN_CURRENCY_CODE,
+);
+export const SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE_LABEL =
+  formatBillingPrice(
+    SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE,
+    SINGLE_BILLING_PLAN_CURRENCY_CODE,
+  );
+export const SINGLE_BILLING_PLAN_YEARLY_SAVINGS_LABEL = formatBillingPrice(
+  SINGLE_BILLING_PLAN_YEARLY_SAVINGS,
+  SINGLE_BILLING_PLAN_CURRENCY_CODE,
+);
+
 function hasStripeLiveSecret() {
   return getStripeSecretKey()?.startsWith("sk_live_") ?? false;
 }
 
 function hasStripeBillingCatalogConfigured() {
-  const planIds = ["starter", "growth", "premium"] as const;
-  const billingIntervals = ["monthly", "yearly"] as const;
-
-  return planIds.every((planId) =>
-    billingIntervals.every((billingInterval) =>
-      Boolean(getStripePriceId(planId, billingInterval)),
-    ),
+  return SINGLE_BILLING_INTERVALS.every((billingInterval) =>
+    Boolean(getStripePriceId(SINGLE_BILLING_PLAN_ID, billingInterval)),
   );
 }
 
@@ -36,7 +60,7 @@ export const BILLING_PATH = "/dashboard/billing";
 export const PUBLIC_BILLING_PATH = "/planos";
 export const BILLING_ALLOWED_PATHS = [BILLING_PATH, PUBLIC_BILLING_PATH] as const;
 
-export type BillingPlanId = "starter" | "growth" | "premium";
+export type BillingPlanId = typeof SINGLE_BILLING_PLAN_ID;
 export type BillingInterval = "monthly" | "yearly";
 export type BillingStatus = "trialing" | "active" | "past_due" | "paused" | "canceled";
 export type BillingAccessState = "healthy" | "attention" | "locked";
@@ -102,71 +126,71 @@ export type SalonBillingSnapshot = {
   isUsingFallback: boolean;
 };
 
-const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [
-  {
-    id: "starter",
-    displayName: "Starter",
-    description: "Base essencial para colocar o app do salão no ar com agenda, catálogo e visual próprio.",
-    monthlyPrice: 79,
-    yearlyPrice: 790,
+function buildUnifiedPlan(
+  plan?: Partial<SalonBillingPlan>,
+): SalonBillingPlan {
+  const basePlan: SalonBillingPlan = {
+    id: SINGLE_BILLING_PLAN_ID,
+    displayName: "Plano Único",
+    description: "Todos os recursos do painel liberados por um único valor mensal.",
+    monthlyPrice: SINGLE_BILLING_PLAN_MONTHLY_PRICE,
+    yearlyPrice: SINGLE_BILLING_PLAN_YEARLY_PRICE,
     currencyCode: "BRL",
-    trialDays: 0,
-    maxStaffMembers: 3,
-    maxServices: 25,
-    maxMonthlyNotifications: 1500,
-    includesGrowthAutomation: false,
-    includesFeedVideo: false,
-    includesCustomBranding: true,
-    includesPrioritySupport: false,
-    isDefault: true,
-    isPublic: true,
-    sortOrder: 10,
-    highlight: "Liberação do painel logo após o pagamento",
-    tagline: "Base operacional para entrar no ar com segurança",
-  },
-  {
-    id: "growth",
-    displayName: "Growth",
-    description: "Escala comercial com automações, vídeo no feed e mais espaço para equipe e serviços.",
-    monthlyPrice: 149,
-    yearlyPrice: 1490,
-    currencyCode: "BRL",
-    trialDays: 0,
-    maxStaffMembers: 8,
-    maxServices: 80,
-    maxMonthlyNotifications: 10000,
-    includesGrowthAutomation: true,
-    includesFeedVideo: true,
-    includesCustomBranding: true,
-    includesPrioritySupport: false,
-    isDefault: false,
-    isPublic: true,
-    sortOrder: 20,
-    highlight: "Mais equipe, campanhas e retenção ativa",
-    tagline: "Mais equipe, mais campanhas, mais retenção",
-  },
-  {
-    id: "premium",
-    displayName: "Premium",
-    description: "Camada completa para operação madura com suporte prioritário e escala máxima.",
-    monthlyPrice: 249,
-    yearlyPrice: 2490,
-    currencyCode: "BRL",
-    trialDays: 0,
-    maxStaffMembers: 25,
-    maxServices: 250,
-    maxMonthlyNotifications: 50000,
+    trialDays: 3,
+    maxStaffMembers: null,
+    maxServices: null,
+    maxMonthlyNotifications: null,
     includesGrowthAutomation: true,
     includesFeedVideo: true,
     includesCustomBranding: true,
     includesPrioritySupport: true,
-    isDefault: false,
+    isDefault: true,
     isPublic: true,
-    sortOrder: 30,
-    highlight: "Escala máxima com suporte prioritário",
-    tagline: "Estrutura pronta para alto volume",
-  },
-];
+    sortOrder: 10,
+    highlight: "Mensal por R$ 89 ou anual por R$ 890",
+    tagline: "Uma assinatura mensal libera agenda, clientes, equipe, caixa e app",
+  };
+
+  const fixedPlan: Partial<SalonBillingPlan> = {
+    id: SINGLE_BILLING_PLAN_ID,
+    displayName: "Plano Único",
+    description: "Todos os recursos do painel liberados por um único valor mensal.",
+    monthlyPrice: SINGLE_BILLING_PLAN_MONTHLY_PRICE,
+    yearlyPrice: SINGLE_BILLING_PLAN_YEARLY_PRICE,
+    maxStaffMembers: null,
+    maxServices: null,
+    maxMonthlyNotifications: null,
+    includesGrowthAutomation: true,
+    includesFeedVideo: true,
+    includesCustomBranding: true,
+    includesPrioritySupport: true,
+    isDefault: true,
+    isPublic: true,
+    sortOrder: 10,
+    highlight: "Mensal por R$ 89 ou anual por R$ 890",
+    tagline: "Uma assinatura mensal libera agenda, clientes, equipe, caixa e app",
+  };
+
+  return {
+    ...basePlan,
+    ...plan,
+    ...fixedPlan,
+  };
+}
+
+
+
+const DEFAULT_BILLING_PLANS: SalonBillingPlan[] = [buildUnifiedPlan()];
+
+function collapsePlansToUnifiedCatalog(plans: SalonBillingPlan[]) {
+  const preferredPlan =
+    plans.find((plan) => plan.id === SINGLE_BILLING_PLAN_ID) ??
+    plans.find((plan) => plan.isDefault) ??
+    plans[0] ??
+    null;
+
+  return [buildUnifiedPlan(preferredPlan ?? undefined)];
+}
 
 const cache = typeof reactCache === "function"
   ? reactCache
@@ -256,6 +280,20 @@ function maybeNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function nonNegativeNumber(value: unknown, fallback = 0) {
+  const parsed = maybeNumber(value);
+
+  if (parsed === null) {
+    return fallback;
+  }
+
+  return Math.max(parsed, 0);
+}
+
+function nonNegativeInteger(value: unknown, fallback = 0) {
+  return Math.trunc(nonNegativeNumber(value, fallback));
+}
+
 function maybeBoolean(value: unknown) {
   return typeof value === "boolean" ? value : false;
 }
@@ -270,20 +308,24 @@ function normalizePlan(row: Record<string, unknown>): SalonBillingPlan {
     id: maybeString(row.id) ?? "starter",
     displayName: maybeString(row.display_name) ?? "Starter",
     description: maybeString(row.description) ?? "Plano do salão.",
-    monthlyPrice: maybeNumber(row.monthly_price) ?? 0,
-    yearlyPrice: maybeNumber(row.yearly_price) ?? 0,
+    monthlyPrice: nonNegativeNumber(row.monthly_price),
+    yearlyPrice: nonNegativeNumber(row.yearly_price),
     currencyCode: maybeString(row.currency_code) ?? "BRL",
-    trialDays: maybeNumber(row.trial_days) ?? 0,
-    maxStaffMembers: maybeNumber(row.max_staff_members),
-    maxServices: maybeNumber(row.max_services),
-    maxMonthlyNotifications: maybeNumber(row.max_monthly_notifications),
+    trialDays: nonNegativeInteger(row.trial_days),
+    maxStaffMembers:
+      row.max_staff_members == null ? null : nonNegativeInteger(row.max_staff_members),
+    maxServices: row.max_services == null ? null : nonNegativeInteger(row.max_services),
+    maxMonthlyNotifications:
+      row.max_monthly_notifications == null
+        ? null
+        : nonNegativeInteger(row.max_monthly_notifications),
     includesGrowthAutomation: maybeBoolean(row.includes_growth_automation),
     includesFeedVideo: maybeBoolean(row.includes_feed_video),
     includesCustomBranding: maybeBoolean(row.includes_custom_branding),
     includesPrioritySupport: maybeBoolean(row.includes_priority_support),
     isDefault: maybeBoolean(row.is_default),
     isPublic: row.is_public === undefined ? true : maybeBoolean(row.is_public),
-    sortOrder: maybeNumber(row.sort_order) ?? 0,
+    sortOrder: nonNegativeInteger(row.sort_order),
     highlight: maybeString(metadata.highlight),
     tagline: maybeString(metadata.tagline),
   };
@@ -310,7 +352,7 @@ function normalizeSubscription(
   return {
     id: maybeString(row.id) ?? `virtual-${salonId}`,
     salonId,
-    planId: maybeString(row.plan_id) ?? "starter",
+    planId: maybeString(row.plan_id) ?? SINGLE_BILLING_PLAN_ID,
     status: normalizeStatus(row.status),
     billingInterval: normalizeInterval(row.billing_interval),
     trialStartedAt: maybeString(row.trial_started_at),
@@ -337,7 +379,7 @@ function buildFallbackSubscription(salonId: string, plans: SalonBillingPlan[]): 
     salonId,
     planId: defaultPlan.id,
     status: "paused",
-    billingInterval: "monthly" as const,
+    billingInterval: SINGLE_BILLING_INTERVAL,
     trialStartedAt: null,
     trialEndsAt: null,
     currentPeriodStartedAt: null,
@@ -441,15 +483,15 @@ function buildSnapshot(plans: SalonBillingPlan[], subscription: SalonBillingSubs
   let shouldShowBanner = false;
   let nextBillingDateLabel = formatBillingDate(subscription.currentPeriodEndsAt ?? subscription.trialEndsAt);
   let statusDetail = pendingActivation
-    ? `Conta criada. Escolha um plano e conclua o pagamento para liberar o painel ${currentPlan.displayName}.`
+    ? "Conta criada. Conclua a assinatura mensal de R$ 89 para liberar o painel completo."
     : `Plano ${currentPlan.displayName} em ${getStatusLabel(subscription.status).toLowerCase()}.`;
 
   if (pendingActivation) {
     shouldShowBanner = true;
     bannerTone = "accent";
-    bannerTitle = "Ative o painel para começar";
+    bannerTitle = "Ative a assinatura para começar";
     bannerMessage =
-      "Escolha um plano e conclua a assinatura para liberar agenda, clientes, equipe, caixa e demais áreas operacionais.";
+      "Conclua a assinatura mensal de R$ 89 para liberar agenda, clientes, equipe, caixa e demais áreas operacionais.";
     nextBillingDateLabel = null;
   } else if (subscription.status === "trialing" && trialDaysRemaining !== null && trialDaysRemaining <= 5) {
     shouldShowBanner = true;
@@ -457,7 +499,7 @@ function buildSnapshot(plans: SalonBillingPlan[], subscription: SalonBillingSubs
     bannerTitle = "Seu trial está perto do fim";
     bannerMessage =
       trialDaysRemaining <= 0
-        ? "O período de teste terminou. Escolha um plano para evitar bloqueios no painel."
+        ? "O período de teste terminou. Ative a assinatura de R$ 89 para evitar bloqueios no painel."
         : `Faltam ${trialDaysRemaining} dia${trialDaysRemaining === 1 ? "" : "s"} para encerrar o trial.`;
     statusDetail =
       nextBillingDateLabel
@@ -469,19 +511,19 @@ function buildSnapshot(plans: SalonBillingPlan[], subscription: SalonBillingSubs
     bannerTitle = graceDaysRemaining !== null && graceDaysRemaining > 0 ? "Cobrança em aberto" : "Painel bloqueado por inadimplência";
     bannerMessage =
       graceDaysRemaining !== null && graceDaysRemaining > 0
-        ? `Regularize em até ${graceDaysRemaining} dia${graceDaysRemaining === 1 ? "" : "s"} para evitar o bloqueio das áreas premium.`
-        : "O acesso às áreas operacionais foi travado. Reative um plano para voltar a editar o painel.";
+        ? `Regularize em até ${graceDaysRemaining} dia${graceDaysRemaining === 1 ? "" : "s"} para evitar o bloqueio das áreas operacionais.`
+        : "O acesso às áreas operacionais foi travado. Reative a assinatura mensal para voltar a editar o painel.";
     statusDetail =
       graceDaysRemaining !== null && graceDaysRemaining > 0
-        ? `Pagamento pendente com janela de regularização em aberto.`
-        : `Cobrança em aberto sem janela de regularização ativa.`;
+        ? "Pagamento pendente com janela de regularização em aberto."
+        : "Cobrança em aberto sem janela de regularização ativa.";
   } else if (subscription.status === "canceled") {
     shouldShowBanner = true;
     bannerTone = accessState === "locked" ? "danger" : "soft";
     bannerTitle = accessState === "locked" ? "Assinatura encerrada" : "Assinatura cancelada";
     bannerMessage =
       accessState === "locked"
-        ? "Escolha um plano para voltar a operar o painel completo."
+        ? "Reative a assinatura mensal para voltar a operar o painel completo."
         : nextBillingDateLabel
           ? `O acesso segue liberado até ${nextBillingDateLabel}. Depois disso, o painel será bloqueado.`
           : "O cancelamento está agendado ao fim do ciclo atual.";
@@ -531,8 +573,8 @@ async function createDefaultSubscriptionRow(params: {
     status: "paused",
     billing_interval: "monthly",
     trial_started_at: null,
-    trial_ends_at: null,
-  };
+      trial_ends_at: null,
+    };
 
   const { data, error } = await supabase
     .from("salon_subscriptions")
@@ -568,7 +610,9 @@ async function loadSalonBillingSnapshot(
 
   const plans =
     !planResult.error && Array.isArray(planResult.data) && planResult.data.length
-      ? planResult.data.map((row) => normalizePlan(row as Record<string, unknown>))
+      ? collapsePlansToUnifiedCatalog(
+          planResult.data.map((row) => normalizePlan(row as Record<string, unknown>)),
+        )
       : DEFAULT_BILLING_PLANS;
 
   if (shouldFallback) {
@@ -595,7 +639,9 @@ async function loadPublicBillingPlans(): Promise<SalonBillingPlan[]> {
     return DEFAULT_BILLING_PLANS;
   }
 
-  return data.map((row) => normalizePlan(row as Record<string, unknown>));
+  return collapsePlansToUnifiedCatalog(
+    data.map((row) => normalizePlan(row as Record<string, unknown>)),
+  );
 }
 
 export const getSalonBillingSnapshot = cache(async (salonId: string): Promise<SalonBillingSnapshot> => {
@@ -641,3 +687,4 @@ export function formatLimitLabel(limit: number | null, singular: string, plural 
 
   return `${limit} ${limit === 1 ? singular : plural}`;
 }
+

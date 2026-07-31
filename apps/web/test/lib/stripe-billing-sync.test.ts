@@ -12,14 +12,18 @@ import { syncStripeSubscriptionRecord } from "@/lib/stripeBillingSync";
 
 function makeAdminClient(params: {
   existingSubscription: Record<string, unknown> | null;
+  salonScopedSubscription?: Record<string, unknown> | null;
   upsertMock: ReturnType<typeof vi.fn>;
 }) {
   return {
     from: vi.fn(() => ({
       select: vi.fn(() => ({
-        eq: vi.fn(() => ({
+        eq: vi.fn((column: string) => ({
           maybeSingle: vi.fn().mockResolvedValue({
-            data: params.existingSubscription,
+            data:
+              column === "salon_id"
+                ? params.salonScopedSubscription ?? params.existingSubscription
+                : params.existingSubscription,
             error: null,
           }),
         })),
@@ -57,6 +61,8 @@ describe("stripe billing sync", () => {
           activated_at: "2026-03-01T12:00:00.000Z",
           status: "past_due",
           grace_ends_at: "2026-04-03T12:00:00.000Z",
+          provider_customer_id: "cus_123",
+          provider_subscription_id: "sub_123",
         },
         upsertMock,
       }),
@@ -107,6 +113,8 @@ describe("stripe billing sync", () => {
           activated_at: "2026-03-01T12:00:00.000Z",
           status: "active",
           grace_ends_at: null,
+          provider_customer_id: "cus_123",
+          provider_subscription_id: "sub_123",
         },
         upsertMock,
       }),
@@ -145,5 +153,53 @@ describe("stripe billing sync", () => {
       }),
       { onConflict: "salon_id" },
     );
+  });
+
+  it("rejects webhook sync when the incoming Stripe customer conflicts with the salon mapping", async () => {
+    const upsertMock = vi.fn().mockResolvedValue({ error: null });
+    createAdminClientMock.mockReturnValue(
+      makeAdminClient({
+        existingSubscription: null,
+        salonScopedSubscription: {
+          salon_id: "salon-1",
+          plan_id: "starter",
+          activated_at: "2026-03-01T12:00:00.000Z",
+          status: "active",
+          grace_ends_at: null,
+          provider_customer_id: "cus_original",
+          provider_subscription_id: "sub_original",
+        },
+        upsertMock,
+      }),
+    );
+
+    await expect(
+      syncStripeSubscriptionRecord({
+        id: "sub_intruso",
+        customer: "cus_intruso",
+        status: "active",
+        metadata: {
+          salonId: "salon-1",
+          planId: "starter",
+        },
+        items: {
+          data: [
+            {
+              price: {
+                id: "price_starter_m",
+                recurring: { interval: "month" },
+              },
+            },
+          ],
+        },
+        trial_start: null,
+        trial_end: null,
+        canceled_at: null,
+        current_period_start: 1_743_595_200,
+        current_period_end: 1_746_187_200,
+      } as never),
+    ).rejects.toThrow("já possui outro customer Stripe vinculado");
+
+    expect(upsertMock).not.toHaveBeenCalled();
   });
 });

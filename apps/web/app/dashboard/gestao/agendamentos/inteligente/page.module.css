@@ -1,0 +1,396 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.hero {
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(210, 136, 65, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(255, 247, 236, 0.96), rgba(255, 255, 255, 0.92));
+  border: 1px solid rgba(177, 142, 110, 0.2);
+  box-shadow: 0 16px 42px rgba(56, 34, 22, 0.08);
+}
+
+.heroCopy {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+}
+
+.eyebrow,
+.sectionEyebrow,
+.sourceLabel,
+.opportunityTag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.eyebrow {
+  padding: 6px 10px;
+  color: #824b21;
+  background: rgba(221, 175, 131, 0.18);
+}
+
+.hero h1 {
+  margin: 0;
+  color: #24160d;
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.05;
+}
+
+.lead {
+  margin: 0;
+  color: #684a37;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.heroActions,
+.inlineActions,
+.factsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.primaryButton {
+  color: #fffaf3;
+  background: linear-gradient(135deg, #704123, #cf7b2b);
+  box-shadow: 0 10px 24px rgba(155, 90, 31, 0.24);
+}
+
+.secondaryButton {
+  color: #5d3720;
+  border: 1px solid rgba(149, 111, 78, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.heroSummary {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(181, 147, 120, 0.16);
+}
+
+.heroSummary p {
+  margin: 0;
+  color: #4f3626;
+  line-height: 1.55;
+}
+
+.summaryBadge,
+.countPill,
+.factChip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.summaryBadge {
+  padding: 7px 12px;
+  color: #7f4d29;
+  background: rgba(223, 181, 140, 0.2);
+}
+
+.section {
+  display: grid;
+  gap: 18px;
+}
+
+.sectionHeader {
+  display: grid;
+  gap: 8px;
+}
+
+.sectionHeader h2,
+.panelHeader h3 {
+  margin: 0;
+  color: #25170f;
+}
+
+.sectionHeader p,
+.sidebarCopy,
+.emptyCopy,
+.opportunityDetail,
+.workflowStep p,
+.sourceCard p {
+  margin: 0;
+  color: #6c4b37;
+  line-height: 1.6;
+}
+
+.sectionEyebrow {
+  padding: 5px 10px;
+  color: #7a4926;
+  background: rgba(219, 176, 133, 0.18);
+}
+
+.sourceGrid,
+.signalGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.sourceCard,
+.signalCard,
+.panel,
+.sidebarCard,
+.opportunityCard {
+  border-radius: 22px;
+  border: 1px solid rgba(181, 147, 120, 0.16);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 32px rgba(45, 29, 20, 0.06);
+}
+
+.sourceCard {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.sourceCard strong,
+.signalCard strong,
+.workflowStep strong {
+  color: #23160f;
+}
+
+.sourceCardAccent {
+  background: linear-gradient(180deg, rgba(255, 246, 236, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.sourceCardSuccess {
+  background: linear-gradient(180deg, rgba(241, 251, 244, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.sourceCardSoft {
+  background: linear-gradient(180deg, rgba(247, 244, 239, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.sourceCardWarn {
+  background: linear-gradient(180deg, rgba(255, 242, 237, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.sourceLabel {
+  color: #8a5b38;
+}
+
+.signalCard {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.signalCard span {
+  color: #7a553d;
+  font-size: 0.88rem;
+}
+
+.signalCard strong {
+  font-size: 1.6rem;
+}
+
+.signalCard small {
+  color: #866655;
+  line-height: 1.5;
+}
+
+.contentGrid {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+}
+
+.mainColumn,
+.sideColumn {
+  display: grid;
+  gap: 18px;
+}
+
+.panel,
+.sidebarCard {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.countPill {
+  padding: 7px 12px;
+  color: #775034;
+  background: rgba(221, 187, 149, 0.18);
+}
+
+.opportunityList,
+.workflowList {
+  display: grid;
+  gap: 12px;
+}
+
+.opportunityCard {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.opportunityHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.opportunityHeader h4 {
+  margin: 8px 0 0;
+  color: #26170f;
+}
+
+.opportunityTag {
+  padding: 5px 10px;
+  color: #5b3b25;
+  background: rgba(232, 208, 183, 0.3);
+}
+
+.factsRow {
+  gap: 8px;
+}
+
+.factChip {
+  padding: 7px 11px;
+  color: #6f4931;
+  background: rgba(244, 236, 227, 0.9);
+}
+
+.serviceList {
+  margin: 0;
+  padding-left: 18px;
+  color: #5e402f;
+  display: grid;
+  gap: 6px;
+}
+
+.workflowStep {
+  display: grid;
+  gap: 6px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(181, 147, 120, 0.12);
+}
+
+.workflowStep:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.emptyCopy {
+  padding: 6px 0 2px;
+}
+
+@media (max-width: 960px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero,
+  .panel,
+  .sidebarCard {
+    padding: 18px;
+  }
+
+  .heroActions,
+  .inlineActions {
+    flex-direction: column;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+  }
+
+  .opportunityHeader,
+  .panelHeader {
+    flex-direction: column;
+  }
+}
+
+.page,
+.section,
+.hero,
+.contentGrid,
+.sourceGrid,
+.signalGrid,
+.heroSummary {
+  min-width: 0;
+}
+
+.panel,
+.sidebarCard,
+.sourceCard,
+.signalCard,
+.opportunityCard,
+.workflowStep {
+  min-width: 0;
+}
+
+.sourceGrid,
+.signalGrid {
+  align-items: stretch;
+}
+
+.sourceCard,
+.signalCard,
+.opportunityCard,
+.workflowStep {
+  height: 100%;
+  align-content: start;
+}
+
+.heroActions,
+.inlineActions,
+.factsRow {
+  align-items: center;
+}

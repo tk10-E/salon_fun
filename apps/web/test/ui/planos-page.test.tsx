@@ -14,7 +14,6 @@ const {
   getOwnerSalonMock,
   getPublicBillingPlansMock,
   getSalonBillingWorkspaceSnapshotMock,
-  getStripeBillingReadinessMock,
   getStripeOperationalStatusMock,
   redirectMock,
 } = vi.hoisted(() => ({
@@ -22,7 +21,6 @@ const {
   getOwnerSalonMock: vi.fn(),
   getPublicBillingPlansMock: vi.fn(),
   getSalonBillingWorkspaceSnapshotMock: vi.fn(),
-  getStripeBillingReadinessMock: vi.fn(),
   getStripeOperationalStatusMock: vi.fn(),
   redirectMock: vi.fn(),
 }));
@@ -32,8 +30,9 @@ vi.mock("next/link", () => ({
     children?: ReactNode;
     href: string;
     className?: string;
+    "aria-label"?: string;
   }) => (
-    <a href={props.href} className={props.className}>
+    <a href={props.href} className={props.className} aria-label={props["aria-label"]}>
       {props.children}
     </a>
   ),
@@ -45,14 +44,6 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/app/actions", () => ({
   startStripeCheckoutAction: vi.fn(),
-}));
-
-vi.mock("@/components/FlashMessage", () => ({
-  FlashMessage: (props: { message: string }) => <div>{props.message}</div>,
-}));
-
-vi.mock("@/assets/minha_empresa.png", () => ({
-  default: { src: "/jc7-desenvolvimentos.png" },
 }));
 
 vi.mock("@/lib/serverPerformance", () => ({
@@ -72,23 +63,19 @@ vi.mock("@/lib/billing", () => ({
   BILLING_DISABLED: false,
   BILLING_PATH: "/dashboard/billing",
   PUBLIC_BILLING_PATH: "/planos",
+  SINGLE_BILLING_PLAN_YEARLY_COMPARE_AT_PRICE: 1068,
+  SINGLE_BILLING_PLAN_YEARLY_SAVINGS: 178,
   formatBillingPrice: (price: number) =>
     new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
       minimumFractionDigits: 0,
     }).format(price),
-  formatLimitLabel: (
-    value: number | null,
-    singular: string,
-    plural = singular,
-  ) => (value === null ? "Ilimitado" : `${value} ${value === 1 ? singular : plural}`),
   getPublicBillingPlans: getPublicBillingPlansMock,
   getSalonBillingWorkspaceSnapshot: getSalonBillingWorkspaceSnapshotMock,
 }));
 
 vi.mock("@/lib/stripeBilling", () => ({
-  getStripeBillingReadiness: getStripeBillingReadinessMock,
   getStripeOperationalStatus: getStripeOperationalStatusMock,
 }));
 
@@ -97,45 +84,24 @@ import PublicBillingPage from "@/app/planos/page";
 const defaultPlans = [
   {
     id: "starter",
-    displayName: "Starter",
-    description: "Base",
-    monthlyPrice: 79,
-    yearlyPrice: 790,
+    displayName: "Plano único",
+    description: "Todos os recursos liberados por um valor mensal.",
+    monthlyPrice: 89,
+    yearlyPrice: 890,
     currencyCode: "BRL",
-    trialDays: 0,
-    maxStaffMembers: 3,
-    maxServices: 25,
-    maxMonthlyNotifications: 1500,
-    includesGrowthAutomation: false,
-    includesFeedVideo: false,
-    includesCustomBranding: true,
-    includesPrioritySupport: false,
-    isDefault: true,
-    isPublic: true,
-    sortOrder: 10,
-    highlight: "Liberação do painel logo após o pagamento",
-    tagline: "Base operacional para entrar no ar com segurança",
-  },
-  {
-    id: "growth",
-    displayName: "Growth",
-    description: "Growth",
-    monthlyPrice: 149,
-    yearlyPrice: 1490,
-    currencyCode: "BRL",
-    trialDays: 0,
-    maxStaffMembers: 8,
-    maxServices: 80,
-    maxMonthlyNotifications: 10000,
+    trialDays: 3,
+    maxStaffMembers: null,
+    maxServices: null,
+    maxMonthlyNotifications: null,
     includesGrowthAutomation: true,
     includesFeedVideo: true,
     includesCustomBranding: true,
-    includesPrioritySupport: false,
-    isDefault: false,
+    includesPrioritySupport: true,
+    isDefault: true,
     isPublic: true,
-    sortOrder: 20,
-    highlight: "Mais equipe, campanhas e retenção ativa",
-    tagline: "Escala comercial com mais equipe e campanhas",
+    sortOrder: 10,
+    highlight: "Tudo liberado por R$ 89 por mês",
+    tagline: "Agenda, clientes, equipe, caixa e app no mesmo plano",
   },
 ];
 
@@ -146,10 +112,6 @@ describe("public billing page", () => {
       throw new Error(`${TEST_REDIRECT_PREFIX}${location}`);
     });
     getPublicBillingPlansMock.mockResolvedValue(defaultPlans);
-    getStripeBillingReadinessMock.mockReturnValue({
-      configured: true,
-      missing: [],
-    });
     getStripeOperationalStatusMock.mockResolvedValue({
       configured: true,
       mode: "live",
@@ -176,25 +138,32 @@ describe("public billing page", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Planos do painel para salões profissionais.",
+        name: /Mais agenda\..*Menos.*enrolação\./i,
       }),
     ).toBeInTheDocument();
-    const loginLinks = screen.getAllByRole("link", {
-      name: "Entrar para assinar",
-    });
-    expect(loginLinks.length).toBeGreaterThan(0);
+    expect(screen.getByText("Pagamento 100% seguro")).toBeInTheDocument();
+    expect(screen.getByText("Escolha o plano ideal para o seu salão")).toBeInTheDocument();
     expect(
-      loginLinks.every((link) => link.getAttribute("href") === "/login"),
-    ).toBe(true);
-    expect(screen.getByText("Starter")).toBeInTheDocument();
-    expect(screen.getByText("Growth")).toBeInTheDocument();
+      screen.getByRole("link", { name: /Ativar mensal por R\$\s?89/i }),
+    ).toHaveAttribute("href", expect.stringContaining("/comecar?message="));
     expect(
-      screen.getByText("Desenvolvido por JC7 Desenvolvimentos"),
+      screen.getByRole("link", { name: /Ativar mensal por R\$\s?89/i }),
+    ).toHaveAttribute("href", expect.stringContaining("returnPath=%2Fplanos%3Finterval%3Dmonthly"));
+    expect(
+      screen.getByRole("link", { name: /Ativar anual por R\$\s?890/i }),
+    ).toHaveAttribute("href", expect.stringContaining("/comecar?message="));
+    expect(
+      screen.getByRole("link", { name: /Ativar anual por R\$\s?890/i }),
+    ).toHaveAttribute("href", expect.stringContaining("returnPath=%2Fplanos%3Finterval%3Dyearly"));
+    expect(screen.getAllByText("Começar teste grátis")).toHaveLength(2);
+    expect(
+      screen.getByText("O salão acompanha tudo no mesmo lugar."),
     ).toBeInTheDocument();
-    expect(screen.getByAltText("Marca JC7 Desenvolvimentos")).toHaveAttribute(
-      "src",
-      "/jc7-desenvolvimentos.png",
+    expect(screen.getByRole("link", { name: "Abrir suporte" })).toHaveAttribute(
+      "href",
+      "/suporte",
     );
+    expect(screen.getByAltText("Logo Salon Fun")).toHaveAttribute("src", "/icon.png");
   });
 
   it("renders checkout actions for locked salons", async () => {
@@ -210,19 +179,25 @@ describe("public billing page", () => {
       name: "Studio Barber",
     });
     getSalonBillingWorkspaceSnapshotMock.mockResolvedValue({
-      currentPlan: { id: "starter", displayName: "Starter" },
+      currentPlan: { id: "starter", displayName: "Plano único" },
       isLocked: true,
     });
 
     render(await PublicBillingPage({}));
 
+    expect(screen.getByText("Escolha o plano ideal para Studio Barber")).toBeInTheDocument();
+    expect(screen.getByText("Studio Barber pronto para ativação")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", {
-        name: "Escolha o plano para liberar Studio Barber.",
-      }),
+      screen.getAllByText(
+        "A conta de Studio Barber já está pronta. Confirmou o pagamento, o painel abre na hora.",
+      ),
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: /Ativar mensal por R\$\s?89/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Plano inicial")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Assinar mensal" })).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: /Ativar anual por R\$\s?890/i }),
+    ).toBeInTheDocument();
   });
 
   it("redirects active salons back to the internal billing management page", async () => {
@@ -238,7 +213,7 @@ describe("public billing page", () => {
       name: "Studio Barber",
     });
     getSalonBillingWorkspaceSnapshotMock.mockResolvedValue({
-      currentPlan: { id: "growth", displayName: "Growth" },
+      currentPlan: { id: "starter", displayName: "Plano único" },
       isLocked: false,
     });
 

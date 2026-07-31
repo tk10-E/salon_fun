@@ -33,7 +33,6 @@ type ServiceSeed = {
 type ClientSeed = {
   name: string;
   phone: string;
-  whatsappPhone: string;
   email: string;
   birthDate?: string;
   notes?: string;
@@ -212,7 +211,6 @@ async function ensureClient(salonId: string, client: ClientSeed) {
     salonId,
     name: client.name,
     phone: client.phone,
-    whatsappPhone: client.whatsappPhone,
     email: client.email,
     birthDate: client.birthDate ? new Date(client.birthDate) : undefined,
     notes: client.notes ?? null,
@@ -442,15 +440,13 @@ async function seedReferenceData(salonId: string): Promise<SeedRefs> {
     {
       name: "Ana Paula Ribeiro",
       phone: "(11) 99123-4567",
-      whatsappPhone: "(11) 99123-4567",
       email: "ana.ribeiro@example.com",
       birthDate: "1991-05-14",
-      notes: "Prefere horários na primeira metade do dia e responde rápido no WhatsApp.",
+      notes: "Prefere horários na primeira metade do dia e responde rápido.",
     },
     {
       name: "Beatriz Costa",
       phone: "(11) 99876-5432",
-      whatsappPhone: "(11) 99876-5432",
       email: "beatriz.costa@example.com",
       birthDate: "1988-11-03",
       notes: "Costuma confirmar no mesmo dia e gosta de retorno com foto do resultado.",
@@ -458,7 +454,6 @@ async function seedReferenceData(salonId: string): Promise<SeedRefs> {
     {
       name: "Carla Mendes",
       phone: "(11) 98765-1234",
-      whatsappPhone: "(11) 98765-1234",
       email: "carla.mendes@example.com",
       birthDate: "1994-02-22",
       notes: "Cliente recorrente de manicure com bom histórico de comparecimento.",
@@ -466,7 +461,6 @@ async function seedReferenceData(salonId: string): Promise<SeedRefs> {
     {
       name: "Fernanda Rocha",
       phone: "(11) 97654-3321",
-      whatsappPhone: "(11) 97654-3321",
       email: "fernanda.rocha@example.com",
       notes: "Pede lembrete do dia anterior e costuma remarcar com antecedência.",
     },
@@ -601,7 +595,7 @@ async function seedAppointments(salonId: string, refs: SeedRefs) {
     startsAt: yesterdayCancelled,
     duration: refs.services["Manicure completa"].duration,
     status: AppointmentStatus.cancelled,
-    note: "Cancelamento com aviso prévio pelo WhatsApp.",
+    note: "Cancelamento com aviso prévio pelo telefone.",
     cancellationReason: "Cliente precisou viajar e pediu novo encaixe.",
   });
 

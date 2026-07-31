@@ -16,10 +16,14 @@ class SalonBrandHero extends StatelessWidget {
     this.supportLine,
     this.joinCode,
     this.extraPills = const <Widget>[],
+    this.topContent,
     this.bottom,
     this.imageHeight = 190,
     this.showImage = true,
     this.showRating = true,
+    this.showSegmentPill = true,
+    this.showJoinCodePill = true,
+    this.showSupportLine = true,
   });
 
   final SalonPreview? preview;
@@ -31,17 +35,21 @@ class SalonBrandHero extends StatelessWidget {
   final String? supportLine;
   final String? joinCode;
   final List<Widget> extraPills;
+  final Widget? topContent;
   final Widget? bottom;
   final double imageHeight;
   final bool showImage;
   final bool showRating;
+  final bool showSegmentPill;
+  final bool showJoinCodePill;
+  final bool showSupportLine;
 
   @override
   Widget build(BuildContext context) {
     final resolvedAccent = accent ?? parseHexColor(preview?.brandColor);
     final resolvedEyebrow = sentenceOrFallback(
       eyebrow,
-      preview?.segmentLabel ?? 'Seu salão',
+      preview?.segmentLabel ?? 'Seu salao',
     );
     final resolvedTitle = sentenceOrFallback(
       title,
@@ -49,17 +57,19 @@ class SalonBrandHero extends StatelessWidget {
           preview?.welcomeHeadline ??
           preview?.appDisplayName ??
           preview?.name ??
-          'Seu salão no app',
+          'Seu salao no app',
     );
     final resolvedDescription = sentenceOrFallback(
       description,
       preview?.welcomeMessage ??
           preview?.promotionHeadline ??
           preview?.tagline ??
-          'Agenda, vitrine e relacionamento do salão em um só lugar.',
+          'Agenda, vitrine e relacionamento do salao em um so lugar.',
     );
-    final resolvedSupportLine =
-        _normalizeText(supportLine) ?? _normalizeText(preview?.heroSupportLine);
+    final resolvedSupportLine = showSupportLine
+        ? _normalizeText(supportLine) ??
+              _normalizeText(preview?.heroSupportLine)
+        : null;
     final resolvedJoinCode = _normalizeText(joinCode);
     final resolvedImageUrl = _firstNonEmpty(<String?>[
       preview?.heroImageUrl,
@@ -71,20 +81,25 @@ class SalonBrandHero extends StatelessWidget {
     final resolvedLogoUrl = _normalizeText(preview?.logoUrl);
     final shouldOverlayLogo =
         resolvedLogoUrl != null && resolvedLogoUrl != resolvedImageUrl;
+    final ratingCount = preview?.ratingCount ?? 0;
+    final ratingLabel = preview?.ratingValue == null
+        ? null
+        : ratingCount > 0
+        ? '${preview!.ratingValue!.toStringAsFixed(1)} no app - $ratingCount avaliacoes'
+        : '${preview!.ratingValue!.toStringAsFixed(1)} de avaliacao';
+    final resolvedRatingLabel = _normalizeText(ratingLabel);
     final pillWidgets = <Widget>[
-      Pill(
-        label: resolvedEyebrow,
-        backgroundColor: resolvedAccent.withValues(alpha: 0.12),
-        foregroundColor: resolvedAccent,
-        icon: Icons.auto_awesome_rounded,
-      ),
-      if (showRating && preview?.ratingValue != null)
+      if (showSegmentPill)
         Pill(
-          label: '${preview!.ratingValue!.toStringAsFixed(1)} de avaliação',
-          icon: Icons.star_rounded,
+          label: resolvedEyebrow,
+          backgroundColor: resolvedAccent.withValues(alpha: 0.12),
+          foregroundColor: resolvedAccent,
+          icon: Icons.auto_awesome_rounded,
         ),
-      if (resolvedJoinCode != null)
-        Pill(label: 'Código $resolvedJoinCode', icon: Icons.dialpad_rounded),
+      if (showRating && resolvedRatingLabel != null)
+        Pill(label: resolvedRatingLabel, icon: Icons.star_rounded),
+      if (showJoinCodePill && resolvedJoinCode != null)
+        Pill(label: 'Codigo $resolvedJoinCode', icon: Icons.dialpad_rounded),
       ...extraPills,
     ];
 
@@ -95,6 +110,10 @@ class SalonBrandHero extends StatelessWidget {
         children: [
           if (pillWidgets.isNotEmpty)
             Wrap(spacing: 8, runSpacing: 8, children: pillWidgets),
+          if (topContent != null) ...[
+            if (pillWidgets.isNotEmpty) const SizedBox(height: 16),
+            topContent!,
+          ],
           if (greeting != null) ...[
             const SizedBox(height: 18),
             Text(greeting!, style: Theme.of(context).textTheme.bodySmall),
@@ -168,21 +187,15 @@ class _HeroLogoBadge extends StatelessWidget {
           child: SizedBox(
             width: 52,
             height: 52,
-            child: Image.network(
-              imageUrl,
+            child: SalonNetworkImage(
+              imageUrl: imageUrl,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                  ),
-                  child: Icon(
-                    Icons.storefront_rounded,
-                    color: accent,
-                    size: 24,
-                  ),
-                );
-              },
+              error: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                ),
+                child: Icon(Icons.storefront_rounded, color: accent, size: 24),
+              ),
             ),
           ),
         ),
