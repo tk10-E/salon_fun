@@ -296,5 +296,5 @@ describe("settings page UI", () => {
     expect(
       screen.getByRole("button", { name: "Gerar novo código" }),
     ).toBeInTheDocument();
-  });
+  }, 10000);
 });

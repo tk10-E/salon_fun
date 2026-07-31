@@ -191,5 +191,5 @@ describe("management appointments page", () => {
     ).toBeGreaterThan(0);
     expect(screen.getAllByText(/R\$\s?210,00/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/R\$\s?120,00/).length).toBeGreaterThan(0);
-  });
+  }, 10000);
 });

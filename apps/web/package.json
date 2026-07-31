@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint app components lib middleware.ts next.config.mjs --ext .js,.jsx,.ts,.tsx,.mjs --max-warnings=0",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
