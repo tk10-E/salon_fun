@@ -4,5 +4,6 @@
 **/.dart_tool
 **/build
 /apps/mobile
+/apps/web
 /supabase
 *.zip
